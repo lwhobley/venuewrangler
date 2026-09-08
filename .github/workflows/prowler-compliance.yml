@@ -3,6 +3,11 @@ name: Continuous Security & Compliance Scan (Prowler)
 on:
   workflow_dispatch:
     inputs:
+      publish_reports:
+        description: 'Explicitly allow detailed infrastructure reports in this repository (public repositories expose findings)'
+        required: false
+        type: boolean
+        default: false
       framework:
         description: 'Compliance framework to scan'
         required: true
@@ -146,7 +151,7 @@ jobs:
       - name: Upload Compliance Assessment Reports (Evidence Artifacts)
         # Findings cause a non-zero scan exit. Preserve the evidence without
         # masking the failing security gate or uploading credential files.
-        if: always()
+        if: always() && (github.event.repository.private || inputs.publish_reports == true)
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: prowler-compliance-reports-${{ github.sha }}
