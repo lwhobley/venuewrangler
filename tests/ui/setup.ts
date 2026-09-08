@@ -10,3 +10,6 @@ nodeRequire.extensions['.jpg'] = (module, filename) => {
 nodeRequire.extensions['.png'] = (module, filename) => {
   module.exports = filename;
 };
+
+(globalThis as any).__DEV__ = true;
+(globalThis as any).expo = (globalThis as any).expo || { EventEmitter: class {} };
