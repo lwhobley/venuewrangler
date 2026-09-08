@@ -148,6 +148,9 @@ describe('Bar Stock Inventory Cards', () => {
         {
           _id: 'v1',
           name: 'Vodka',
+          category: 'spirits',
+          onHand: 8,
+          parLevel: 12,
           perWeek: 14,
           unit: 'btl',
           usageLast4Weeks: 56,
@@ -156,6 +159,9 @@ describe('Bar Stock Inventory Cards', () => {
         {
           _id: 'v2',
           name: 'Tequila',
+          category: 'spirits',
+          onHand: 12,
+          parLevel: 10,
           perWeek: 7,
           unit: 'btl',
           usageLast4Weeks: 28,

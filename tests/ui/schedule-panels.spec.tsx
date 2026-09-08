@@ -238,7 +238,7 @@ describe('Schedule Panels', () => {
     it('renders forecast stats, explainability bullets, day breakdown, and overtime alerts', async () => {
       const r = createRoot();
       await act(async () => {
-        r.render(<LaborForecastPanel venueId={'v1' as any} weekStart="2026-09-06" />);
+        r.render(<LaborForecastPanel venueId={'v1' as any} />);
       });
 
       const json = output(r);
@@ -276,7 +276,7 @@ describe('Schedule Panels', () => {
 
       const r = createRoot();
       await act(async () => {
-        r.render(<LaborForecastPanel venueId={'v1' as any} weekStart="2026-09-06" />);
+        r.render(<LaborForecastPanel venueId={'v1' as any} />);
       });
 
       const draftBtn = r.container.queryAll(

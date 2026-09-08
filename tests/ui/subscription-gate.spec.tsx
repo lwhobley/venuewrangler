@@ -21,7 +21,7 @@ const state = vi.hoisted(() => ({
     all_access: false,
     venue_id: 'v1',
   } as any,
-  token: 'valid-token',
+  token: 'valid-token' as string | null,
   syncProfile: vi.fn(),
   clearSession: vi.fn(),
   meData: {
