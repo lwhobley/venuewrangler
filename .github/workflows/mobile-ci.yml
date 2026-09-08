@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths:
       - 'app/**'
+      - 'packages/marketing/**'
       - 'components/**'
       - 'lib/**'
       - 'modules/**'
@@ -29,6 +30,7 @@ on:
     branches: [main]
     paths:
       - 'app/**'
+      - 'packages/marketing/**'
       - 'components/**'
       - 'lib/**'
       - 'modules/**'

@@ -6,6 +6,12 @@ import { spawnSync } from 'node:child_process';
 import { shouldCopySiteSource } from './site-build-files.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const marketing = spawnSync(process.execPath, [join(root, 'node_modules/vite/bin/vite.js'), 'build'], {
+  cwd: join(root, 'packages/marketing'), stdio: 'inherit',
+  env: { ...process.env, EXPO_NO_DOTENV: '1' },
+});
+if (marketing.error) throw marketing.error;
+if (marketing.status !== 0) process.exit(marketing.status ?? 1);
 const output = join(root, 'dist-site');
 const marker = join(output, '.venue-site-build');
 if (existsSync(output)) {

@@ -12,6 +12,7 @@ on:
       - desktop-web
     paths:
       - 'site/**'
+      - 'packages/marketing/**'
       - 'app/**'
       - 'components/**'
       - 'lib/**'
