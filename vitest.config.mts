@@ -9,6 +9,7 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text-summary'],
+      reportsDirectory: 'coverage/core',
       // Include untested source files so coverage cannot be made to look high
       // by simply omitting difficult modules from the report.
       all: true,

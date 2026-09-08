@@ -92,6 +92,7 @@ async function enterCredentials(renderer: ReturnType<typeof createRoot>) {
 describe('SignInScreen', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    state.haptic.mockReset().mockResolvedValue(undefined);
     state.params = {};
     state.passwordAuth.mockReset();
     state.previewInvite.mockReset();
@@ -141,6 +142,42 @@ describe('SignInScreen', () => {
     await act(async () => find(renderer, 'Button', 'signIn.signInButton')?.props.onPress());
 
     expect(state.replace).toHaveBeenCalledWith('/(auth)/verify-email');
+  });
+
+  it.each(['rejects', 'never settles'])('completes sign-in when haptic feedback %s', async (failure) => {
+    state.haptic.mockImplementation(() => failure === 'rejects'
+      ? Promise.reject(new Error('Haptics unavailable')) : new Promise(() => {}));
+    state.passwordAuth.mockResolvedValue({ profile: { emailVerified: true }, venue: { id: 'v1' }, token: 'token' });
+    const renderer = createRoot();
+    await act(async () => renderer.render(<SignInScreen />));
+    await enterCredentials(renderer);
+    await act(async () => { void find(renderer, 'Button', 'signIn.signInButton')?.props.onPress(); });
+    expect(state.replace).toHaveBeenCalledWith('/(tabs)/home');
+    expect(state.alert).not.toHaveBeenCalled();
+  });
+
+  it('preserves the invite and reports verification email delivery failure', async () => {
+    state.params = { invite: 'invite-1', tab: 'signIn' };
+    state.previewInvite.mockResolvedValue({ venueName: 'Test Venue' });
+    state.passwordAuth.mockResolvedValue({ profile: { emailVerified: false }, venue: null, token: 'token', verificationEmailSent: false });
+    const renderer = createRoot();
+    await act(async () => renderer.render(<SignInScreen />));
+    await enterCredentials(renderer);
+    await act(async () => find(renderer, 'Button', 'signIn.signInButton')?.props.onPress());
+    expect(state.replace).toHaveBeenCalledWith({ pathname: '/(auth)/verify-email', params: { invite: 'invite-1', emailSendFailed: '1' } });
+  });
+
+  it('allows retry after a failed authentication request', async () => {
+    state.passwordAuth.mockRejectedValueOnce(new Error('Network unavailable'))
+      .mockResolvedValueOnce({ profile: { emailVerified: true }, venue: null, token: 'token' });
+    const renderer = createRoot();
+    await act(async () => renderer.render(<SignInScreen />));
+    await enterCredentials(renderer);
+    await act(async () => find(renderer, 'Button', 'signIn.signInButton')?.props.onPress());
+    expect(state.setSession).not.toHaveBeenCalled();
+    expect(state.alert).toHaveBeenCalledWith('signIn.signInFailedTitle', 'Network unavailable');
+    await act(async () => find(renderer, 'Button', 'signIn.signInButton')?.props.onPress());
+    expect(state.replace).toHaveBeenCalledWith('/(auth)/team-choice');
   });
 
   it('synchronously blocks a double-tap while authentication is pending', async () => {

@@ -23,20 +23,28 @@ export default function VerifyEmailScreen() {
   const [code, setCode] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [resending, setResending] = useState(false);
+  const [codeVerified, setCodeVerified] = useState(false);
+  const codeVerifiedRef = useRef(false);
   // Synchronous guards; "Resend" in particular sent two verification emails.
   const submittingRef = useRef(false);
   const resendingRef = useRef(false);
 
   const verify = async () => {
     if (submittingRef.current) return;
-    if (!code.trim()) {
+    if (!codeVerifiedRef.current && !code.trim()) {
       Alert.alert(t('verifyEmail.codeRequiredTitle'), t('verifyEmail.codeRequiredMessage'));
       return;
     }
     submittingRef.current = true;
     setSubmitting(true);
     try {
-      await appApi.verifyEmail({ code: code.trim() });
+      // Verification consumes the code. A later network failure during invite
+      // redemption must retry that step, not submit the consumed code again.
+      if (!codeVerifiedRef.current) {
+        await appApi.verifyEmail({ code: code.trim() });
+        codeVerifiedRef.current = true;
+        setCodeVerified(true);
+      }
       const redemption = typeof invite === 'string' && invite
         ? await appApi.redeemInvite(invite)
         : await appApi.redeemMyInvite();
@@ -75,7 +83,7 @@ export default function VerifyEmailScreen() {
   };
 
   const resend = async () => {
-    if (resendingRef.current) return;
+    if (resendingRef.current || submittingRef.current || codeVerifiedRef.current) return;
     resendingRef.current = true;
     setResending(true);
     try {
@@ -115,6 +123,7 @@ export default function VerifyEmailScreen() {
               label={t('verifyEmail.codeLabel')}
               value={code}
               onChangeText={setCode}
+              editable={!submitting && !codeVerified}
               keyboardType="number-pad"
               autoCapitalize="none"
               mode="outlined"
@@ -126,7 +135,7 @@ export default function VerifyEmailScreen() {
             <Button mode="contained" buttonColor={colors.primary} textColor={colors.buttonText} loading={submitting} disabled={submitting} onPress={() => void verify()}>
               {t('verifyEmail.verifyButton')}
             </Button>
-            <Button mode="text" textColor={colors.primary} loading={resending} disabled={resending} onPress={() => void resend()}>
+            <Button mode="text" textColor={colors.primary} loading={resending} disabled={resending || submitting || codeVerified} onPress={() => void resend()}>
               {t('verifyEmail.resendButton')}
             </Button>
           </Card.Content>

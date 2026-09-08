@@ -9,7 +9,7 @@ import {
   View,
 } from 'react-native';
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
-import * as Haptics from 'expo-haptics';
+import { notifySuccess } from '../../lib/feedback';
 import { Button, Card, Checkbox, Text, TextInput } from 'react-native-paper';
 import { appApi } from '../../lib/api-client';
 import { userFromProfile, venueFromAuth } from '../../lib/session-from-auth';
@@ -74,7 +74,7 @@ export default function RegisterScreen() {
         venue: venueFromAuth(profile, venue),
         token,
       });
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      notifySuccess();
       // Always verify email first — verify-email.tsx calls redeemMyInvite after
       // the code is confirmed, which will automatically claim the unclaimed staff
       // profile and link this account to the venue.

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Pressable, ScrollView, View, Linking, TextInput } from 'react-native';
 import { Card, Text } from 'react-native-paper';
-import * as Haptics from 'expo-haptics';
+import { notifySuccess } from '../../lib/feedback';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { ScreenErrorBoundary } from '../../components/ErrorBoundary';
 import { accents, colors, radius, spacing } from '../../lib/theme';
@@ -167,7 +167,7 @@ function ClockScreen() {
         await resetAttestationKey();
         await submit();
       }
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      notifySuccess();
     } catch (error) {
       Alert.alert(t('clock.punchFailedTitle'), errorMessage(error, t('clock.punchFailedDefault')));
     } finally {
@@ -182,7 +182,7 @@ function ClockScreen() {
     setBusy(true);
     try {
       await breakStart({ type });
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      notifySuccess();
     } catch (error) {
       Alert.alert(t('clock.breakFailedTitle'), errorMessage(error, t('clock.breakFailedDefault')));
     } finally {
@@ -197,7 +197,7 @@ function ClockScreen() {
     setBusy(true);
     try {
       await breakEnd({});
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      notifySuccess();
     } catch (error) {
       Alert.alert(t('clock.endBreakFailedTitle'), errorMessage(error, t('clock.endBreakFailedDefault')));
     } finally {
