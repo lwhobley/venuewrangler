@@ -74,6 +74,10 @@ keys/
 .antigravity/
 .vs/
 
+# Local security tooling and detailed cloud findings (never publish).
+.local-security/
+prowler_output/
+
 # Supabase CLI link metadata
 supabase/.temp/
 

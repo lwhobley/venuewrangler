@@ -9,7 +9,7 @@ import {
   View,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import * as Haptics from 'expo-haptics';
+import { notifySuccess } from '../../lib/feedback';
 import { Button, Card, Checkbox, Text, TextInput } from 'react-native-paper';
 import { appApi } from '../../lib/api-client';
 import { userFromProfile, venueFromAuth } from '../../lib/session-from-auth';
@@ -72,11 +72,15 @@ export default function InviteAcceptScreen() {
         venue: venueFromAuth(profile, venue),
         token: authToken,
       });
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      notifySuccess();
       // Route to email verification — verify-email.tsx will call redeemInvite
       // with the invite token after code confirmation to finalize team membership.
       if (!profile.emailVerified) {
-        router.replace({ pathname: '/(auth)/verify-email', params: { invite: token } });
+        const emailSendFailed = (resp as { verificationEmailSent?: boolean | null }).verificationEmailSent === false;
+        router.replace({ pathname: '/(auth)/verify-email', params: {
+          invite: token,
+          ...(emailSendFailed ? { emailSendFailed: '1' } : {}),
+        } });
       } else {
         router.replace('/(tabs)/home');
       }

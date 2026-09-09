@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Pressable, ScrollView, View, Linking, TextInput } from 'react-native';
 import { Card, Text } from 'react-native-paper';
-import * as Haptics from 'expo-haptics';
+import { notifySuccess } from '../../lib/feedback';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { ScreenErrorBoundary } from '../../components/ErrorBoundary';
 import { accents, colors, radius, spacing } from '../../lib/theme';
@@ -167,7 +167,7 @@ function ClockScreen() {
         await resetAttestationKey();
         await submit();
       }
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      notifySuccess();
     } catch (error) {
       Alert.alert(t('clock.punchFailedTitle'), errorMessage(error, t('clock.punchFailedDefault')));
     } finally {
@@ -182,7 +182,7 @@ function ClockScreen() {
     setBusy(true);
     try {
       await breakStart({ type });
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      notifySuccess();
     } catch (error) {
       Alert.alert(t('clock.breakFailedTitle'), errorMessage(error, t('clock.breakFailedDefault')));
     } finally {
@@ -197,7 +197,7 @@ function ClockScreen() {
     setBusy(true);
     try {
       await breakEnd({});
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      notifySuccess();
     } catch (error) {
       Alert.alert(t('clock.endBreakFailedTitle'), errorMessage(error, t('clock.endBreakFailedDefault')));
     } finally {
@@ -305,6 +305,8 @@ function ClockScreen() {
             <Pressable
               onPress={() => void onEndBreak()}
               disabled={busy}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: busy, busy }}
               style={{
                 backgroundColor: accents[1].fg,
                 borderRadius: radius.sharp,
@@ -321,6 +323,13 @@ function ClockScreen() {
             <Pressable
               onPress={() => void onPunch()}
               disabled={!canClock || busy}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: !canClock || busy, busy }}
+              accessibilityHint={
+                canClock
+                  ? undefined
+                  : t('clock.a11y.outsideGeofenceHint')
+              }
               style={{
                 backgroundColor: canClock ? (isClockedIn ? colors.danger : colors.secondary) : colors.border,
                 borderRadius: radius.sharp,
@@ -337,6 +346,8 @@ function ClockScreen() {
 
           {isClockedIn && !isOnBreak && (
             <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ disabled: busy }}
               onPress={() => {
                 Alert.alert(
                   t('clock.takeBreakTitle'),
@@ -431,6 +442,8 @@ function ClockScreen() {
           <Card style={{ backgroundColor: colors.surface, borderRadius: radius.sharp }}>
             <Card.Content style={{ gap: spacing.sm }}>
               <Pressable
+                accessibilityRole="button"
+                accessibilityState={{ expanded: showCorrection }}
                 onPress={() => setShowCorrection(!showCorrection)}
                 style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}
               >
@@ -518,6 +531,8 @@ function ClockScreen() {
                     />
                   </View>
                   <Pressable
+                    accessibilityRole="button"
+                    accessibilityState={{ disabled: busy, busy }}
                     onPress={() => void onSubmitCorrection()}
                     disabled={busy}
                     style={{
@@ -573,6 +588,8 @@ function ClockScreen() {
                     </View>
                     {Number.isFinite(e.clockInLat) && Number.isFinite(e.clockInLng) && e.clockInLat !== 0 && e.clockInLng !== 0 && (
                       <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={t('clock.a11y.openPunchLocation')}
                         onPress={() => {
                           const url = `https://www.google.com/maps/search/?api=1&query=${e.clockInLat},${e.clockInLng}`;
                           Linking.openURL(url).catch(() => Alert.alert(t('clock.errorTitle'), t('clock.mapError')));

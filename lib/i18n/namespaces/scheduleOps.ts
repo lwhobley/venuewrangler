@@ -200,6 +200,12 @@ export const en = {
     locationUnavailableMsg: 'Location unavailable — enable GPS to punch.',
     mockedLocation: 'Mocked location detected — punching is disabled.',
     mustBeWithin: 'You must be within {radius}m of {venue} to punch.',
+    a11y: {
+      // Announced by VoiceOver/TalkBack when the punch control is disabled,
+      // so the reason is conveyed rather than only shown as a greyed button.
+      outsideGeofenceHint: 'Unavailable until you are inside the venue area.',
+      openPunchLocation: 'Open this punch location in Maps',
+    },
     insideGeofence: "✓ You're inside the geofence",
     inSince: ' · in since {time}',
     onBreakSuffix: ' · (On {type} Break)',
@@ -434,6 +440,10 @@ export const es: ScheduleOpsDictionary = {
     locationUnavailableMsg: 'Ubicación no disponible — activa el GPS para marcar.',
     mockedLocation: 'Se detectó una ubicación simulada — el marcaje está deshabilitado.',
     mustBeWithin: 'Debes estar a menos de {radius}m de {venue} para marcar.',
+    a11y: {
+      outsideGeofenceHint: 'No disponible hasta que estés dentro del área del local.',
+      openPunchLocation: 'Abrir la ubicación de este fichaje en Mapas',
+    },
     insideGeofence: '✓ Estás dentro del área permitida',
     inSince: ' · desde las {time}',
     onBreakSuffix: ' · (En descanso {type})',
@@ -666,6 +676,10 @@ export const fr: ScheduleOpsDictionary = {
     locationUnavailableMsg: 'Position indisponible — activez le GPS pour pointer.',
     mockedLocation: 'Position simulée détectée — le pointage est désactivé.',
     mustBeWithin: 'Vous devez être à moins de {radius}m de {venue} pour pointer.',
+    a11y: {
+      outsideGeofenceHint: "Indisponible tant que vous n'êtes pas dans la zone du lieu.",
+      openPunchLocation: 'Ouvrir le lieu de ce pointage dans Plans',
+    },
     insideGeofence: '✓ Vous êtes dans la zone autorisée',
     inSince: ' · depuis {time}',
     onBreakSuffix: ' · (En pause {type})',
