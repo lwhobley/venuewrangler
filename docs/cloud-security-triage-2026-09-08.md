@@ -30,6 +30,30 @@ reconstructions of unavailable findings.
 | Review | The only managed DNS zone is private `cluster.local`, owned by the stadium GKE cluster | If the missing control is DNSSEC, classify it as not applicable to this private zone, with evidence. Private Cloud DNS zones do not support DNSSEC. The missing report prevents confirming the exact DNS check; do not suppress all DNS findings or alter public DNS on this evidence. |
 | Review | GKE-managed rules allow ports 3310 and 5672 from `0.0.0.0/0` | Both matching forwarding rules are `INTERNAL`. These rules alone are not evidence of internet-accessible brokers. Review backend/node reachability and intended private clients before tightening Kubernetes-managed rules. Do not edit generated rules independently of their owning Service. |
 
+## Dependency advisory: multer (accepted, tracked — not fixable at this layer)
+
+`npm audit` reports 4 high-severity advisories against `multer@2.2.0`, reached
+only via `@nestjs/platform-express@12.0.1`, which pins that exact version.
+`multer@2.3.0` carries the fixes, but `platform-express` has no release that
+depends on it, so npm reports "no fix available".
+
+Not reachable in this application. `multer` only parses a request when a route
+opts in, and no route does: there is no `FileInterceptor`, `FilesInterceptor`,
+`@UploadedFile`, or `MulterModule` anywhere in `packages/api/src`. Uploads
+(documents, checklist photos, staff CSV, invoice photos) are sent as base64
+JSON and never enter multer's multipart path.
+
+An npm `overrides` entry was attempted and rejected. Root overrides do not
+reach this workspace's transitive dependency, workspace-level overrides are
+ignored by npm entirely, and the combinations that did move the version left
+`multer` unresolvable from `node_modules/@nestjs/platform-express` — i.e. a
+broken API runtime traded for an unreachable advisory. Verified with
+`require.resolve('multer', { paths: [<platform-express>] })`.
+
+Action: leave the dependency as-is and re-check when NestJS ships a
+`platform-express` built on `multer@2.3.0`. Re-evaluate immediately if any
+route ever adopts multipart upload, which would make the path reachable.
+
 ## Infrastructure coupling: avoid destructive cleanup
 
 - GKE cluster `stadium-wrangler-broker` is RUNNING in `us-east1` on `default`.
