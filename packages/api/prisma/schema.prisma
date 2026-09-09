@@ -1419,6 +1419,11 @@ model Subscription {
   cancelledAt            DateTime?
   externalSubscriptionId String?               @unique
   externalCustomerId     String?
+  // One canonical RevenueCat customer allocation; never copied to covered venues.
+  revenueCatSubscriberId String?               @unique
+  billingSubscriptionId  String?
+  billingSubscription    Subscription?         @relation("VenueBillingCoverage", fields: [billingSubscriptionId], references: [id], onDelete: SetNull)
+  coveredSubscriptions   Subscription[]        @relation("VenueBillingCoverage")
   dataRetentionWarnedAt  DateTime?
   lastStripeEventAt      DateTime?
   lastRevenueCatEventAt  DateTime?
@@ -1428,6 +1433,7 @@ model Subscription {
 
   @@index([status])
   @@index([externalCustomerId])
+  @@index([billingSubscriptionId])
 }
 
 model SubscriptionEvent {

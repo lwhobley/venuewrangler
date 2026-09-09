@@ -381,7 +381,9 @@ describe('AppController multi-venue invariants', () => {
       },
       subscription: {
         create: vi.fn().mockResolvedValue({}),
-        findFirst: vi.fn().mockResolvedValue({ id: 'sub-multi' }),
+        findFirst: vi.fn().mockResolvedValue({ id: 'sub-multi', venueId: 'venue-a', status: 'active', planId: 'venueflow_multi_venue_5', platform: 'stripe' }),
+        findUnique: vi.fn().mockResolvedValue({ id: 'sub-multi', venueId: 'venue-a', status: 'active', planId: 'venueflow_multi_venue_5', platform: 'stripe' }),
+        count: vi.fn().mockResolvedValue(0),
       },
       staffOnboardingTask: { createMany: vi.fn().mockResolvedValue({ count: 0 }) },
       team: { upsert: vi.fn().mockResolvedValue({}) },
@@ -400,6 +402,9 @@ describe('AppController multi-venue invariants', () => {
     );
 
     expect(prisma.profile.delete).not.toHaveBeenCalled();
+    expect(prisma.subscription.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({
+      billingSubscriptionId: 'sub-multi', status: 'expired', trialEndsAt: null,
+    }) }));
   });
 
   it('refuses to create a venue at the 0,0 geofence sentinel', async () => {

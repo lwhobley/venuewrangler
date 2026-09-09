@@ -9,6 +9,7 @@ import { CurrentUser } from '../../auth/current-user.decorator';
 import type { AuthUser } from '../../auth/auth.guard';
 import { canManageVenue, isAdminRole, isOwnerOrAdminRole } from '../../auth/roles';
 import { RequireSubscription } from '../../billing/require-subscription.decorator';
+import { assertCoverageCapacity, COVERED_SUBSCRIPTION_DATA, effectiveSubscriptionStatus, isMultiVenuePlan } from '../../billing/billing-coverage';
 import { closeOpenBreaks, parseTimeBreaks, unpaidBreakMs } from '../../common/break-duration';
 import { csvCell, csvDocument } from '../../common/csv';
 import { getClientIp } from '../../common/http';
@@ -429,10 +430,13 @@ export class AppController {
       }
 
       const isAdditionalVenue = venueIds.length > 0;
+      let billingSubscriptionId: string | null = null;
       if (isAdditionalVenue) {
         const hasMultiPlan = await tx.subscription.findFirst({
           where: {
             venueId: { in: venueIds },
+            billingSubscriptionId: null,
+            venue: { profiles: { some: { userId: user.sub, role: { in: ['owner', 'admin'] }, OR: [{ membershipStatus: null }, { membershipStatus: 'active' }] } } },
             status: { in: ['active', 'trialing'] },
             OR: [
               { planId: MULTI_VENUE_PLAN_ID },
@@ -440,9 +444,8 @@ export class AppController {
               { planId: { contains: 'multi' } },
             ],
           },
-          select: { id: true },
         });
-        if (!hasMultiPlan) {
+        if (!hasMultiPlan || !isMultiVenuePlan(hasMultiPlan) || !['active', 'trialing'].includes(effectiveSubscriptionStatus(hasMultiPlan))) {
           throw new HttpException(
             {
               statusCode: 402,
@@ -452,6 +455,14 @@ export class AppController {
             HttpStatus.PAYMENT_REQUIRED,
           );
         }
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`billing:${hasMultiPlan.venueId}`}))`;
+        // Re-read under the payer lock in case cancellation raced registration.
+        const payer = await tx.subscription.findUnique({ where: { id: hasMultiPlan.id } });
+        if (!payer || !isMultiVenuePlan(payer) || !['active', 'trialing'].includes(effectiveSubscriptionStatus(payer))) {
+          throw new BadRequestException('The paying subscription is no longer active.');
+        }
+        await assertCoverageCapacity(tx, payer.id);
+        billingSubscriptionId = payer.id;
       }
 
       const plan = isAdditionalVenue
@@ -496,6 +507,7 @@ export class AppController {
           trialStartedAt,
           trialEndsAt,
           cancelAtPeriodEnd: false,
+          ...(billingSubscriptionId ? { ...COVERED_SUBSCRIPTION_DATA, billingSubscriptionId } : {}),
         },
       });
       const profile = await tx.profile.create({
