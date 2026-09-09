@@ -27,6 +27,17 @@ updates:
     # `npx expo install --check` is the source of truth for this set; it
     # reports "Dependencies are up to date" at the pinned versions.
     ignore:
+      # multer is pinned to 2.2.0 by @nestjs/platform-express and has no
+      # patched release reachable from it, so Dependabot's security update
+      # retries and fails on every run with nothing it can open. The advisories
+      # are unreachable here and are recorded in scripts/audit-gate.mjs and
+      # docs/cloud-security-triage-2026-09-08.md.
+      #
+      # Silencing this does not lose the signal. @nestjs/* updates still come
+      # through (see the nestjs group above), which is how the fix will
+      # actually arrive, and the moment a patched platform-express lands the
+      # audit gate's stale-exemption check fails until the entry is removed.
+      - dependency-name: "multer"
       - dependency-name: "react"
       - dependency-name: "react-dom"
       - dependency-name: "react-native"
