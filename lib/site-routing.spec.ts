@@ -9,6 +9,13 @@ const root = resolve(__dirname, '..');
 const read = (path: string) => readFileSync(resolve(root, path), 'utf8');
 
 describe('hosted Expo routing', () => {
+  it('allows authenticated API images without allowing arbitrary image hosts', async () => {
+    const fetch = vi.fn().mockResolvedValue(new Response('<html>app</html>'));
+    const response = await worker.fetch(new Request('https://venuewrangler.com/app/chat/1'), { ASSETS: { fetch } });
+    const directive = response.headers.get('Content-Security-Policy')!.split(';').find((part: string) => part.trim().startsWith('img-src'))!;
+    expect(directive).toContain('https://venue-wrangler-api-c57mm72zpa-ue.a.run.app');
+    expect(directive).not.toContain('*');
+  });
   afterEach(() => { vi.unstubAllEnvs(); });
 
   it('does not rewrite a clean URL to its own canonical HTML file', () => {

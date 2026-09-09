@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ChatController } from './chat.controller';
+import { Readable, Writable } from 'node:stream';
 
 function makeController() {
   const prisma: any = {
@@ -57,6 +58,7 @@ function makeController() {
   } as any;
 
   const s3ImageService = {
+    getObject: vi.fn(),
     upload: vi.fn().mockResolvedValue('uploads/chat-image.webp'),
     delete: vi.fn().mockResolvedValue(undefined),
     getPresignedUrl: vi.fn().mockResolvedValue('https://signed.example/image.webp'),
@@ -809,19 +811,22 @@ describe('ChatController', () => {
     expect(s3ImageService.delete).toHaveBeenCalledWith('uploads/orphan.png');
   });
 
-  it('validates chat image access tokens before redirecting to the presigned url', async () => {
+  it('validates chat image access tokens before streaming bytes through the API', async () => {
     const { controller, prisma, mediaAccess, s3ImageService } = makeController();
     prisma.chatImage.findUnique.mockResolvedValue({
       id: 'img-1',
       venueId: 'venue-1',
       s3Key: 'uploads/img-1.png',
     });
-    s3ImageService.getPresignedUrl.mockResolvedValue('https://signed.example/img-1.png');
-    const res = { redirect: vi.fn().mockReturnValue('redirected'), setHeader: vi.fn() } as any;
+    s3ImageService.getObject.mockResolvedValue({ Body: Readable.from([Buffer.from('image')]), ContentType: 'image/png' });
+    const chunks: Buffer[] = [];
+    const res = Object.assign(new Writable({ write(chunk, _encoding, callback) { chunks.push(chunk); callback(); } }), { setHeader: vi.fn() });
 
-    await expect(controller.getImage('img-1', 'token-1', res)).resolves.toBe('redirected');
+    await controller.getImage('img-1', 'token-1', res as any);
     expect(mediaAccess.assertToken).toHaveBeenCalledWith('token-1', 'chat-image', 'img-1', 'venue-1');
     expect(res.setHeader).toHaveBeenCalledWith('Cache-Control', 'no-store');
-    expect(res.redirect).toHaveBeenCalledWith(302, 'https://signed.example/img-1.png');
+    expect(Buffer.concat(chunks).toString()).toBe('image');
+    expect(res.setHeader).toHaveBeenCalledWith('Cross-Origin-Resource-Policy', 'cross-origin');
+    expect(s3ImageService.getPresignedUrl).not.toHaveBeenCalled();
   });
 });

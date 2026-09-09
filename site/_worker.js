@@ -22,7 +22,7 @@ export default {
     response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
     response.headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
     response.headers.set('Permissions-Policy', 'camera=(self), microphone=(), geolocation=(self)');
-    response.headers.set('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob:; connect-src 'self' https://venue-wrangler-api-c57mm72zpa-ue.a.run.app; media-src 'self' blob:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
+    response.headers.set('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https://venue-wrangler-api-c57mm72zpa-ue.a.run.app; connect-src 'self' https://venue-wrangler-api-c57mm72zpa-ue.a.run.app; media-src 'self' blob:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
     return response;
   },
 };

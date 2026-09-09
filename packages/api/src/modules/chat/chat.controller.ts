@@ -1,3 +1,5 @@
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import {
   BadRequestException,
   Body,
@@ -872,10 +874,15 @@ export class ChatController {
     const image = await this.prisma.chatImage.findUnique({ where: { id } });
     if (!image) throw new NotFoundException('Image not found');
     await this.mediaAccess.assertToken(token, 'chat-image', id, image.venueId);
-    const url = await this.s3ImageService.getPresignedUrl(image.s3Key);
+    const object = await this.s3ImageService.getObject(image.s3Key);
+    if (!object.Body) throw new NotFoundException('Image content not found');
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('Referrer-Policy', 'no-referrer');
-    return res.redirect(302, url);
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    res.setHeader('Content-Type', object.ContentType ?? 'application/octet-stream');
+    // Stream through the API origin already trusted by the web CSP. A redirect
+    // would require allowing the private storage host as well.
+    return pipeline(object.Body as Readable, res);
   }
 }
 
