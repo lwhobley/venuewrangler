@@ -1,0 +1,88 @@
+name: API Deploy Drift Check
+
+# Deploy API to Cloud Run is workflow_dispatch-only and gated behind seven
+# human attestations (backups verified, secondary alerting verified, billing
+# secrets verified, attestation rollout verified, ...) — deliberately manual,
+# not something to auto-trigger. That means nothing else guarantees main's
+# packages/api ever reaches production. It found 10 backend commits
+# (chat image streaming, payroll export validation, multi-venue billing)
+# sitting undeployed a week after the last successful run, with no signal
+# anywhere that they hadn't shipped.
+#
+# This does not deploy anything. It only measures the gap between main and
+# the last commit actually running in Cloud Run, and fails loudly when that
+# gap is non-empty — the same "surface drift, do not decide it" contract as
+# branch-api-parity.yml and site-branch-parity.yml.
+
+on:
+  schedule:
+    - cron: '0 13 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  check-drift:
+    name: Compare main's packages/api against the last successful production deploy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Find the last successful Deploy API to Cloud Run run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -Eeuo pipefail
+          deployed_sha="$(gh run list \
+            --repo "${{ github.repository }}" \
+            --workflow deploy-api.yml \
+            --status success \
+            --limit 1 \
+            --json headSha \
+            --jq '.[0].headSha // empty')"
+          if [[ -z "$deployed_sha" ]]; then
+            echo "::error::No successful Deploy API to Cloud Run run found. Cannot determine what is live."
+            exit 1
+          fi
+          echo "DEPLOYED_SHA=$deployed_sha" >> "$GITHUB_ENV"
+          echo "Last successful deploy was built from $deployed_sha"
+
+      - name: Diff packages/api between the deployed commit and current main
+        run: |
+          set -Eeuo pipefail
+          git fetch origin main --quiet
+
+          if ! git cat-file -e "$DEPLOYED_SHA" 2>/dev/null; then
+            echo "::error::Deployed commit $DEPLOYED_SHA is not reachable from this checkout (fetch-depth issue?)."
+            exit 1
+          fi
+
+          if git diff --quiet "$DEPLOYED_SHA" origin/main -- packages/api/; then
+            echo "packages/api on main matches the last production deploy ($DEPLOYED_SHA)." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          commits_behind="$(git rev-list --count "$DEPLOYED_SHA"..origin/main -- packages/api/)"
+          days_behind="$(( ( $(date +%s) - $(git log -1 --format=%ct "$DEPLOYED_SHA") ) / 86400 ))"
+
+          {
+            echo "## ⚠️ Production API is $commits_behind backend commit(s) behind main"
+            echo
+            echo "Last successful deploy: \`$DEPLOYED_SHA\` ($days_behind days ago)."
+            echo "Deploy API to Cloud Run is manual and gated behind real-world"
+            echo "attestations (backups, alerting, billing secrets, attestation"
+            echo "rollout) — this check does not decide when to deploy, only that"
+            echo "someone should look at whether this gap is intentional."
+            echo
+            echo '```text'
+            git diff --name-status "$DEPLOYED_SHA" origin/main -- packages/api/ | head -200
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          echo "packages/api on main is $commits_behind commit(s) / $days_behind day(s) ahead of the last production deploy ($DEPLOYED_SHA)."
+          git diff --name-status "$DEPLOYED_SHA" origin/main -- packages/api/ | head -200
+          exit 1
