@@ -79,6 +79,7 @@ vi.mock('../../lib/i18n', () => ({
 }));
 
 import BarStockScreenWrapper from '../../app/(tabs)/bar-stock';
+import { clearOfflineQueue } from '../../lib/offline-inventory-queue';
 
 function render() {
   return createRoot();
@@ -94,12 +95,13 @@ function inputByLabel(r: ReturnType<typeof createRoot>, label: string) {
 }
 
 describe('Bar stock screen', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
     state.venue = { id: 'venue-1' };
     state.canManage = true;
     state.profileLoading = false;
     state.stock = { items: [], lowStockCount: 0, totalValueCents: 0 };
+    await clearOfflineQueue();
   });
 
   it('gives non-managers a read-only stock view with no edit or movement actions', async () => {
@@ -177,5 +179,35 @@ describe('Bar stock screen', () => {
     const out = output(r);
     expect(out).toContain('Chicken Breast');
     expect(out).not.toContain('Well Vodka');
+  });
+
+  it('enqueues movement offline and displays pending sync banner when walk-in cooler drops connection', async () => {
+    state.stock = { items: [item()], lowStockCount: 1, totalValueCents: 6000 };
+    state.recordMovement.mockRejectedValueOnce(new Error('Network request failed'));
+    const r = render();
+    await act(async () => r.render(<BarStockScreenWrapper />));
+    await act(async () => buttonByLabel(r, 'barStock.list.plusOne')?.props.onPress());
+
+    const out = output(r);
+    expect(out).toContain('barStock.messages.offlineMovementQueued');
+    expect(out).toContain('barStock.messages.offlinePendingBanner(count=1)');
+  });
+
+  it('syncs queued walk-in cooler movements when sync now button is pressed', async () => {
+    state.stock = { items: [item()], lowStockCount: 1, totalValueCents: 6000 };
+    state.recordMovement
+      .mockRejectedValueOnce(new Error('Network request failed'))
+      .mockResolvedValueOnce({ ok: true });
+
+    const r = render();
+    await act(async () => r.render(<BarStockScreenWrapper />));
+    await act(async () => buttonByLabel(r, 'barStock.list.plusOne')?.props.onPress());
+    expect(output(r)).toContain('barStock.messages.offlinePendingBanner(count=1)');
+
+    const syncBtn = buttonByLabel(r, 'barStock.messages.syncNow');
+    expect(syncBtn).toBeDefined();
+    await act(async () => syncBtn?.props.onPress());
+
+    expect(output(r)).toContain('barStock.messages.offlineSyncSuccess(count=1)');
   });
 });

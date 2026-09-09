@@ -13,3 +13,19 @@ nodeRequire.extensions['.png'] = (module, filename) => {
 
 (globalThis as any).__DEV__ = true;
 (globalThis as any).expo = (globalThis as any).expo || { EventEmitter: class {} };
+
+import { vi } from 'vitest';
+vi.mock('expo-file-system/legacy', () => ({
+  documentDirectory: '/mock/documents/',
+  getInfoAsync: vi.fn().mockResolvedValue({ exists: false }),
+  readAsStringAsync: vi.fn().mockResolvedValue(''),
+  writeAsStringAsync: vi.fn().mockResolvedValue(undefined),
+  deleteAsync: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock('expo-file-system', () => ({
+  documentDirectory: '/mock/documents/',
+  getInfoAsync: vi.fn().mockResolvedValue({ exists: false }),
+  readAsStringAsync: vi.fn().mockResolvedValue(''),
+  writeAsStringAsync: vi.fn().mockResolvedValue(undefined),
+  deleteAsync: vi.fn().mockResolvedValue(undefined),
+}));
