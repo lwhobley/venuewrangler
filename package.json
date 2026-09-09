@@ -79,10 +79,10 @@
     "@emnapi/runtime": "1.11.3",
     "@emnapi/wasi-threads": "1.2.3",
     "@types/react": "~19.2.18",
-    "@vitest/coverage-v8": "^4.1.9",
+    "@vitest/coverage-v8": "^5.0.0",
     "expo-doctor": "1.20.4",
     "test-renderer": "^1.2.0",
     "typescript": "~6.0.3",
-    "vitest": "^4.1.9"
+    "vitest": "^5.0.0"
   }
 }
