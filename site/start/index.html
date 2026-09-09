@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><meta name="robots" content="noindex"/><title>Create your workspace — Venue Wrangler</title><style>
+*{box-sizing:border-box}body{margin:0;background:#08080a;color:#f4f4f5;font:15px/1.6 Arial,sans-serif}main{max-width:650px;margin:60px auto;padding:28px}a{color:#64ddb2}h1{font-size:38px;letter-spacing:-1.5px}.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.full{grid-column:1/-1}label{display:block;color:#b6b6be;font-size:13px}input,select{display:block;width:100%;margin-top:7px;padding:13px;border:1px solid #36363d;border-radius:8px;background:#15151a;color:white;font:inherit}button{padding:14px 22px;border:0;border-radius:8px;background:#a5f0cc;color:#082a1e;font-weight:700;cursor:pointer}button:disabled{opacity:.5}.status{margin-top:16px}.error{color:#ffaaa0}.success{color:#8be7b6}:focus-visible{outline:2px solid #10b981;outline-offset:4px}@media(max-width:520px){.form-grid{grid-template-columns:1fr}main{margin:20px auto}}
+</style></head><body><main><a href="../">← Venue Wrangler</a><h1>Your next great service starts here.</h1><p>Create your account, verify your email, and set up your venue.</p>          <form id="signupForm">
+            <div class="form-grid">
+              <label>Owner name<input name="ownerName" autocomplete="name" required placeholder="Alex Morgan" /></label>
+              <label>Email<input name="email" type="email" autocomplete="email" required placeholder="owner@example.com" /></label>
+              <label>Password<input name="password" type="password" autocomplete="new-password" minlength="8" required placeholder="At least 8 characters" /></label>
+              <label>Business name<input name="businessName" autocomplete="organization" required placeholder="North Room" /></label>
+              <label>Venue type<select name="venueType"><option value="restaurant">Restaurant</option><option value="bar">Bar</option><option value="hotel">Hotel</option><option value="cafe">Cafe</option><option value="nightclub">Nightclub</option><option value="event_venue">Event venue</option><option value="other">Other</option></select></label>
+              <label>Team size<select name="staffRange"><option value="1-15">1-15 staff</option><option value="16-30">16-30 staff</option><option value="31-50">31-50 staff</option></select></label>
+              <label class="full">Address<input name="address" autocomplete="street-address" placeholder="123 Main Street" /></label>
+              <label class="full">Phone<input name="phone" autocomplete="tel" placeholder="(555) 123-4567" /></label>
+            </div>
+            <label class="full" style="display:flex; align-items:flex-start; gap:8px; font-weight:600; margin-top:16px;">
+              <input name="termsAccepted" type="checkbox" required style="width:auto; margin-top:3px;" />
+              <span>I agree to the <a href="../terms/">Terms of Service</a> and <a href="../privacy/">Privacy Policy</a>.</span>
+            </label>
+            <div style="height:16px"></div>
+            <button class="btn" type="submit" id="signupButton">Start workspace</button>
+            <div id="verificationStep" hidden style="margin-top:16px;">
+              <label>Email verification code<input id="verificationCode" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="8-digit code" /></label>
+              <div style="height:12px"></div>
+              <button class="btn" type="button" id="verifyButton">Verify email &amp; create workspace</button>
+            </div>
+            <div class="status" id="signupStatus" role="status" aria-live="polite"></div>
+          </form></main><script>
+const API_BASE = "https://venue-wrangler-api-c57mm72zpa-ue.a.run.app/api";
+const APP_PATH = "/app";
+    async function api(path, options = {}, token) {
+      const response = await fetch(API_BASE + path, {
+        ...options,
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...(options.headers || {}),
+        },
+      });
+      const text = await response.text();
+      const data = text ? JSON.parse(text) : null;
+      if (!response.ok) {
+        throw new Error(data?.message || data?.error || "Request failed.");
+      }
+      return data;
+    }
+
+    const form = document.getElementById("signupForm");
+    const statusEl = document.getElementById("signupStatus");
+    const button = document.getElementById("signupButton");
+    const verificationStep = document.getElementById("verificationStep");
+    const verificationCode = document.getElementById("verificationCode");
+    const verifyButton = document.getElementById("verifyButton");
+    let pendingSession = null;
+    let pendingWorkspace = null;
+
+    async function createWorkspace() {
+      const result = await api("/v1/app/register-venue", {
+        method: "POST",
+        body: JSON.stringify(pendingWorkspace),
+      }, pendingSession.token);
+      statusEl.className = "status success";
+      statusEl.textContent = `Workspace created for ${result.venue?.name || pendingWorkspace.businessName}. Opening your workspace...`;
+      form.reset();
+      verificationStep.hidden = true;
+      pendingSession = null;
+      pendingWorkspace = null;
+      window.location.assign(APP_PATH);
+    }
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const data = Object.fromEntries(new FormData(form).entries());
+      statusEl.className = "status";
+      statusEl.textContent = "Adding your venue...";
+      button.disabled = true;
+      try {
+        let session;
+        try {
+          session = await api("/v1/auth/password", {
+            method: "POST",
+            body: JSON.stringify({
+              email: String(data.email || "").trim(),
+              password: String(data.password || ""),
+              flow: "signUp",
+              fullName: String(data.ownerName || "").trim(),
+              phone: String(data.phone || "").trim() || undefined,
+              termsAccepted: data.termsAccepted === "on",
+            }),
+          });
+        } catch (error) {
+          if (!String(error.message || "").includes("account already exists")) throw error;
+          session = await api("/v1/auth/password", {
+            method: "POST",
+            body: JSON.stringify({
+              email: String(data.email || "").trim(),
+              password: String(data.password || ""),
+              flow: "signIn",
+            }),
+          });
+          if (!session.profile?.emailVerified) {
+            await api("/v1/auth/verify-email/send", { method: "POST" }, session.token);
+          }
+        }
+        pendingSession = session;
+        pendingWorkspace = {
+          businessName: String(data.businessName || "").trim(),
+          ownerName: String(data.ownerName || "").trim(),
+          phone: String(data.phone || "").trim() || undefined,
+          address: String(data.address || "").trim() || undefined,
+          venueType: String(data.venueType || "restaurant"),
+          staffRange: String(data.staffRange || "1-15"),
+          // VW-24: without this, a venue created through the marketing site
+          // (unlike the in-app "add venue" flow) got no timezone at all,
+          // which desynced payroll/schedule day-boundary math from the
+          // venue's actual business day.
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        };
+        if (session.profile?.emailVerified) {
+          await createWorkspace();
+          return;
+        }
+        verificationStep.hidden = false;
+        statusEl.textContent = "We sent an 8-digit verification code to your email. Enter it below to create your workspace.";
+        verificationCode.focus();
+      } catch (error) {
+        statusEl.className = "status error";
+        statusEl.textContent = error.message || "Could not add the venue.";
+      } finally {
+        button.disabled = false;
+      }
+    });
+
+    verifyButton.addEventListener("click", async () => {
+      if (!pendingSession || !pendingWorkspace) return;
+      const code = verificationCode.value.trim();
+      if (!code) {
+        statusEl.className = "status error";
+        statusEl.textContent = "Enter the verification code from your email.";
+        return;
+      }
+      verifyButton.disabled = true;
+      statusEl.className = "status";
+      statusEl.textContent = "Verifying your email...";
+      try {
+        await api("/v1/auth/verify-email", { method: "POST", body: JSON.stringify({ code }) }, pendingSession.token);
+        await createWorkspace();
+      } catch (error) {
+        statusEl.className = "status error";
+        statusEl.textContent = error.message || "Could not verify your email.";
+      } finally {
+        verifyButton.disabled = false;
+      }
+    });
+
+try { const draft=JSON.parse(sessionStorage.getItem('vw-workspace-draft')||'null'); if(draft){form.elements.namedItem('businessName').value=draft.venue||'';form.elements.namedItem('email').value=draft.email||'';sessionStorage.removeItem('vw-workspace-draft');} } catch {}
+</script></body></html>
