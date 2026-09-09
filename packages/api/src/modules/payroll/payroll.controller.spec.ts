@@ -22,6 +22,16 @@ afterEach(() => {
 });
 
 describe('PayrollController', () => {
+  it.each([
+    ['2026-02-30', '2026-03-01'],
+    ['2026-07-15', '2026-07-01'],
+    ['2020-01-01', '2026-01-01'],
+    ['invalid', '2026-07-01'],
+  ])('rejects invalid or oversized payroll ranges (%s to %s) before reading punches', async (start, end) => {
+    const { controller, prisma } = makeController();
+    await expect(controller.exportPayrollCsv(managerScope, start, end)).rejects.toThrow();
+    expect(prisma.timeEntry.findMany).not.toHaveBeenCalled();
+  });
   describe('authorization', () => {
     it('rejects non-manager roles from the summary endpoint', async () => {
       const { controller } = makeController();
