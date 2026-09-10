@@ -52,7 +52,7 @@ vi.mock('../../components/bar-stock/InventoryCards', () => ({
 }));
 vi.mock('../../lib/picked-file', () => ({ readPickedFileText: vi.fn() }));
 vi.mock('../../lib/useVenueAuth', () => ({
-  useVenueAuth: () => ({ venue: state.venue, isReady: true, canManage: state.canManage, profileLoading: state.profileLoading, profileError: null, refetchProfile: vi.fn() }),
+  useVenueAuth: () => ({ user: { id: 'owner-1' }, venue: state.venue, isReady: true, canManage: state.canManage, profileLoading: state.profileLoading, profileError: null, refetchProfile: vi.fn() }),
 }));
 vi.mock('../../lib/railway-api', () => ({
   api: {

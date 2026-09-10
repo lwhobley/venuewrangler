@@ -23,7 +23,7 @@ describe('native inventory persistence', () => {
   it('persists with native window globals and restores after a module restart', async () => {
     expect(typeof window).toBe('object');
     const queue = await import('../../lib/offline-inventory-queue');
-    const item = await queue.enqueueOfflineMovement({ venueId: 'v1', itemId: 'i1', movementType: 'count', quantity: 4 });
+    const item = await queue.enqueueOfflineMovement({ ownerId: 'owner-1', venueId: 'v1', itemId: 'i1', movementType: 'count', quantity: 4 });
     expect(disk.writes).toBe(1);
     vi.resetModules();
     const restarted = await import('../../lib/offline-inventory-queue');
@@ -34,14 +34,14 @@ describe('native inventory persistence', () => {
     const queue = await import('../../lib/offline-inventory-queue');
     await queue.getOfflineQueue();
     disk.fail = true;
-    await expect(queue.enqueueOfflineMovement({ venueId: 'v1', itemId: 'i1', movementType: 'count', quantity: 4 })).rejects.toThrow('Disk full');
+    await expect(queue.enqueueOfflineMovement({ ownerId: 'owner-1', venueId: 'v1', itemId: 'i1', movementType: 'count', quantity: 4 })).rejects.toThrow('Disk full');
     expect(await queue.getOfflineQueue()).toEqual([]);
   });
 
   it('does not overwrite unreadable saved inventory', async () => {
     disk.content = '{invalid';
     const queue = await import('../../lib/offline-inventory-queue');
-    await expect(queue.enqueueOfflineMovement({ venueId: 'v1', itemId: 'i1', movementType: 'count', quantity: 4 })).rejects.toThrow('Unable to read');
+    await expect(queue.enqueueOfflineMovement({ ownerId: 'owner-1', venueId: 'v1', itemId: 'i1', movementType: 'count', quantity: 4 })).rejects.toThrow('Unable to read');
     expect(disk.content).toBe('{invalid');
   });
 });

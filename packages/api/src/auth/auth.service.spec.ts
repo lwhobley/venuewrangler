@@ -261,6 +261,7 @@ describe('AuthService.issueSession branch coverage', () => {
       profile: {
         findFirst: vi.fn()
           .mockResolvedValueOnce(existingProfile) // existingByUser lookup (where: { userId })
+          .mockResolvedValueOnce(null) // no established workplace profile
           .mockResolvedValueOnce(placeholderProfile), // adoptableProfile lookup
         delete: vi.fn(),
         update: vi.fn().mockResolvedValue(updatedExistingProfile),
@@ -462,7 +463,7 @@ describe('AuthService.confirmProfileAdoption', () => {
     // resolves null/'active' profiles (ACTIVE_MEMBERSHIP), and nothing else
     // in the system would activate a row created by this confirm flow.
     expect(tx.profile.update).toHaveBeenCalledWith({
-      where: { id: 'placeholder-1' },
+      where: expect.objectContaining({ id: 'placeholder-1', userId: null, OR: [{ membershipStatus: null }, { membershipStatus: 'active' }] }),
       data: { userId: 'user-1', role: 'manager', membershipStatus: 'active' },
       include: { venue: true },
     });
@@ -472,7 +473,7 @@ describe('AuthService.confirmProfileAdoption', () => {
     expect(result).toBe(adopted);
   });
 
-  it('deletes the caller\'s own venueless placeholder profile when adopting', async () => {
+  it('preserves the caller\'s venueless profile and its related history when adopting', async () => {
     const existingByUser = { id: 'existing-1', userId: 'user-1', venueId: null };
     const candidate = {
       id: 'placeholder-1', userId: null, email: 'manager@example.com', venueId: 'venue-9', role: 'staff',
@@ -494,7 +495,7 @@ describe('AuthService.confirmProfileAdoption', () => {
 
     await service.confirmProfileAdoption('user-1', 'placeholder-1');
 
-    expect(tx.profile.delete).toHaveBeenCalledWith({ where: { id: 'existing-1' } });
+    expect(tx.profile.delete).not.toHaveBeenCalled();
   });
 
   it('rejects when the caller already belongs to a different venue', async () => {

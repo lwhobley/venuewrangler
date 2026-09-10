@@ -242,7 +242,8 @@ export class PosController {
         ) VALUES (
           gen_random_uuid()::text, ${venueId}, ${provider}::"PosProvider", ${check.externalCheckId},
           ${check.tableLabel ?? null}, ${check.serverName ?? null}, ${check.guestName ?? null},
-          ${new Date(check.openedAt)}, ${check.closedAt ? new Date(check.closedAt) : null},
+          (${new Date(check.openedAt)}::timestamptz AT TIME ZONE 'UTC'),
+          (${check.closedAt != null ? new Date(check.closedAt) : null}::timestamptz AT TIME ZONE 'UTC'),
           ${check.subtotalCents}, ${check.taxCents ?? null}, ${check.tipCents}, ${check.totalCents},
           ${check.discountCents ?? null}, ${check.compCents ?? null}, ${check.promoCents ?? null},
           ${check.guestCount ?? null}, ${check.revenueCenter ?? null}, ${check.tenderType ?? null},
@@ -276,6 +277,7 @@ export class PosController {
             ELSE EXCLUDED."status"
           END,
           "updatedAt" = NOW()
+        WHERE NOT ("PosCheck"."status" IN ('paid', 'void') AND EXCLUDED."status" = 'open')
       `);
     });
 

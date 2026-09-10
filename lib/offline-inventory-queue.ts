@@ -5,6 +5,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 export type MovementType = 'count' | 'received' | 'waste' | 'transfer';
 
 export type QueuedMovement = {
+  ownerId?: string; // Legacy unowned entries remain stored, never auto-adopted.
   id: string;
   venueId: string;
   itemId: string;
@@ -112,6 +113,7 @@ export async function getOfflineQueue(venueId?: string): Promise<QueuedMovement[
 }
 
 export async function enqueueOfflineMovement(params: {
+  ownerId: string;
   venueId: string;
   itemId: string;
   itemName?: string;
@@ -119,7 +121,9 @@ export async function enqueueOfflineMovement(params: {
   quantity: number;
   notes?: string;
 }): Promise<QueuedMovement> {
+  if (!params.ownerId) throw new Error('Sign in before recording inventory.');
   const newEntry: QueuedMovement = {
+    ownerId: params.ownerId,
     id: `queue_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     venueId: params.venueId,
     itemId: params.itemId,
@@ -172,6 +176,7 @@ export type SyncResult = {
 };
 
 type SyncOptions = {
+  ownerId: string;
   venueId: string;
   automatic?: boolean;
   recordMovement: (args: {
@@ -181,21 +186,24 @@ type SyncOptions = {
     quantity: number;
     notes?: string;
     operationId: string;
+    ownerId: string;
   }) => Promise<any>;
 };
 
 export function syncOfflineInventoryQueue(options: SyncOptions): Promise<SyncResult> {
-  const active = activeSyncs.get(options.venueId);
+  if (!options.ownerId) return Promise.resolve({ synced: 0, failed: 0, errors: [] });
+  const syncKey = `${options.ownerId}:${options.venueId}`;
+  const active = activeSyncs.get(syncKey);
   if (active) return active;
-  const syncing = runSync(options).finally(() => { activeSyncs.delete(options.venueId); });
-  activeSyncs.set(options.venueId, syncing);
+  const syncing = runSync(options).finally(() => { activeSyncs.delete(syncKey); });
+  activeSyncs.set(syncKey, syncing);
   return syncing;
 }
 
 async function runSync(options: SyncOptions): Promise<SyncResult> {
   await mutationTail;
   const allQueued = await readRawQueue();
-  const venueMovements = allQueued.filter((m) => m.venueId === options.venueId);
+  const venueMovements = allQueued.filter((m) => m.venueId === options.venueId && m.ownerId === options.ownerId);
 
   if (venueMovements.length === 0) {
     return { synced: 0, failed: 0, errors: [] };
@@ -220,6 +228,7 @@ async function runSync(options: SyncOptions): Promise<SyncResult> {
         quantity: item.quantity,
         notes: item.notes,
         operationId: item.id,
+        ownerId: options.ownerId,
       });
       await removeOfflineMovement(item.id);
       synced++;
@@ -241,7 +250,7 @@ async function runSync(options: SyncOptions): Promise<SyncResult> {
 /**
  * React hook for consuming and synchronizing offline movements in UI components.
  */
-export function useOfflineInventoryQueue(venueId?: string) {
+export function useOfflineInventoryQueue(venueId?: string, ownerId?: string) {
   const [queue, setQueue] = useState<QueuedMovement[]>(() => {
     if (memoryQueue !== null) {
       return venueId ? memoryQueue.filter((m) => m.venueId === venueId) : memoryQueue;
@@ -281,18 +290,19 @@ export function useOfflineInventoryQueue(venueId?: string) {
       quantity: number;
       notes?: string;
     }) => {
-      if (!venueId) return null;
+      if (!venueId || !ownerId) throw new Error('Sign in before recording inventory.');
       return await enqueueOfflineMovement({
         venueId,
+        ownerId,
         ...params,
       });
     },
-    [venueId],
+    [venueId, ownerId],
   );
 
   const syncNow = useCallback(
     async (recordMovement: (args: any) => Promise<any>, automatic = false): Promise<SyncResult> => {
-      if (!venueId || isSyncing) {
+      if (!venueId || !ownerId || isSyncing) {
         return { synced: 0, failed: 0, errors: [] };
       }
       setIsSyncing(true);
@@ -300,6 +310,7 @@ export function useOfflineInventoryQueue(venueId?: string) {
       try {
         const result = await syncOfflineInventoryQueue({
           venueId,
+          ownerId,
           automatic,
           recordMovement,
         });
@@ -313,24 +324,24 @@ export function useOfflineInventoryQueue(venueId?: string) {
         setIsSyncing(false);
       }
     },
-    [venueId, isSyncing],
+    [venueId, ownerId, isSyncing],
   );
 
   const getOptimisticOnHand = useCallback(
     (itemId: string, baseOnHand: number) => {
-      return calculateOptimisticOnHand(itemId, baseOnHand, queue);
+      return calculateOptimisticOnHand(itemId, baseOnHand, queue.filter((item) => !!ownerId && item.ownerId === ownerId));
     },
-    [queue],
+    [queue, ownerId],
   );
 
   return {
-    queue,
-    pendingCount: queue.length,
+    queue: queue.filter((item) => !!ownerId && item.ownerId === ownerId),
+    pendingCount: queue.filter((item) => !!ownerId && item.ownerId === ownerId).length,
     isSyncing,
     syncStatus,
     enqueue,
     syncNow,
     getOptimisticOnHand,
-    clearAll: useCallback(() => clearOfflineQueue(venueId), [venueId]),
+    clearAll: useCallback(() => mutateQueue((current) => current.filter((item) => item.venueId !== venueId || !ownerId || item.ownerId !== ownerId)), [venueId, ownerId]),
   };
 }

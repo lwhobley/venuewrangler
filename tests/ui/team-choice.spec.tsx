@@ -32,6 +32,7 @@ vi.mock('../../lib/theme', () => ({
 vi.mock('../../lib/i18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }));
 
 import TeamChoiceScreen from '../../app/(auth)/team-choice';
+vi.mock('../../components/WorkplaceAdoption', () => ({ WorkplaceAdoption: () => null }));
 
 function render() {
   return createRoot();

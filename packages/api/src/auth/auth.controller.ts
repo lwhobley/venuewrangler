@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Logger, Optional, Post, Req, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Logger, Optional, Post, Req, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Throttle } from '@nestjs/throttler';
 import { Role } from '@prisma/client';
@@ -643,6 +643,11 @@ export class AuthController {
     await assertWithinSharedRateLimit(this.prisma, `confirm-adoption:ip:${getClientIp(request)}`, 10, AUTH_RATE_LIMIT_WINDOW_MS);
     const profile = await this.authService.confirmProfileAdoption(user.sub, body.profileId);
     return { profile: mapProfile(profile, true), venue: profile.venue ? mapVenue(profile.venue) : null };
+  }
+
+  @Get('pending-adoption')
+  async pendingAdoption(@CurrentUser() user: AuthUser) {
+    return { pendingAdoption: await this.authService.pendingProfileAdoption(user.sub) };
   }
 
   // Revoke every session for the account (all devices).

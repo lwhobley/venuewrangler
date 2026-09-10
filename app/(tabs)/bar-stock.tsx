@@ -100,7 +100,7 @@ const addItemNumberField = { flexGrow: 1, flexShrink: 1, flexBasis: 120, minWidt
 
 function BarStockScreen() {
   const { t } = useI18n();
-  const { venue, isReady, canManage, profileLoading, profileError, refetchProfile } = useVenueAuth();
+  const { venue, user, isReady, canManage, profileLoading, profileError, refetchProfile } = useVenueAuth();
   // Inventory (stock levels) is visible to every venue member; edits below stay
   // manager-only. The velocity/prep-board/report queries remain manager-gated.
   const stock = useQuery(api.barInventory.getBarStock, isReady && venue?.id ? { venueId: venue.id } : 'skip') as BarStock | null | undefined;
@@ -123,7 +123,7 @@ function BarStockScreen() {
     syncNow: syncOfflineQueue,
     enqueue: enqueueOfflineMovement,
     getOptimisticOnHand,
-  } = useOfflineInventoryQueue(venue?.id);
+  } = useOfflineInventoryQueue(venue?.id, user?.id);
 
   const handleSyncOffline = useCallback(async (automatic = false) => {
     if (!canManage || !venue?.id || offlinePendingCount === 0 || isOfflineSyncing) return;

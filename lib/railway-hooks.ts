@@ -636,6 +636,8 @@ function getKey(ref: RailwayFunctionRef) {
 function requestRoute<T>(route: Route, args: any, signal?: AbortSignal): Promise<T> {
   const path = typeof route.path === 'function' ? route.path(args ?? {}) : route.path;
   return apiRequest<T>(path, {
+    expectedProfileId: args?.ownerId,
+    expectedVenueId: args?.ownerId ? args?.venueId : undefined,
     method: route.method ?? 'GET',
     signal,
     timeoutMs: route.timeoutMs,

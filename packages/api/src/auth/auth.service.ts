@@ -108,13 +108,22 @@ export class AuthService {
           })
         : null;
 
-      const existingByUser =
+      let existingByUser =
         existingProfileForVenue ||
         (await tx.profile.findFirst({
           where: { userId },
           include: { venue: true },
           orderBy: { createdAt: 'asc' },
         }));
+
+      // Adoption preserves the old venueless profile and its history. Prefer
+      // an established workplace on subsequent logins, not that placeholder.
+      if (existingByUser?.venueId === null) {
+        existingByUser = (await tx.profile.findFirst({
+          where: { userId, venueId: { not: null } },
+          include: { venue: true }, orderBy: { createdAt: 'asc' },
+        })) ?? existingByUser;
+      }
 
       let result;
       if (existingByUser && (!grant?.venueId || existingByUser.venueId === grant.venueId)) {
@@ -207,7 +216,7 @@ export class AuthService {
   private async findAdoptableProfile(tx: Prisma.TransactionClient, emailVerified: boolean, email: string) {
     if (!emailVerified) return null;
     return tx.profile.findFirst({
-      where: { userId: null, email: { equals: email, mode: 'insensitive' }, venueId: { not: null } },
+      where: { userId: null, email: { equals: email, mode: 'insensitive' }, venueId: { not: null }, OR: [{ membershipStatus: null }, { membershipStatus: 'active' }] },
       orderBy: { createdAt: 'asc' },
       include: { venue: true },
     });
@@ -226,18 +235,15 @@ export class AuthService {
     }
     return this.prisma.$transaction(async (tx) => {
       const candidate = await tx.profile.findFirst({
-        where: { id: profileId, userId: null, email: { equals: account.email!, mode: 'insensitive' }, venueId: { not: null } },
+        where: { id: profileId, userId: null, email: { equals: account.email!, mode: 'insensitive' }, venueId: { not: null }, OR: [{ membershipStatus: null }, { membershipStatus: 'active' }] },
         include: { venue: true },
       });
-      if (!candidate) {
+      if (!candidate || (candidate.membershipStatus != null && candidate.membershipStatus !== 'active')) {
         throw new UnauthorizedException('This workplace connection is no longer available. It may have already been claimed.');
       }
-      const existingByUser = await tx.profile.findFirst({ where: { userId }, orderBy: { createdAt: 'asc' } });
-      if (existingByUser && existingByUser.venueId && existingByUser.venueId !== candidate.venueId) {
-        throw new UnauthorizedException('Your account already belongs to a different venue.');
-      }
-      if (existingByUser) {
-        await tx.profile.delete({ where: { id: existingByUser.id } });
+      const existingByUser = await tx.profile.findFirst({ where: { userId, venueId: { not: null } }, orderBy: { createdAt: 'asc' } });
+      if (existingByUser?.venueId) {
+        throw new UnauthorizedException('Your account already has a workplace profile. Ask a manager to reconcile the roster.');
       }
       // 'active', not 'pending': AuthGuard only ever resolves a profile with
       // membershipStatus null or 'active' (see ACTIVE_MEMBERSHIP), and unlike
@@ -248,13 +254,22 @@ export class AuthService {
       // connection, which is strictly more proof of intent than the invite
       // flow requires, so there is no reason to leave it inert.
       const adopted = await tx.profile.update({
-        where: { id: candidate.id },
+        where: { id: candidate.id, userId: null, email: { equals: account.email!, mode: 'insensitive' }, OR: [{ membershipStatus: null }, { membershipStatus: 'active' }] },
         data: { userId, role: candidate.role, membershipStatus: 'active' },
         include: { venue: true },
       });
       await this.logProfileAdoption(tx, adopted);
       return adopted;
-    });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  }
+
+  async pendingProfileAdoption(userId: string) {
+    const account = await this.prisma.user.findUnique({ where: { id: userId }, select: { email: true, emailVerifiedAt: true } });
+    if (!account?.email || !account.emailVerifiedAt) return null;
+    const existing = await this.prisma.profile.findFirst({ where: { userId, venueId: { not: null } }, select: { id: true } });
+    if (existing) return null;
+    const candidate = await this.findAdoptableProfile(this.prisma, true, account.email);
+    return candidate?.venue ? { profileId: candidate.id, venueId: candidate.venue.id, venueName: candidate.venue.name, role: candidate.role } : null;
   }
 
   /**

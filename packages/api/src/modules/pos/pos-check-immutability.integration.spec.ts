@@ -122,7 +122,7 @@ describe('POS check immutability (PostgreSQL)', () => {
 
     await controller.ingest({ ip: '127.0.0.1' } as never, venueId, secret, {
       provider: 'toast',
-      checks: [{ externalCheckId, openedAt, subtotalCents: 2000, taxCents: 150, tipCents: 300, totalCents: 2450, status: 'paid' }],
+      checks: [{ externalCheckId, openedAt, closedAt: openedAt + 1000, subtotalCents: 2000, taxCents: 150, tipCents: 300, totalCents: 2450, status: 'paid' }],
     } as never);
 
     // A late/out-of-order delivery claims the check is still open.
@@ -133,6 +133,7 @@ describe('POS check immutability (PostgreSQL)', () => {
 
     const stillPaid = await prisma.posCheck.findFirstOrThrow({ where: { venueId, externalCheckId } });
     expect(stillPaid.status).toBe('paid');
+    expect(stillPaid.closedAt).toEqual(new Date(openedAt + 1000));
 
     // If the reopen had landed, this would succeed. It must not.
     await controller.ingest({ ip: '127.0.0.1' } as never, venueId, secret, {
@@ -144,5 +145,8 @@ describe('POS check immutability (PostgreSQL)', () => {
     expect(stillLocked.status).toBe('paid');
     expect(stillLocked.subtotalCents).toBe(2000);
     expect(stillLocked.taxCents).toBe(150);
+    expect(stillLocked.tipCents).toBe(300);
+    expect(stillLocked.totalCents).toBe(2450);
+    expect(stillLocked.closedAt).toEqual(stillPaid.closedAt);
   });
 });
