@@ -188,6 +188,10 @@ export class AttestationService {
       const result = await this.prisma.attestationChallenge.deleteMany({
         where: { id: { in: batch.map(({ id }) => id) } },
       });
+      // Progress guard: if a selected page deletes nothing, the next iteration
+      // would re-select the same page forever. Matches the same guard in
+      // audit.service.ts's retention loops.
+      if (result.count === 0) break;
       total += result.count;
     }
     if (total > 0) this.logger.log(`Cleaned up ${total} expired/consumed attestation challenges.`);
