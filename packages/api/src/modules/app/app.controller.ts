@@ -1487,6 +1487,27 @@ export class AppController {
           });
         }
         await tx.scheduleShift.updateMany({ where: { profileId: { in: profileIds } }, data: { profileId: null, status: 'open' } });
+
+        // Archive-before-cascade, same reasoning as TimeEntry above: an
+        // approved StaffRequest is the paper trail for why this profile's
+        // PTO/sick balance changed, and StaffRequest.profile is onDelete:
+        // Cascade. Only approved requests carry that compliance value —
+        // pending/denied/cancelled ones never affected pay and are left to
+        // the ordinary cascade.
+        await tx.$executeRaw(Prisma.sql`
+          INSERT INTO "RetainedStaffRequest" (
+            "id", "originVenueId", "originVenueName", "profileFullName", "kind", "title", "details",
+            "requestedForDate", "requestedRangeStart", "requestedRangeEnd", "responseNotes",
+            "originCreatedAt", "originReviewedAt", "retainedAt"
+          )
+          SELECT
+            ${`retained-${deletionRunId}-`} || r."id", r."venueId", v."name", ${`deleted_user_`} || r."profileId",
+            r."kind", r."title", r."details", r."requestedForDate", r."requestedRangeStart", r."requestedRangeEnd",
+            r."responseNotes", r."createdAt", r."reviewedAt", NOW()
+          FROM "StaffRequest" r
+          JOIN "Venue" v ON v."id" = r."venueId"
+          WHERE r."profileId" IN (${Prisma.join(profileIds)}) AND r."status" = 'approved'
+        `);
       }
       await tx.session.deleteMany({ where: { userId: user.sub } });
       await tx.authAccount.deleteMany({ where: { userId: user.sub } });

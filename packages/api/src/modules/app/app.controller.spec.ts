@@ -765,6 +765,55 @@ describe('AppController multi-venue invariants', () => {
     );
     expect(closeOrder).toBeLessThan(prisma.timeEntry.updateMany.mock.invocationCallOrder[renameCall]);
   });
+
+  it('archives an approved staff request before the profile cascade destroys it', async () => {
+    const profiles = [
+      { id: 'profile-leaver', email: 'leaver@example.com', fullName: 'Lee Leaver', role: 'staff', venueId: 'venue-other', membershipStatus: 'active' },
+    ];
+    const prisma: any = {
+      $executeRaw: vi.fn().mockResolvedValue(undefined),
+      $queryRaw: vi.fn().mockResolvedValue([]),
+      user: { findUnique: vi.fn().mockResolvedValue({ email: 'leaver@example.com' }), deleteMany: vi.fn() },
+      profile: {
+        findMany: vi.fn().mockResolvedValue(profiles),
+        count: vi.fn().mockResolvedValue(3),
+        deleteMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
+      venue: { deleteMany: vi.fn(), findMany: vi.fn().mockResolvedValue([]) },
+      objectDeletionJob: { create: vi.fn() },
+      pushToken: { deleteMany: vi.fn() }, availability: { deleteMany: vi.fn() },
+      subscription: { findMany: vi.fn().mockResolvedValue([]), count: vi.fn().mockResolvedValue(0) },
+      timeEntry: {
+        updateMany: vi.fn(), update: vi.fn(), deleteMany: vi.fn(),
+        findMany: vi.fn().mockResolvedValue([]), count: vi.fn().mockResolvedValue(0),
+      },
+      scheduleShift: { updateMany: vi.fn() },
+      session: { deleteMany: vi.fn() }, authAccount: { deleteMany: vi.fn() },
+      team: { upsert: vi.fn() },
+    };
+    prisma.$transaction = vi.fn(async (callback: any) => callback(prisma));
+    const controller = new AppController(prisma, { send: vi.fn() } as any, {} as any);
+
+    await controller.deleteMyAccount({ sub: 'user-1' } as any);
+
+    // $executeRaw is invoked two ways in this flow: tagged-template calls
+    // (call[0] is the raw strings array) for advisory locks, and
+    // `tx.$executeRaw(Prisma.sql...)` (call[0] is a Sql object with a
+    // .strings property) for archive inserts. Normalize both.
+    const sqlTextOf = (call: any) => {
+      const raw = call[0];
+      return Array.isArray(raw) ? raw.join('') : String(raw?.strings?.join('') ?? raw);
+    };
+    const archiveCallIndex = prisma.$executeRaw.mock.calls.findIndex(
+      (call: any) => sqlTextOf(call).includes('INSERT INTO "RetainedStaffRequest"'),
+    );
+    expect(archiveCallIndex).toBeGreaterThanOrEqual(0);
+    expect(sqlTextOf(prisma.$executeRaw.mock.calls[archiveCallIndex])).toContain('"status" = \'approved\'');
+    // Archived before the profile row (and its StaffRequest cascade) is gone.
+    const archiveOrder = prisma.$executeRaw.mock.invocationCallOrder[archiveCallIndex];
+    const profileDeleteOrder = prisma.profile.deleteMany.mock.invocationCallOrder[0];
+    expect(archiveOrder).toBeLessThan(profileDeleteOrder);
+  });
 });
 
 describe('AppController createInvite', () => {

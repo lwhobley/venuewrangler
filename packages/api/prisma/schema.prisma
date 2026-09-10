@@ -804,6 +804,38 @@ model RetainedPosLaborPunch {
   @@index([retainedAt])
 }
 
+// Same pattern as RetainedTimeEntry: StaffRequest.profile is onDelete:
+// Cascade, and an APPROVED time-off/PTO/sick request is the paper trail for
+// why sickHoursAccrued/ptoHoursAccrued changed on the departing account's
+// Profile (see staff-requests.controller.ts) — the same wage/hour compliance
+// category that justified retaining TimeEntry in the first place. Only
+// approved requests are archived; pending/denied/cancelled ones never
+// affected pay and are left to the ordinary Cascade. This IS the departing
+// account's own personal data, so the name is pseudonymized like
+// RetainedTimeEntry, not preserved like RetainedPosCheck.
+model RetainedStaffRequest {
+  id                  String    @id @default(cuid())
+  originVenueId       String
+  originVenueName     String?
+  // Pseudonymized (deleted_user_<profileId>), same as RetainedTimeEntry —
+  // this lets multiple retained records be correlated to the same former
+  // employee without retaining their actual name.
+  profileFullName     String?
+  kind                String
+  title               String
+  details             String
+  requestedForDate    String?
+  requestedRangeStart String?
+  requestedRangeEnd   String?
+  responseNotes       String?
+  originCreatedAt     DateTime
+  originReviewedAt    DateTime?
+  retainedAt          DateTime  @default(now())
+
+  @@index([originVenueId])
+  @@index([retainedAt])
+}
+
 model ObjectDeletionJob {
   id          String    @id @default(cuid())
   objectKeys  String[]
