@@ -30,6 +30,7 @@ function makeController() {
     },
     venue: { findUnique: vi.fn().mockResolvedValue({ timezone: 'America/New_York' }) },
     $queryRaw: vi.fn().mockResolvedValue([]),
+    $executeRaw: vi.fn().mockResolvedValue(undefined),
     $transaction: vi.fn().mockImplementation((ops: any[]) => Promise.all(ops)),
   } as any;
   const controller = new PosController(prisma);
@@ -112,6 +113,14 @@ describe('PosController', () => {
         .rejects.toThrow('Invalid webhook secret');
     });
 
+    // $executeRaw is invoked as `this.prisma.$executeRaw(Prisma.sql\`...\`)`
+    // — a single argument that is a Sql object with .strings/.values, not a
+    // tagged-template call. Pull the interpolated values back out to assert
+    // on them without hardcoding the exact SQL text.
+    function sqlValuesOf(call: any): any[] {
+      return call[0].values;
+    }
+
     it('upserts checks and labor punches, then records lastSyncAt', async () => {
       const { controller, prisma } = makeController();
       const secret = 'correct-secret';
@@ -127,9 +136,10 @@ describe('PosController', () => {
         }],
       } as any);
 
-      expect(prisma.posCheck.upsert).toHaveBeenCalledWith(expect.objectContaining({
-        where: { venueId_provider_externalCheckId: { venueId: 'venue-1', provider: 'toast', externalCheckId: 'chk-1' } },
-      }));
+      expect(prisma.$executeRaw).toHaveBeenCalledTimes(1);
+      expect(sqlValuesOf(prisma.$executeRaw.mock.calls[0])).toEqual(
+        expect.arrayContaining(['venue-1', 'chk-1']),
+      );
       expect(prisma.posLaborPunch.upsert).toHaveBeenCalledWith(expect.objectContaining({
         where: {
           venueId_provider_externalEmployeeId_businessDate: {
@@ -144,12 +154,15 @@ describe('PosController', () => {
       expect(result).toEqual({ ok: true, checksUpserted: 1, laborUpserted: 1 });
     });
 
-    it('does not overwrite a check that is already paid or void (closed financial record)', async () => {
+    it('locks the core sale amounts once closed, in the same statement that still allows a tip/status correction', async () => {
+      // Real Postgres enforcement of the paid/void guard is covered by
+      // pos-check-immutability.integration.spec.ts — a mocked $executeRaw
+      // can't execute the CASE logic. This only proves the query construction
+      // and parameter passing are correct: every check goes through the same
+      // single atomic call, with no separate pre-check step to race against.
       const { controller, prisma } = makeController();
       const secret = 'correct-secret';
       prisma.posConnection.findFirst.mockResolvedValue({ id: 'conn-1', webhookSecret: hashWebhookSecret(secret) });
-      // chk-closed is already paid; chk-open has no existing row.
-      prisma.posCheck.findMany.mockResolvedValue([{ externalCheckId: 'chk-closed' }]);
 
       const result = await controller.ingest(makeRequest(), 'venue-1', secret, {
         provider: 'toast',
@@ -159,14 +172,12 @@ describe('PosController', () => {
         ],
       } as any);
 
-      expect(prisma.posCheck.findMany).toHaveBeenCalledWith(expect.objectContaining({
-        where: expect.objectContaining({ status: { in: ['paid', 'void'] } }),
-      }));
-      expect(prisma.posCheck.upsert).toHaveBeenCalledTimes(1);
-      expect(prisma.posCheck.upsert).toHaveBeenCalledWith(expect.objectContaining({
-        where: { venueId_provider_externalCheckId: { venueId: 'venue-1', provider: 'toast', externalCheckId: 'chk-open' } },
-      }));
-      expect(result.checksUpserted).toBe(1);
+      expect(prisma.posCheck.findMany).not.toHaveBeenCalled();
+      expect(prisma.$executeRaw).toHaveBeenCalledTimes(2);
+      const sqlText = String(prisma.$executeRaw.mock.calls[0][0].strings.join(''));
+      expect(sqlText).toContain('ON CONFLICT');
+      expect(sqlText).toContain('IN (\'paid\', \'void\')');
+      expect(result.checksUpserted).toBe(2);
     });
 
     it('chunks large ingest batches into multiple transactions', async () => {

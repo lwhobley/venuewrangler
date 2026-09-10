@@ -216,53 +216,65 @@ export class PosController {
       }
     }
 
-    // A paid/void check is a closed financial record, not a mutable draft — a
-    // replayed or corrected webhook delivery for the same externalCheckId
-    // must not silently rewrite its totals after close. Look up which of the
-    // incoming checks are already closed so those are skipped below instead
-    // of upserted; open/unknown checks proceed as before.
-    const incomingCheckIds = (body.checks ?? []).map((check) => check.externalCheckId);
-    const closedCheckIds = incomingCheckIds.length
-      ? new Set(
-          (await this.prisma.posCheck.findMany({
-            where: { venueId, provider, externalCheckId: { in: incomingCheckIds }, status: { in: ['paid', 'void'] } },
-            select: { externalCheckId: true },
-          })).map((row) => row.externalCheckId),
+    // A paid/void check is a closed financial record, not a mutable draft.
+    // The previous fix checked closed status with a separate findMany before
+    // building the upserts, which left a TOCTOU window (a concurrent
+    // delivery could close the check between the check and the write) and
+    // blocked every field equally — including a tip adjustment a POS
+    // commonly sends after the guest signs, which is a legitimate post-close
+    // update, not a rewrite attempt. Each check is now a single atomic
+    // INSERT ... ON CONFLICT DO UPDATE: the core sale amounts (subtotal,
+    // tax, discount, comp, promo) are locked once the existing row's status
+    // is paid/void, via a CASE against the row being upserted — checked and
+    // written in one statement, so there is no window between them. Tip,
+    // total (which a tip adjustment necessarily changes), status itself
+    // (a paid check being voided is a real correction), and non-financial
+    // metadata all remain freely correctable after close.
+    const checkOperations = (body.checks ?? []).map((check) => {
+      const menuItemsJson = check.menuItems ? JSON.stringify(check.menuItems) : null;
+      return this.prisma.$executeRaw(Prisma.sql`
+        INSERT INTO "PosCheck" (
+          "id", "venueId", "provider", "externalCheckId", "tableLabel", "serverName", "guestName",
+          "openedAt", "closedAt", "subtotalCents", "taxCents", "tipCents", "totalCents",
+          "discountCents", "compCents", "promoCents", "guestCount", "revenueCenter", "tenderType",
+          "menuItems", "status", "updatedAt"
+        ) VALUES (
+          gen_random_uuid()::text, ${venueId}, ${provider}::"PosProvider", ${check.externalCheckId},
+          ${check.tableLabel ?? null}, ${check.serverName ?? null}, ${check.guestName ?? null},
+          ${new Date(check.openedAt)}, ${check.closedAt ? new Date(check.closedAt) : null},
+          ${check.subtotalCents}, ${check.taxCents ?? null}, ${check.tipCents}, ${check.totalCents},
+          ${check.discountCents ?? null}, ${check.compCents ?? null}, ${check.promoCents ?? null},
+          ${check.guestCount ?? null}, ${check.revenueCenter ?? null}, ${check.tenderType ?? null},
+          ${menuItemsJson}::jsonb, ${(check.status ?? 'open') as PosCheckStatus}::"PosCheckStatus", NOW()
         )
-      : new Set<string>();
+        ON CONFLICT ("venueId", "provider", "externalCheckId") DO UPDATE SET
+          "tableLabel" = EXCLUDED."tableLabel",
+          "serverName" = EXCLUDED."serverName",
+          "guestName" = EXCLUDED."guestName",
+          "openedAt" = EXCLUDED."openedAt",
+          "closedAt" = EXCLUDED."closedAt",
+          "subtotalCents" = CASE WHEN "PosCheck"."status" IN ('paid', 'void') THEN "PosCheck"."subtotalCents" ELSE EXCLUDED."subtotalCents" END,
+          "taxCents" = CASE WHEN "PosCheck"."status" IN ('paid', 'void') THEN "PosCheck"."taxCents" ELSE EXCLUDED."taxCents" END,
+          "discountCents" = CASE WHEN "PosCheck"."status" IN ('paid', 'void') THEN "PosCheck"."discountCents" ELSE EXCLUDED."discountCents" END,
+          "compCents" = CASE WHEN "PosCheck"."status" IN ('paid', 'void') THEN "PosCheck"."compCents" ELSE EXCLUDED."compCents" END,
+          "promoCents" = CASE WHEN "PosCheck"."status" IN ('paid', 'void') THEN "PosCheck"."promoCents" ELSE EXCLUDED."promoCents" END,
+          "tipCents" = EXCLUDED."tipCents",
+          "totalCents" = EXCLUDED."totalCents",
+          "guestCount" = EXCLUDED."guestCount",
+          "revenueCenter" = EXCLUDED."revenueCenter",
+          "tenderType" = EXCLUDED."tenderType",
+          "menuItems" = EXCLUDED."menuItems",
+          "status" = EXCLUDED."status",
+          "updatedAt" = NOW()
+      `);
+    });
 
-    // Batch upserts into chunked transactions (not one single transaction for
-    // the whole payload) so a large delivery (up to MAX_INGEST_ROWS checks +
-    // MAX_INGEST_ROWS labor punches) can't hold one transaction's locks for an
-    // extended period.
-    const checksToApply = (body.checks ?? []).filter((check) => !closedCheckIds.has(check.externalCheckId));
+    // Batch into chunked transactions (not one single transaction for the
+    // whole payload) so a large delivery (up to MAX_INGEST_ROWS checks +
+    // MAX_INGEST_ROWS labor punches) can't hold one transaction's locks for
+    // an extended period.
     const operations = [
-      ...checksToApply.map((check) => {
-        const data = {
-          tableLabel: check.tableLabel ?? null,
-          serverName: check.serverName ?? null,
-          guestName: check.guestName ?? null,
-          openedAt: new Date(check.openedAt),
-          closedAt: check.closedAt ? new Date(check.closedAt) : null,
-          subtotalCents: check.subtotalCents,
-          taxCents: check.taxCents ?? null,
-          tipCents: check.tipCents,
-          totalCents: check.totalCents,
-          discountCents: check.discountCents ?? null,
-          compCents: check.compCents ?? null,
-          promoCents: check.promoCents ?? null,
-          guestCount: check.guestCount ?? null,
-          revenueCenter: check.revenueCenter ?? null,
-          tenderType: check.tenderType ?? null,
-          menuItems: check.menuItems ? (check.menuItems as unknown as Prisma.InputJsonValue) : undefined,
-          status: (check.status ?? 'open') as PosCheckStatus,
-        };
-        return this.prisma.posCheck.upsert({
-          where: { venueId_provider_externalCheckId: { venueId, provider, externalCheckId: check.externalCheckId } },
-          create: { venueId, provider, externalCheckId: check.externalCheckId, ...data },
-          update: data,
-        });
-      }),
+      ...checkOperations,
       ...(body.laborPunches ?? []).map((punch) => {
         const data = {
           employeeName: punch.employeeName,
@@ -295,7 +307,7 @@ export class PosController {
       await this.prisma.$transaction(operations.slice(i, i + INGEST_CHUNK_SIZE));
     }
 
-    const checksUpserted = checksToApply.length;
+    const checksUpserted = checkOperations.length;
     const laborUpserted = (body.laborPunches ?? []).length;
 
     await this.prisma.posConnection.update({ where: { id: connection.id }, data: { lastSyncAt: new Date() } });
