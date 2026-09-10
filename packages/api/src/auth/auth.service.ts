@@ -77,6 +77,7 @@ export class AuthService {
       throw new UnauthorizedException('This invite was sent to a different mobile number.');
     }
     const trimmedFullName = fullName?.trim();
+    let pendingAdoption: { profileId: string; venueId: string; venueName: string; role: Role } | null = null;
     const profile = await this.prisma.$transaction(async (tx) => {
       let activeInvite = invite;
       if (invite) {
@@ -117,39 +118,24 @@ export class AuthService {
 
       let result;
       if (existingByUser && (!grant?.venueId || existingByUser.venueId === grant.venueId)) {
-        const adoptableProfile = emailVerified
-          ? await tx.profile.findFirst({
-              where: { userId: null, email: { equals: email, mode: 'insensitive' }, venueId: { not: null } },
-              orderBy: { createdAt: 'asc' },
-              include: { venue: true },
-            })
-          : null;
-
-        if (adoptableProfile && (!existingByUser.venueId || existingByUser.venueId === adoptableProfile.venueId)) {
-          await tx.profile.delete({ where: { id: existingByUser.id } });
-          result = await tx.profile.update({
-            where: { id: adoptableProfile.id },
-            data: {
-              userId,
-              role: grant?.role ?? 'staff',
-              ...(grant?.jobTitle || adoptableProfile.jobTitle ? { jobTitle: grant?.jobTitle ?? adoptableProfile.jobTitle } : {}),
-              membershipStatus: grant ? grant.membershipStatus : 'pending',
-            },
-            include: { venue: true },
-          });
-          await this.logProfileAdoption(tx, result);
-        } else {
-          result = await tx.profile.update({
-            where: { id: existingByUser.id },
-            data: {
-              email,
-              ...(trimmedFullName ? { fullName: trimmedFullName } : {}),
-              ...(grant ?? {}),
-              ...(existingByUser.trialEndsAt ? {} : { trialEndsAt }),
-            },
-            include: { venue: true },
-          });
+        // A matching unclaimed roster row is surfaced as pendingAdoption
+        // rather than merged automatically — see findAdoptableProfile's
+        // doc comment for why a bare email match is not enough proof to
+        // silently bind an account to a venue.
+        const adoptableProfile = await this.findAdoptableProfile(tx, emailVerified, email);
+        if (adoptableProfile && (!existingByUser.venueId || existingByUser.venueId === adoptableProfile.venueId) && adoptableProfile.venue) {
+          pendingAdoption = { profileId: adoptableProfile.id, venueId: adoptableProfile.venueId!, venueName: adoptableProfile.venue.name, role: adoptableProfile.role };
         }
+        result = await tx.profile.update({
+          where: { id: existingByUser.id },
+          data: {
+            email,
+            ...(trimmedFullName ? { fullName: trimmedFullName } : {}),
+            ...(grant ?? {}),
+            ...(existingByUser.trialEndsAt ? {} : { trialEndsAt }),
+          },
+          include: { venue: true },
+        });
       } else if (grant?.venueId) {
         // User belongs to another venue and is joining this venue via invite -> create new profile for this venue
         result = await tx.profile.create({
@@ -166,50 +152,27 @@ export class AuthService {
           include: { venue: true },
         });
       } else {
-        const adoptableProfile = emailVerified
-          ? (grant
-              ? await tx.profile.findFirst({
-                  where: { userId: null, venueId: grant.venueId, email: { equals: email, mode: 'insensitive' } },
-                  orderBy: { createdAt: 'asc' },
-                  include: { venue: true },
-                })
-              : await tx.profile.findFirst({
-                  where: { userId: null, email: { equals: email, mode: 'insensitive' }, venueId: { not: null } },
-                  orderBy: { createdAt: 'asc' },
-                  include: { venue: true },
-                }))
-          : null;
-        if (adoptableProfile) {
-          result = await tx.profile.update({
-            where: { id: adoptableProfile.id },
-            data: {
-              userId,
-              email,
-              fullName: trimmedFullName || adoptableProfile.fullName,
-              role: grant?.role ?? 'staff',
-              jobTitle: grant?.jobTitle ?? adoptableProfile.jobTitle,
-              venueId: grant?.venueId ?? adoptableProfile.venueId,
-              membershipStatus: grant ? grant.membershipStatus : 'pending',
-              trialEndsAt: adoptableProfile.trialEndsAt ?? trialEndsAt,
-            },
-            include: { venue: true },
-          });
-          await this.logProfileAdoption(tx, result);
-        } else {
-          result = await tx.profile.create({
-            data: {
-              userId,
-              email,
-              fullName: trimmedFullName || email.split('@')[0] || 'Team Member',
-              role: grant?.role ?? 'staff',
-              jobTitle: grant?.jobTitle ?? 'Staff',
-              venueId: grant?.venueId ?? undefined,
-              ...(grant ? { membershipStatus: grant.membershipStatus } : {}),
-              trialEndsAt,
-            },
-            include: { venue: true },
-          });
+        // grant is always null here (a truthy grant would have matched the
+        // `grant?.venueId` branch above), so this is exclusively the plain
+        // login/signup path with no invite token at all. A matching
+        // unclaimed roster row is surfaced as pendingAdoption rather than
+        // merged automatically — see findAdoptableProfile's doc comment.
+        const adoptableProfile = await this.findAdoptableProfile(tx, emailVerified, email);
+        if (adoptableProfile && adoptableProfile.venueId && adoptableProfile.venue) {
+          pendingAdoption = { profileId: adoptableProfile.id, venueId: adoptableProfile.venueId, venueName: adoptableProfile.venue.name, role: adoptableProfile.role };
         }
+        result = await tx.profile.create({
+          data: {
+            userId,
+            email,
+            fullName: trimmedFullName || email.split('@')[0] || 'Team Member',
+            role: 'staff',
+            jobTitle: 'Staff',
+            venueId: undefined,
+            trialEndsAt,
+          },
+          include: { venue: true },
+        });
       }
 
       if (activeInvite) {
@@ -225,7 +188,65 @@ export class AuthService {
     const session = await this.prisma.session.create({
       data: { userId, expiresAt: new Date(Date.now() + SESSION_DURATION_MS), tokenHash },
     });
-    return { session, profile };
+    return { session, profile, pendingAdoption };
+  }
+
+  /**
+   * A roster row with no owner (userId: null) whose email matches the
+   * signing-in account, found by verified-email match alone. This used to be
+   * adopted automatically — no invite token, no confirmation — on every
+   * login where the account had no other qualifying profile. Because
+   * `upsertVenueStaff` never requires an Invite row to add someone to the
+   * roster, that meant a manager's typo, or an unrelated person who happens
+   * to already control a matching (already-verified) email address, could be
+   * silently bound to a venue's staff roster on their very next login,
+   * anywhere in the system — no consent, no scoping to the venue they were
+   * actually trying to reach. It is now only ever a candidate: the caller
+   * must confirm via confirmProfileAdoption() before anything changes.
+   */
+  private async findAdoptableProfile(tx: Prisma.TransactionClient, emailVerified: boolean, email: string) {
+    if (!emailVerified) return null;
+    return tx.profile.findFirst({
+      where: { userId: null, email: { equals: email, mode: 'insensitive' }, venueId: { not: null } },
+      orderBy: { createdAt: 'asc' },
+      include: { venue: true },
+    });
+  }
+
+  /**
+   * Explicit, user-initiated confirmation of a pendingAdoption candidate
+   * surfaced by issueSession(). Re-validates the same conditions at the time
+   * of confirmation (the roster row could have been claimed, deleted, or
+   * reassigned in the meantime) rather than trusting the earlier snapshot.
+   */
+  async confirmProfileAdoption(userId: string, profileId: string) {
+    const account = await this.prisma.user.findUnique({ where: { id: userId }, select: { email: true, emailVerifiedAt: true } });
+    if (!account?.email || !account.emailVerifiedAt) {
+      throw new UnauthorizedException('Verify your email address before joining a workplace this way.');
+    }
+    return this.prisma.$transaction(async (tx) => {
+      const candidate = await tx.profile.findFirst({
+        where: { id: profileId, userId: null, email: { equals: account.email!, mode: 'insensitive' }, venueId: { not: null } },
+        include: { venue: true },
+      });
+      if (!candidate) {
+        throw new UnauthorizedException('This workplace connection is no longer available. It may have already been claimed.');
+      }
+      const existingByUser = await tx.profile.findFirst({ where: { userId }, orderBy: { createdAt: 'asc' } });
+      if (existingByUser && existingByUser.venueId && existingByUser.venueId !== candidate.venueId) {
+        throw new UnauthorizedException('Your account already belongs to a different venue.');
+      }
+      if (existingByUser) {
+        await tx.profile.delete({ where: { id: existingByUser.id } });
+      }
+      const adopted = await tx.profile.update({
+        where: { id: candidate.id },
+        data: { userId, role: candidate.role, membershipStatus: 'pending' },
+        include: { venue: true },
+      });
+      await this.logProfileAdoption(tx, adopted);
+      return adopted;
+    });
   }
 
   /**

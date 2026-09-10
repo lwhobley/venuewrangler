@@ -669,3 +669,45 @@ describe('AuthController log hygiene', () => {
     expect(offenders).toEqual([]);
   });
 });
+
+describe('AuthController confirmAdoption', () => {
+  it('delegates to AuthService.confirmProfileAdoption and maps the result', async () => {
+    const authService = {
+      confirmProfileAdoption: vi.fn().mockResolvedValue({
+        id: 'placeholder-1',
+        email: 'manager@example.com',
+        fullName: 'Invited Manager',
+        role: 'manager',
+        jobTitle: 'General Manager',
+        venueId: 'venue-9',
+        allAccess: false,
+        trialEndsAt: null,
+        venue: { id: 'venue-9', name: 'Other Venue', latitude: 0, longitude: 0, geofenceRadiusM: 100, subscriptionStatus: 'trialing' },
+      }),
+    };
+    const controller = new AuthController({} as any, {} as any, {} as any, authService as any);
+
+    const result = await controller.confirmAdoption(
+      { ip: '127.0.0.1' } as any,
+      { sub: 'user-1' } as any,
+      { profileId: 'placeholder-1' },
+    );
+
+    expect(authService.confirmProfileAdoption).toHaveBeenCalledWith('user-1', 'placeholder-1');
+    expect(result.profile.id).toBe('placeholder-1');
+    expect(result.venue?.id).toBe('venue-9');
+  });
+
+  it('propagates a rejection (e.g. the candidate was already claimed) without mapping a result', async () => {
+    const authService = {
+      confirmProfileAdoption: vi.fn().mockRejectedValue(new Error('This workplace connection is no longer available.')),
+    };
+    const controller = new AuthController({} as any, {} as any, {} as any, authService as any);
+
+    await expect(controller.confirmAdoption(
+      { ip: '127.0.0.1' } as any,
+      { sub: 'user-1' } as any,
+      { profileId: 'stale-id' },
+    )).rejects.toThrow('no longer available');
+  });
+});

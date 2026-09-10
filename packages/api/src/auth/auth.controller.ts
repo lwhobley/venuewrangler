@@ -100,6 +100,12 @@ class VerifyEmailDto {
   code!: string;
 }
 
+class ConfirmAdoptionDto {
+  @IsString()
+  @MaxLength(64)
+  profileId!: string;
+}
+
 class ForgotPasswordDto {
   @IsEmail()
   email!: string;
@@ -627,6 +633,18 @@ export class AuthController {
     return { ok: true };
   }
 
+  // Explicit, user-initiated confirmation of a pendingAdoption candidate
+  // returned by a login/signup response. Nothing changes until the person
+  // actually confirms — see AuthService.confirmProfileAdoption for why this
+  // can no longer happen automatically.
+  @Post('confirm-adoption')
+  async confirmAdoption(@Req() request: Request, @CurrentUser() user: AuthUser, @Body() body: ConfirmAdoptionDto) {
+    await assertWithinSharedRateLimit(this.prisma, `confirm-adoption:${user.sub}`, 10, AUTH_RATE_LIMIT_WINDOW_MS);
+    await assertWithinSharedRateLimit(this.prisma, `confirm-adoption:ip:${getClientIp(request)}`, 10, AUTH_RATE_LIMIT_WINDOW_MS);
+    const profile = await this.authService.confirmProfileAdoption(user.sub, body.profileId);
+    return { profile: mapProfile(profile, true), venue: profile.venue ? mapVenue(profile.venue) : null };
+  }
+
   // Revoke every session for the account (all devices).
   @AllowUnverifiedEmail()
   @Post('logout-all')
@@ -641,7 +659,7 @@ export class AuthController {
   }
 
   private async issueSession(userId: string, email: string, fullName?: string, inviteToken?: string, rawPhone?: string) {
-    const { session, profile } = await this.authService.issueSession(userId, email, fullName, inviteToken, rawPhone);
+    const { session, profile, pendingAdoption } = await this.authService.issueSession(userId, email, fullName, inviteToken, rawPhone);
     const account = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { emailVerifiedAt: true },
@@ -685,6 +703,11 @@ export class AuthController {
       profile: mapProfile(profile, emailVerified),
       venue: emailVerified && isActiveMembership(profile.membershipStatus) && profile.venue ? mapVenue(profile.venue) : null,
       venues,
+      // A roster row elsewhere matched this account's verified email. Not
+      // applied automatically — the client should prompt ("You appear to be
+      // on the roster at {venueName} as {role} — join?") and call
+      // POST /v1/auth/confirm-adoption only if the person confirms.
+      pendingAdoption: pendingAdoption ?? null,
     };
   }
 
