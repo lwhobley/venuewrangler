@@ -15,6 +15,7 @@ export type QueuedMovement = {
   createdAt: string;
   retryCount: number;
   lastError?: string;
+  retryable?: boolean;
 };
 
 const QUEUE_STORAGE_KEY = 'venuewrangler.bar_inventory.offline_queue';
@@ -26,6 +27,24 @@ const listeners = new Set<QueueListener>();
 // In-memory cache for fast synchronous access
 let memoryQueue: QueuedMovement[] | null = null;
 let isLoaded = false;
+let mutationTail: Promise<unknown> = Promise.resolve();
+const activeSyncs = new Map<string, Promise<SyncResult>>();
+
+function mutateQueue(update: (queue: QueuedMovement[]) => QueuedMovement[]): Promise<void> {
+  const run = async () => {
+    // Re-read inside the lock so another browser tab cannot be overwritten.
+    const current = await readRawQueue();
+    await writeRawQueue(update(current));
+    notifyListeners();
+  };
+  const next = mutationTail.then(() =>
+    Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.locks
+      ? navigator.locks.request(QUEUE_STORAGE_KEY, run)
+      : run(),
+  );
+  mutationTail = next.catch(() => undefined);
+  return next;
+}
 
 function getNativeFileUri(): string | null {
   const dir = FileSystem.documentDirectory;
@@ -35,48 +54,41 @@ function getNativeFileUri(): string | null {
 
 async function readRawQueue(): Promise<QueuedMovement[]> {
   try {
-    if (Platform.OS === 'web' || typeof window !== 'undefined') {
+    if (Platform.OS === 'web') {
       if (typeof localStorage !== 'undefined') {
         const raw = localStorage.getItem(QUEUE_STORAGE_KEY);
         if (!raw) return [];
         const parsed = JSON.parse(raw);
         return Array.isArray(parsed) ? parsed : [];
       }
-      return [];
+      throw new Error('Offline storage is unavailable');
     }
 
     const uri = getNativeFileUri();
-    if (!uri) return [];
-    const info = await FileSystem.getInfoAsync(uri).catch(() => ({ exists: false }));
+    if (!uri) throw new Error('Offline storage is unavailable');
+    const info = await FileSystem.getInfoAsync(uri);
     if (!info.exists) return [];
     const content = await FileSystem.readAsStringAsync(uri);
     if (!content) return [];
     const parsed = JSON.parse(content);
     return Array.isArray(parsed) ? parsed : [];
   } catch (err) {
-    console.warn('[OfflineInventoryQueue] Error reading stored queue:', err);
-    return [];
+    throw new Error('Unable to read saved inventory. Do not clear app storage.', { cause: err });
   }
 }
 
 async function writeRawQueue(queue: QueuedMovement[]): Promise<void> {
-  memoryQueue = queue;
-  try {
     const serialized = JSON.stringify(queue);
-    if (Platform.OS === 'web' || typeof window !== 'undefined') {
-      if (typeof localStorage !== 'undefined') {
-        localStorage.setItem(QUEUE_STORAGE_KEY, serialized);
-      }
-      return;
-    }
-
-    const uri = getNativeFileUri();
-    if (uri) {
+    if (Platform.OS === 'web') {
+      if (typeof localStorage === 'undefined') throw new Error('Offline storage is unavailable');
+      localStorage.setItem(QUEUE_STORAGE_KEY, serialized);
+    } else {
+      const uri = getNativeFileUri();
+      if (!uri) throw new Error('Offline storage is unavailable');
       await FileSystem.writeAsStringAsync(uri, serialized);
     }
-  } catch (err) {
-    console.warn('[OfflineInventoryQueue] Error writing stored queue:', err);
-  }
+    memoryQueue = queue;
+    isLoaded = true;
 }
 
 function notifyListeners() {
@@ -107,7 +119,6 @@ export async function enqueueOfflineMovement(params: {
   quantity: number;
   notes?: string;
 }): Promise<QueuedMovement> {
-  const current = await getOfflineQueue();
   const newEntry: QueuedMovement = {
     id: `queue_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     venueId: params.venueId,
@@ -120,28 +131,16 @@ export async function enqueueOfflineMovement(params: {
     retryCount: 0,
   };
 
-  const nextQueue = [...current, newEntry];
-  await writeRawQueue(nextQueue);
-  notifyListeners();
+  await mutateQueue((current) => [...current, newEntry]);
   return newEntry;
 }
 
 export async function removeOfflineMovement(id: string): Promise<void> {
-  const current = await getOfflineQueue();
-  const nextQueue = current.filter((m) => m.id !== id);
-  await writeRawQueue(nextQueue);
-  notifyListeners();
+  await mutateQueue((current) => current.filter((m) => m.id !== id));
 }
 
 export async function clearOfflineQueue(venueId?: string): Promise<void> {
-  if (!venueId) {
-    await writeRawQueue([]);
-  } else {
-    const current = await getOfflineQueue();
-    const nextQueue = current.filter((m) => m.venueId !== venueId);
-    await writeRawQueue(nextQueue);
-  }
-  notifyListeners();
+  await mutateQueue((current) => venueId ? current.filter((m) => m.venueId !== venueId) : []);
 }
 
 /**
@@ -172,17 +171,30 @@ export type SyncResult = {
   errors: string[];
 };
 
-export async function syncOfflineInventoryQueue(options: {
+type SyncOptions = {
   venueId: string;
+  automatic?: boolean;
   recordMovement: (args: {
     venueId: string;
     itemId: string;
     movementType: string;
     quantity: number;
     notes?: string;
+    operationId: string;
   }) => Promise<any>;
-}): Promise<SyncResult> {
-  const allQueued = await getOfflineQueue();
+};
+
+export function syncOfflineInventoryQueue(options: SyncOptions): Promise<SyncResult> {
+  const active = activeSyncs.get(options.venueId);
+  if (active) return active;
+  const syncing = runSync(options).finally(() => { activeSyncs.delete(options.venueId); });
+  activeSyncs.set(options.venueId, syncing);
+  return syncing;
+}
+
+async function runSync(options: SyncOptions): Promise<SyncResult> {
+  await mutationTail;
+  const allQueued = await readRawQueue();
   const venueMovements = allQueued.filter((m) => m.venueId === options.venueId);
 
   if (venueMovements.length === 0) {
@@ -192,9 +204,14 @@ export async function syncOfflineInventoryQueue(options: {
   let synced = 0;
   let failed = 0;
   const errors: string[] = [];
-  const remainingIds = new Set(allQueued.map((m) => m.id));
+  const blockedItems = new Set<string>();
 
   for (const item of venueMovements) {
+    if (blockedItems.has(item.itemId)) continue;
+    if (options.automatic && (item.retryable === false || item.retryCount >= 3)) {
+      blockedItems.add(item.itemId);
+      continue;
+    }
     try {
       await options.recordMovement({
         venueId: item.venueId,
@@ -202,25 +219,21 @@ export async function syncOfflineInventoryQueue(options: {
         movementType: item.movementType,
         quantity: item.quantity,
         notes: item.notes,
+        operationId: item.id,
       });
+      await removeOfflineMovement(item.id);
       synced++;
-      remainingIds.delete(item.id);
     } catch (err: any) {
       failed++;
       const message = err?.message || 'Sync failed';
+      const status = Number(err?.status);
+      const retryable = !status || status >= 500 || status === 408 || status === 429;
       errors.push(`${item.itemName ?? item.itemId}: ${message}`);
-      // Keep in queue, increment retry
-      const target = allQueued.find((m) => m.id === item.id);
-      if (target) {
-        target.retryCount = (target.retryCount || 0) + 1;
-        target.lastError = message;
-      }
+      blockedItems.add(item.itemId);
+      await mutateQueue((current) => current.map((entry) => entry.id === item.id
+        ? { ...entry, retryCount: entry.retryCount + 1, lastError: message, retryable } : entry));
     }
   }
-
-  const updatedQueue = allQueued.filter((m) => remainingIds.has(m.id));
-  await writeRawQueue(updatedQueue);
-  notifyListeners();
 
   return { synced, failed, errors };
 }
@@ -250,6 +263,8 @@ export function useOfflineInventoryQueue(venueId?: string) {
 
     void getOfflineQueue(venueId).then((items) => {
       if (mounted) setQueue(items);
+    }).catch(() => {
+      if (mounted) setSyncStatus('Unable to read saved inventory. Do not clear app storage.');
     });
 
     return () => {
@@ -276,7 +291,7 @@ export function useOfflineInventoryQueue(venueId?: string) {
   );
 
   const syncNow = useCallback(
-    async (recordMovement: (args: any) => Promise<any>): Promise<SyncResult> => {
+    async (recordMovement: (args: any) => Promise<any>, automatic = false): Promise<SyncResult> => {
       if (!venueId || isSyncing) {
         return { synced: 0, failed: 0, errors: [] };
       }
@@ -285,6 +300,7 @@ export function useOfflineInventoryQueue(venueId?: string) {
       try {
         const result = await syncOfflineInventoryQueue({
           venueId,
+          automatic,
           recordMovement,
         });
         if (result.synced > 0) {

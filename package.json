@@ -7,6 +7,7 @@
     "packages/*"
   ],
   "overrides": {
+    "multer": "2.3.0",
     "brace-expansion@^1.1.7": "1.1.18",
     "brace-expansion@^5.0.5": "5.0.9",
     "decode-uri-component": "0.5.0",
@@ -74,6 +75,7 @@
     "zustand": "^5.0.15"
   },
   "devDependencies": {
+    "@nestjs/platform-express": "12.0.1",
     "@babel/core": "^7.25.0",
     "@emnapi/core": "1.11.3",
     "@emnapi/runtime": "1.11.3",

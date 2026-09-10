@@ -423,7 +423,7 @@ export class GuestsController {
 
     if (body.guestId) {
       const existing = await this.prisma.guest.findFirst({
-        where: { id: body.guestId, venueId: scope.venueId },
+        where: { id: body.guestId, venueId: scope.venueId, deletedAt: null },
       });
       if (!existing) throw new BadRequestException('Guest not found');
       const updated = await this.prisma.guest.update({ where: { id: existing.id }, data });

@@ -73,6 +73,8 @@ keys/
 .agents/
 .antigravity/
 .vs/
+# Contains a live Supabase OAuth access/refresh token — never commit.
+.opencode/
 
 # Local security tooling and detailed cloud findings (never publish).
 .local-security/

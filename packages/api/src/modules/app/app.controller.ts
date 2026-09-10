@@ -1306,6 +1306,31 @@ export class AppController {
         }
       }
 
+      if (venuesToDelete.length > 0) {
+        // A venue being deleted may itself be the "billing venue" that covers
+        // other venues' subscriptions (Subscription.billingSubscriptionId).
+        // That FK is onDelete: SetNull, so deleting it silently cuts the
+        // covered venues off their paid plan with no warning. Block it
+        // instead — the covered venues must be reassigned first.
+        const coveringSubscriptions = await tx.subscription.findMany({
+          where: { venueId: { in: venuesToDelete } },
+          select: { id: true },
+        });
+        if (coveringSubscriptions.length > 0) {
+          const coveredElsewhere = await tx.subscription.count({
+            where: {
+              billingSubscriptionId: { in: coveringSubscriptions.map((s) => s.id) },
+              venueId: { notIn: venuesToDelete },
+            },
+          });
+          if (coveredElsewhere > 0) {
+            throw new ConflictException(
+              'This account owns a venue whose subscription covers other venues’ billing. Reassign that coverage before deleting this account.',
+            );
+          }
+        }
+      }
+
       const mediaJobIds: string[] = [];
       if (venuesToDelete.length > 0) {
         const venueList = Prisma.join(venuesToDelete);
@@ -1371,6 +1396,43 @@ export class AppController {
           JOIN "Venue" v ON v."id" = t."venueId"
           LEFT JOIN "Profile" p ON p."id" = t."profileId"
           WHERE t."venueId" IN (${venueList})
+        `);
+
+        // Same archive-before-cascade need as TimeEntry above: PosCheck and
+        // PosLaborPunch are onDelete: Cascade from Venue with no other
+        // retention path, so this venue's revenue and labor history would
+        // otherwise be destroyed outright. Neither table carries a profileId
+        // link to the departing account, so — unlike TimeEntry — nothing here
+        // is that account's own personal data requiring pseudonymization.
+        await tx.$executeRaw(Prisma.sql`
+          INSERT INTO "RetainedPosCheck" (
+            "id", "originVenueId", "originVenueName", "provider", "externalCheckId",
+            "tableLabel", "serverName", "guestName", "openedAt", "closedAt",
+            "subtotalCents", "taxCents", "tipCents", "totalCents", "status",
+            "originUpdatedAt", "retainedAt"
+          )
+          SELECT
+            ${`retained-${deletionRunId}-`} || c."id", c."venueId", v."name", c."provider"::text, c."externalCheckId",
+            c."tableLabel", c."serverName", c."guestName", c."openedAt", c."closedAt",
+            c."subtotalCents", c."taxCents", c."tipCents", c."totalCents", c."status"::text,
+            c."updatedAt", NOW()
+          FROM "PosCheck" c
+          JOIN "Venue" v ON v."id" = c."venueId"
+          WHERE c."venueId" IN (${venueList})
+        `);
+        await tx.$executeRaw(Prisma.sql`
+          INSERT INTO "RetainedPosLaborPunch" (
+            "id", "originVenueId", "originVenueName", "provider", "externalEmployeeId",
+            "employeeName", "clockInAt", "clockOutAt", "regularMinutes", "overtimeMinutes",
+            "regularPayCents", "overtimePayCents", "totalPayCents", "businessDate", "retainedAt"
+          )
+          SELECT
+            ${`retained-${deletionRunId}-`} || l."id", l."venueId", v."name", l."provider"::text, l."externalEmployeeId",
+            l."employeeName", l."clockInAt", l."clockOutAt", l."regularMinutes", l."overtimeMinutes",
+            l."regularPayCents", l."overtimePayCents", l."totalPayCents", l."businessDate", NOW()
+          FROM "PosLaborPunch" l
+          JOIN "Venue" v ON v."id" = l."venueId"
+          WHERE l."venueId" IN (${venueList})
         `);
 
         // Profile.venue uses SetNull because profiles can temporarily be

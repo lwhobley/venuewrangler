@@ -2,6 +2,27 @@ import { BadRequestException } from '@nestjs/common';
 import { describe, expect, it, vi } from 'vitest';
 import { WranglerOperatorService } from './wrangler-operator.service';
 
+describe('Wrangler inventory writes', () => {
+  const actor = { profileId: 'p1', fullName: 'Manager', role: 'manager', allAccess: false };
+  const plan = { tool: 'UPDATE_BAR_STOCK', args: { itemName: 'House Vodka', onHand: 3 }, summary: 'Count', risk: 'write' };
+
+  it('uses the shared movement service with an exact venue-scoped item', async () => {
+    const findMany = vi.fn(async () => [{ id: 'i1', name: 'House Vodka', parLevel: 5 }]);
+    const record = vi.fn(async () => ({ movement: { nextOnHand: 3 } }));
+    const service = new WranglerOperatorService({ barInventoryItem: { findMany }, auditLog: { create: vi.fn() } } as never, { record } as never);
+    await service.execute({ venueId: 'v1', actor, plan } as never);
+    expect(findMany).toHaveBeenCalledWith({ where: { venueId: 'v1', name: { equals: 'House Vodka', mode: 'insensitive' } }, take: 2 });
+    expect(record).toHaveBeenCalledWith(expect.objectContaining({ venueId: 'v1', itemId: 'i1', createdBy: 'p1', movementType: 'count', quantity: 3 }));
+  });
+
+  it('rejects an ambiguous inventory name without updating stock', async () => {
+    const record = vi.fn();
+    const service = new WranglerOperatorService({ barInventoryItem: { findMany: vi.fn(async () => [{ id: 'i1' }, { id: 'i2' }]) } } as never, { record } as never);
+    await expect(service.execute({ venueId: 'v1', actor, plan } as never)).rejects.toThrow('ambiguous');
+    expect(record).not.toHaveBeenCalled();
+  });
+});
+
 // Covers the read-path tool branches inside the private executeRead() method
 // (FIND_RESERVATION, LIST_WAITLIST, FIND_CRM_LEAD, SEARCH_CHAT, LIST_INVENTORY,
 // GET_SALES_PULSE, LIST_INTEGRATIONS, FIND_STAFF, LIST_SCHEDULE, LIST_CLOCKS).

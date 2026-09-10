@@ -19,6 +19,7 @@ import type { Request } from 'express';
 import { Public } from '../../auth/public.decorator';
 import { CurrentUser } from '../../auth/current-user.decorator';
 import type { AuthUser } from '../../auth/auth.guard';
+import { canManageVenue } from '../../auth/roles';
 import { getClientIp } from '../../common/http';
 import { hashInviteToken } from '../../common/invite-token';
 import { assertWithinSharedRateLimit } from '../../common/rate-limit';
@@ -70,6 +71,22 @@ class ReviewDecisionDto {
   note?: string;
 }
 
+// Intentionally class-level, not per-method. A repo-wide audit flagged this
+// as "every handler skips tenant isolation" and recommended narrowing it to
+// only the public invite-check route — doing that would break every other
+// handler here: AuthGuard has already bound a single-venue tenant context
+// from the X-Venue-Id header by the time this controller runs (see
+// VenueScopeInterceptor's own comment on SKIP_VENUE_SCOPE_KEY), and a manager
+// who administers more than one venue needs listManagerJoinRequests/
+// getJoinRequestDetail/approve/reject to see and act on requests across ALL
+// of their venues, not just whichever one happens to be "active" in the
+// header. Every handler below instead does its own explicit venueId
+// predicate (see listManagerJoinRequests computing venueIds from the
+// caller's own manager profiles, and getJoinRequestDetail's actorProfile
+// check) — that manual scoping is the actual isolation boundary here, not
+// the Prisma tenant extension. Keep it that way: a new handler added to this
+// controller must add its own explicit venueId check, the extension will not
+// do it automatically.
 @SkipVenueScope()
 @Controller('v1/workforce')
 export class WorkforceController {
@@ -304,17 +321,22 @@ export class WorkforceController {
 
   @Get('manager/join-requests')
   async listManagerJoinRequests(@CurrentUser() user: AuthUser) {
-    // Find all venues where this user is a manager/admin/owner.
-    const managerProfiles = await this.prisma.profile.findMany({
+    // Find all venues where this user can manage staff — role-based manager,
+    // or a support/all-access profile that canManageVenue also recognizes.
+    // Filtering in JS (rather than a role list baked into the query) keeps
+    // this in sync with canManageVenue instead of drifting from it.
+    const myProfiles = await this.prisma.profile.findMany({
       where: {
         userId: user.sub,
-        role: { in: ['admin', 'owner', 'manager'] },
         venueId: { not: null },
         OR: [{ membershipStatus: null }, { membershipStatus: 'active' }],
       },
-      select: { venueId: true },
+      select: { venueId: true, role: true, allAccess: true },
     });
-    const venueIds = managerProfiles.map((p) => p.venueId).filter(Boolean) as string[];
+    const venueIds = myProfiles
+      .filter((p) => canManageVenue(p.role, p.allAccess))
+      .map((p) => p.venueId)
+      .filter(Boolean) as string[];
     if (!venueIds.length) return { requests: [] };
 
     const requests = await this.prisma.workplaceJoinRequest.findMany({
@@ -424,16 +446,17 @@ export class WorkforceController {
     });
     if (!request) throw new NotFoundException('Join request not found.');
 
-    // Verify actor is manager at this venue.
+    // Verify actor can manage this venue (role-based manager, or all-access).
     const actorProfile = await this.prisma.profile.findFirst({
       where: {
         userId: user.sub,
         venueId: request.venueId,
-        role: { in: ['admin', 'owner', 'manager'] },
         OR: [{ membershipStatus: null }, { membershipStatus: 'active' }],
       },
     });
-    if (!actorProfile) throw new ForbiddenException('Not authorized.');
+    if (!actorProfile || !canManageVenue(actorProfile.role, actorProfile.allAccess)) {
+      throw new ForbiddenException('Not authorized.');
+    }
 
     return {
       id: request.id,

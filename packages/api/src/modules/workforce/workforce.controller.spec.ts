@@ -223,7 +223,7 @@ describe('WorkforceController manager join-request names', () => {
   it('uses the applicant oldest profile even when it already belongs to a venue', async () => {
     const prisma = {
       profile: {
-        findMany: vi.fn().mockResolvedValue([{ venueId: 'venue-1' }]),
+        findMany: vi.fn().mockResolvedValue([{ venueId: 'venue-1', role: 'manager', allAccess: false }]),
       },
       workplaceJoinRequest: {
         findMany: vi.fn().mockResolvedValue([{
@@ -261,6 +261,80 @@ describe('WorkforceController manager join-request names', () => {
       }),
     }));
     expect(result.requests[0]?.userName).toBe('Alex Applicant');
+  });
+
+  it('includes venues where the caller is an all-access support profile, not just a named manager role', async () => {
+    const prisma = {
+      profile: {
+        // staff-role but allAccess — canManageVenue grants this the same as
+        // a manager role would. AUD-043: the SQL join-request functions and
+        // this controller both used to check role IN (...) only.
+        findMany: vi.fn().mockResolvedValue([{ venueId: 'venue-2', role: 'staff', allAccess: true }]),
+      },
+      workplaceJoinRequest: { findMany: vi.fn().mockResolvedValue([]) },
+    };
+    const controller = new WorkforceController(prisma as never, {} as never, {} as never);
+
+    await controller.listManagerJoinRequests({ sub: 'support-1' } as never);
+
+    expect(prisma.workplaceJoinRequest.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ venueId: { in: ['venue-2'] } }),
+    }));
+  });
+});
+
+describe('WorkforceController join request detail', () => {
+  it('authorizes an all-access support profile even without a manager role', async () => {
+    const prisma = {
+      workplaceJoinRequest: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: 'request-1',
+          venueId: 'venue-1',
+          userId: 'applicant-1',
+          status: 'pending',
+          decidedAt: null,
+          decisionNote: null,
+          createdAt: new Date('2026-08-01T00:00:00.000Z'),
+          venue: { id: 'venue-1', name: 'Test Venue' },
+          user: { id: 'applicant-1', email: 'applicant@example.com', profiles: [{ fullName: 'Alex Applicant' }] },
+          events: [],
+        }),
+      },
+      profile: {
+        findFirst: vi.fn().mockResolvedValue({ role: 'staff', allAccess: true }),
+      },
+    };
+    const controller = new WorkforceController(prisma as never, {} as never, {} as never);
+
+    await expect(controller.getJoinRequestDetail({ sub: 'support-1' } as never, 'request-1'))
+      .resolves.toEqual(expect.objectContaining({ id: 'request-1' }));
+  });
+
+  it('rejects a caller with neither a manager role nor allAccess at the request\'s venue', async () => {
+    const prisma = {
+      workplaceJoinRequest: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: 'request-1',
+          venueId: 'venue-1',
+          userId: 'applicant-1',
+          status: 'pending',
+          decidedAt: null,
+          decisionNote: null,
+          createdAt: new Date('2026-08-01T00:00:00.000Z'),
+          venue: { id: 'venue-1', name: 'Test Venue' },
+          user: { id: 'applicant-1', email: 'applicant@example.com', profiles: [] },
+          events: [],
+        }),
+      },
+      profile: {
+        // Active membership at the venue, but plain staff with no allAccess.
+        findFirst: vi.fn().mockResolvedValue({ role: 'staff', allAccess: false }),
+      },
+    };
+    const controller = new WorkforceController(prisma as never, {} as never, {} as never);
+
+    await expect(controller.getJoinRequestDetail({ sub: 'staff-1' } as never, 'request-1'))
+      .rejects.toThrow('Not authorized');
   });
 });
 

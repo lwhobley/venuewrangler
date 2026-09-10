@@ -19,6 +19,9 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 
 COPY packages/api packages/api
+COPY Dockerfile .dockerignore ./
+COPY scripts/api-source-manifest.mjs scripts/api-source-manifest.mjs
+RUN node scripts/api-source-manifest.mjs --output /app/api-source-manifest.json
 # `npm run build` runs `prisma generate`, which resolves every env() in the
 # datasource block (DATABASE_URL and DATABASE_DIRECT_URL) even though it never
 # opens a connection. .dockerignore keeps .env files out of this stage, so
@@ -56,6 +59,7 @@ COPY --from=build --chown=node:node /app/node_modules/.prisma ./node_modules/.pr
 COPY --from=build --chown=node:node /app/packages/api/dist packages/api/dist
 COPY --from=build --chown=node:node /app/packages/api/prisma packages/api/prisma
 COPY --from=build --chown=node:node /app/packages/api/scripts packages/api/scripts
+COPY --from=build --chown=node:node /app/api-source-manifest.json ./api-source-manifest.json
 
 # Migrations run once in the release job. Every serving instance independently
 # verifies that the complete packaged migration history is present before it

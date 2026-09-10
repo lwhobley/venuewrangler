@@ -21,39 +21,8 @@
  */
 import { spawnSync } from 'node:child_process';
 
-/**
- * Each entry needs an id, why it is accepted, and what makes it removable.
- * Keep this list short; an exemption is a debt, not a resolution.
- *
- * multer has a fourth advisory, GHSA-qvfw-j98x-7q72 (fileFilter race), which
- * is rated low and so never reaches this gate's high/critical threshold. It
- * is deliberately not listed — listing it would register as a stale exemption.
- */
-const ALLOWED = [
-  {
-    id: 'GHSA-wc9g-mqfw-jrwm',
-    package: 'multer',
-    reason: 'DoS via crafted multipart field names. Unreachable: no route uses multipart parsing.',
-    removeWhen: '@nestjs/platform-express depends on multer >= 2.3.0',
-  },
-  {
-    id: 'GHSA-qfvm-cv95-jqjf',
-    package: 'multer',
-    reason: 'DoS via file descriptor leak on aborted uploads. Unreachable: no route uses multipart parsing.',
-    removeWhen: '@nestjs/platform-express depends on multer >= 2.3.0',
-  },
-  {
-    id: 'GHSA-535w-7cp7-47q4',
-    package: 'multer',
-    reason: 'DoS via oversized array index in field names. Unreachable: no route uses multipart parsing.',
-    removeWhen: '@nestjs/platform-express depends on multer >= 2.3.0',
-  },
-];
-
-// Why multer is considered unreachable, re-verified by the check below:
-// packages/api/src contains no FileInterceptor, FilesInterceptor,
-// @UploadedFile or MulterModule, so multer never parses a request. Uploads are
-// sent as base64 JSON. See docs/cloud-security-triage-2026-09-08.md.
+// No accepted advisories. Multer is patched through a scoped root override.
+const ALLOWED = [];
 const MULTIPART_MARKERS = /FileInterceptor|FilesInterceptor|@UploadedFiles?\b|MulterModule/;
 
 // Windows cannot spawn npm's .cmd shim directly, and `shell: true` with an

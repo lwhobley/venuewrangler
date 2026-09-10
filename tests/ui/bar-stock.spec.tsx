@@ -11,12 +11,20 @@ function item(overrides: Record<string, unknown> = {}) {
 }
 
 const state = vi.hoisted(() => ({
+  savedQueue: '',
   venue: { id: 'venue-1' } as any,
   canManage: true,
   profileLoading: false,
   stock: undefined as any,
   upsertBarItem: vi.fn(),
   recordMovement: vi.fn(),
+}));
+
+vi.mock('expo-file-system/legacy', () => ({
+  documentDirectory: '/mock/documents/',
+  getInfoAsync: async () => ({ exists: !!state.savedQueue }),
+  readAsStringAsync: async () => state.savedQueue,
+  writeAsStringAsync: async (_uri: string, value: string) => { state.savedQueue = value; },
 }));
 
 vi.mock('react-native', () => ({
@@ -145,7 +153,7 @@ describe('Bar stock screen', () => {
     const r = render();
     await act(async () => r.render(<BarStockScreenWrapper />));
     await act(async () => buttonByLabel(r, 'barStock.list.plusOne')?.props.onPress());
-    expect(state.recordMovement).toHaveBeenCalledWith({ venueId: 'venue-1', itemId: 'i1', movementType: 'received', quantity: 1 });
+    expect(state.recordMovement).toHaveBeenCalledWith(expect.objectContaining({ venueId: 'venue-1', itemId: 'i1', movementType: 'received', quantity: 1, operationId: expect.any(String) }));
   });
 
   it('records a -1 waste movement for an item', async () => {
@@ -154,7 +162,7 @@ describe('Bar stock screen', () => {
     const r = render();
     await act(async () => r.render(<BarStockScreenWrapper />));
     await act(async () => buttonByLabel(r, 'barStock.list.minusOne')?.props.onPress());
-    expect(state.recordMovement).toHaveBeenCalledWith({ venueId: 'venue-1', itemId: 'i1', movementType: 'waste', quantity: -1 });
+    expect(state.recordMovement).toHaveBeenCalledWith(expect.objectContaining({ venueId: 'venue-1', itemId: 'i1', movementType: 'waste', quantity: -1, operationId: expect.any(String) }));
   });
 
   it('flags an item below par level in the reorder list', async () => {

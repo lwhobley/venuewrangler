@@ -752,6 +752,57 @@ model RetainedTimeEntry {
   @@index([retainedAt])
 }
 
+// Same pattern as RetainedTimeEntry: PosCheck/PosLaborPunch are onDelete:
+// Cascade from Venue, so account deletion (the only place a Venue is ever
+// deleted — see app.controller.ts) archives them here first. No Venue FK, so
+// the row survives the cascade. Unlike TimeEntry these are not the departing
+// account's own personal data (no profileId link), so nothing here needs
+// pseudonymizing — they retain venue revenue/labor history the same way
+// RetainedTimeEntry retains co-workers' wage history.
+model RetainedPosCheck {
+  id              String    @id @default(cuid())
+  originVenueId   String
+  originVenueName String?
+  provider        String
+  externalCheckId String
+  tableLabel      String?
+  serverName      String?
+  guestName       String?
+  openedAt        DateTime
+  closedAt        DateTime?
+  subtotalCents   Int
+  taxCents        Int?
+  tipCents        Int
+  totalCents      Int
+  status          String
+  originUpdatedAt DateTime
+  retainedAt      DateTime  @default(now())
+
+  @@index([originVenueId])
+  @@index([retainedAt])
+}
+
+model RetainedPosLaborPunch {
+  id                 String    @id @default(cuid())
+  originVenueId      String
+  originVenueName    String?
+  provider           String
+  externalEmployeeId String
+  employeeName       String
+  clockInAt          DateTime
+  clockOutAt         DateTime?
+  regularMinutes     Int?
+  overtimeMinutes    Int?
+  regularPayCents    Int?
+  overtimePayCents   Int?
+  totalPayCents      Int?
+  businessDate       String
+  retainedAt         DateTime  @default(now())
+
+  @@index([originVenueId])
+  @@index([retainedAt])
+}
+
 model ObjectDeletionJob {
   id          String    @id @default(cuid())
   objectKeys  String[]
@@ -827,7 +878,7 @@ model PushToken {
   id         String   @id @default(cuid())
   venueId    String
   profileId  String
-  token      String   @unique
+  token      String
   platform   String
   enabled    Boolean
   lastSeenAt DateTime
@@ -836,8 +887,14 @@ model PushToken {
   venue      Venue    @relation(fields: [venueId], references: [id], onDelete: Cascade)
   profile    Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
 
+  // Scoped per venue, not global: the same physical device token is
+  // legitimately registered at multiple venues for a staff member who works
+  // more than one (notifications.service.ts already scopes delivery by
+  // venueId, so this is a genuine multi-row case, not a collision to reject).
+  @@unique([venueId, token])
   @@index([profileId])
   @@index([venueId])
+  @@index([token])
 }
 
 // NOTE: a partial unique index exists in SQL only (Prisma cannot express it):
@@ -1359,7 +1416,11 @@ model CrmContract {
   // every write site (crm.controller.ts).
   beo                 CrmBeo?        @relation(fields: [beoId], references: [id], onDelete: SetNull)
 
-  @@unique([contractNumber])
+  // Scoped per venue, not global: contractNumber is a random per-tenant
+  // identifier (see makeContractNumber() in crm.controller.ts), and a global
+  // unique let one venue's number collide with another's, rejecting an
+  // unrelated venue's contract creation outright.
+  @@unique([venueId, contractNumber])
   @@index([venueId])
   @@index([leadId])
   @@index([beoId])
@@ -1641,6 +1702,7 @@ model BarInventoryItem {
 
 model BarInventoryMovement {
   id             String               @id @default(cuid())
+  operationId    String?
   venueId        String
   itemId         String
   movementType   BarStockMovementType
@@ -1659,6 +1721,7 @@ model BarInventoryMovement {
 
   @@index([venueId, createdAt])
   @@index([itemId, createdAt])
+  @@unique([venueId, operationId])
 }
 
 model PrepBoardItem {

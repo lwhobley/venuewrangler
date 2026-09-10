@@ -113,7 +113,7 @@ export class ReservationMutationService {
       await this.assertNoHoldConflict(transaction, args.venueId, reservationTime, data.durationMinutes);
       if (args.reservationId) {
         const existing = await transaction.reservation.findFirst({
-          where: { id: args.reservationId, venueId: args.venueId },
+          where: { id: args.reservationId, venueId: args.venueId, deletedAt: null },
         });
         if (!existing) throw new BadRequestException('Reservation not found');
         assertReservationTransitionAllowed(existing.status, data.status);

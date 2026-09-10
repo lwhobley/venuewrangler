@@ -8,6 +8,7 @@ import { adjacentWeekStarts, previousOvernightFilter, shiftsOverlap } from '../.
 import { syncTeamMemberCount } from '../../../common/team-sync';
 import { normalizedShiftEnd, zonedDateBounds, zonedIsoDate } from '../../../common/venue-time';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { InventoryMovementService } from '../../bar-inventory/inventory-movement.service';
 import { runWithoutTenant } from '../../../prisma/tenant-context';
 
 const DEFAULT_MODEL = 'gemini-flash-latest';
@@ -115,7 +116,7 @@ Rules:
 export class WranglerOperatorService {
   private readonly logger = new Logger(WranglerOperatorService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly inventory?: InventoryMovementService) {}
 
   async plan(input: { venueId: string; timezone?: string | null; command: string; actor: Actor }) {
     const command = input.command.trim();
@@ -693,15 +694,17 @@ export class WranglerOperatorService {
     if (plan.tool === 'UPDATE_BAR_STOCK') {
       const itemName = String(args.itemName);
       const onHand = Number(args.onHand);
-      const item = await this.prisma.barInventoryItem.findFirst({
-        where: { venueId, name: { contains: itemName, mode: 'insensitive' } },
+      const items = await this.prisma.barInventoryItem.findMany({
+        where: { venueId, name: { equals: itemName, mode: 'insensitive' } },
+        take: 2,
       });
+      if (items.length > 1) throw new BadRequestException('Inventory name is ambiguous. Use the stock screen to select the item.');
+      const item = items[0];
       if (!item) throw new NotFoundException(`Inventory item "${itemName}" not found`);
-      const row = await this.prisma.barInventoryItem.update({
-        where: { id: item.id },
-        data: { onHand, lastCountedAt: new Date() },
-      });
-      return { id: row.id, name: row.name, onHand: row.onHand, parLevel: row.parLevel };
+      if (!this.inventory) throw new BadRequestException('Inventory service is unavailable');
+      const { movement } = await this.inventory.record({ venueId, itemId: item.id, createdBy: actor.profileId,
+        movementType: 'count', quantity: onHand, notes: 'Wrangler operator count' });
+      return { id: item.id, name: item.name, onHand: movement.nextOnHand, parLevel: item.parLevel };
     }
 
     if (plan.tool === 'CREATE_SHIFT') {

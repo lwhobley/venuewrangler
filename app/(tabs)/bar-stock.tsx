@@ -125,27 +125,47 @@ function BarStockScreen() {
     getOptimisticOnHand,
   } = useOfflineInventoryQueue(venue?.id);
 
-  const handleSyncOffline = useCallback(async () => {
-    if (!venue?.id || offlinePendingCount === 0 || isOfflineSyncing) return;
+  const handleSyncOffline = useCallback(async (automatic = false) => {
+    if (!canManage || !venue?.id || offlinePendingCount === 0 || isOfflineSyncing) return;
+    if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.onLine === false) return;
+    try {
     const result = await syncOfflineQueue(async (params) => {
       return await recordMovement(params);
-    });
+    }, automatic);
     if (result.synced > 0) {
       setMessage(t('barStock.messages.offlineSyncSuccess', { count: result.synced }));
     } else if (result.failed > 0) {
       setMessage(t('barStock.messages.offlineSyncFailed', { count: result.failed }));
     }
-  }, [venue?.id, offlinePendingCount, isOfflineSyncing, syncOfflineQueue, recordMovement, t]);
+    } catch (error) {
+      setMessage(errorMessage(error, t('barStock.messages.errorUpdateStockCount')));
+    }
+  }, [canManage, venue?.id, offlinePendingCount, isOfflineSyncing, syncOfflineQueue, recordMovement, t]);
+
+  const syncHandlerRef = useRef(handleSyncOffline);
+  syncHandlerRef.current = handleSyncOffline;
 
   useFocusEffect(
     useCallback(() => {
-      if (venue?.id && offlinePendingCount > 0 && !isOfflineSyncing) {
-        void handleSyncOffline();
-      }
+      // A stable focus subscription prevents isSyncing toggles from restarting
+      // retries. Retry at most three times per visit, with increasing delays.
+      let cancelled = false;
+      let attempt = 0;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const retry = async () => {
+        if (cancelled) return;
+        await syncHandlerRef.current(true);
+        if (!cancelled && attempt < 3) {
+          timer = setTimeout(() => { void retry(); }, 30_000 * 2 ** attempt++);
+        }
+      };
+      void retry();
       return () => {
+        cancelled = true;
+        clearTimeout(timer);
         setShowScanner(false);
       };
-    }, [venue?.id, offlinePendingCount, isOfflineSyncing, handleSyncOffline]),
+    }, [venue?.id]),
   );
 
   const [name, setName] = useState('');
@@ -329,15 +349,16 @@ function BarStockScreen() {
     setMessage(null);
     const targetItem = allItems.find((i) => i._id === itemId);
     try {
-      await recordMovement({ venueId: venue.id, itemId, movementType, quantity });
-    } catch (e) {
       await enqueueOfflineMovement({
         itemId,
         itemName: targetItem?.name,
         movementType,
         quantity,
       });
-      setMessage(t('barStock.messages.offlineMovementQueued'));
+      const result = await syncOfflineQueue(recordMovement);
+      if (result.failed) setMessage(t('barStock.messages.offlineMovementQueued'));
+    } catch (e) {
+      setMessage(errorMessage(e, t('barStock.messages.errorUpdateStockCount')));
     }
   };
 
@@ -345,19 +366,22 @@ function BarStockScreen() {
     if (!venue?.id || countIndex >= countItems.length) return;
     const item = countItems[countIndex];
     const qty = Number(countValue);
-    if (isNaN(qty) || qty < 0) { setMessage(t('barStock.messages.invalidCount')); return; }
+    if (!Number.isFinite(qty) || qty < 0) { setMessage(t('barStock.messages.invalidCount')); return; }
     let isOffline = false;
     try {
-      await recordMovement({ venueId: venue.id, itemId: item._id, movementType: 'count', quantity: qty });
-    } catch (e) {
       await enqueueOfflineMovement({
         itemId: item._id,
         itemName: item.name,
         movementType: 'count',
         quantity: qty,
       });
-      isOffline = true;
+    } catch (e) {
+      setMessage(errorMessage(e, t('barStock.messages.errorUpdateStockCount')));
+      return; // Never advance past a count that was not durably saved.
     }
+    try {
+      isOffline = (await syncOfflineQueue(recordMovement)).failed > 0;
+    } catch { isOffline = true; }
 
     if (countIndex + 1 < countItems.length) {
       setCountIndex(countIndex + 1);
@@ -374,7 +398,7 @@ function BarStockScreen() {
         setMessage(t('barStock.messages.countComplete', { count: countItems.length }));
       }
     }
-  }, [venue?.id, countIndex, countItems, countValue, recordMovement, enqueueOfflineMovement, t]);
+  }, [venue?.id, countIndex, countItems, countValue, recordMovement, enqueueOfflineMovement, syncOfflineQueue, t]);
 
   const openScanner = async () => {
     setScanMsg(null); setScannedItem(null);

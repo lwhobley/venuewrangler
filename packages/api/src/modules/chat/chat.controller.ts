@@ -1,5 +1,4 @@
-import { Readable } from 'node:stream';
-import { pipeline } from 'node:stream/promises';
+import { streamPrivateImage } from '../../common/stream-private-image';
 import {
   BadRequestException,
   Body,
@@ -837,9 +836,7 @@ export class ChatController {
     if (data.length === 0) throw new BadRequestException('Image is empty');
     if (data.length > MAX_IMAGE_BYTES) throw new BadRequestException('Image is too large (max 5MB)');
     const mime = assertAllowedImageBytes(data, body.mimeType);
-    if (this.malwareScanner) {
-      await this.malwareScanner.assertClean(data);
-    }
+    await this.malwareScanner.assertClean(data);
 
     const s3Key = await this.s3ImageService.upload(data, mime, scope.venueId);
 
@@ -875,14 +872,9 @@ export class ChatController {
     if (!image) throw new NotFoundException('Image not found');
     await this.mediaAccess.assertToken(token, 'chat-image', id, image.venueId);
     const object = await this.s3ImageService.getObject(image.s3Key);
-    if (!object.Body) throw new NotFoundException('Image content not found');
-    res.setHeader('Cache-Control', 'no-store');
-    res.setHeader('Referrer-Policy', 'no-referrer');
-    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-    res.setHeader('Content-Type', object.ContentType ?? 'application/octet-stream');
     // Stream through the API origin already trusted by the web CSP. A redirect
     // would require allowing the private storage host as well.
-    return pipeline(object.Body as Readable, res);
+    return streamPrivateImage(object, res);
   }
 }
 

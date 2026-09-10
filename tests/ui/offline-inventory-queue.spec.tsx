@@ -1,4 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+const storage = new Map<string, string>();
+vi.stubGlobal('localStorage', {
+  getItem: (key: string) => storage.get(key) ?? null,
+  setItem: (key: string, value: string) => { storage.set(key, value); },
+});
 import {
   calculateOptimisticOnHand,
   clearOfflineQueue,
@@ -12,6 +17,54 @@ import {
 describe('offline-inventory-queue (walk-in cooler resilience)', () => {
   beforeEach(async () => {
     await clearOfflineQueue();
+  });
+
+  it('preserves entries enqueued while a sync request is pending', async () => {
+    await enqueueOfflineMovement({ venueId: 'v1', itemId: 'first', movementType: 'count', quantity: 1 });
+    let release!: () => void;
+    let started!: () => void;
+    const ready = new Promise<void>((resolve) => { started = resolve; });
+    const recordMovement = vi.fn(() => { started(); return new Promise<void>((resolve) => { release = resolve; }); });
+    const syncing = syncOfflineInventoryQueue({ venueId: 'v1', recordMovement });
+    await ready;
+    const second = await enqueueOfflineMovement({ venueId: 'v1', itemId: 'second', movementType: 'count', quantity: 2 });
+    release();
+    await syncing;
+    expect((await getOfflineQueue()).map((item) => item.id)).toEqual([second.id]);
+  });
+
+  it('serializes concurrent enqueues', async () => {
+    await Promise.all(['first', 'second'].map((itemId) => enqueueOfflineMovement({ venueId: 'v1', itemId, movementType: 'count', quantity: 1 })));
+    expect(await getOfflineQueue()).toHaveLength(2);
+  });
+
+  it('does not automatically retry permanent failures, but allows explicit retry', async () => {
+    await enqueueOfflineMovement({ venueId: 'v1', itemId: 'i1', movementType: 'count', quantity: 1 });
+    const recordMovement = vi.fn().mockRejectedValueOnce(Object.assign(new Error('Forbidden'), { status: 403 })).mockResolvedValue({});
+    await syncOfflineInventoryQueue({ venueId: 'v1', recordMovement });
+    await syncOfflineInventoryQueue({ venueId: 'v1', recordMovement, automatic: true });
+    expect(recordMovement).toHaveBeenCalledTimes(1);
+    await syncOfflineInventoryQueue({ venueId: 'v1', recordMovement });
+    expect(recordMovement).toHaveBeenCalledTimes(2);
+  });
+
+  it('coalesces overlapping sync requests in one runtime', async () => {
+    await enqueueOfflineMovement({ venueId: 'v1', itemId: 'i1', movementType: 'count', quantity: 1 });
+    const recordMovement = vi.fn().mockResolvedValue({});
+    await Promise.all([syncOfflineInventoryQueue({ venueId: 'v1', recordMovement }), syncOfflineInventoryQueue({ venueId: 'v1', recordMovement })]);
+    expect(recordMovement).toHaveBeenCalledTimes(1);
+  });
+
+  it('reuses the operation ID after a lost response and holds later counts for that item', async () => {
+    const first = await enqueueOfflineMovement({ venueId: 'v1', itemId: 'same', movementType: 'received', quantity: 5 });
+    await enqueueOfflineMovement({ venueId: 'v1', itemId: 'same', movementType: 'count', quantity: 8 });
+    const recordMovement = vi.fn().mockRejectedValueOnce(new Error('Response lost')).mockResolvedValue({});
+    await syncOfflineInventoryQueue({ venueId: 'v1', recordMovement });
+    expect(recordMovement).toHaveBeenCalledTimes(1);
+    await syncOfflineInventoryQueue({ venueId: 'v1', recordMovement });
+    expect(recordMovement.mock.calls[0][0].operationId).toBe(first.id);
+    expect(recordMovement.mock.calls[1][0].operationId).toBe(first.id);
+    expect(await getOfflineQueue()).toHaveLength(0);
   });
 
   it('enqueues a bottle count when in walk-in cooler with zero reception', async () => {

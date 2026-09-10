@@ -28,6 +28,7 @@ import { NotificationsService } from '../../notifications/notifications.service'
 import { EmailService } from '../../email/email.service';
 import { BarInventoryParserService } from './bar-inventory-parser.service';
 import { BarInventoryReportsService } from './bar-inventory-reports.service';
+import { InventoryMovementService } from './inventory-movement.service';
 
 const CATEGORIES = [
   'spirit', 'wine', 'beer', 'mixer', 'garnish', 'supply', 'other',
@@ -97,6 +98,11 @@ class UpsertBarItemDto {
 }
 
 class RecordMovementDto {
+  @IsOptional()
+  @IsString()
+  @Matches(/^[A-Za-z0-9_-]{1,100}$/)
+  operationId?: string;
+
   @IsIn(MOVEMENT_TYPES)
   movementType!: BarStockMovementType;
 
@@ -329,6 +335,7 @@ export class BarInventoryController {
     private readonly email: EmailService,
     private readonly parser: BarInventoryParserService,
     private readonly reports: BarInventoryReportsService,
+    private readonly movements: InventoryMovementService = new InventoryMovementService(prisma, notifications),
   ) {}
 
   @RequireSubscription('active')
@@ -423,59 +430,7 @@ export class BarInventoryController {
   ) {
     const profile = await this.requireManagerProfile(user);
     const venueId = profile.venueId!;
-    // Regression for VW-07: quantity had no sign constraint, so a 'waste'
-    // movement with a positive quantity silently increased stock instead of
-    // reducing it. The app itself already submits waste/comp as negative and
-    // received as positive (see app/(tabs)/bar-stock.tsx) — this just makes
-    // that convention a server-enforced invariant rather than a client habit.
-    if ((body.movementType === 'waste' || body.movementType === 'comp') && body.quantity > 0) {
-      throw new BadRequestException(`A ${body.movementType} movement must reduce stock. Use a negative quantity.`);
-    }
-    if (body.movementType === 'received' && body.quantity < 0) {
-      throw new BadRequestException('A received movement must be positive.');
-    }
-    const { movement, item, previousOnHand, nextOnHand } = await this.prisma.$transaction(async (tx) => {
-      const lockKey = `bar-inventory-${itemId}`;
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`;
-      const item = await tx.barInventoryItem.findFirst({ where: { id: itemId, venueId } });
-      if (!item) throw new NotFoundException('Item not found');
-      const previousOnHand = item.onHand;
-      const nextOnHand =
-        body.movementType === 'count'
-          ? Math.max(0, body.quantity)
-          : Math.max(0, previousOnHand + body.quantity);
-      const now = new Date();
-      await tx.barInventoryItem.update({
-        where: { id: item.id },
-        data: {
-          onHand: nextOnHand,
-          lastCountedAt: body.movementType === 'count' ? now : item.lastCountedAt,
-          updatedAt: now,
-        },
-      });
-      const movement = await tx.barInventoryMovement.create({
-        data: {
-          venueId,
-          itemId: item.id,
-          movementType: body.movementType,
-          quantity: body.quantity,
-          previousOnHand,
-          nextOnHand,
-          notes: cleanText(body.notes) ?? null,
-          // Freeze the valuation at write time. Reports used to multiply a
-          // historical movement by the item's present cost, so changing a cost
-          // today retroactively changed what last month's waste was worth.
-          unitCostCents: item.unitCostCents ?? null,
-          createdBy: profile.id,
-          createdAt: now,
-        },
-      });
-      return { movement, item, previousOnHand, nextOnHand };
-    });
-
-    // Fire-and-forget alerts after the transaction commits
-    void this.fireInventoryAlerts({ venueId, item, previousOnHand, nextOnHand, movementType: body.movementType, quantity: body.quantity });
-
+    const { movement } = await this.movements.record({ ...body, venueId, itemId, createdBy: profile.id });
     return { _id: movement.id };
   }
 
@@ -1034,55 +989,6 @@ export class BarInventoryController {
     };
   }
 
-  private fireInventoryAlerts(args: {
-    venueId: string;
-    item: { id: string; name: string; parLevel: number; unitCostCents: number | null };
-    previousOnHand: number;
-    nextOnHand: number;
-    movementType: string;
-    quantity: number;
-  }) {
-    void this.fireInventoryAlertsInBackground(args).catch((error) => {
-      this.logger.error(
-        `Inventory alert delivery failed: ${error instanceof Error ? error.message : String(error)}`,
-        error instanceof Error ? error.stack : undefined,
-      );
-    });
-  }
-
-  private async fireInventoryAlertsInBackground(args: {
-    venueId: string;
-    item: { id: string; name: string; parLevel: number; unitCostCents: number | null };
-    previousOnHand: number;
-    nextOnHand: number;
-    movementType: string;
-    quantity: number;
-  }) {
-    const { venueId, item, previousOnHand, nextOnHand, movementType, quantity } = args;
-
-    // Low-stock alert: just crossed below par
-    if (previousOnHand >= item.parLevel && nextOnHand < item.parLevel) {
-      await this.notifications.notifyManagers({
-        venueId,
-        kind: 'inventory_low_stock',
-        title: `Low stock: ${item.name}`,
-        body: `${nextOnHand} ${nextOnHand === 1 ? 'unit' : 'units'} remaining (par ${item.parLevel})`,
-      });
-    }
-
-    // Large waste/comp alert: loss > $50 in cost
-    if ((movementType === 'waste' || movementType === 'comp') && item.unitCostCents != null) {
-      const lossCents = Math.abs(quantity) * item.unitCostCents;
-      if (lossCents >= 5000) {
-        await this.notifications.notifyManagers({
-          venueId,
-          kind: 'inventory_large_loss',
-          title: `Large ${movementType} recorded`,
-          body: `${Math.abs(quantity)} × ${item.name} — est. $${(lossCents / 100).toFixed(2)} loss`,
-        });
-      }
-    }
-  }
 
   private async getProfile(user: AuthUser) {
     return this.prisma.profile.findFirst({

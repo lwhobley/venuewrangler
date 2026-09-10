@@ -446,6 +446,7 @@ describe('AppController multi-venue invariants', () => {
         deleteMany: vi.fn(),
       },
       pushToken: { deleteMany: vi.fn() }, availability: { deleteMany: vi.fn() },
+      subscription: { findMany: vi.fn().mockResolvedValue([]), count: vi.fn().mockResolvedValue(0) },
       timeEntry: { updateMany: vi.fn(), update: vi.fn(), findMany: vi.fn().mockResolvedValue([]) }, scheduleShift: { updateMany: vi.fn() },
       session: { deleteMany: vi.fn() }, authAccount: { deleteMany: vi.fn() },
     };
@@ -472,6 +473,7 @@ describe('AppController multi-venue invariants', () => {
         deleteMany: vi.fn(),
       },
       pushToken: { deleteMany: vi.fn() }, availability: { deleteMany: vi.fn() },
+      subscription: { findMany: vi.fn().mockResolvedValue([]), count: vi.fn().mockResolvedValue(0) },
       timeEntry: { updateMany: vi.fn(), update: vi.fn(), findMany: vi.fn().mockResolvedValue([]) }, scheduleShift: { updateMany: vi.fn() },
       session: { deleteMany: vi.fn() }, authAccount: { deleteMany: vi.fn() },
     };
@@ -507,6 +509,7 @@ describe('AppController multi-venue invariants', () => {
       objectDeletionJob: { create: vi.fn() },
       retainedTimeEntry: { createMany: vi.fn() },
       pushToken: { deleteMany: vi.fn() }, availability: { deleteMany: vi.fn() },
+      subscription: { findMany: vi.fn().mockResolvedValue([]), count: vi.fn().mockResolvedValue(0) },
       timeEntry: { updateMany: vi.fn(), update: vi.fn(), findMany: vi.fn().mockResolvedValue([]), deleteMany: vi.fn(), count: vi.fn().mockResolvedValue(0) },
       scheduleShift: { updateMany: vi.fn() },
       session: { deleteMany: vi.fn() }, authAccount: { deleteMany: vi.fn() },
@@ -550,6 +553,7 @@ describe('AppController multi-venue invariants', () => {
       objectDeletionJob: { create: vi.fn() },
       retainedTimeEntry: { createMany: vi.fn() },
       pushToken: { deleteMany: vi.fn() }, availability: { deleteMany: vi.fn() },
+      subscription: { findMany: vi.fn().mockResolvedValue([]), count: vi.fn().mockResolvedValue(0) },
       timeEntry: { updateMany: vi.fn(), update: vi.fn(), findMany: vi.fn().mockResolvedValue([]) },
       scheduleShift: { updateMany: vi.fn() },
       session: { deleteMany: vi.fn() }, authAccount: { deleteMany: vi.fn() },
@@ -609,6 +613,7 @@ describe('AppController multi-venue invariants', () => {
       objectDeletionJob: { create: vi.fn() },
       retainedTimeEntry: { createMany: vi.fn() },
       pushToken: { deleteMany: vi.fn() }, availability: { deleteMany: vi.fn() },
+      subscription: { findMany: vi.fn().mockResolvedValue([]), count: vi.fn().mockResolvedValue(0) },
       // First call returns the page, second returns empty to end the loop.
       timeEntry: {
         updateMany: vi.fn(),
@@ -628,21 +633,77 @@ describe('AppController multi-venue invariants', () => {
 
     await controller.deleteMyAccount({ sub: 'user-1' } as any, { deleteOwnedVenues: true });
 
-    const archiveSql = prisma.$executeRaw.mock.calls.at(-1)[0];
-    const archiveText = archiveSql.strings.join('');
-    expect(archiveText).toContain('INSERT INTO "RetainedTimeEntry"');
+    // $executeRaw is invoked two ways in this flow: tagged-template calls
+    // (`` tx.$executeRaw`...` ``, where call[0] is the raw strings array) for
+    // advisory locks, and `tx.$executeRaw(Prisma.sql`...`)` (call[0] is a Sql
+    // object with a .strings property) for the archive inserts. Normalize both.
+    const executeRawCalls = prisma.$executeRaw.mock.calls.map((call: any, index: number) => {
+      const raw = call[0];
+      const text = Array.isArray(raw) ? raw.join('') : String(raw?.strings?.join('') ?? raw);
+      return { text, order: prisma.$executeRaw.mock.invocationCallOrder[index] };
+    });
+    const findArchiveCall = (table: string) => {
+      const found = executeRawCalls.find((call: any) => call.text.includes(`INSERT INTO "${table}"`));
+      if (!found) throw new Error(`No archive INSERT found for ${table}`);
+      return found;
+    };
+
+    const timeEntryArchive = findArchiveCall('RetainedTimeEntry');
     // Pseudonymize the departing account's own rows only. Co-workers keep their
     // real name/email — an anonymized wage record cannot satisfy FLSA §516.2,
     // so blanket-anonymizing the venue would retain the rows and still lose the
     // compliance value they exist for.
-    expect(archiveText).toContain("'deleted_user_' || t.\"profileId\"");
-    expect(archiveText).toContain('CASE WHEN t."profileId" IS NOT NULL');
-    expect(archiveText).toContain('ELSE t."profileFullName" END');
-    expect(archiveText).toContain('ELSE p."email" END');
-    // And the archive must happen before the cascade, not after.
-    const archiveOrder = prisma.$executeRaw.mock.invocationCallOrder.at(-1);
+    expect(timeEntryArchive.text).toContain("'deleted_user_' || t.\"profileId\"");
+    expect(timeEntryArchive.text).toContain('CASE WHEN t."profileId" IS NOT NULL');
+    expect(timeEntryArchive.text).toContain('ELSE t."profileFullName" END');
+    expect(timeEntryArchive.text).toContain('ELSE p."email" END');
+
+    // PosCheck/PosLaborPunch are also Cascade from Venue with no other
+    // retention path — they must be archived before the cascade too.
+    const posCheckArchive = findArchiveCall('RetainedPosCheck');
+    const posLaborArchive = findArchiveCall('RetainedPosLaborPunch');
+
+    // And every archive insert must happen before the cascade, not after.
     const cascadeOrder = prisma.venue.deleteMany.mock.invocationCallOrder[0];
-    expect(archiveOrder).toBeLessThan(cascadeOrder);
+    expect(timeEntryArchive.order).toBeLessThan(cascadeOrder);
+    expect(posCheckArchive.order).toBeLessThan(cascadeOrder);
+    expect(posLaborArchive.order).toBeLessThan(cascadeOrder);
+  });
+
+  it('refuses to delete a venue whose subscription still covers another venue\'s billing', async () => {
+    const profiles = [
+      { id: 'profile-sole', email: 'owner@example.com', fullName: 'Sole Owner', role: 'owner', venueId: 'venue-billing', membershipStatus: 'active' },
+    ];
+    const prisma: any = {
+      $executeRaw: vi.fn().mockResolvedValue(undefined),
+      $queryRaw: vi.fn().mockResolvedValue([]),
+      user: { findUnique: vi.fn().mockResolvedValue({ email: 'owner@example.com' }), deleteMany: vi.fn() },
+      profile: {
+        findMany: vi.fn().mockResolvedValue(profiles),
+        count: vi.fn().mockResolvedValue(1),
+        deleteMany: vi.fn(),
+      },
+      venue: { deleteMany: vi.fn(), findMany: vi.fn().mockResolvedValue([]) },
+      subscription: {
+        findMany: vi.fn().mockResolvedValue([{ id: 'sub-billing' }]),
+        // Another venue's subscription still points at this one as its
+        // billing parent — the venue-billing account cannot be deleted
+        // without silently cutting that other venue off its paid plan.
+        count: vi.fn().mockResolvedValue(1),
+      },
+    };
+    prisma.$transaction = vi.fn(async (callback: any) => callback(prisma));
+    const controller = new AppController(prisma, { send: vi.fn() } as any, {} as any);
+
+    await expect(controller.deleteMyAccount(
+      { sub: 'user-1' } as any,
+      { deleteOwnedVenues: true },
+    )).rejects.toThrow('covers other venues');
+
+    expect(prisma.venue.deleteMany).not.toHaveBeenCalled();
+    expect(prisma.subscription.count).toHaveBeenCalledWith({
+      where: { billingSubscriptionId: { in: ['sub-billing'] }, venueId: { notIn: ['venue-billing'] } },
+    });
   });
 
   it('closes a still-running punch with a real clock-out so the final shift stays payable', async () => {
@@ -664,6 +725,7 @@ describe('AppController multi-venue invariants', () => {
       objectDeletionJob: { create: vi.fn() },
       retainedTimeEntry: { createMany: vi.fn() },
       pushToken: { deleteMany: vi.fn() }, availability: { deleteMany: vi.fn() },
+      subscription: { findMany: vi.fn().mockResolvedValue([]), count: vi.fn().mockResolvedValue(0) },
       timeEntry: {
         updateMany: vi.fn(),
         update: vi.fn(),

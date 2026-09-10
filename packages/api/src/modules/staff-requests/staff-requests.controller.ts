@@ -566,12 +566,20 @@ export class StaffRequestsController {
         // the floor plan for a shift they had been told they were off. Apply
         // the approval to the shift the request names.
         if ((request.kind === 'drop_shift' || request.kind === 'open_shift') && request.requestedShiftId) {
-          await tx.scheduleShift.updateMany({
+          const dropped = await tx.scheduleShift.updateMany({
             // venueId as well as id: the shift id arrived on the request and a
             // tenant predicate belongs on every write.
             where: { id: request.requestedShiftId, venueId: request.venueId, profileId: request.profileId },
             data: { profileId: null, status: 'open' },
           });
+          // The where-clause's profileId match means 0 rows updated is not
+          // "already applied" — it means the shift no longer matches what this
+          // request expects (reassigned, deleted, or already dropped by
+          // another action). Approving would otherwise report success while
+          // silently leaving the schedule untouched.
+          if (dropped.count === 0) {
+            throw new BadRequestException('This shift no longer matches the request and cannot be approved as-is.');
+          }
         }
 
         // A swap needs two shifts and two people; a staff request carries one
@@ -585,10 +593,16 @@ export class StaffRequestsController {
         }
 
         if (request.kind === 'add_shift' && request.requestedShiftId) {
-          await tx.scheduleShift.updateMany({
+          const claimed = await tx.scheduleShift.updateMany({
             where: { id: request.requestedShiftId, venueId: request.venueId, profileId: null },
             data: { profileId: request.profileId, status: 'scheduled' },
           });
+          // profileId: null in the where-clause means 0 rows updated is a real
+          // conflict — the open shift this request wanted was already claimed
+          // by someone else between the request and this approval.
+          if (claimed.count === 0) {
+            throw new BadRequestException('This shift is no longer open and cannot be assigned by this approval.');
+          }
         }
       }
 

@@ -410,7 +410,7 @@ const mutationRoutes: Record<string, Route> = {
   'guests.rotateLeadsWebhookSecret': { path: '/v1/guests/rotate-webhook-secret', method: 'POST', body: () => ({}), invalidate: [['guests', 'listGuests']] },
   'operations.upsertManagerGoal': { path: '/v1/operations/manager-goal', method: 'PATCH', body: stripVenue, invalidate: [['operations', 'getManagerDashboard']] },
   'barInventory.upsertBarItem': { path: '/v1/bar-inventory', method: 'POST', body: stripVenue, invalidate: inventoryInvalidations() },
-  'barInventory.recordBarStockMovement': { path: (args) => `/v1/bar-inventory/${enc(args.itemId)}/movement`, method: 'POST', body: ({ movementType, quantity, notes }) => ({ movementType, quantity, notes }), invalidate: inventoryInvalidations() },
+  'barInventory.recordBarStockMovement': { path: (args) => `/v1/bar-inventory/${enc(args.itemId)}/movement`, method: 'POST', body: ({ movementType, quantity, notes, operationId }) => ({ movementType, quantity, notes, operationId }), invalidate: inventoryInvalidations() },
   'barInventory.importParsedBarItems': { path: '/v1/bar-inventory/import', method: 'POST', body: ({ items }) => ({ items }), invalidate: inventoryInvalidations() },
   'barInventory.parseBarInventoryInput': { path: '/v1/bar-inventory/parse', method: 'POST', body: ({ text, imageBase64, imageMimeType }) => ({ text, imageBase64, imageMimeType }) },
   'barInventory.updateItemCost': { path: (args) => `/v1/bar-inventory/${enc(args.itemId)}/cost`, method: 'PATCH', body: ({ unitCostCents }) => ({ unitCostCents }), invalidate: inventoryInvalidations() },

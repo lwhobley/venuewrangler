@@ -597,7 +597,7 @@ export class FloorService {
     if (!tableIds.length) throw new BadRequestException('No tables specified');
 
     const reservation = await this.prisma.reservation.findFirst({
-      where: { id: reservationId, venueId },
+      where: { id: reservationId, venueId, deletedAt: null },
     });
     if (!reservation) throw new NotFoundException('Reservation not found');
 
