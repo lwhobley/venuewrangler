@@ -40,6 +40,17 @@ describe('web session persistence and identity refresh', () => {
     expect(authStore).toMatch(/scopeChanged \? \{ authEpoch: state\.authEpoch \+ 1 \} : \{\}/);
   });
 
+  it('does not bump the cache-scope epoch when setVenue receives the same venue', () => {
+    // E02: auth-readiness calls setVenue on every getMe response with a freshly
+    // built venue object (venueFromApi always returns a new reference), so an
+    // unconditional epoch bump here reran that same query, produced another new
+    // venue object, and bumped again -- the same reload loop as E01, through a
+    // different store action.
+    const start = authStore.lastIndexOf('setVenue:');
+    const block = authStore.slice(start, authStore.indexOf('setVenues:', start));
+    expect(block).toMatch(/state\.venue\?\.id !== venue\.id \? \{ authEpoch: state\.authEpoch \+ 1 \} : \{\}/);
+  });
+
   it('routes the /me identity refresh through syncProfile, not setSession', () => {
     expect(gate).toContain('syncProfile({');
     expect(gate).not.toContain('setSession({');

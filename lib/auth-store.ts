@@ -243,7 +243,18 @@ const createAuthStore = (set: any): AuthState => ({
         ...(scopeChanged ? { authEpoch: state.authEpoch + 1 } : {}),
       };
     }),
-  setVenue: (venue: Venue) => set((state: AuthState) => ({ venue, authEpoch: state.authEpoch + 1 })),
+  // Same trap as the /me refresh above, via a different door: auth-readiness's
+  // effect calls this on every getMe response with a freshly-built venue
+  // object (session-from-auth's venueFromApi always returns a new reference),
+  // so an unconditional epoch bump here reran that same query, produced
+  // another new venue object, and bumped again -- an infinite refetch loop
+  // across every mounted screen, not just the one query. Only a real identity
+  // change (a different venue) is a cache-scope change.
+  setVenue: (venue: Venue) =>
+    set((state: AuthState) => ({
+      venue,
+      ...(state.venue?.id !== venue.id ? { authEpoch: state.authEpoch + 1 } : {}),
+    })),
   setVenues: (venues: VenueSummary[]) => set({ venues }),
   switchVenue: (venue: Venue) =>
     set((state: AuthState) => ({
