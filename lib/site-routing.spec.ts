@@ -16,6 +16,13 @@ describe('hosted Expo routing', () => {
     expect(directive).toContain('https://venue-wrangler-api-c57mm72zpa-ue.a.run.app');
     expect(directive).not.toContain('*');
   });
+  it('does not allow inline scripts on the app shell (Expo only ever loads JS via <script src>)', async () => {
+    const fetch = vi.fn().mockResolvedValue(new Response('<html>app</html>'));
+    const response = await worker.fetch(new Request('https://venuewrangler.com/app/'), { ASSETS: { fetch } });
+    const directive = response.headers.get('Content-Security-Policy')!.split(';').find((part: string) => part.trim().startsWith('script-src'))!;
+    expect(directive).not.toContain('unsafe-inline');
+  });
+
   afterEach(() => { vi.unstubAllEnvs(); });
 
   it('does not rewrite a clean URL to its own canonical HTML file', () => {
