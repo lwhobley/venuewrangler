@@ -475,6 +475,20 @@ export class SchedulingAssignmentService {
         if (!currentSwap || !['accepted', 'proposed'].includes(currentSwap.status)) {
           throw new BadRequestException('Swap is not pending');
         }
+        // A party's profile can be gone (see the schema comment on
+        // ShiftSwap.requesterProfileId/targetProfileId) if that account was
+        // deleted after this swap was proposed/accepted. There is no one to
+        // assign the shift to on that side, so the swap cannot be completed —
+        // decline it instead of leaving it stuck as pending forever.
+        if (!currentSwap.requesterProfileId || !currentSwap.targetProfileId) {
+          await tx.shiftSwap.updateMany({
+            where: { id: currentSwap.id, status: { in: ['accepted', 'proposed'] } },
+            data: { status: 'declined' },
+          });
+          throw new BadRequestException('One of the parties in this swap no longer has an account. The swap has been declined.');
+        }
+        const requesterProfileId = currentSwap.requesterProfileId;
+        const targetProfileId = currentSwap.targetProfileId;
 
         const requesterShift = await tx.scheduleShift.findFirst({
           where: { id: currentSwap.requesterShiftId, venueId: args.venueId },
@@ -488,19 +502,19 @@ export class SchedulingAssignmentService {
           throw new NotFoundException('Shift not found');
         }
 
-        await this.assertNotUnavailable(tx, args.venueId, currentSwap.targetProfileId, requesterShift);
+        await this.assertNotUnavailable(tx, args.venueId, targetProfileId, requesterShift);
         if (targetShift) {
-          await this.assertNotUnavailable(tx, args.venueId, currentSwap.requesterProfileId, targetShift);
+          await this.assertNotUnavailable(tx, args.venueId, requesterProfileId, targetShift);
         }
 
         await this.lockAssignmentKeys(tx, [
-          ...this.profileLockKeys(args.venueId, currentSwap.targetProfileId, requesterShift),
-          ...(targetShift ? this.profileLockKeys(args.venueId, currentSwap.requesterProfileId, targetShift) : []),
+          ...this.profileLockKeys(args.venueId, targetProfileId, requesterShift),
+          ...(targetShift ? this.profileLockKeys(args.venueId, requesterProfileId, targetShift) : []),
         ]);
         await this.assertNoDoubleBookInWeekTx(
           tx,
           args.venueId,
-          currentSwap.targetProfileId,
+          targetProfileId,
           requesterShift.weekStart,
           requesterShift.dayIndex,
           requesterShift.startMinutes,
@@ -512,7 +526,7 @@ export class SchedulingAssignmentService {
           await this.assertNoDoubleBookInWeekTx(
             tx,
             args.venueId,
-            currentSwap.requesterProfileId,
+            requesterProfileId,
             targetShift.weekStart,
             targetShift.dayIndex,
             targetShift.startMinutes,
@@ -523,12 +537,12 @@ export class SchedulingAssignmentService {
         }
         await tx.scheduleShift.update({
           where: { id: requesterShift.id },
-          data: { profileId: currentSwap.targetProfileId, status: 'scheduled' },
+          data: { profileId: targetProfileId, status: 'scheduled' },
         });
         if (targetShift) {
           await tx.scheduleShift.update({
             where: { id: targetShift.id },
-            data: { profileId: currentSwap.requesterProfileId, status: 'scheduled' },
+            data: { profileId: requesterProfileId, status: 'scheduled' },
           });
         }
         const reviewed = await tx.shiftSwap.updateMany({

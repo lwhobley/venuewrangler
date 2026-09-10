@@ -944,17 +944,24 @@ model TimeEntry {
 model ShiftSwap {
   id                 String         @id @default(cuid())
   venueId            String
-  requesterProfileId String
+  // Nullable + SetNull (not Cascade): a shift swap is a two-party record, and
+  // deleting ONE party's account (which removes every profile they hold,
+  // across every venue — see app.controller.ts's account-delete flow) used to
+  // cascade-delete the entire row, silently destroying the OTHER, still-active
+  // party's pending/accepted swap with no trace. The row now survives with a
+  // null party instead. Every read site must treat a null id as "that party
+  // no longer has an account" rather than assuming it's always populated.
+  requesterProfileId String?
   requesterShiftId   String
-  targetProfileId    String
+  targetProfileId    String?
   targetShiftId      String?
   status             String
   note               String?
   createdAt          DateTime       @default(now())
   updatedAt          DateTime       @updatedAt
   venue              Venue          @relation(fields: [venueId], references: [id], onDelete: Cascade)
-  requesterProfile   Profile        @relation("ShiftSwapRequesterProfile", fields: [requesterProfileId], references: [id], onDelete: Cascade)
-  targetProfile      Profile        @relation("ShiftSwapTargetProfile", fields: [targetProfileId], references: [id], onDelete: Cascade)
+  requesterProfile   Profile?       @relation("ShiftSwapRequesterProfile", fields: [requesterProfileId], references: [id], onDelete: SetNull)
+  targetProfile      Profile?       @relation("ShiftSwapTargetProfile", fields: [targetProfileId], references: [id], onDelete: SetNull)
   requesterShift     ScheduleShift  @relation("ShiftSwapRequesterShift", fields: [requesterShiftId], references: [id], onDelete: Cascade)
   targetShift        ScheduleShift? @relation("ShiftSwapTargetShift", fields: [targetShiftId], references: [id], onDelete: SetNull)
   messages           Message[]

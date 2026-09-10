@@ -1589,21 +1589,28 @@ export class SchedulingController {
       swapId: id,
       approve: body.approve,
     });
-    await this.notifications.notifyProfile({
-      venueId: scope!.venueId,
-      profileId: swap.requesterProfileId,
-      kind: 'swap_reviewed',
-      title: `Swap ${body.approve ? 'approved' : 'denied'}`,
-      body: `Your shift swap was ${body.approve ? 'approved' : 'denied'}.`,
-    });
+    // Either party's profile can be null if that account was deleted after
+    // this swap was proposed/accepted (see the schema comment on
+    // ShiftSwap.requesterProfileId/targetProfileId) — nothing to notify then.
+    if (swap.requesterProfileId) {
+      await this.notifications.notifyProfile({
+        venueId: scope!.venueId,
+        profileId: swap.requesterProfileId,
+        kind: 'swap_reviewed',
+        title: `Swap ${body.approve ? 'approved' : 'denied'}`,
+        body: `Your shift swap was ${body.approve ? 'approved' : 'denied'}.`,
+      });
+    }
     void this.sendStaffSwapReviewedEmail(scope!.venueId, swap.id, body.approve);
-    await this.notifications.notifyProfile({
-      venueId: scope!.venueId,
-      profileId: swap.targetProfileId,
-      kind: 'swap_reviewed',
-      title: `Swap ${body.approve ? 'approved' : 'denied'}`,
-      body: `A shift swap was ${body.approve ? 'approved' : 'denied'}.`,
-    });
+    if (swap.targetProfileId) {
+      await this.notifications.notifyProfile({
+        venueId: scope!.venueId,
+        profileId: swap.targetProfileId,
+        kind: 'swap_reviewed',
+        title: `Swap ${body.approve ? 'approved' : 'denied'}`,
+        body: `A shift swap was ${body.approve ? 'approved' : 'denied'}.`,
+      });
+    }
     return { ok: true };
   }
 
@@ -1740,7 +1747,7 @@ export class SchedulingController {
     return `${dayLabel(shift.dayIndex)} ${minutesToTime(shift.startMinutes)}-${minutesToTime(shift.endMinutes)}`;
   }
 
-  private async mapSwaps(venueId: string, swaps: Array<{ id: string; status: string; note: string | null; requesterProfileId: string; targetProfileId: string; requesterShiftId: string; targetShiftId: string | null; createdAt: Date }>, meId: string | null) {
+  private async mapSwaps(venueId: string, swaps: Array<{ id: string; status: string; note: string | null; requesterProfileId: string | null; targetProfileId: string | null; requesterShiftId: string; targetShiftId: string | null; createdAt: Date }>, meId: string | null) {
     // Labels only ever need the shifts these swaps reference — loading the
     // venue's entire shift history here grew unbounded with venue age.
     const staff = await this.prisma.profile.findMany({ where: { venueId, OR: ACTIVE_MEMBERSHIP } });
@@ -1759,8 +1766,8 @@ export class SchedulingController {
         _id: swap.id,
         status: swap.status,
         note: swap.note,
-        requesterName: nameById.get(swap.requesterProfileId) ?? 'Teammate',
-        targetName: nameById.get(swap.targetProfileId) ?? 'Teammate',
+        requesterName: (swap.requesterProfileId && nameById.get(swap.requesterProfileId)) ?? (swap.requesterProfileId ? 'Teammate' : 'Former teammate'),
+        targetName: (swap.targetProfileId && nameById.get(swap.targetProfileId)) ?? (swap.targetProfileId ? 'Teammate' : 'Former teammate'),
         requesterShift: this.shiftLabel(shiftById.get(swap.requesterShiftId) ?? { dayIndex: 0, startMinutes: 0, endMinutes: 0 }),
         targetShift: swap.targetShiftId && shiftById.get(swap.targetShiftId) ? this.shiftLabel(shiftById.get(swap.targetShiftId)!) : null,
         direction: meId === swap.targetProfileId ? 'incoming' : meId === swap.requesterProfileId ? 'outgoing' : 'other',
@@ -1840,7 +1847,9 @@ export class SchedulingController {
 
   private async sendManagerSwapApprovalEmailInBackground(venueId: string, swapId: string) {
     const swap = await this.prisma.shiftSwap.findUnique({ where: { id: swapId } });
-    if (!swap) return;
+    // A party's profile can be null if that account was deleted after this
+    // swap was proposed/accepted — nothing useful to email in that case.
+    if (!swap || !swap.requesterProfileId || !swap.targetProfileId) return;
 
     const [requester, target, reqShift, tarShift] = await Promise.all([
       this.prisma.profile.findUnique({ where: { id: swap.requesterProfileId } }),
@@ -1924,7 +1933,9 @@ export class SchedulingController {
 
   private async sendStaffSwapReviewedEmailInBackground(venueId: string, swapId: string, approve: boolean) {
     const swap = await this.prisma.shiftSwap.findUnique({ where: { id: swapId } });
-    if (!swap) return;
+    // A party's profile can be null if that account was deleted after this
+    // swap was proposed/accepted — nothing useful to email in that case.
+    if (!swap || !swap.requesterProfileId || !swap.targetProfileId) return;
 
     const [requester, target, reqShift, tarShift] = await Promise.all([
       this.prisma.profile.findUnique({ where: { id: swap.requesterProfileId } }),

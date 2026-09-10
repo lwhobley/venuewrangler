@@ -166,12 +166,12 @@ describe('scheduling concurrency (integration)', () => {
           if (!requesterShift || !targetShift) throw new Error('SHIFT_NOT_FOUND');
 
           await lockAssignmentKeys(tx, [
-            { venueId: venue.id, profileId: swap.targetProfileId, dayIndex: requesterShift.dayIndex },
-            { venueId: venue.id, profileId: swap.requesterProfileId, dayIndex: targetShift.dayIndex },
+            { venueId: venue.id, profileId: swap.targetProfileId!, dayIndex: requesterShift.dayIndex },
+            { venueId: venue.id, profileId: swap.requesterProfileId!, dayIndex: targetShift.dayIndex },
           ]);
 
-          await assertNoDoubleBookTx(tx, venue.id, swap.targetProfileId, requesterShift.dayIndex, requesterShift.startMinutes, requesterShift.endMinutes, requesterShift.id, targetShift.id);
-          await assertNoDoubleBookTx(tx, venue.id, swap.requesterProfileId, targetShift.dayIndex, targetShift.startMinutes, targetShift.endMinutes, targetShift.id, requesterShift.id);
+          await assertNoDoubleBookTx(tx, venue.id, swap.targetProfileId!, requesterShift.dayIndex, requesterShift.startMinutes, requesterShift.endMinutes, requesterShift.id, targetShift.id);
+          await assertNoDoubleBookTx(tx, venue.id, swap.requesterProfileId!, targetShift.dayIndex, targetShift.startMinutes, targetShift.endMinutes, targetShift.id, requesterShift.id);
 
           await tx.scheduleShift.update({ where: { id: requesterShift.id }, data: { profileId: swap.targetProfileId, status: 'scheduled' } });
           await tx.scheduleShift.update({ where: { id: targetShift.id }, data: { profileId: swap.requesterProfileId, status: 'scheduled' } });
