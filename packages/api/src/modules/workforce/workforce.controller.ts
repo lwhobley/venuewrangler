@@ -455,7 +455,10 @@ export class WorkforceController {
       },
     });
     if (!actorProfile || !canManageVenue(actorProfile.role, actorProfile.allAccess)) {
-      throw new ForbiddenException('Not authorized.');
+      // 404, not 403: a 403 here would tell a caller "this request id exists,
+      // just not at a venue you manage" — a cross-tenant existence oracle.
+      // Same shape a manager gets for an id that doesn't exist at all.
+      throw new NotFoundException('Join request not found.');
     }
 
     return {

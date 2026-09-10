@@ -180,6 +180,9 @@ describe('PosController', () => {
       // paid<->void is a real correction; closed -> 'open' is not (it would
       // silently unlock the CASE-guarded fields for the next delivery).
       expect(sqlText).toContain('EXCLUDED."status" = \'open\'');
+      // menuItems is locked the same way as the amount fields once closed,
+      // not left freely rewritable metadata.
+      expect(sqlText).toContain('"menuItems" = CASE WHEN "PosCheck"."status" IN (\'paid\', \'void\') THEN "PosCheck"."menuItems"');
       expect(result.checksUpserted).toBe(2);
     });
 

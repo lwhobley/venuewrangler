@@ -79,6 +79,36 @@ describe('POS check immutability (PostgreSQL)', () => {
     expect(voided.status).toBe('void');
   });
 
+  it('locks the itemization once paid, the same way it locks the sale amounts', async () => {
+    const controller = new PosController(prisma as never);
+    const externalCheckId = randomUUID();
+    const openedAt = Date.now();
+
+    await controller.ingest({ ip: '127.0.0.1' } as never, venueId, secret, {
+      provider: 'toast',
+      checks: [{
+        externalCheckId, openedAt, subtotalCents: 2000, taxCents: 150, tipCents: 300, totalCents: 2450,
+        status: 'paid', menuItems: [{ name: 'Burger', quantity: 1, priceCents: 2000 }],
+      }],
+    } as never);
+
+    const paid = await prisma.posCheck.findFirstOrThrow({ where: { venueId, externalCheckId } });
+    expect(paid.menuItems).toEqual([{ name: 'Burger', quantity: 1, priceCents: 2000 }]);
+
+    // A replayed delivery tries to rewrite the line items on the closed check.
+    await controller.ingest({ ip: '127.0.0.1' } as never, venueId, secret, {
+      provider: 'toast',
+      checks: [{
+        externalCheckId, openedAt, subtotalCents: 2000, taxCents: 150, tipCents: 400, totalCents: 2550,
+        status: 'paid', menuItems: [{ name: 'Fraudulent Item', quantity: 1, priceCents: 1 }],
+      }],
+    } as never);
+
+    const afterReplay = await prisma.posCheck.findFirstOrThrow({ where: { venueId, externalCheckId } });
+    expect(afterReplay.menuItems).toEqual([{ name: 'Burger', quantity: 1, priceCents: 2000 }]); // locked
+    expect(afterReplay.tipCents).toBe(400); // tip adjustment still applied
+  });
+
   it('does not let a late "open" delivery reopen a paid check and unlock its amounts', async () => {
     // The CASE guards on subtotal/tax/discount/comp/promo key off the
     // row's *current* status being paid/void. If a stale or late 'open'

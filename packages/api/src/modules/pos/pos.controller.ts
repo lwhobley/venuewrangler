@@ -224,12 +224,13 @@ export class PosController {
     // commonly sends after the guest signs, which is a legitimate post-close
     // update, not a rewrite attempt. Each check is now a single atomic
     // INSERT ... ON CONFLICT DO UPDATE: the core sale amounts (subtotal,
-    // tax, discount, comp, promo) are locked once the existing row's status
-    // is paid/void, via a CASE against the row being upserted — checked and
-    // written in one statement, so there is no window between them. Tip,
-    // total (which a tip adjustment necessarily changes), status itself
-    // (a paid check being voided is a real correction), and non-financial
-    // metadata all remain freely correctable after close.
+    // tax, discount, comp, promo) and the itemization (menuItems) are locked
+    // once the existing row's status is paid/void, via a CASE against the
+    // row being upserted — checked and written in one statement, so there is
+    // no window between them. Tip, total (which a tip adjustment necessarily
+    // changes), status itself (a paid check being voided is a real
+    // correction), and non-financial metadata all remain freely correctable
+    // after close.
     const checkOperations = (body.checks ?? []).map((check) => {
       const menuItemsJson = check.menuItems ? JSON.stringify(check.menuItems) : null;
       return this.prisma.$executeRaw(Prisma.sql`
@@ -263,7 +264,7 @@ export class PosController {
           "guestCount" = EXCLUDED."guestCount",
           "revenueCenter" = EXCLUDED."revenueCenter",
           "tenderType" = EXCLUDED."tenderType",
-          "menuItems" = EXCLUDED."menuItems",
+          "menuItems" = CASE WHEN "PosCheck"."status" IN ('paid', 'void') THEN "PosCheck"."menuItems" ELSE EXCLUDED."menuItems" END,
           -- paid<->void is a real correction (a disputed charge, a voided-in-
           -- error check reinstated). Closed -> 'open' is not: it would reopen
           -- a settled check, and the CASE guards above key off status = 'paid'

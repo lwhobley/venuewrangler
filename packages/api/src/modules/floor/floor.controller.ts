@@ -298,7 +298,11 @@ export class FloorController {
   @Get('waitlist')
   async getOpenWaitlist(@VenueScope() scope: Scope) {
     if (!scope) return [];
-    return this.floor.getOpenWaitlist(scope.venueId);
+    const entries = await this.floor.getOpenWaitlist(scope.venueId);
+    // Any member can see who's on the list to seat them, but guest phone and
+    // free-text notes are only for managers -- not every host/server shift.
+    if (canManageVenue(scope.role, scope.allAccess)) return entries;
+    return entries.map((e) => ({ ...e, phone: null, notes: null }));
   }
 
   @RequireSubscription('active')

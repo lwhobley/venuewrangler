@@ -310,7 +310,10 @@ describe('WorkforceController join request detail', () => {
       .resolves.toEqual(expect.objectContaining({ id: 'request-1' }));
   });
 
-  it('rejects a caller with neither a manager role nor allAccess at the request\'s venue', async () => {
+  it('404s (not 403) for a caller with neither a manager role nor allAccess at the request\'s venue', async () => {
+    // A 403 here would tell the caller "this id exists, just not at a venue
+    // you manage" -- a cross-tenant existence oracle. Must read the same as
+    // an id that doesn't exist at all.
     const prisma = {
       workplaceJoinRequest: {
         findUnique: vi.fn().mockResolvedValue({
@@ -334,7 +337,7 @@ describe('WorkforceController join request detail', () => {
     const controller = new WorkforceController(prisma as never, {} as never, {} as never);
 
     await expect(controller.getJoinRequestDetail({ sub: 'staff-1' } as never, 'request-1'))
-      .rejects.toThrow('Not authorized');
+      .rejects.toThrow('Join request not found.');
   });
 });
 
