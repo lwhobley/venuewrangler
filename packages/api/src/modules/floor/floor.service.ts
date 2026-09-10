@@ -5,6 +5,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { withSerializableRetry } from '../../common/tx-retry';
 import { ReservationNotifierService } from '../reservations/reservation-notifier.service';
+import { TERMINAL_RESERVATION_STATUSES } from '../reservations/reservation-mutation.service';
 import { refreshTableStates } from './table-state';
 
 /**
@@ -622,6 +623,13 @@ export class FloorService {
       where: { id: reservationId, venueId, deletedAt: null },
     });
     if (!reservation) throw new NotFoundException('Reservation not found');
+    // deletedAt and status are independent: cancelling a reservation (e.g.
+    // reservation-mutation.service.ts's saveReservation cancel path) sets
+    // status: 'cancelled' without ever touching deletedAt, so the filter
+    // above does not catch it. A closed reservation cannot be seated.
+    if (TERMINAL_RESERVATION_STATUSES.has(reservation.status)) {
+      throw new BadRequestException(`A ${reservation.status} reservation cannot be assigned to a table.`);
+    }
 
     // Validate every table belongs to this venue's active floor plan so a
     // caller can't attach a reservation to another venue's (or a stale) table.

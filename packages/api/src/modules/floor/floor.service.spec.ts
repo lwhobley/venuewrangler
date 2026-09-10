@@ -317,6 +317,22 @@ describe('FloorService regressions', () => {
       return { prisma, tx };
     };
 
+    it('rejects assigning a table to a cancelled reservation that was never soft-deleted', async () => {
+      // Cancelling a reservation (reservation-mutation.service.ts's
+      // saveReservation cancel path) sets status: 'cancelled' without ever
+      // setting deletedAt — the two are independent. A closed reservation
+      // must not be seatable just because it still passes deletedAt: null.
+      const { prisma } = makeAssignPrisma();
+      prisma.reservation.findFirst.mockResolvedValue({
+        id: 'res-1', partySize: 4, durationMinutes: 120, reservationTime: new Date(), status: 'cancelled',
+      });
+
+      await expect(
+        new FloorService(prisma, {} as any).assignReservationToTables('venue-1', 'res-1', ['table-1'], {}),
+      ).rejects.toThrow('cancelled reservation cannot be assigned');
+      expect(prisma.floorPlan.findFirst).not.toHaveBeenCalled();
+    });
+
     it('seats a party who arrived before their booking time', async () => {
       // The host screen sends the reservation's scheduled startsAt, so an early
       // seat has a window that has not opened yet. It must still take the table.

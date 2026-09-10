@@ -12,7 +12,7 @@ import { refreshTableStates } from '../floor/table-state';
 // — only that a closed reservation cannot become active again. Without this,
 // `saveReservation`'s generic upsert accepted `cancelled -> seated` as a
 // plain cast with no validation at all.
-const TERMINAL_RESERVATION_STATUSES: ReadonlySet<ReservationStatus> = new Set(['completed', 'no_show', 'cancelled']);
+export const TERMINAL_RESERVATION_STATUSES: ReadonlySet<ReservationStatus> = new Set(['completed', 'no_show', 'cancelled']);
 
 function assertReservationTransitionAllowed(from: ReservationStatus, to: ReservationStatus) {
   if (from === to) return;
@@ -237,7 +237,7 @@ export class ReservationMutationService {
     reservationId: string;
   }) {
     const reservation = await this.prisma.reservation.findFirst({
-      where: { id: args.reservationId, venueId: args.venueId },
+      where: { id: args.reservationId, venueId: args.venueId, deletedAt: null },
     });
     if (!reservation) throw new BadRequestException('Reservation not found');
 

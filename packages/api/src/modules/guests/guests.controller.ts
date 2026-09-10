@@ -438,7 +438,7 @@ export class GuestsController {
   @Delete(':id')
   async removeGuest(@VenueScope() scope: Scope, @Param('id') id: string) {
     this.requireManager(scope);
-    const guest = await this.prisma.guest.findFirst({ where: { id, venueId: scope.venueId } });
+    const guest = await this.prisma.guest.findFirst({ where: { id, venueId: scope.venueId, deletedAt: null } });
     if (!guest) throw new BadRequestException('Guest not found');
     await this.prisma.$transaction(async (tx) => {
       await tx.guest.update({

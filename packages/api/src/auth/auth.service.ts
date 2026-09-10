@@ -239,9 +239,17 @@ export class AuthService {
       if (existingByUser) {
         await tx.profile.delete({ where: { id: existingByUser.id } });
       }
+      // 'active', not 'pending': AuthGuard only ever resolves a profile with
+      // membershipStatus null or 'active' (see ACTIVE_MEMBERSHIP), and unlike
+      // an invite grant — where 'pending' is later flipped to 'active' by
+      // verifyEmail's Invite.usedBy linkage — nothing else in the system
+      // would ever activate a row created here. The caller already has a
+      // verified email (checked above) and just explicitly confirmed the
+      // connection, which is strictly more proof of intent than the invite
+      // flow requires, so there is no reason to leave it inert.
       const adopted = await tx.profile.update({
         where: { id: candidate.id },
-        data: { userId, role: candidate.role, membershipStatus: 'pending' },
+        data: { userId, role: candidate.role, membershipStatus: 'active' },
         include: { venue: true },
       });
       await this.logProfileAdoption(tx, adopted);

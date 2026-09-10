@@ -438,7 +438,7 @@ describe('AuthService.confirmProfileAdoption', () => {
       role: 'manager',
       venue: { id: 'venue-9', name: 'Other Venue' },
     };
-    const adopted = { ...candidate, userId: 'user-1', membershipStatus: 'pending' };
+    const adopted = { ...candidate, userId: 'user-1', membershipStatus: 'active' };
     const tx = {
       profile: {
         findFirst: vi.fn()
@@ -458,9 +458,12 @@ describe('AuthService.confirmProfileAdoption', () => {
     const result = await service.confirmProfileAdoption('user-1', 'placeholder-1');
 
     expect(tx.profile.delete).not.toHaveBeenCalled();
+    // membershipStatus must be 'active', not 'pending' — AuthGuard only ever
+    // resolves null/'active' profiles (ACTIVE_MEMBERSHIP), and nothing else
+    // in the system would activate a row created by this confirm flow.
     expect(tx.profile.update).toHaveBeenCalledWith({
       where: { id: 'placeholder-1' },
-      data: { userId: 'user-1', role: 'manager', membershipStatus: 'pending' },
+      data: { userId: 'user-1', role: 'manager', membershipStatus: 'active' },
       include: { venue: true },
     });
     expect(tx.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({

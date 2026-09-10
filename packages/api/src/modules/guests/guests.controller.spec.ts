@@ -398,7 +398,7 @@ describe('GuestsController', () => {
 
       const result = await controller.removeGuest(managerScope, 'guest-1');
 
-      expect(prisma.guest.findFirst).toHaveBeenCalledWith({ where: { id: 'guest-1', venueId: 'venue-1' } });
+      expect(prisma.guest.findFirst).toHaveBeenCalledWith({ where: { id: 'guest-1', venueId: 'venue-1', deletedAt: null } });
       expect(prisma.guest.update).toHaveBeenCalledWith({
         where: { id: 'guest-1' },
         data: { deletedAt: expect.any(Date) },
