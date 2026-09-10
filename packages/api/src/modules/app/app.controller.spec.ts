@@ -847,3 +847,42 @@ describe('AppController createInvite', () => {
   });
 });
 
+describe('AppController exportTimeEntriesCsv', () => {
+  it('refuses to export rather than silently truncate when the range has too many rows', async () => {
+    const overCap = Array.from({ length: 5001 }, (_, i) => ({
+      id: `entry-${i}`,
+      clockInAt: new Date(),
+      clockOutAt: new Date(),
+      breaks: null,
+      profile: { fullName: 'Staff Member' },
+    }));
+    const prisma: any = {
+      venue: { findUnique: vi.fn().mockResolvedValue({ timezone: 'UTC' }) },
+      timeEntry: { findMany: vi.fn().mockResolvedValue(overCap) },
+    };
+    const profiles = { requireManagerProfile: vi.fn().mockResolvedValue({ venueId: 'venue-1' }) };
+    const controller = new AppController(prisma, {} as any, profiles as any);
+
+    await expect(controller.exportTimeEntriesCsv({ sub: 'manager-1' } as any))
+      .rejects.toThrow('too large');
+    expect(prisma.timeEntry.findMany).toHaveBeenCalledWith(expect.objectContaining({ take: 5001 }));
+  });
+
+  it('exports normally when the range is within the row cap', async () => {
+    const prisma: any = {
+      venue: { findUnique: vi.fn().mockResolvedValue({ timezone: 'UTC' }) },
+      timeEntry: {
+        findMany: vi.fn().mockResolvedValue([
+          { id: 'entry-1', clockInAt: new Date('2026-01-01T00:00:00Z'), clockOutAt: new Date('2026-01-01T08:00:00Z'), breaks: null, profile: { fullName: 'Staff Member' } },
+        ]),
+      },
+    };
+    const profiles = { requireManagerProfile: vi.fn().mockResolvedValue({ venueId: 'venue-1' }) };
+    const controller = new AppController(prisma, {} as any, profiles as any);
+
+    const csv = await controller.exportTimeEntriesCsv({ sub: 'manager-1' } as any);
+
+    expect(csv).toContain('Staff Member');
+  });
+});
+

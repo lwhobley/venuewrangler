@@ -1073,7 +1073,13 @@ export class OperationsController {
   ) {
     const completion = await this.prisma.checklistCompletion.findUnique({ where: { id: completionId } });
     if (!completion?.photoKey) throw new NotFoundException('Photo not found');
-    await this.mediaAccess.assertToken(token, 'checklist-photo', completionId, completion.venueId);
+    try {
+      await this.mediaAccess.assertToken(token, 'checklist-photo', completionId, completion.venueId);
+    } catch {
+      // Same response either way an unauthenticated caller can't tell a
+      // real-but-wrong-token completion id from one that doesn't exist at all.
+      throw new NotFoundException('Photo not found');
+    }
     return streamPrivateImage(await this.s3ImageService.getObject(completion.photoKey), res);
   }
 

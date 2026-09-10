@@ -889,7 +889,13 @@ export class ChatController {
   async getImage(@Param('id') id: string, @Query('token') token: string | undefined, @Res() res: Response) {
     const image = await this.prisma.chatImage.findUnique({ where: { id } });
     if (!image) throw new NotFoundException('Image not found');
-    await this.mediaAccess.assertToken(token, 'chat-image', id, image.venueId);
+    try {
+      await this.mediaAccess.assertToken(token, 'chat-image', id, image.venueId);
+    } catch {
+      // Same response either way an unauthenticated caller can't tell a
+      // real-but-wrong-token image id from one that doesn't exist at all.
+      throw new NotFoundException('Image not found');
+    }
     const object = await this.s3ImageService.getObject(image.s3Key);
     // Stream through the API origin already trusted by the web CSP. A redirect
     // would require allowing the private storage host as well.

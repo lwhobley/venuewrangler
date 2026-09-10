@@ -829,4 +829,17 @@ describe('ChatController', () => {
     expect(res.setHeader).toHaveBeenCalledWith('Cross-Origin-Resource-Policy', 'cross-origin');
     expect(s3ImageService.getPresignedUrl).not.toHaveBeenCalled();
   });
+
+  it('gives a bad token the same "not found" response as a missing image, not a distinguishable 401', async () => {
+    const { controller, prisma, mediaAccess } = makeController();
+    prisma.chatImage.findUnique.mockResolvedValue({
+      id: 'img-1',
+      venueId: 'venue-1',
+      s3Key: 'uploads/img-1.png',
+    });
+    mediaAccess.assertToken.mockRejectedValue(new Error('Media access token is invalid or expired'));
+    const res = { setHeader: vi.fn() } as any;
+
+    await expect(controller.getImage('img-1', 'bad-token', res)).rejects.toThrow('Image not found');
+  });
 });

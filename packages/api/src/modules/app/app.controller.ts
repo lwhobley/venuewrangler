@@ -12,7 +12,7 @@ import { RequireSubscription } from '../../billing/require-subscription.decorato
 import { assertCoverageCapacity, COVERED_SUBSCRIPTION_DATA, effectiveSubscriptionStatus, isMultiVenuePlan } from '../../billing/billing-coverage';
 import { closeOpenBreaks, parseTimeBreaks, unpaidBreakMs } from '../../common/break-duration';
 import { csvCell, csvDocument } from '../../common/csv';
-import { getClientIp } from '../../common/http';
+import { getClientIp, venueIdHeader } from '../../common/http';
 import { hashInviteToken } from '../../common/invite-token';
 import { assertWithinSharedRateLimit } from '../../common/rate-limit';
 import { sanitizeForEmail } from '../../common/sanitize-email-text';
@@ -24,13 +24,14 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { runWithoutTenant } from '../../prisma/tenant-context';
 import { mapClockEntry, mapProfile, mapShift, mapVenue, toMs } from './app-mappers';
 import { ProfileService } from './profile.service';
-import { isActiveMembership } from '../../common/membership';
+import { ACTIVE_MEMBERSHIP, isActiveMembership } from '../../common/membership';
 import { syncTeamMemberCount } from '../../common/team-sync';
 import { MediaCleanupService } from '../media-cleanup/media-cleanup.service';
 import { endBreakForProfile, startBreakForProfile } from '../time-clock/break-transitions';
 import { Audited } from '../audit/audited.decorator';
 
 const TRIAL_DURATION_MS = 14 * 24 * 60 * 60 * 1000;
+const MAX_TIME_ENTRIES_CSV_ROWS = 5_000;
 
 function parseVenueTimeZone(value: string | undefined): string | undefined {
   if (value == null || value.trim() === '') return undefined;
@@ -264,7 +265,7 @@ export class AppController {
   @UseGuards(AuthGuard)
   @Get('me')
   async getMe(@CurrentUser() user: AuthUser, @Req() req: Request) {
-    const requestedVenueId = (req.headers['x-venue-id'] as string | undefined) || user.venueId || undefined;
+    const requestedVenueId = venueIdHeader(req.headers) || user.venueId || undefined;
     let profile = await this.getProfile(user, requestedVenueId);
     if (!profile) {
       profile = await this.prisma.profile.findFirst({
@@ -609,13 +610,16 @@ export class AppController {
         take: 14,
       }),
       this.prisma.scheduleShift.groupBy({ by: ['status'], where: shiftWhere, _count: { _all: true } }),
-      canManage ? this.prisma.profile.count({ where: { venueId: profile.venueId! } }) : Promise.resolve(0),
+      // Revoked staff keep their venueId (deactivateVenueStaff only flips
+      // membershipStatus), so an unfiltered count here inflates headcount
+      // forever after any turnover — it never shrinks as people leave.
+      canManage ? this.prisma.profile.count({ where: { venueId: profile.venueId!, OR: ACTIVE_MEMBERSHIP } }) : Promise.resolve(0),
       canManage
         ? this.prisma.timeEntry.findMany({
             where: {
               venueId: profile.venueId!,
               isOpen: true,
-              profile: { OR: [{ membershipStatus: null }, { membershipStatus: 'active' }] },
+              profile: { OR: ACTIVE_MEMBERSHIP },
             },
             include: { profile: true, venue: true },
             take: 50,
@@ -750,8 +754,16 @@ export class AppController {
       },
       include: { profile: true },
       orderBy: { clockInAt: 'desc' },
-      take: 5000,
+      take: MAX_TIME_ENTRIES_CSV_ROWS + 1,
     });
+    // This used to silently cap at 5000 and return whatever fit — ordered
+    // newest-first, so a manager exporting a long/unbounded range got the
+    // most recent punches with the oldest ones missing and no indication
+    // anything was cut. Match payroll's export: refuse rather than return a
+    // silently incomplete file.
+    if (entries.length > MAX_TIME_ENTRIES_CSV_ROWS) {
+      throw new BadRequestException('This export is too large. Choose a smaller date range; no partial export was generated.');
+    }
     const header = 'id,memberId,memberName,clockInAt,clockOutAt,unpaidBreakHours,hoursWorked\n';
     const rows = entries
       .map((e) => {

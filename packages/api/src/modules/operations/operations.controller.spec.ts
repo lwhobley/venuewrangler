@@ -1046,13 +1046,17 @@ describe('OperationsController', () => {
       expect(Buffer.concat(chunks).toString()).toBe('photo');
     });
 
-    it('propagates a rejected/invalid token instead of redirecting', async () => {
+    it('rejects a rejected/invalid token instead of redirecting, with the same message a missing photo gets', async () => {
+      // Same response either way: a caller with a bad/expired token cannot
+      // distinguish "this completion id doesn't exist" from "it exists but
+      // your token is wrong" by comparing error messages/status codes.
       const { controller, prisma, mediaAccess } = makeController();
       prisma.checklistCompletion.findUnique.mockResolvedValue({ id: 'comp-1', photoKey: 'photos/comp-1.jpg', venueId: 'venue-1' });
       mediaAccess.assertToken.mockRejectedValue(new Error('Media access token is invalid or expired'));
       const res = { setHeader: vi.fn(), redirect: vi.fn() } as any;
 
-      await expect(controller.getChecklistPhoto('comp-1', 'bad-tok', res)).rejects.toThrow('Media access token is invalid or expired');
+      await expect(controller.getChecklistPhoto('comp-1', 'bad-tok', res)).rejects.toThrow(NotFoundException);
+      await expect(controller.getChecklistPhoto('comp-1', 'bad-tok', res)).rejects.toThrow('Photo not found');
       expect(res.redirect).not.toHaveBeenCalled();
     });
   });
