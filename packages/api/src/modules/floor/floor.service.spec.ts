@@ -226,19 +226,24 @@ describe('FloorService regressions', () => {
   });
 
   describe('refreshTableStates via releaseAssignment', () => {
-    const makePrisma = (currentStatus: string) => ({
-      tableAssignment: {
-        findFirst: vi.fn().mockResolvedValue({ id: 'assign-1', tableId: 'table-1', reservationId: null, waitlistId: null }),
-        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
-        findMany: vi.fn().mockResolvedValue([]),
-        count: vi.fn().mockResolvedValue(0),
-      },
-      tableState: {
-        findMany: vi.fn().mockResolvedValue([{ tableId: 'table-1', status: currentStatus }]),
-        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
-      },
-      floorTable: { findFirst: vi.fn().mockResolvedValue({ seats: 0 }) },
-    });
+    const makePrisma = (currentStatus: string) => {
+      const prisma: any = {
+        $executeRaw: vi.fn().mockResolvedValue(undefined),
+        tableAssignment: {
+          findFirst: vi.fn().mockResolvedValue({ id: 'assign-1', tableId: 'table-1', reservationId: null, waitlistId: null }),
+          updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+          findMany: vi.fn().mockResolvedValue([]),
+          count: vi.fn().mockResolvedValue(0),
+        },
+        tableState: {
+          findMany: vi.fn().mockResolvedValue([{ tableId: 'table-1', status: currentStatus }]),
+          updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+        },
+        floorTable: { findFirst: vi.fn().mockResolvedValue({ seats: 0 }) },
+      };
+      prisma.$transaction = vi.fn((callback: (t: typeof prisma) => unknown) => callback(prisma));
+      return prisma;
+    };
 
     it.each(['dirty', 'out_of_service'])(
       'leaves a %s table in that state when no seating is active on it',

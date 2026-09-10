@@ -78,4 +78,41 @@ describe('POS check immutability (PostgreSQL)', () => {
     const voided = await prisma.posCheck.findFirstOrThrow({ where: { venueId, externalCheckId } });
     expect(voided.status).toBe('void');
   });
+
+  it('does not let a late "open" delivery reopen a paid check and unlock its amounts', async () => {
+    // The CASE guards on subtotal/tax/discount/comp/promo key off the
+    // row's *current* status being paid/void. If a stale or late 'open'
+    // webhook were allowed to flip a closed check back to 'open', the very
+    // next delivery would see status = 'open' and rewrite those "locked"
+    // fields freely — a broken state machine, not a real correction like
+    // paid<->void.
+    const controller = new PosController(prisma as never);
+    const externalCheckId = randomUUID();
+    const openedAt = Date.now();
+
+    await controller.ingest({ ip: '127.0.0.1' } as never, venueId, secret, {
+      provider: 'toast',
+      checks: [{ externalCheckId, openedAt, subtotalCents: 2000, taxCents: 150, tipCents: 300, totalCents: 2450, status: 'paid' }],
+    } as never);
+
+    // A late/out-of-order delivery claims the check is still open.
+    await controller.ingest({ ip: '127.0.0.1' } as never, venueId, secret, {
+      provider: 'toast',
+      checks: [{ externalCheckId, openedAt, subtotalCents: 2000, taxCents: 150, tipCents: 300, totalCents: 2450, status: 'open' }],
+    } as never);
+
+    const stillPaid = await prisma.posCheck.findFirstOrThrow({ where: { venueId, externalCheckId } });
+    expect(stillPaid.status).toBe('paid');
+
+    // If the reopen had landed, this would succeed. It must not.
+    await controller.ingest({ ip: '127.0.0.1' } as never, venueId, secret, {
+      provider: 'toast',
+      checks: [{ externalCheckId, openedAt, subtotalCents: 1, taxCents: 1, tipCents: 300, totalCents: 302, status: 'open' }],
+    } as never);
+
+    const stillLocked = await prisma.posCheck.findFirstOrThrow({ where: { venueId, externalCheckId } });
+    expect(stillLocked.status).toBe('paid');
+    expect(stillLocked.subtotalCents).toBe(2000);
+    expect(stillLocked.taxCents).toBe(150);
+  });
 });

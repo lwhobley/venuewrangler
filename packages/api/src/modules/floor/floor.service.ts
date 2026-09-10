@@ -826,67 +826,79 @@ export class FloorService {
   }
 
   async releaseAssignment(venueId: string, id: string) {
-    const assignment = await this.prisma.tableAssignment.findFirst({
-      where: { venueId, id, releasedAt: null },
-      select: { id: true, tableId: true, reservationId: true, waitlistId: true },
-    });
-    const tableIds = assignment ? [assignment.tableId] : [id];
-    const released = assignment
-      ? await this.prisma.tableAssignment.updateMany({
-          where: { venueId, id: assignment.id, releasedAt: null },
-          data: { releasedAt: new Date(), releasedReason: 'manual' },
-        })
-      : await this.prisma.tableAssignment.updateMany({
-          where: { venueId, tableId: id, releasedAt: null },
-          data: { releasedAt: new Date(), releasedReason: 'manual' },
-        });
-    if (released.count === 0) throw new NotFoundException('Assignment not found');
-    await this.refreshTableStates(venueId, tableIds);
+    // This used to be a sequence of independent, unlocked statements — no
+    // $transaction, no advisory lock — unlike assign (Serializable +
+    // overlap check) and merge/split (Serializable + lockFloorTables). A
+    // concurrent merge/split on the same table, or a concurrent
+    // seat/release, could interleave with this one and leave TableState
+    // disagreeing with what was actually released. Now runs under the same
+    // lockFloorTables protocol merge/split use.
+    let tableIds: string[] = [];
+    await withSerializableRetry(this.prisma, async (tx) => {
+      const assignment = await tx.tableAssignment.findFirst({
+        where: { venueId, id, releasedAt: null },
+        select: { id: true, tableId: true, reservationId: true, waitlistId: true },
+      });
+      tableIds = assignment ? [assignment.tableId] : [id];
+      await this.lockFloorTables(tx, venueId, tableIds);
 
-    if (assignment?.reservationId) {
-      const activeLeft = await this.prisma.tableAssignment.count({
-        where: { venueId, reservationId: assignment.reservationId, releasedAt: null },
-      });
-      if (activeLeft === 0) {
-        const r = await this.prisma.reservation.findFirst({
-          where: { id: assignment.reservationId, venueId },
-          select: { status: true },
-        });
-        if (r && r.status === 'seated') {
-          await this.prisma.reservation.update({
-            where: { id: assignment.reservationId },
-            data: { status: 'completed' },
+      const released = assignment
+        ? await tx.tableAssignment.updateMany({
+            where: { venueId, id: assignment.id, releasedAt: null },
+            data: { releasedAt: new Date(), releasedReason: 'manual' },
+          })
+        : await tx.tableAssignment.updateMany({
+            where: { venueId, tableId: id, releasedAt: null },
+            data: { releasedAt: new Date(), releasedReason: 'manual' },
           });
+      if (released.count === 0) throw new NotFoundException('Assignment not found');
+      await refreshTableStates(tx, venueId, tableIds);
+
+      if (assignment?.reservationId) {
+        const activeLeft = await tx.tableAssignment.count({
+          where: { venueId, reservationId: assignment.reservationId, releasedAt: null },
+        });
+        if (activeLeft === 0) {
+          const r = await tx.reservation.findFirst({
+            where: { id: assignment.reservationId, venueId },
+            select: { status: true },
+          });
+          if (r && r.status === 'seated') {
+            await tx.reservation.update({
+              where: { id: assignment.reservationId },
+              data: { status: 'completed' },
+            });
+          }
         }
       }
-    }
-    if (assignment?.waitlistId) {
-      const activeLeft = await this.prisma.tableAssignment.count({
-        where: { venueId, waitlistId: assignment.waitlistId, releasedAt: null },
-      });
-      if (activeLeft === 0) {
-        const w = await this.prisma.waitlist.findFirst({
-          where: { id: assignment.waitlistId, venueId },
-          select: { status: true },
+      if (assignment?.waitlistId) {
+        const activeLeft = await tx.tableAssignment.count({
+          where: { venueId, waitlistId: assignment.waitlistId, releasedAt: null },
         });
-        // A seated party leaving is done. An 'assigned' party was only held or
-        // called — releasing that table cancels the hold, it does not seat and
-        // finish them, so they go back in the queue. Completing them here made
-        // them vanish from getOpenWaitlist, the only list with a Seat action,
-        // and left re-seating throwing NotFound.
-        if (w?.status === 'seated') {
-          await this.prisma.waitlist.update({
-            where: { id: assignment.waitlistId },
-            data: { status: 'completed' },
+        if (activeLeft === 0) {
+          const w = await tx.waitlist.findFirst({
+            where: { id: assignment.waitlistId, venueId },
+            select: { status: true },
           });
-        } else if (w?.status === 'assigned') {
-          await this.prisma.waitlist.update({
-            where: { id: assignment.waitlistId },
-            data: { status: 'waiting', readyAt: null },
-          });
+          // A seated party leaving is done. An 'assigned' party was only held or
+          // called — releasing that table cancels the hold, it does not seat and
+          // finish them, so they go back in the queue. Completing them here made
+          // them vanish from getOpenWaitlist, the only list with a Seat action,
+          // and left re-seating throwing NotFound.
+          if (w?.status === 'seated') {
+            await tx.waitlist.update({
+              where: { id: assignment.waitlistId },
+              data: { status: 'completed' },
+            });
+          } else if (w?.status === 'assigned') {
+            await tx.waitlist.update({
+              where: { id: assignment.waitlistId },
+              data: { status: 'waiting', readyAt: null },
+            });
+          }
         }
       }
-    }
+    });
     // Find seats freed up by the released table so we can match a waitlist
     // entry whose party fits. Best-effort; fire-and-forget so the manager
     // action returns immediately.

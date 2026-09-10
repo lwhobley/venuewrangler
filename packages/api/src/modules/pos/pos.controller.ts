@@ -264,7 +264,16 @@ export class PosController {
           "revenueCenter" = EXCLUDED."revenueCenter",
           "tenderType" = EXCLUDED."tenderType",
           "menuItems" = EXCLUDED."menuItems",
-          "status" = EXCLUDED."status",
+          -- paid<->void is a real correction (a disputed charge, a voided-in-
+          -- error check reinstated). Closed -> 'open' is not: it would reopen
+          -- a settled check, and the CASE guards above key off status = 'paid'
+          -- or 'void' to decide whether a field is locked — so a late/stale
+          -- 'open' delivery reopening it would silently unlock every guarded
+          -- field for whatever delivery comes next. Once closed, stay closed.
+          "status" = CASE
+            WHEN "PosCheck"."status" IN ('paid', 'void') AND EXCLUDED."status" = 'open' THEN "PosCheck"."status"
+            ELSE EXCLUDED."status"
+          END,
           "updatedAt" = NOW()
       `);
     });

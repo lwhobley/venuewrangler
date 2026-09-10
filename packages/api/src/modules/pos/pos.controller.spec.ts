@@ -177,6 +177,9 @@ describe('PosController', () => {
       const sqlText = String(prisma.$executeRaw.mock.calls[0][0].strings.join(''));
       expect(sqlText).toContain('ON CONFLICT');
       expect(sqlText).toContain('IN (\'paid\', \'void\')');
+      // paid<->void is a real correction; closed -> 'open' is not (it would
+      // silently unlock the CASE-guarded fields for the next delivery).
+      expect(sqlText).toContain('EXCLUDED."status" = \'open\'');
       expect(result.checksUpserted).toBe(2);
     });
 
