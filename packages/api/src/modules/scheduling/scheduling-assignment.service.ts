@@ -152,11 +152,29 @@ export class SchedulingAssignmentService {
     const shift = await this.getVenueShift(args.venueId, args.shiftId);
 
     if (!args.profileId) {
-      await this.prisma.scheduleShift.update({
-        where: { id: shift.id },
-        data: { profileId: null, status: 'open' },
+      // This bare update used to run with no lock and no re-check, so a
+      // concurrent claim/assign for this exact shift (both of which DO run
+      // under withSerializableRetry + an advisory lock below) could commit
+      // a new profileId a moment before this unassign silently overwrote it
+      // back to open — the claiming staff member would vanish from the
+      // shift with no error surfaced to either caller.
+      await withSerializableRetry(this.prisma, async (tx) => {
+        const current = await tx.scheduleShift.findFirst({
+          where: { id: shift.id, venueId: args.venueId },
+        });
+        if (!current) throw new NotFoundException('Shift not found');
+        if (current.profileId) {
+          await this.lockAssignmentKeys(tx, this.profileLockKeys(args.venueId, current.profileId, current));
+        }
+        await tx.scheduleShift.update({
+          where: { id: current.id },
+          data: { profileId: null, status: 'open' },
+        });
+        await tx.venue.update({
+          where: { id: args.venueId },
+          data: { scheduleUpdatedAfterPublishAt: new Date() },
+        });
       });
-      await this.markScheduleEdited(args.venueId);
       return { shift, nextProfileId: null };
     }
 

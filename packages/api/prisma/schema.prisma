@@ -420,6 +420,7 @@ model Venue {
   aiUsageEvents                 AiUsageEvent[]
   aiBudgetReservations          AiBudgetReservation[]
   joinRequests                  WorkplaceJoinRequest[]
+  joinRequestEvents             WorkplaceJoinRequestEvent[]
   eventExecutionWorkspaces      EventExecutionWorkspace[]
   documents                     VenueDocument[]
 }
@@ -1056,7 +1057,15 @@ model Reservation {
   syncEvents          ReservationSyncEvent[]
   tableAssignments    TableAssignment[]
 
-  @@unique([venueId, source, externalId])
+  // externalId is nullable (direct/manual reservations have none), and
+  // Postgres treats every NULL as distinct — a plain composite unique here
+  // does nothing to prevent duplicate "no external id" bookings. A partial
+  // unique index exists in SQL only (Prisma cannot express WHERE on
+  // @@unique): "Reservation_venueId_source_externalId_key" ON
+  // ("venueId", "source", "externalId") WHERE "externalId" IS NOT NULL
+  // (migration 20260910050000). If `prisma migrate dev` ever proposes
+  // dropping that index for this plain one, delete that statement.
+  @@index([venueId, source, externalId])
   @@index([venueId, reservationTime])
   @@index([venueId, status])
   @@index([guestId])
@@ -2085,15 +2094,23 @@ model WorkplaceJoinRequest {
 model WorkplaceJoinRequestEvent {
   id        String               @id @default(cuid())
   requestId String
+  // Denormalized from the parent request at write time (see the SQL
+  // functions that insert these rows) so this table is directly
+  // tenant-scoped rather than only reachable safely through the
+  // WorkplaceJoinRequest relation. SetNull, not Cascade, matching AuditLog's
+  // pattern: an event's history outlives the venue it happened at.
+  venueId   String?
   actorId   String?
   eventType String
   payload   Json?
   createdAt DateTime             @default(now())
   request   WorkplaceJoinRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  venue     Venue?               @relation(fields: [venueId], references: [id], onDelete: SetNull)
   actor     User?                @relation(fields: [actorId], references: [id], onDelete: SetNull)
 
   @@index([requestId, createdAt])
   @@index([actorId])
+  @@index([venueId])
 }
 
 model RateLimitBucket {

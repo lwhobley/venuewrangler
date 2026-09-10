@@ -144,6 +144,31 @@ describe('PosController', () => {
       expect(result).toEqual({ ok: true, checksUpserted: 1, laborUpserted: 1 });
     });
 
+    it('does not overwrite a check that is already paid or void (closed financial record)', async () => {
+      const { controller, prisma } = makeController();
+      const secret = 'correct-secret';
+      prisma.posConnection.findFirst.mockResolvedValue({ id: 'conn-1', webhookSecret: hashWebhookSecret(secret) });
+      // chk-closed is already paid; chk-open has no existing row.
+      prisma.posCheck.findMany.mockResolvedValue([{ externalCheckId: 'chk-closed' }]);
+
+      const result = await controller.ingest(makeRequest(), 'venue-1', secret, {
+        provider: 'toast',
+        checks: [
+          { externalCheckId: 'chk-closed', openedAt: Date.now(), subtotalCents: 999, totalCents: 999, tipCents: 0, status: 'paid' },
+          { externalCheckId: 'chk-open', openedAt: Date.now(), subtotalCents: 500, totalCents: 550, tipCents: 50 },
+        ],
+      } as any);
+
+      expect(prisma.posCheck.findMany).toHaveBeenCalledWith(expect.objectContaining({
+        where: expect.objectContaining({ status: { in: ['paid', 'void'] } }),
+      }));
+      expect(prisma.posCheck.upsert).toHaveBeenCalledTimes(1);
+      expect(prisma.posCheck.upsert).toHaveBeenCalledWith(expect.objectContaining({
+        where: { venueId_provider_externalCheckId: { venueId: 'venue-1', provider: 'toast', externalCheckId: 'chk-open' } },
+      }));
+      expect(result.checksUpserted).toBe(1);
+    });
+
     it('chunks large ingest batches into multiple transactions', async () => {
       const { controller, prisma } = makeController();
       const secret = 'correct-secret';

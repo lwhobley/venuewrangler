@@ -648,8 +648,12 @@ describe('BarInventoryController', () => {
 
       await controller.updateItemCost(managerUser, 'item-1', { unitCostCents: 1800 } as any);
 
-      expect(prisma.$transaction).not.toHaveBeenCalled();
+      // The item is now read under the same advisory lock movements take (so
+      // a concurrent movement can't race the no-op check), so $transaction is
+      // always entered — but nothing is written when the cost hasn't changed.
+      expect(prisma.$transaction).toHaveBeenCalledOnce();
       expect(prisma.barInventoryItem.update).not.toHaveBeenCalled();
+      expect(prisma.barInventoryMovement.create).not.toHaveBeenCalled();
     });
 
     it('throws NotFoundException for a missing item', async () => {

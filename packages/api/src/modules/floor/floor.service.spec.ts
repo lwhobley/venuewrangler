@@ -130,17 +130,21 @@ describe('FloorService regressions', () => {
   });
 
   it('requires an existing merge to be split before those tables are merged again', async () => {
-    const prisma = {
-      floorPlan: { findFirst: vi.fn().mockResolvedValue({ tables: [{ id: 't1' }, { id: 't2' }] }) },
+    const transaction = {
+      $executeRaw: vi.fn().mockResolvedValue(undefined),
       tableState: { findMany: vi.fn().mockResolvedValue([
         { id: 's1', tableId: 't1', status: 'seated', mergeGroupId: 'group-1' },
         { id: 's2', tableId: 't2', status: 'seated', mergeGroupId: 'group-1' },
       ]), updateMany: vi.fn() },
     };
+    const prisma = {
+      floorPlan: { findFirst: vi.fn().mockResolvedValue({ tables: [{ id: 't1' }, { id: 't2' }] }) },
+      $transaction: vi.fn((callback: (tx: typeof transaction) => unknown) => callback(transaction)),
+    };
     const service = new FloorService(prisma as any, {} as any);
 
     await expect(service.mergeTablesForParty('venue-1', ['t1', 't2'], 6)).rejects.toThrow(ConflictException);
-    expect(prisma.tableState.updateMany).not.toHaveBeenCalled();
+    expect(transaction.tableState.updateMany).not.toHaveBeenCalled();
   });
 
   it('rejects a table-status write that loses an optimistic concurrency race', async () => {

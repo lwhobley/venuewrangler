@@ -149,7 +149,7 @@ export class WranglerOperatorService {
     };
   }
 
-  async execute(input: { venueId: string; timezone?: string | null; actor: Actor; plan: OperatorPlan }): Promise<OperatorExecutionResponse> {
+  async execute(input: { venueId: string; timezone?: string | null; actor: Actor; plan: OperatorPlan; requestId?: string }): Promise<OperatorExecutionResponse> {
     if (!this.canManage(input.actor)) throw new ForbiddenException('Manager access required for Wrangler operator actions');
     if (!ALLOWED_TOOLS.includes(input.plan.tool)) throw new BadRequestException('Unsupported Wrangler operator tool');
     const risk = this.riskFor(input.plan.tool);
@@ -159,7 +159,7 @@ export class WranglerOperatorService {
     }
 
     const normalized = await this.resolveWritePlan(input.venueId, input.timezone, { ...input.plan, risk });
-    const result = await this.executeWrite(input.venueId, input.timezone, input.actor, normalized);
+    const result = await this.executeWrite(input.venueId, input.timezone, input.actor, normalized, input.requestId);
     await this.writeAudit(input.venueId, input.actor, normalized, result);
     return { ok: true, tool: normalized.tool, risk, result };
   }
@@ -577,7 +577,7 @@ export class WranglerOperatorService {
     return { ...plan, args, preview } as ResolvedOperatorPlan;
   }
 
-  private async executeWrite(venueId: string, timezone: string | null | undefined, actor: Actor, plan: ResolvedOperatorPlan) {
+  private async executeWrite(venueId: string, timezone: string | null | undefined, actor: Actor, plan: ResolvedOperatorPlan, requestId?: string) {
     const args = plan.args;
 
     if (plan.tool === 'CLEAR_TABLE' || plan.tool === 'UPDATE_TABLE_STATUS') {
@@ -702,8 +702,13 @@ export class WranglerOperatorService {
       const item = items[0];
       if (!item) throw new NotFoundException(`Inventory item "${itemName}" not found`);
       if (!this.inventory) throw new BadRequestException('Inventory service is unavailable');
+      // requestId is optional (older clients don't send one yet) — when
+      // present it lets a retried execute() call replay instead of creating
+      // a second movement row and re-firing manager alerts; when absent this
+      // behaves exactly as before (no idempotency protection, no regression).
+      const operationId = requestId ? `wrangler-${requestId}` : undefined;
       const { movement } = await this.inventory.record({ venueId, itemId: item.id, createdBy: actor.profileId,
-        movementType: 'count', quantity: onHand, notes: 'Wrangler operator count' });
+        movementType: 'count', quantity: onHand, notes: 'Wrangler operator count', operationId });
       return { id: item.id, name: item.name, onHand: movement.nextOnHand, parLevel: item.parLevel };
     }
 

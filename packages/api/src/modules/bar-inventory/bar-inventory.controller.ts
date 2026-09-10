@@ -668,19 +668,27 @@ export class BarInventoryController {
   ) {
     const profile = await this.requireManagerProfile(user);
     const venueId = profile.venueId!;
-    const item = await this.prisma.barInventoryItem.findFirst({ where: { id: itemId, venueId } });
-    if (!item) throw new NotFoundException('Item not found');
-    const oldCost = item.unitCostCents ?? 0;
     const newCost = Math.max(0, Math.round(body.unitCostCents));
-    if (oldCost === newCost) return mapItem(item);
     const now = new Date();
-    const [updated] = await this.prisma.$transaction([
-      this.prisma.barInventoryItem.update({
+    // Same advisory lock InventoryMovementService.record() takes on this item,
+    // so a concurrent count/waste/received movement cannot commit a new
+    // onHand between the read below and this transaction's write — without
+    // it, the correction movement's previousOnHand/nextOnHand snapshot could
+    // already be stale by the time it lands, misrepresenting the cost-history
+    // ledger at the exact moment stock was moving.
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const lockKey = `bar-inventory-${itemId}`;
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`;
+      const item = await tx.barInventoryItem.findFirst({ where: { id: itemId, venueId } });
+      if (!item) throw new NotFoundException('Item not found');
+      const oldCost = item.unitCostCents ?? 0;
+      if (oldCost === newCost) return item;
+      const result = await tx.barInventoryItem.update({
         where: { id: item.id },
         data: { unitCostCents: newCost, updatedAt: now },
-      }),
+      });
       // Write a zero-quantity correction so cost history is queryable from movement log
-      this.prisma.barInventoryMovement.create({
+      await tx.barInventoryMovement.create({
         data: {
           venueId,
           itemId: item.id,
@@ -692,8 +700,9 @@ export class BarInventoryController {
           createdBy: profile.id,
           createdAt: now,
         },
-      }),
-    ]);
+      });
+      return result;
+    });
     return mapItem(updated);
   }
 

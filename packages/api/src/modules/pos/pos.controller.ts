@@ -216,12 +216,28 @@ export class PosController {
       }
     }
 
+    // A paid/void check is a closed financial record, not a mutable draft — a
+    // replayed or corrected webhook delivery for the same externalCheckId
+    // must not silently rewrite its totals after close. Look up which of the
+    // incoming checks are already closed so those are skipped below instead
+    // of upserted; open/unknown checks proceed as before.
+    const incomingCheckIds = (body.checks ?? []).map((check) => check.externalCheckId);
+    const closedCheckIds = incomingCheckIds.length
+      ? new Set(
+          (await this.prisma.posCheck.findMany({
+            where: { venueId, provider, externalCheckId: { in: incomingCheckIds }, status: { in: ['paid', 'void'] } },
+            select: { externalCheckId: true },
+          })).map((row) => row.externalCheckId),
+        )
+      : new Set<string>();
+
     // Batch upserts into chunked transactions (not one single transaction for
     // the whole payload) so a large delivery (up to MAX_INGEST_ROWS checks +
     // MAX_INGEST_ROWS labor punches) can't hold one transaction's locks for an
     // extended period.
+    const checksToApply = (body.checks ?? []).filter((check) => !closedCheckIds.has(check.externalCheckId));
     const operations = [
-      ...( body.checks ?? []).map((check) => {
+      ...checksToApply.map((check) => {
         const data = {
           tableLabel: check.tableLabel ?? null,
           serverName: check.serverName ?? null,
@@ -279,7 +295,7 @@ export class PosController {
       await this.prisma.$transaction(operations.slice(i, i + INGEST_CHUNK_SIZE));
     }
 
-    const checksUpserted = (body.checks ?? []).length;
+    const checksUpserted = checksToApply.length;
     const laborUpserted = (body.laborPunches ?? []).length;
 
     await this.prisma.posConnection.update({ where: { id: connection.id }, data: { lastSyncAt: new Date() } });

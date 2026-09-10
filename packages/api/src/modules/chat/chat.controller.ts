@@ -28,6 +28,7 @@ import { addDays, todayInZone, weekStartFor } from '../../common/pay-period';
 import { occupiedSlots, previousOvernightFilter } from '../../common/shift-overlap';
 import { tryAcquireSharedLease, releaseSharedLease } from '../../common/shared-lease';
 import { assertWithinSharedRateLimit } from '../../common/rate-limit';
+import { withSerializableRetry } from '../../common/tx-retry';
 import { PrismaService } from '../../prisma/prisma.service';
 import { VenueScope } from '../../venue/venue-scope.decorator';
 import type { VenueScopedRequest } from '../../venue/venue-scope.interceptor';
@@ -359,54 +360,72 @@ export class ChatController {
   async ensureChatSetup(@VenueScope() scope: Scope) {
     if (!scope) throw new ForbiddenException('No venue profile found');
 
-    const [systemConversation, activeProfiles] = await Promise.all([
-      this.prisma.conversation.findFirst({
-        where: { venueId: scope.venueId, type: 'group', isSystem: true },
-      }),
-      this.prisma.profile.findMany({
-        where: { venueId: scope.venueId, OR: ACTIVE_MEMBERSHIP },
-        select: { id: true },
-      }),
-    ]);
-    const existing = systemConversation ?? await this.prisma.conversation.findFirst({
-      where: { venueId: scope.venueId, type: 'group', name: GENERAL_GROUP_NAME },
-    });
-    const memberIds = Array.from(new Set([scope.profileId, ...activeProfiles.map((profile) => profile.id)])).sort();
+    // Any active member can trigger this (not just managers): the payload
+    // written is entirely derived from the current roster, never from
+    // caller-supplied data, so there is nothing here for a non-manager to
+    // manipulate — the same shape as the role/shift sync above, which is
+    // also open to any member. What DOES need protection is the read-decide-
+    // write sequence itself: without a lock, two concurrent calls (e.g. two
+    // staff loading the app at once when #General doesn't exist yet, or
+    // membership changing between two overlapping calls) can race on the
+    // same row. The advisory lock below serializes that, matching the
+    // pattern the role/shift sync already uses via its shared lease.
+    return withSerializableRetry(this.prisma, async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`chat-setup:${scope.venueId}`}))`;
 
-    if (existing) {
-      const existingMembers = [...existing.memberIds].sort();
-      if (!sameMembers(existingMembers, memberIds) || existing.name !== GENERAL_GROUP_NAME || !existing.isSystem) {
-        await this.prisma.conversation.update({
-          where: { id: existing.id },
+      const [systemConversation, activeProfiles] = await Promise.all([
+        tx.conversation.findFirst({
+          where: { venueId: scope.venueId, type: 'group', isSystem: true },
+        }),
+        tx.profile.findMany({
+          where: { venueId: scope.venueId, OR: ACTIVE_MEMBERSHIP },
+          select: { id: true },
+        }),
+      ]);
+      const existing = systemConversation ?? await tx.conversation.findFirst({
+        where: { venueId: scope.venueId, type: 'group', name: GENERAL_GROUP_NAME },
+      });
+      const memberIds = Array.from(new Set([scope.profileId, ...activeProfiles.map((profile) => profile.id)])).sort();
+
+      if (existing) {
+        const existingMembers = [...existing.memberIds].sort();
+        if (!sameMembers(existingMembers, memberIds) || existing.name !== GENERAL_GROUP_NAME || !existing.isSystem) {
+          await tx.conversation.update({
+            where: { id: existing.id },
+            data: { name: GENERAL_GROUP_NAME, memberIds, isSystem: true },
+          });
+        }
+        return { conversationId: existing.id };
+      }
+
+      try {
+        const conv = await tx.conversation.create({
+          data: {
+            venueId: scope.venueId,
+            type: 'group',
+            name: GENERAL_GROUP_NAME,
+            memberIds,
+            isSystem: true,
+          },
+        });
+        return { conversationId: conv.id };
+      } catch (error: any) {
+        // Defense in depth: the advisory lock above should make this
+        // unreachable for two calls going through this same method, but keep
+        // the fallback for any other path that could still insert the
+        // isSystem row (e.g. a future migration/backfill).
+        if (error?.code !== 'P2002') throw error;
+        const winner = await tx.conversation.findFirst({
+          where: { venueId: scope.venueId, type: 'group', isSystem: true },
+        });
+        if (!winner) throw error;
+        await tx.conversation.update({
+          where: { id: winner.id },
           data: { name: GENERAL_GROUP_NAME, memberIds, isSystem: true },
         });
+        return { conversationId: winner.id };
       }
-      return { conversationId: existing.id };
-    }
-
-    try {
-      const conv = await this.prisma.conversation.create({
-        data: {
-          venueId: scope.venueId,
-          type: 'group',
-          name: GENERAL_GROUP_NAME,
-          memberIds,
-          isSystem: true,
-        },
-      });
-      return { conversationId: conv.id };
-    } catch (error: any) {
-      if (error?.code !== 'P2002') throw error;
-      const winner = await this.prisma.conversation.findFirst({
-        where: { venueId: scope.venueId, type: 'group', isSystem: true },
-      });
-      if (!winner) throw error;
-      await this.prisma.conversation.update({
-        where: { id: winner.id },
-        data: { name: GENERAL_GROUP_NAME, memberIds, isSystem: true },
-      });
-      return { conversationId: winner.id };
-    }
+    });
   }
 
   @RequireSubscription('active')

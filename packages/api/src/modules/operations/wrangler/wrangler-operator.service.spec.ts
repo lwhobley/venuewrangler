@@ -15,6 +15,26 @@ describe('Wrangler inventory writes', () => {
     expect(record).toHaveBeenCalledWith(expect.objectContaining({ venueId: 'v1', itemId: 'i1', createdBy: 'p1', movementType: 'count', quantity: 3 }));
   });
 
+  it('passes no operationId when the caller sends no requestId (unchanged behavior for older clients)', async () => {
+    const findMany = vi.fn(async () => [{ id: 'i1', name: 'House Vodka', parLevel: 5 }]);
+    const record = vi.fn(async () => ({ movement: { nextOnHand: 3 } }));
+    const service = new WranglerOperatorService({ barInventoryItem: { findMany }, auditLog: { create: vi.fn() } } as never, { record } as never);
+
+    await service.execute({ venueId: 'v1', actor, plan } as never);
+
+    expect(record).toHaveBeenCalledWith(expect.objectContaining({ operationId: undefined }));
+  });
+
+  it('derives a stable operationId from requestId so a retried execute() can be deduped', async () => {
+    const findMany = vi.fn(async () => [{ id: 'i1', name: 'House Vodka', parLevel: 5 }]);
+    const record = vi.fn(async () => ({ movement: { nextOnHand: 3 } }));
+    const service = new WranglerOperatorService({ barInventoryItem: { findMany }, auditLog: { create: vi.fn() } } as never, { record } as never);
+
+    await service.execute({ venueId: 'v1', actor, plan, requestId: 'req-abc' } as never);
+
+    expect(record).toHaveBeenCalledWith(expect.objectContaining({ operationId: 'wrangler-req-abc' }));
+  });
+
   it('rejects an ambiguous inventory name without updating stock', async () => {
     const record = vi.fn();
     const service = new WranglerOperatorService({ barInventoryItem: { findMany: vi.fn(async () => [{ id: 'i1' }, { id: 'i2' }]) } } as never, { record } as never);
