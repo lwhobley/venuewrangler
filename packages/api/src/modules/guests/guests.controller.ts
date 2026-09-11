@@ -13,7 +13,7 @@ import {
   Req,
   UnauthorizedException,
 } from '@nestjs/common';
-import { ArrayMaxSize, IsArray, IsBoolean, IsOptional, IsString, MaxLength, ValidateNested } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsBoolean, IsIn, IsOptional, IsString, MaxLength, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import type { Request } from 'express';
 import { createHash } from 'crypto';
@@ -131,6 +131,122 @@ class UpsertGuestDto {
   @IsOptional()
   @MaxLength(2000)
   notes?: string;
+
+  @IsString()
+  @IsOptional()
+  @IsIn(['sms', 'email', 'phone', 'none'])
+  preferredContactMethod?: string;
+
+  @IsBoolean()
+  @IsOptional()
+  smsOptIn?: boolean;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(120)
+  phoneticName?: string;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(40)
+  pronouns?: string;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(40)
+  honorific?: string;
+
+  @IsString()
+  @IsOptional()
+  @IsIn(['regular', 'vip', 'vvip', 'investor', 'media', 'industry_peer', 'hotel_resident'])
+  guestTier?: string;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(120)
+  executiveRole?: string;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(2000)
+  allergyNotes?: string;
+
+  @IsBoolean()
+  @IsOptional()
+  allergyAirborne?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  allergyRequiresChefSignoff?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  allergyRequiresManagerTouch?: boolean;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(80)
+  dietaryRegimen?: string;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(200)
+  waterPreference?: string;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(400)
+  beverageSignature?: string;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(200)
+  diningPace?: string;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(400)
+  serviceInteraction?: string;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(400)
+  physicalComfort?: string;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(400)
+  seatingPreferences?: string;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(400)
+  environmentAvoidance?: string;
+}
+
+class GuestCrmNoteDto {
+  @IsString()
+  @IsIn(['fact', 'milestone', 'personal', 'incident', 'amenity'])
+  kind!: string;
+
+  @IsString()
+  @MaxLength(2000)
+  text!: string;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(32)
+  occurredOn?: string;
+}
+
+class GuestHouseholdDto {
+  @IsString()
+  @MaxLength(64)
+  otherGuestId!: string;
+
+  @IsString()
+  @IsIn(['spouse', 'partner', 'assistant', 'child', 'other'])
+  relationship!: string;
 }
 
 class LeadDto {
@@ -199,6 +315,50 @@ function mergeTags(existing: string[], incoming: string[]): string[] {
   return cleanTags([...existing, ...incoming]);
 }
 
+function mapGuestProfileFields(g: {
+  preferredContactMethod?: string | null;
+  smsOptIn?: boolean | null;
+  phoneticName?: string | null;
+  pronouns?: string | null;
+  honorific?: string | null;
+  guestTier?: string | null;
+  executiveRole?: string | null;
+  allergyNotes?: string | null;
+  allergyAirborne?: boolean | null;
+  allergyRequiresChefSignoff?: boolean | null;
+  allergyRequiresManagerTouch?: boolean | null;
+  dietaryRegimen?: string | null;
+  waterPreference?: string | null;
+  beverageSignature?: string | null;
+  diningPace?: string | null;
+  serviceInteraction?: string | null;
+  physicalComfort?: string | null;
+  seatingPreferences?: string | null;
+  environmentAvoidance?: string | null;
+}) {
+  return {
+    preferredContactMethod: g.preferredContactMethod ?? null,
+    smsOptIn: g.smsOptIn ?? false,
+    phoneticName: g.phoneticName ?? null,
+    pronouns: g.pronouns ?? null,
+    honorific: g.honorific ?? null,
+    guestTier: g.guestTier ?? null,
+    executiveRole: g.executiveRole ?? null,
+    allergyNotes: g.allergyNotes ?? null,
+    allergyAirborne: g.allergyAirborne ?? false,
+    allergyRequiresChefSignoff: g.allergyRequiresChefSignoff ?? false,
+    allergyRequiresManagerTouch: g.allergyRequiresManagerTouch ?? false,
+    dietaryRegimen: g.dietaryRegimen ?? null,
+    waterPreference: g.waterPreference ?? null,
+    beverageSignature: g.beverageSignature ?? null,
+    diningPace: g.diningPace ?? null,
+    serviceInteraction: g.serviceInteraction ?? null,
+    physicalComfort: g.physicalComfort ?? null,
+    seatingPreferences: g.seatingPreferences ?? null,
+    environmentAvoidance: g.environmentAvoidance ?? null,
+  };
+}
+
 @Controller('v1/guests')
 export class GuestsController {
   constructor(private readonly prisma: PrismaService) {}
@@ -241,14 +401,20 @@ export class GuestsController {
     // query per guest — segmentation, VIP scoring, and lifetime-spend totals
     // on this screen all read these fields, so they must be populated even at
     // 200 guests per page.
-    const [checkAgg, reservationCounts, upcomingReservations] = guestIds.length
+    const ninetyDaysAgo = new Date(now - 90 * 86_400_000);
+    const [checkAgg, recentCheckAgg, reservationCounts, upcomingReservations, reliability] = guestIds.length
       ? await Promise.all([
           this.prisma.posCheck.groupBy({
             by: ['guestId'],
             where: { venueId: scope.venueId, guestId: { in: guestIds } },
             _count: { _all: true },
-            _sum: { totalCents: true },
+            _sum: { totalCents: true, tipCents: true },
             _max: { closedAt: true },
+          }),
+          this.prisma.posCheck.groupBy({
+            by: ['guestId'],
+            where: { venueId: scope.venueId, guestId: { in: guestIds }, closedAt: { gte: ninetyDaysAgo } },
+            _count: { _all: true },
           }),
           this.prisma.reservation.groupBy({
             by: ['guestId'],
@@ -266,13 +432,26 @@ export class GuestsController {
             select: { guestId: true, reservationTime: true },
             orderBy: { reservationTime: 'asc' },
           }),
+          this.prisma.reservation.groupBy({
+            by: ['guestId', 'status'],
+            where: { venueId: scope.venueId, guestId: { in: guestIds }, deletedAt: null, status: { in: ['no_show', 'cancelled'] } },
+            _count: { _all: true },
+          }),
         ])
-      : [[], [], []];
+      : [[], [], [], [], []];
     const checkByGuest = new Map(checkAgg.filter((a) => a.guestId).map((a) => [a.guestId as string, a]));
+    const recentByGuest = new Map(recentCheckAgg.filter((a) => a.guestId).map((a) => [a.guestId as string, a._count._all]));
     const reservationCountByGuest = new Map(reservationCounts.filter((a) => a.guestId).map((a) => [a.guestId as string, a._count._all]));
     const upcomingByGuest = new Map<string, number>();
     for (const r of upcomingReservations) {
       if (r.guestId && !upcomingByGuest.has(r.guestId)) upcomingByGuest.set(r.guestId, r.reservationTime.getTime());
+    }
+    const noShowByGuest = new Map<string, number>();
+    const cancelByGuest = new Map<string, number>();
+    for (const row of reliability) {
+      if (!row.guestId) continue;
+      if (row.status === 'no_show') noShowByGuest.set(row.guestId, row._count._all);
+      if (row.status === 'cancelled') cancelByGuest.set(row.guestId, row._count._all);
     }
 
     return {
@@ -280,6 +459,7 @@ export class GuestsController {
         const agg = checkByGuest.get(g.id);
         const visitCount = agg?._count._all ?? 0;
         const totalSpendCents = agg?._sum.totalCents ?? 0;
+        const totalTipCents = agg?._sum.tipCents ?? 0;
         const lastVisitAt = agg?._max.closedAt ? agg._max.closedAt.getTime() : null;
         return {
           _id: g.id,
@@ -297,14 +477,20 @@ export class GuestsController {
           dietaryNotes: g.dietaryNotes ?? null,
           tags: g.tags,
           notes: g.notes ?? null,
+          ...mapGuestProfileFields(g),
           createdAt: g.createdAt.getTime(),
           updatedAt: g.updatedAt.getTime(),
           reservationCount: reservationCountByGuest.get(g.id) ?? 0,
           visitCount,
+          visitsLast90Days: recentByGuest.get(g.id) ?? 0,
           lastVisitAt,
           upcomingReservationAt: upcomingByGuest.get(g.id) ?? null,
           totalSpendCents,
           averageSpendCents: visitCount > 0 ? Math.round(totalSpendCents / visitCount) : 0,
+          totalTipCents,
+          averageTipCents: visitCount > 0 ? Math.round(totalTipCents / visitCount) : 0,
+          noShowCount: noShowByGuest.get(g.id) ?? 0,
+          cancellationCount: cancelByGuest.get(g.id) ?? 0,
           daysSinceLastVisit: lastVisitAt != null ? Math.floor((now - lastVisitAt) / 86_400_000) : null,
         };
       }),
@@ -321,7 +507,7 @@ export class GuestsController {
     const guest = await this.prisma.guest.findFirst({ where: { id, venueId: scope.venueId, deletedAt: null } });
     if (!guest) throw new NotFoundException('Guest not found');
 
-    const [reservations, checks] = await Promise.all([
+    const [reservations, checks, crmNotes, household] = await Promise.all([
       this.prisma.reservation.findMany({
         where: { venueId: scope.venueId, guestId: guest.id, deletedAt: null },
         orderBy: { reservationTime: 'desc' },
@@ -331,6 +517,18 @@ export class GuestsController {
         where: { venueId: scope.venueId, guestId: guest.id },
         orderBy: { openedAt: 'desc' },
         take: 50,
+      }),
+      this.prisma.guestCrmNote.findMany({
+        where: { guestId: guest.id, venueId: scope.venueId },
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+      }),
+      this.prisma.guestHouseholdLink.findMany({
+        where: { venueId: scope.venueId, OR: [{ fromGuestId: guest.id }, { toGuestId: guest.id }] },
+        include: {
+          fromGuest: { select: { id: true, fullName: true } },
+          toGuest: { select: { id: true, fullName: true } },
+        },
       }),
     ]);
 
@@ -351,9 +549,27 @@ export class GuestsController {
         dietaryNotes: guest.dietaryNotes ?? null,
         tags: guest.tags,
         notes: guest.notes ?? null,
+        ...mapGuestProfileFields(guest),
         createdAt: guest.createdAt.getTime(),
         updatedAt: guest.updatedAt.getTime(),
       },
+      crmNotes: crmNotes.map((note) => ({
+        id: note.id,
+        kind: note.kind,
+        text: note.text,
+        occurredOn: note.occurredOn ?? null,
+        authorName: note.authorName ?? null,
+        createdAt: note.createdAt.getTime(),
+      })),
+      household: household.map((link) => {
+        const other = link.fromGuestId === guest.id ? link.toGuest : link.fromGuest;
+        return {
+          id: link.id,
+          otherGuestId: other.id,
+          otherGuestName: other.fullName,
+          relationship: link.relationship,
+        };
+      }),
       reservations: reservations.map((r) => ({
         _id: r.id,
         partySize: r.partySize,
@@ -418,6 +634,25 @@ export class GuestsController {
       dietaryNotes: cleanText(body.dietaryNotes) ?? null,
       tags: cleanTags(body.tags ?? []),
       notes: cleanText(body.notes) ?? null,
+      preferredContactMethod: body.preferredContactMethod ?? null,
+      smsOptIn: body.smsOptIn ?? false,
+      phoneticName: cleanText(body.phoneticName) ?? null,
+      pronouns: cleanText(body.pronouns) ?? null,
+      honorific: cleanText(body.honorific) ?? null,
+      guestTier: body.guestTier ?? null,
+      executiveRole: cleanText(body.executiveRole) ?? null,
+      allergyNotes: cleanText(body.allergyNotes) ?? null,
+      allergyAirborne: body.allergyAirborne ?? false,
+      allergyRequiresChefSignoff: body.allergyRequiresChefSignoff ?? false,
+      allergyRequiresManagerTouch: body.allergyRequiresManagerTouch ?? false,
+      dietaryRegimen: cleanText(body.dietaryRegimen) ?? null,
+      waterPreference: cleanText(body.waterPreference) ?? null,
+      beverageSignature: cleanText(body.beverageSignature) ?? null,
+      diningPace: cleanText(body.diningPace) ?? null,
+      serviceInteraction: cleanText(body.serviceInteraction) ?? null,
+      physicalComfort: cleanText(body.physicalComfort) ?? null,
+      seatingPreferences: cleanText(body.seatingPreferences) ?? null,
+      environmentAvoidance: cleanText(body.environmentAvoidance) ?? null,
       updatedAt: now,
     };
 
@@ -432,6 +667,75 @@ export class GuestsController {
 
     const created = await this.prisma.guest.create({ data: { ...data, createdAt: now } });
     return { id: created.id };
+  }
+
+  @RequireSubscription('active')
+  @Post(':guestId/notes')
+  async addGuestNote(@VenueScope() scope: Scope, @Param('guestId') guestId: string, @Body() body: GuestCrmNoteDto) {
+    this.requireManager(scope);
+    const text = body.text.trim();
+    if (!text) throw new BadRequestException('Note text is required');
+    const guest = await this.prisma.guest.findFirst({ where: { id: guestId, venueId: scope.venueId, deletedAt: null }, select: { id: true } });
+    if (!guest) throw new NotFoundException('Guest not found');
+    const note = await this.prisma.guestCrmNote.create({
+      data: {
+        venueId: scope.venueId,
+        guestId: guest.id,
+        kind: body.kind,
+        text,
+        occurredOn: cleanText(body.occurredOn) ?? null,
+        authorName: scope.fullName || null,
+      },
+    });
+    return { id: note.id };
+  }
+
+  @RequireSubscription('active')
+  @Delete(':guestId/notes/:noteId')
+  async removeGuestNote(@VenueScope() scope: Scope, @Param('guestId') guestId: string, @Param('noteId') noteId: string) {
+    this.requireManager(scope);
+    const note = await this.prisma.guestCrmNote.findFirst({ where: { id: noteId, guestId, venueId: scope.venueId } });
+    if (!note) throw new NotFoundException('Note not found');
+    await this.prisma.guestCrmNote.delete({ where: { id: note.id } });
+    return { ok: true };
+  }
+
+  @RequireSubscription('active')
+  @Post(':guestId/household')
+  async addHouseholdLink(@VenueScope() scope: Scope, @Param('guestId') guestId: string, @Body() body: GuestHouseholdDto) {
+    this.requireManager(scope);
+    if (body.otherGuestId === guestId) throw new BadRequestException('Cannot link a guest to themselves');
+    const [from, to] = await Promise.all([
+      this.prisma.guest.findFirst({ where: { id: guestId, venueId: scope.venueId, deletedAt: null }, select: { id: true } }),
+      this.prisma.guest.findFirst({ where: { id: body.otherGuestId, venueId: scope.venueId, deletedAt: null }, select: { id: true } }),
+    ]);
+    if (!from || !to) throw new NotFoundException('Guest not found');
+    const existing = await this.prisma.guestHouseholdLink.findFirst({
+      where: {
+        venueId: scope.venueId,
+        OR: [
+          { fromGuestId: from.id, toGuestId: to.id },
+          { fromGuestId: to.id, toGuestId: from.id },
+        ],
+      },
+    });
+    if (existing) return { id: existing.id };
+    const link = await this.prisma.guestHouseholdLink.create({
+      data: { venueId: scope.venueId, fromGuestId: from.id, toGuestId: to.id, relationship: body.relationship },
+    });
+    return { id: link.id };
+  }
+
+  @RequireSubscription('active')
+  @Delete(':guestId/household/:linkId')
+  async removeHouseholdLink(@VenueScope() scope: Scope, @Param('guestId') guestId: string, @Param('linkId') linkId: string) {
+    this.requireManager(scope);
+    const link = await this.prisma.guestHouseholdLink.findFirst({
+      where: { id: linkId, venueId: scope.venueId, OR: [{ fromGuestId: guestId }, { toGuestId: guestId }] },
+    });
+    if (!link) throw new NotFoundException('Household link not found');
+    await this.prisma.guestHouseholdLink.delete({ where: { id: link.id } });
+    return { ok: true };
   }
 
   @RequireSubscription('active')

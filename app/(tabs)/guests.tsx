@@ -42,12 +42,36 @@ type GuestRow = {
   dietaryNotes: string | null;
   tags: string[];
   notes: string | null;
+  preferredContactMethod: string | null;
+  smsOptIn: boolean;
+  phoneticName: string | null;
+  pronouns: string | null;
+  honorific: string | null;
+  guestTier: string | null;
+  executiveRole: string | null;
+  allergyNotes: string | null;
+  allergyAirborne: boolean;
+  allergyRequiresChefSignoff: boolean;
+  allergyRequiresManagerTouch: boolean;
+  dietaryRegimen: string | null;
+  waterPreference: string | null;
+  beverageSignature: string | null;
+  diningPace: string | null;
+  serviceInteraction: string | null;
+  physicalComfort: string | null;
+  seatingPreferences: string | null;
+  environmentAvoidance: string | null;
   reservationCount: number;
   visitCount: number;
+  visitsLast90Days: number;
   lastVisitAt: number | null;
   upcomingReservationAt: number | null;
   totalSpendCents: number;
   averageSpendCents: number;
+  totalTipCents: number;
+  averageTipCents: number;
+  noShowCount: number;
+  cancellationCount: number;
   daysSinceLastVisit: number | null;
 };
 
@@ -84,7 +108,13 @@ type CheckEvent = {
   menuItems: Array<{ name: string; category: string | null; quantity: number; priceCents: number }>;
 };
 
-type GuestProfile = { guest: GuestRow; reservations: ReservationEvent[]; checks: CheckEvent[] };
+type CrmNote = { id: string; kind: string; text: string; occurredOn: string | null; authorName: string | null; createdAt: number };
+type HouseholdLink = { id: string; otherGuestId: string; otherGuestName: string; relationship: string };
+type GuestProfile = { guest: GuestRow; reservations: ReservationEvent[]; checks: CheckEvent[]; crmNotes?: CrmNote[]; household?: HouseholdLink[] };
+
+const GUEST_TIERS = ['regular', 'vip', 'vvip', 'investor', 'media', 'industry_peer', 'hotel_resident'] as const;
+const NOTE_KINDS = ['fact', 'milestone', 'personal', 'incident', 'amenity'] as const;
+const CONTACT_METHODS = ['sms', 'email', 'phone', 'none'] as const;
 type GuestListResponse = { guests: GuestRow[]; totalCount: number; page: number; limit: number };
 
 type I18nT = ReturnType<typeof useI18n>['t'];
@@ -142,7 +172,7 @@ function generateBeo(guest: GuestRow, profile: GuestProfile | null | undefined, 
     t('guests.documents.beo.setup', { value: event?.setupStyle ?? tbd }),
     t('guests.documents.beo.menu', { value: event?.menuNotes ?? favorites }),
     t('guests.documents.beo.beverage', { value: event?.beverageNotes ?? tbd }),
-    t('guests.documents.beo.dietary', { value: guest.dietaryNotes ?? t('guests.documents.common.noneCaptured') }),
+    t('guests.documents.beo.dietary', { value: [guest.allergyNotes, guest.dietaryRegimen, guest.dietaryNotes].filter(Boolean).join(' · ') || t('guests.documents.common.noneCaptured') }),
     t('guests.documents.beo.serviceNotes', { value: event?.notes ?? guest.notes ?? tbd }),
     t('guests.documents.beo.billingNotes', { value: event?.billingNotes ?? tbd }),
   ].join('\n');
@@ -286,6 +316,25 @@ function GuestsScreenInner() {
   const [dietaryNotes, setDietaryNotes] = useState('');
   const [tags, setTags] = useState('');
   const [notes, setNotes] = useState('');
+  const [preferredContactMethod, setPreferredContactMethod] = useState('');
+  const [smsOptIn, setSmsOptIn] = useState(false);
+  const [phoneticName, setPhoneticName] = useState('');
+  const [pronouns, setPronouns] = useState('');
+  const [honorific, setHonorific] = useState('');
+  const [guestTier, setGuestTier] = useState('');
+  const [executiveRole, setExecutiveRole] = useState('');
+  const [allergyNotes, setAllergyNotes] = useState('');
+  const [allergyAirborne, setAllergyAirborne] = useState(false);
+  const [allergyRequiresChefSignoff, setAllergyRequiresChefSignoff] = useState(false);
+  const [allergyRequiresManagerTouch, setAllergyRequiresManagerTouch] = useState(false);
+  const [dietaryRegimen, setDietaryRegimen] = useState('');
+  const [waterPreference, setWaterPreference] = useState('');
+  const [beverageSignature, setBeverageSignature] = useState('');
+  const [diningPace, setDiningPace] = useState('');
+  const [serviceInteraction, setServiceInteraction] = useState('');
+  const [physicalComfort, setPhysicalComfort] = useState('');
+  const [seatingPreferences, setSeatingPreferences] = useState('');
+  const [environmentAvoidance, setEnvironmentAvoidance] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [savingGuest, setSavingGuest] = useState(false);
   const savingGuestRef = useRef(false);
@@ -364,6 +413,25 @@ function GuestsScreenInner() {
     setDietaryNotes('');
     setTags('');
     setNotes('');
+    setPreferredContactMethod('');
+    setSmsOptIn(false);
+    setPhoneticName('');
+    setPronouns('');
+    setHonorific('');
+    setGuestTier('');
+    setExecutiveRole('');
+    setAllergyNotes('');
+    setAllergyAirborne(false);
+    setAllergyRequiresChefSignoff(false);
+    setAllergyRequiresManagerTouch(false);
+    setDietaryRegimen('');
+    setWaterPreference('');
+    setBeverageSignature('');
+    setDiningPace('');
+    setServiceInteraction('');
+    setPhysicalComfort('');
+    setSeatingPreferences('');
+    setEnvironmentAvoidance('');
     setError(null);
   };
 
@@ -382,6 +450,25 @@ function GuestsScreenInner() {
     setDietaryNotes(guest.dietaryNotes ?? '');
     setTags(guest.tags.join(', '));
     setNotes(guest.notes ?? '');
+    setPreferredContactMethod(guest.preferredContactMethod ?? '');
+    setSmsOptIn(guest.smsOptIn);
+    setPhoneticName(guest.phoneticName ?? '');
+    setPronouns(guest.pronouns ?? '');
+    setHonorific(guest.honorific ?? '');
+    setGuestTier(guest.guestTier ?? '');
+    setExecutiveRole(guest.executiveRole ?? '');
+    setAllergyNotes(guest.allergyNotes ?? '');
+    setAllergyAirborne(guest.allergyAirborne);
+    setAllergyRequiresChefSignoff(guest.allergyRequiresChefSignoff);
+    setAllergyRequiresManagerTouch(guest.allergyRequiresManagerTouch);
+    setDietaryRegimen(guest.dietaryRegimen ?? '');
+    setWaterPreference(guest.waterPreference ?? '');
+    setBeverageSignature(guest.beverageSignature ?? '');
+    setDiningPace(guest.diningPace ?? '');
+    setServiceInteraction(guest.serviceInteraction ?? '');
+    setPhysicalComfort(guest.physicalComfort ?? '');
+    setSeatingPreferences(guest.seatingPreferences ?? '');
+    setEnvironmentAvoidance(guest.environmentAvoidance ?? '');
     setShowForm(true);
   }, []);
 
@@ -411,6 +498,25 @@ function GuestsScreenInner() {
         dietaryNotes: dietaryNotes.trim() || undefined,
         tags: splitTags(tags),
         notes: notes.trim() || undefined,
+        preferredContactMethod: preferredContactMethod || undefined,
+        smsOptIn,
+        phoneticName: phoneticName.trim() || undefined,
+        pronouns: pronouns.trim() || undefined,
+        honorific: honorific.trim() || undefined,
+        guestTier: guestTier || undefined,
+        executiveRole: executiveRole.trim() || undefined,
+        allergyNotes: allergyNotes.trim() || undefined,
+        allergyAirborne,
+        allergyRequiresChefSignoff,
+        allergyRequiresManagerTouch,
+        dietaryRegimen: dietaryRegimen.trim() || undefined,
+        waterPreference: waterPreference.trim() || undefined,
+        beverageSignature: beverageSignature.trim() || undefined,
+        diningPace: diningPace.trim() || undefined,
+        serviceInteraction: serviceInteraction.trim() || undefined,
+        physicalComfort: physicalComfort.trim() || undefined,
+        seatingPreferences: seatingPreferences.trim() || undefined,
+        environmentAvoidance: environmentAvoidance.trim() || undefined,
       });
       setSelectedGuestId(saved._id);
       setShowForm(false);
@@ -599,6 +705,51 @@ function GuestsScreenInner() {
                     <TextInput label={t('guests.form.preferredServer')} value={preferredServer} onChangeText={setPreferredServer} mode="outlined" style={{ flex: 1, minWidth: 135, backgroundColor: colors.surface }} />
                   </View>
                   <TextInput label={t('guests.form.dietaryNotes')} value={dietaryNotes} onChangeText={setDietaryNotes} mode="outlined" style={{ backgroundColor: colors.surface }} />
+                  <Text variant="titleSmall" style={{ fontWeight: '700' }}>{t('guests.form.identitySection')}</Text>
+                  <View style={{ flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' }}>
+                    <TextInput label={t('guests.form.honorific')} value={honorific} onChangeText={setHonorific} mode="outlined" style={{ flex: 1, minWidth: 120, backgroundColor: colors.surface }} />
+                    <TextInput label={t('guests.form.pronouns')} value={pronouns} onChangeText={setPronouns} mode="outlined" style={{ flex: 1, minWidth: 120, backgroundColor: colors.surface }} />
+                    <TextInput label={t('guests.form.phoneticName')} value={phoneticName} onChangeText={setPhoneticName} mode="outlined" style={{ flex: 1, minWidth: 150, backgroundColor: colors.surface }} />
+                  </View>
+                  <TextInput label={t('guests.form.executiveRole')} value={executiveRole} onChangeText={setExecutiveRole} mode="outlined" style={{ backgroundColor: colors.surface }} />
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                    {GUEST_TIERS.map((tier) => (
+                      <Chip key={tier} compact selected={guestTier === tier} onPress={() => setGuestTier(guestTier === tier ? '' : tier)}>{t(`guests.tiers.${tier}`)}</Chip>
+                    ))}
+                  </View>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                    {CONTACT_METHODS.map((method) => (
+                      <Chip key={method} compact selected={preferredContactMethod === method} onPress={() => setPreferredContactMethod(preferredContactMethod === method ? '' : method)}>{method}</Chip>
+                    ))}
+                  </View>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm }}>
+                    <Text style={{ color: colors.charcoal, flex: 1 }}>{t('guests.form.smsOptIn')}</Text>
+                    <Switch value={smsOptIn} onValueChange={setSmsOptIn} color={colors.primary} />
+                  </View>
+                  <Text variant="titleSmall" style={{ fontWeight: '700' }}>{t('guests.form.safetySection')}</Text>
+                  <TextInput label={t('guests.form.allergyNotes')} value={allergyNotes} onChangeText={setAllergyNotes} mode="outlined" multiline style={{ backgroundColor: colors.surface }} />
+                  <TextInput label={t('guests.form.dietaryRegimen')} value={dietaryRegimen} onChangeText={setDietaryRegimen} mode="outlined" style={{ backgroundColor: colors.surface }} />
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm }}>
+                    <Text style={{ color: colors.charcoal, flex: 1 }}>{t('guests.form.allergyAirborne')}</Text>
+                    <Switch value={allergyAirborne} onValueChange={setAllergyAirborne} color={colors.danger} />
+                  </View>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm }}>
+                    <Text style={{ color: colors.charcoal, flex: 1 }}>{t('guests.form.allergyChef')}</Text>
+                    <Switch value={allergyRequiresChefSignoff} onValueChange={setAllergyRequiresChefSignoff} color={colors.danger} />
+                  </View>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm }}>
+                    <Text style={{ color: colors.charcoal, flex: 1 }}>{t('guests.form.allergyManager')}</Text>
+                    <Switch value={allergyRequiresManagerTouch} onValueChange={setAllergyRequiresManagerTouch} color={colors.danger} />
+                  </View>
+                  <Text variant="titleSmall" style={{ fontWeight: '700' }}>{t('guests.form.serviceSection')}</Text>
+                  <TextInput label={t('guests.form.waterPreference')} value={waterPreference} onChangeText={setWaterPreference} mode="outlined" style={{ backgroundColor: colors.surface }} />
+                  <TextInput label={t('guests.form.beverageSignature')} value={beverageSignature} onChangeText={setBeverageSignature} mode="outlined" style={{ backgroundColor: colors.surface }} />
+                  <TextInput label={t('guests.form.diningPace')} value={diningPace} onChangeText={setDiningPace} mode="outlined" style={{ backgroundColor: colors.surface }} />
+                  <TextInput label={t('guests.form.serviceInteraction')} value={serviceInteraction} onChangeText={setServiceInteraction} mode="outlined" multiline style={{ backgroundColor: colors.surface }} />
+                  <TextInput label={t('guests.form.physicalComfort')} value={physicalComfort} onChangeText={setPhysicalComfort} mode="outlined" style={{ backgroundColor: colors.surface }} />
+                  <Text variant="titleSmall" style={{ fontWeight: '700' }}>{t('guests.form.seatingSection')}</Text>
+                  <TextInput label={t('guests.form.seatingPreferences')} value={seatingPreferences} onChangeText={setSeatingPreferences} mode="outlined" multiline style={{ backgroundColor: colors.surface }} />
+                  <TextInput label={t('guests.form.environmentAvoidance')} value={environmentAvoidance} onChangeText={setEnvironmentAvoidance} mode="outlined" multiline style={{ backgroundColor: colors.surface }} />
                   <TextInput label={t('guests.form.tags')} value={tags} onChangeText={setTags} mode="outlined" style={{ backgroundColor: colors.surface }} />
                   <TextInput label={t('guests.form.notes')} value={notes} onChangeText={setNotes} mode="outlined" multiline style={{ backgroundColor: colors.surface }} />
                   <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm }}>
@@ -701,7 +852,17 @@ const GuestListItem = memo(function GuestListItem({ guest, isSelected, onOpen, o
 
 function GuestProfilePanel({ guest, profile, onEdit, onDelete }: { guest: GuestRow; profile: GuestProfile | null | undefined; onEdit: () => void; onDelete: () => void }) {
   const { t } = useI18n();
+  const { venue } = useVenueAuth();
+  const addNote = useMutation(api.guests.addGuestNote);
+  const removeNote = useMutation(api.guests.removeGuestNote);
+  const addHousehold = useMutation(api.guests.addHouseholdLink);
+  const removeHousehold = useMutation(api.guests.removeHouseholdLink);
   const [generatedDocument, setGeneratedDocument] = useState('');
+  const [noteKind, setNoteKind] = useState<(typeof NOTE_KINDS)[number]>('fact');
+  const [noteText, setNoteText] = useState('');
+  const [noteDate, setNoteDate] = useState('');
+  const [linkGuestId, setLinkGuestId] = useState('');
+  const [linkRelationship, setLinkRelationship] = useState('spouse');
   const timeline = useMemo(() => {
     const reservations = (profile?.reservations ?? []).map((reservation) => ({
       id: reservation._id,
@@ -748,15 +909,27 @@ function GuestProfilePanel({ guest, profile, onEdit, onDelete }: { guest: GuestR
             <View style={{ flex: 1 }}>
               <Text variant="headlineSmall" style={{ fontWeight: '800', color: colors.primary }}>{guest.fullName}</Text>
               <Text style={{ color: colors.muted }}>{guest.phone || t('guests.detail.noPhone')} · {guest.email || t('guests.detail.noEmail')}</Text>
-              {guest.company ? <Text style={{ color: colors.muted }}>{guest.company}</Text> : null}
+              {guest.company ? <Text style={{ color: colors.muted }}>{guest.company}{guest.executiveRole ? ` · ${guest.executiveRole}` : ''}</Text> : null}
             </View>
-            <Chip>{guest.lifecycleStage.toUpperCase()}</Chip>
+            <Chip>{(guest.guestTier ?? guest.lifecycleStage).toUpperCase()}</Chip>
           </View>
+          {guest.allergyNotes ? (
+            <Text style={{ color: colors.danger, fontWeight: '800' }}>
+              {guest.allergyNotes}
+              {guest.allergyAirborne ? ' · airborne' : ''}
+              {guest.allergyRequiresChefSignoff ? ' · chef sign-off' : ''}
+              {guest.allergyRequiresManagerTouch ? ' · manager touch' : ''}
+            </Text>
+          ) : null}
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
             <Metric label={t('guests.detail.relationshipScore')} value={String(scoreGuest(guest))} />
             <Metric label={t('guests.detail.lifetimeSpend')} value={formatMoney(guest.totalSpendCents)} />
             <Metric label={t('guests.detail.avgCheck')} value={formatMoney(guest.averageSpendCents)} />
             <Metric label={t('guests.detail.visits')} value={String(guest.visitCount)} />
+            <Metric label={t('guests.detail.visits90')} value={String(guest.visitsLast90Days ?? 0)} />
+            <Metric label={t('guests.detail.avgTip')} value={formatMoney(guest.averageTipCents ?? 0)} />
+            <Metric label={t('guests.detail.noShows')} value={String(guest.noShowCount ?? 0)} />
+            <Metric label={t('guests.detail.cancels')} value={String(guest.cancellationCount ?? 0)} />
           </View>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
             {guest.tags.length > 0 ? guest.tags.map((tag) => <Chip compact key={tag}>{tag}</Chip>) : <Chip compact>{t('guests.detail.noTags')}</Chip>}
@@ -789,6 +962,22 @@ function GuestProfilePanel({ guest, profile, onEdit, onDelete }: { guest: GuestR
           <Preference label={t('guests.preferences.birthday')} value={guest.birthday} />
           <Preference label={t('guests.preferences.source')} value={guest.source} />
           <Preference label={t('guests.preferences.dietaryNotes')} value={guest.dietaryNotes} />
+          <Preference label={t('guests.preferences.guestTier')} value={guest.guestTier} />
+          <Preference label={t('guests.preferences.honorific')} value={guest.honorific} />
+          <Preference label={t('guests.preferences.pronouns')} value={guest.pronouns} />
+          <Preference label={t('guests.preferences.phoneticName')} value={guest.phoneticName} />
+          <Preference label={t('guests.preferences.contact')} value={guest.preferredContactMethod} />
+          <Preference label={t('guests.preferences.sms')} value={guest.smsOptIn ? t('guests.preferences.optedIn') : t('guests.preferences.notOptedIn')} />
+          <Preference label={t('guests.preferences.executiveRole')} value={guest.executiveRole} />
+          <Preference label={t('guests.preferences.allergyNotes')} value={guest.allergyNotes} />
+          <Preference label={t('guests.preferences.dietaryRegimen')} value={guest.dietaryRegimen} />
+          <Preference label={t('guests.preferences.waterPreference')} value={guest.waterPreference} />
+          <Preference label={t('guests.preferences.beverageSignature')} value={guest.beverageSignature} />
+          <Preference label={t('guests.preferences.diningPace')} value={guest.diningPace} />
+          <Preference label={t('guests.preferences.serviceInteraction')} value={guest.serviceInteraction} />
+          <Preference label={t('guests.preferences.physicalComfort')} value={guest.physicalComfort} />
+          <Preference label={t('guests.preferences.seatingPreferences')} value={guest.seatingPreferences} />
+          <Preference label={t('guests.preferences.environmentAvoidance')} value={guest.environmentAvoidance} />
           <Preference label={t('guests.preferences.marketing')} value={guest.marketingOptIn ? t('guests.preferences.optedIn') : t('guests.preferences.notOptedIn')} />
           {guest.notes ? <Text style={{ color: colors.charcoal }}>{guest.notes}</Text> : null}
         </Card.Content>
@@ -813,6 +1002,39 @@ function GuestProfilePanel({ guest, profile, onEdit, onDelete }: { guest: GuestR
               ))}
             </View>
           ) : null}
+        </Card.Content>
+      </Card>
+
+      <Card style={{ backgroundColor: colors.surface, borderRadius: radius.sharp }}>
+        <Card.Content style={{ gap: spacing.sm }}>
+          <Text variant="titleMedium" style={{ fontWeight: '700' }}>{t('guests.crmLog.title')}</Text>
+          <Text style={{ color: colors.muted }}>{t('guests.crmLog.empty')}</Text>
+          {(profile?.household ?? []).map((link) => (
+            <View key={link.id} style={{ flexDirection: 'row', justifyContent: 'space-between', gap: spacing.sm }}>
+              <Text style={{ color: colors.charcoal, flex: 1 }}>{link.otherGuestName} · {link.relationship}</Text>
+              <Button compact mode="text" textColor={colors.danger} onPress={() => void removeHousehold({ guestId: guest._id, linkId: link.id })}>{t('guests.detail.delete')}</Button>
+            </View>
+          ))}
+          <View style={{ flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' }}>
+            <TextInput label={t('guests.crmLog.linkGuest')} value={linkGuestId} onChangeText={setLinkGuestId} mode="outlined" style={{ flex: 1, minWidth: 140, backgroundColor: colors.surface }} />
+            <TextInput label={t('guests.crmLog.relationship')} value={linkRelationship} onChangeText={setLinkRelationship} mode="outlined" style={{ flex: 1, minWidth: 120, backgroundColor: colors.surface }} />
+            <Button compact mode="outlined" textColor={colors.primary} disabled={!venue?.id || !linkGuestId.trim()} onPress={() => void addHousehold({ guestId: guest._id, otherGuestId: linkGuestId.trim(), relationship: linkRelationship || 'other' }).then(() => setLinkGuestId(''))}>{t('guests.crmLog.link')}</Button>
+          </View>
+          {(profile?.crmNotes ?? []).map((note) => (
+            <View key={note.id} style={{ borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.sm, gap: 4 }}>
+              <Text style={{ fontWeight: '700' }}>{note.kind}{note.occurredOn ? ` · ${note.occurredOn}` : ''}{note.authorName ? ` · ${note.authorName}` : ''}</Text>
+              <Text style={{ color: colors.charcoal }}>{note.text}</Text>
+              <Button compact mode="text" textColor={colors.danger} onPress={() => void removeNote({ guestId: guest._id, noteId: note.id })}>{t('guests.detail.delete')}</Button>
+            </View>
+          ))}
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+            {NOTE_KINDS.map((kind) => (
+              <Chip key={kind} compact selected={noteKind === kind} onPress={() => setNoteKind(kind)}>{t(`guests.crmLog.kinds.${kind}`)}</Chip>
+            ))}
+          </View>
+          <TextInput label={t('guests.crmLog.date')} value={noteDate} onChangeText={setNoteDate} mode="outlined" style={{ backgroundColor: colors.surface }} />
+          <TextInput label={t('guests.crmLog.text')} value={noteText} onChangeText={setNoteText} mode="outlined" multiline style={{ backgroundColor: colors.surface }} />
+          <Button compact mode="contained" buttonColor={colors.primary} disabled={!noteText.trim()} onPress={() => void addNote({ guestId: guest._id, kind: noteKind, text: noteText.trim(), occurredOn: noteDate.trim() || undefined }).then(() => { setNoteText(''); setNoteDate(''); })}>{t('guests.crmLog.add')}</Button>
         </Card.Content>
       </Card>
 

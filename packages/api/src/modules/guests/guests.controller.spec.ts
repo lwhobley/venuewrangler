@@ -34,6 +34,18 @@ function makeController() {
     waitlist: {
       updateMany: vi.fn().mockResolvedValue({ count: 0 }),
     },
+    guestCrmNote: {
+      findMany: vi.fn().mockResolvedValue([]),
+      findFirst: vi.fn().mockResolvedValue(null),
+      create: vi.fn().mockResolvedValue({ id: 'note-1' }),
+      delete: vi.fn().mockResolvedValue({}),
+    },
+    guestHouseholdLink: {
+      findMany: vi.fn().mockResolvedValue([]),
+      findFirst: vi.fn().mockResolvedValue(null),
+      create: vi.fn().mockResolvedValue({ id: 'link-1' }),
+      delete: vi.fn().mockResolvedValue({}),
+    },
     rateLimitBucket: {
       deleteMany: vi.fn().mockResolvedValue({ count: 1 }),
     },
@@ -381,6 +393,56 @@ describe('GuestsController', () => {
         data: expect.objectContaining({ fullName: 'Updated Name' }),
       });
       expect(result).toEqual({ id: 'guest-1' });
+    });
+
+    it('persists allergy hard-stops and service preferences', async () => {
+      const { controller, prisma } = makeController();
+
+      await controller.upsertGuest(managerScope, {
+        fullName: 'Alex Guest',
+        allergyNotes: 'Severe tree nut allergy',
+        allergyAirborne: true,
+        allergyRequiresChefSignoff: true,
+        dietaryRegimen: 'pescatarian',
+        waterPreference: 'Sparkling, no ice, two limes',
+        guestTier: 'vvip',
+      } as any);
+
+      expect(prisma.guest.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          allergyNotes: 'Severe tree nut allergy',
+          allergyAirborne: true,
+          allergyRequiresChefSignoff: true,
+          dietaryRegimen: 'pescatarian',
+          waterPreference: 'Sparkling, no ice, two limes',
+          guestTier: 'vvip',
+        }),
+      });
+    });
+  });
+
+  describe('guest CRM notes', () => {
+    it('creates a dated note attributed to the manager', async () => {
+      const { controller, prisma } = makeController();
+      prisma.guest.findFirst.mockResolvedValue(makeGuestRow());
+      const scope = { ...managerScope, fullName: 'Capt. Sarah' };
+
+      const result = await controller.addGuestNote(scope, 'guest-1', {
+        kind: 'incident',
+        text: 'Steak served well-done instead of medium-rare. Comped dessert.',
+        occurredOn: '2026-04-12',
+      } as any);
+
+      expect(prisma.guestCrmNote.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          venueId: 'venue-1',
+          guestId: 'guest-1',
+          kind: 'incident',
+          authorName: 'Capt. Sarah',
+          occurredOn: '2026-04-12',
+        }),
+      });
+      expect(result).toEqual({ id: 'note-1' });
     });
   });
 

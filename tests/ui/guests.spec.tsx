@@ -6,8 +6,13 @@ function guest(overrides: Record<string, unknown> = {}) {
   return {
     _id: 'g1', fullName: 'Casey Nguyen', phone: '555-0100', email: 'casey@example.com', lifecycleStage: 'regular',
     source: null, birthday: null, company: null, marketingOptIn: false, favoriteTable: null, preferredServer: null,
-    dietaryNotes: null, tags: [], notes: null, reservationCount: 2, visitCount: 5, lastVisitAt: null,
-    upcomingReservationAt: null, totalSpendCents: 12000, averageSpendCents: 2400, daysSinceLastVisit: 10,
+    dietaryNotes: null, tags: [], notes: null, reservationCount: 2, visitCount: 5, visitsLast90Days: 2, lastVisitAt: null,
+    upcomingReservationAt: null, totalSpendCents: 12000, averageSpendCents: 2400, totalTipCents: 0, averageTipCents: 0,
+    noShowCount: 0, cancellationCount: 0, daysSinceLastVisit: 10,
+    preferredContactMethod: null, smsOptIn: false, phoneticName: null, pronouns: null, honorific: null, guestTier: null,
+    executiveRole: null, allergyNotes: null, allergyAirborne: false, allergyRequiresChefSignoff: false,
+    allergyRequiresManagerTouch: false, dietaryRegimen: null, waterPreference: null, beverageSignature: null,
+    diningPace: null, serviceInteraction: null, physicalComfort: null, seatingPreferences: null, environmentAvoidance: null,
     ...overrides,
   };
 }
@@ -50,7 +55,7 @@ vi.mock('../../components/AppCard', () => ({ SectionHeader: ({ title }: any) => 
 vi.mock('../../components/CrmSalesWorkspace', () => ({ CrmSalesWorkspace: () => null }));
 vi.mock('../../lib/useVenueAuth', () => ({ useVenueAuth: () => ({ venue: state.venue, isReady: true, canManage: state.canManage }) }));
 vi.mock('../../lib/railway-api', () => ({
-  api: { guests: { listGuests: 'listGuests', upsertGuest: 'upsertGuest', ingestLeads: 'ingestLeads', removeGuest: 'removeGuest', getGuestProfile: 'getGuestProfile' } },
+  api: { guests: { listGuests: 'listGuests', upsertGuest: 'upsertGuest', ingestLeads: 'ingestLeads', removeGuest: 'removeGuest', getGuestProfile: 'getGuestProfile', addGuestNote: 'addGuestNote', removeGuestNote: 'removeGuestNote', addHouseholdLink: 'addHouseholdLink', removeHouseholdLink: 'removeHouseholdLink' } },
 }));
 vi.mock('../../lib/railway-hooks', () => ({
   useQuery: (ref: string) => (ref === 'listGuests' ? state.guestList : undefined),

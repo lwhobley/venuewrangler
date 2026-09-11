@@ -374,6 +374,8 @@ model Venue {
   schedulePublications          SchedulePublication[]
   staffRequests                 StaffRequest[]
   guests                        Guest[]
+  guestHouseholdLinks           GuestHouseholdLink[]
+  guestCrmNotes                 GuestCrmNote[]
   reservations                  Reservation[]
   floorPlans                    FloorPlan[]
   floorTables                   FloorTable[]
@@ -1021,6 +1023,25 @@ model Guest {
   dietaryNotes    String?
   tags            String[]
   notes           String?
+  preferredContactMethod String?
+  smsOptIn               Boolean?
+  phoneticName           String?
+  pronouns               String?
+  honorific              String?
+  guestTier              String?
+  executiveRole          String?
+  allergyNotes           String?
+  allergyAirborne        Boolean?
+  allergyRequiresChefSignoff Boolean?
+  allergyRequiresManagerTouch Boolean?
+  dietaryRegimen         String?
+  waterPreference        String?
+  beverageSignature      String?
+  diningPace             String?
+  serviceInteraction     String?
+  physicalComfort        String?
+  seatingPreferences     String?
+  environmentAvoidance   String?
   nameLower       String?
   deletedAt       DateTime?
   createdAt       DateTime      @default(now())
@@ -1029,6 +1050,9 @@ model Guest {
   reservations    Reservation[]
   waitlistEntries Waitlist[]
   crmLeads        CrmLead[]
+  householdLinksFrom GuestHouseholdLink[] @relation("GuestHouseholdFrom")
+  householdLinksTo   GuestHouseholdLink[] @relation("GuestHouseholdTo")
+  crmNotes           GuestCrmNote[]
 
   @@index([venueId])
   // VW-14: every guest lookup is already tenant-scoped, so a global
@@ -1040,6 +1064,38 @@ model Guest {
   @@index([venueId, phone])
   @@index([venueId, email])
   @@index([venueId, nameLower])
+  @@index([venueId, guestTier])
+}
+
+model GuestHouseholdLink {
+  id           String   @id @default(cuid())
+  venueId      String
+  fromGuestId  String
+  toGuestId    String
+  relationship String
+  createdAt    DateTime @default(now())
+  venue        Venue    @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  fromGuest    Guest    @relation("GuestHouseholdFrom", fields: [fromGuestId], references: [id], onDelete: Cascade)
+  toGuest      Guest    @relation("GuestHouseholdTo", fields: [toGuestId], references: [id], onDelete: Cascade)
+
+  @@unique([fromGuestId, toGuestId])
+  @@index([venueId])
+  @@index([toGuestId])
+}
+
+model GuestCrmNote {
+  id         String   @id @default(cuid())
+  venueId    String
+  guestId    String
+  kind       String
+  text       String
+  occurredOn String?
+  authorName String?
+  createdAt  DateTime @default(now())
+  venue      Venue    @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  guest      Guest    @relation(fields: [guestId], references: [id], onDelete: Cascade)
+
+  @@index([venueId, guestId, createdAt])
 }
 
 model Reservation {
