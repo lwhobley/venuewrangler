@@ -62,5 +62,20 @@ ALTER TABLE "GuestCrmNote" ADD CONSTRAINT "GuestCrmNote_guestId_fkey" FOREIGN KE
 
 ALTER TABLE "GuestCrmNote" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "GuestHouseholdLink" ENABLE ROW LEVEL SECURITY;
-REVOKE ALL ON "GuestCrmNote" FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON "GuestHouseholdLink" FROM PUBLIC, anon, authenticated;
+
+REVOKE ALL ON TABLE "GuestCrmNote" FROM PUBLIC;
+REVOKE ALL ON TABLE "GuestHouseholdLink" FROM PUBLIC;
+
+-- Supabase provides anon/authenticated roles; plain Postgres CI does not.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+    REVOKE ALL ON TABLE "GuestCrmNote" FROM anon;
+    REVOKE ALL ON TABLE "GuestHouseholdLink" FROM anon;
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
+    REVOKE ALL ON TABLE "GuestCrmNote" FROM authenticated;
+    REVOKE ALL ON TABLE "GuestHouseholdLink" FROM authenticated;
+  END IF;
+END
+$$;
