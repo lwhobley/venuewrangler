@@ -26,6 +26,7 @@ import { assertWithinSharedRateLimit } from '../../common/rate-limit';
 import { publicWebOrigin } from '../../common/public-web-url';
 import { sanitizeForEmail } from '../../common/sanitize-email-text';
 import { EmailService } from '../../email/email.service';
+import { inviteCheckEmailTemplate, joinRequestDecidedTemplate } from '../../email/templates/workforce';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SkipVenueScope } from '../../venue/skip-venue-scope.decorator';
 
@@ -190,10 +191,13 @@ export class WorkforceController {
     void this.email
       .sendOrThrow({
         to: email,
-        subject: `Your Venue Wrangler invitation for ${venueName}`,
-        text: outcome.emailSent
-          ? `Your email address has been invited to join ${venueName} on Venue Wrangler as ${outcome.jobTitle}.\n\nCreate your account using this secure link:\n${signupUrl}\n\nThis link expires on ${newExpiresAt.toLocaleDateString('en-US')}. If you did not expect this invitation, you can ignore this email.\n\nQuestions? support@venuewrangler.com\n\n— The Venue Wrangler Team`
-          : `An active invitation already exists for this email address at ${venueName}. Use the secure link in the original invitation email, or ask your manager to send a new invitation.\n\nIf you did not request this reminder, you can ignore it.\n\nQuestions? support@venuewrangler.com\n\n— The Venue Wrangler Team`,
+        ...inviteCheckEmailTemplate({
+          venueName,
+          jobTitle: outcome.jobTitle,
+          signupUrl,
+          expiresAt: newExpiresAt.toLocaleDateString('en-US'),
+          isNewInvite: outcome.emailSent,
+        }),
       })
       .catch((err: unknown) => {
         this.logger.error(`Invite-check email failed for a venue invite: ${err instanceof Error ? err.message : String(err)}`);
@@ -512,23 +516,9 @@ export class WorkforceController {
     const to = request.user.email;
     if (!to) return;
     const name = request.user.profiles?.[0]?.fullName ?? 'there';
-    const statusText = decision === 'approved' ? 'Approved' : 'Rejected';
     void this.email.send({
       to,
-      subject: `Your request to join ${request.venue.name} was ${statusText}`,
-      text:
-        `Hi ${name},\n\n` +
-        `Your request to join ${request.venue.name} has been ${statusText.toLowerCase()} by a manager.\n\n` +
-        `Request Details\n` +
-        `Detail\tInfo\n` +
-        `Venue\t${request.venue.name}\n` +
-        `Status\t${statusText}\n` +
-        (note ? `Manager Note\t${note}\n\n` : '\n') +
-        (decision === 'approved'
-          ? `You can now log in to the Venue Wrangler app to access your team dashboard and start viewing your shifts.\n\n`
-          : `Please reach out to your venue manager directly if you have any questions or require further assistance.\n\n`) +
-        `Questions? support@venuewrangler.com\n\n` +
-        `— The Venue Wrangler Team`,
+      ...joinRequestDecidedTemplate({ fullName: name, venueName: request.venue.name, approved: decision === 'approved', note }),
     });
   }
 

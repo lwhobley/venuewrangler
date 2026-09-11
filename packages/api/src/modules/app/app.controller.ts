@@ -23,6 +23,7 @@ import { EmailService } from '../../email/email.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { runWithoutTenant } from '../../prisma/tenant-context';
 import { mapClockEntry, mapProfile, mapShift, mapVenue, toMs } from './app-mappers';
+import { accountDeletedTemplate, accountUpdatedTemplate, teamInviteTemplate } from '../../email/templates/account';
 import { ProfileService } from './profile.service';
 import { ACTIVE_MEMBERSHIP, isActiveMembership } from '../../common/membership';
 import { syncTeamMemberCount } from '../../common/team-sync';
@@ -358,19 +359,12 @@ export class AppController {
     const venueName = profile.venue?.name ?? 'your venue';
     void this.email.send({
       to: profile.email,
-      subject: 'Your Venue Wrangler Account Was Updated',
-      text:
-        `Hi ${profile.fullName},\n\n` +
-        `Your Venue Wrangler account profile was successfully updated. Here are your current profile details:\n\n` +
-        `Updated Profile Details\n` +
-        `Detail\tInfo\n` +
-        `Name\t${profile.fullName}\n` +
-        `Role\t${profile.role}\n` +
-        `Job Title\t${profile.jobTitle}\n` +
-        (profile.venueId ? `Venue\t${venueName}\n` : '') + '\n' +
-        `If you have any questions or did not authorize this, please contact support.\n\n` +
-        `Questions? support@venuewrangler.com\n\n` +
-        `— The Venue Wrangler Team`,
+      ...accountUpdatedTemplate({
+        fullName: profile.fullName,
+        role: profile.role,
+        jobTitle: profile.jobTitle,
+        venueName: profile.venueId ? venueName : null,
+      }),
     });
 
     const venues = await this.profiles.listUserVenues(user.sub);
@@ -1053,19 +1047,7 @@ export class AppController {
     if (email) {
       void this.email.send({
         to: email,
-        subject: `Invitation: Join the Team at ${venueName} on Venue Wrangler`,
-        text:
-          `Hi there,\n\n` +
-          `You have been invited by ${profile.fullName} to join the team at ${venueName} on Venue Wrangler.\n\n` +
-          `To accept your invitation and join the venue:\n\n` +
-          `1. Open the Venue Wrangler app on your phone and choose "Join a team"\n` +
-          `2. Enter the following invite code when prompted:\n\n` +
-          `   ${code}\n\n` +
-          `Or just tap this link on your phone:\n` +
-          `${inviteUrl}\n\n` +
-          `Note: This invitation is valid for 7 days.\n\n` +
-          `Questions? support@venuewrangler.com\n\n` +
-          `— The Venue Wrangler Team`,
+        ...teamInviteTemplate({ inviterName: profile.fullName, venueName, code, inviteUrl }),
       });
     }
     return {
@@ -1555,16 +1537,7 @@ export class AppController {
     if (deletion?.email) {
       void this.email.send({
         to: deletion.email,
-        subject: 'Your Venue Wrangler Account Has Been Deleted',
-        text:
-          `Hi ${deletion.name},\n\n` +
-          `Your Venue Wrangler account has been successfully deleted.\n\n` +
-          (deletion.deletedVenueCount > 0
-            ? `${deletion.deletedVenueCount} owned venue${deletion.deletedVenueCount === 1 ? '' : 's'} and associated operational data were also deleted. Media deletion is processed by a durable purge queue.\n\n`
-            : `Any legally retained timeclock records have been de-identified and remain available to the venue only for wage and compliance purposes.\n\n`) +
-          `Thank you for using Venue Wrangler.\n\n` +
-          `Questions? support@venuewrangler.com\n\n` +
-          `— The Venue Wrangler Team`,
+        ...accountDeletedTemplate({ fullName: deletion.name, deletedVenueCount: deletion.deletedVenueCount }),
       });
     }
     return { ok: true };

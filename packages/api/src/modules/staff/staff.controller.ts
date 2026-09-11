@@ -20,6 +20,7 @@ import type { VenueScopedRequest } from '../../venue/venue-scope.interceptor';
 import { syncTeamMemberCount } from '../../common/team-sync';
 import { todayInZone, weekStartFor } from '../../common/pay-period';
 import { AuditService } from '../audit/audit.service';
+import { rosterInvitedTemplate, rosterProfileUpdatedTemplate } from '../../email/templates/roster';
 
 type Scope = VenueScopedRequest['venueScope'];
 
@@ -158,18 +159,7 @@ export class StaffController {
       });
       void this.email.send({
         to: updated.email,
-        subject: 'Your Venue Wrangler Profile Has Been Updated',
-        text:
-          `Hi ${updated.fullName},\n\n` +
-          `Your team profile at ${scope.venueName} has been updated. Here are your current profile details:\n\n` +
-          `Updated Profile Details\n` +
-          `Detail\tInfo\n` +
-          `Name\t${updated.fullName}\n` +
-          `Role\t${updated.role}\n` +
-          `Job Title\t${updated.jobTitle}\n\n` +
-          `If you did not request these changes or have any questions, please contact your venue administrator.\n\n` +
-          `Questions? support@venuewrangler.com\n\n` +
-          `— The Venue Wrangler Team`,
+        ...rosterProfileUpdatedTemplate({ fullName: updated.fullName, venueName: scope.venueName, role: updated.role, jobTitle: updated.jobTitle }),
       });
       return mapProfile(updated);
     }
@@ -212,16 +202,7 @@ export class StaffController {
     });
     void this.email.send({
       to: created.email,
-      subject: `Invitation: Join the Team at ${scope.venueName} on Venue Wrangler`,
-      text:
-        `Hi ${created.fullName},\n\n` +
-        `Welcome! You have been added to the team at ${scope.venueName} as a ${created.jobTitle}.\n\n` +
-        `To view your schedule, request unavailable days, and request shift swaps, please join the venue using the steps below:\n\n` +
-        `1. Create a Venue Wrangler account or sign in using your email: ${created.email}\n` +
-        `2. You will be automatically linked to the venue and can access your dashboard right away.\n\n` +
-        `We're excited to have you on board!\n\n` +
-        `Questions? support@venuewrangler.com\n\n` +
-        `— The Venue Wrangler Team`,
+      ...rosterInvitedTemplate({ fullName: created.fullName, venueName: scope.venueName, jobTitle: created.jobTitle, email: created.email }),
     });
     return mapProfile(created);
   }

@@ -15,6 +15,7 @@ import { runWithoutTenant } from '../../prisma/tenant-context';
 import { mapProfile } from './app-mappers';
 import { ProfileService } from './profile.service';
 import { StaffImportParserService } from './staff-import-parser.service';
+import { rosterInvitedTemplate, rosterProfileUpdatedTemplate } from '../../email/templates/roster';
 
 const MAX_STAFF_IMPORT_ROWS = 100;
 const AI_PARSE_RATE_LIMIT_MAX = 20;
@@ -367,26 +368,9 @@ export class AppStaffController {
     const venueName = viewer.venue?.name ?? 'your venue';
     void this.email.send({
       to: row.email,
-      subject: existing ? 'Your Venue Wrangler Profile Has Been Updated' : `Invitation: Join the Team at ${venueName} on Venue Wrangler`,
-      text: existing
-        ? `Hi ${row.fullName},\n\n` +
-          `Your team profile for ${venueName} was updated. Here are your current profile details:\n\n` +
-          `Updated Profile Details\n` +
-          `Detail\tInfo\n` +
-          `Name\t${row.fullName}\n` +
-          `Role\t${row.role}\n` +
-          `Job Title\t${row.jobTitle}\n\n` +
-          `If you did not request these changes or have any questions, please contact your venue administrator.\n\n` +
-          `Questions? support@venuewrangler.com\n\n` +
-          `— The Venue Wrangler Team`
-        : `Hi ${row.fullName},\n\n` +
-          `Welcome! You have been added to the team at ${venueName} as a ${row.jobTitle}.\n\n` +
-          `To view your schedule, request unavailable days, and request shift swaps, please join the venue using the steps below:\n\n` +
-          `1. Create a Venue Wrangler account or sign in using your email: ${row.email}\n` +
-          `2. You will be automatically linked to the venue and can access your dashboard right away.\n\n` +
-          `We're excited to have you on board!\n\n` +
-          `Questions? support@venuewrangler.com\n\n` +
-          `— The Venue Wrangler Team`,
+      ...(existing
+        ? rosterProfileUpdatedTemplate({ fullName: row.fullName, venueName, role: row.role, jobTitle: row.jobTitle })
+        : rosterInvitedTemplate({ fullName: row.fullName, venueName, jobTitle: row.jobTitle, email: row.email })),
     });
     return row;
   }

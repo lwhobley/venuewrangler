@@ -20,6 +20,7 @@ import { runWithoutTenant } from '../prisma/tenant-context';
 import { isActiveMembership } from '../common/membership';
 import { AuthService } from './auth.service';
 import { AuditService } from '../modules/audit/audit.service';
+import { passwordChangedTemplate, resetPasswordTemplate, verifyEmailTemplate } from '../email/templates/auth';
 
 const TRIAL_DURATION_MS = 14 * 24 * 60 * 60 * 1000;
 const EMAIL_CODE_TTL_MS = 24 * 60 * 60 * 1000;
@@ -370,16 +371,7 @@ export class AuthController {
       select: { email: true },
     });
     if (account?.email) {
-      void this.email.send({
-        to: account.email,
-        subject: 'Security Alert: Your Venue Wrangler Password Has Been Changed',
-        text:
-          `Hi there,\n\n` +
-          `Your Venue Wrangler account password was successfully changed.\n\n` +
-          `If you did not make this change, please reset your password immediately in the app and contact our support team at support@venuewrangler.com to secure your account.\n\n` +
-          `Questions? support@venuewrangler.com\n\n` +
-          `— The Venue Wrangler Team`,
-      });
+      void this.email.send({ to: account.email, ...passwordChangedTemplate() });
     }
     void this.audit?.record({
       venueId: user.venueId,
@@ -502,15 +494,7 @@ export class AuthController {
       queueMicrotask(() => {
         void this.email.send({
           to: accountEmail,
-          subject: 'Reset Your Venue Wrangler Password',
-          text:
-            `Hi ${account.profiles?.[0]?.fullName ?? 'there'},\n\n` +
-            `We received a request to reset the password for your Venue Wrangler account.\n\n` +
-            `To complete your password reset, enter the following code when prompted in the app:\n\n` +
-            `   ${code}\n\n` +
-            `Note: This code is valid for 60 minutes. If you did not request a password reset, you can safely ignore this email — your account remains secure.\n\n` +
-            `Questions? support@venuewrangler.com\n\n` +
-            `— The Venue Wrangler Team`,
+          ...resetPasswordTemplate({ fullName: account.profiles?.[0]?.fullName, code }),
         }).catch((error: any) => {
           this.logger.error(`Password reset email failed for user ${account.id}: ${error?.message ?? String(error)}`);
         });
@@ -749,15 +733,7 @@ export class AuthController {
     });
     await this.email.sendOrThrow({
       to: email,
-      subject: 'Verify Your Venue Wrangler Email Address',
-      text:
-        `Hi ${fullName?.trim() || 'there'},\n\n` +
-        `Thank you for signing up for Venue Wrangler!\n\n` +
-        `To complete your registration and verify your email address, please enter the following verification code in the app:\n\n` +
-        `   ${code}\n\n` +
-        `Note: This verification code is valid for 24 hours.\n\n` +
-        `Questions? support@venuewrangler.com\n\n` +
-        `— The Venue Wrangler Team`,
+      ...verifyEmailTemplate({ fullName, code }),
     });
   }
 }
