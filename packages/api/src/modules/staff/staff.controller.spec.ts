@@ -327,7 +327,7 @@ describe('StaffController', () => {
       } as any);
 
       expect(email.send).toHaveBeenCalledWith(
-        expect.objectContaining({ to: 'staffer@x.com', subject: expect.stringContaining('Profile Has Been Updated') }),
+        expect.objectContaining({ to: 'staffer@x.com', subject: expect.stringContaining('profile was updated') }),
       );
     });
   });
@@ -355,7 +355,7 @@ describe('StaffController', () => {
       });
       expect(result).toEqual(expect.objectContaining({ fullName: 'New Hire' }));
       expect(email.send).toHaveBeenCalledWith(
-        expect.objectContaining({ to: 'new.hire@x.com', subject: expect.stringContaining('Invitation') }),
+        expect.objectContaining({ to: 'new.hire@x.com', subject: expect.stringContaining('added to the team') }),
       );
     });
 
