@@ -244,26 +244,124 @@ const GUEST_LAST = [
   'Cruz', 'Mendoza', 'Aguilar', 'Castillo', 'Freeman', 'Dixon', 'Porter', 'Holloway', 'Booker', 'Whitfield',
 ];
 
-const MENU = [
-  { name: 'Jollof Rice', category: 'entree', priceCents: 2400 },
-  { name: 'Suya Platter', category: 'entree', priceCents: 2800 },
-  { name: 'Egusi Soup & Pounded Yam', category: 'entree', priceCents: 3200 },
-  { name: 'Grilled Tilapia', category: 'entree', priceCents: 3400 },
-  { name: 'Pepper Soup', category: 'starter', priceCents: 1600 },
-  { name: 'Fried Plantains', category: 'side', priceCents: 900 },
-  { name: 'Meat Pie', category: 'starter', priceCents: 800 },
-  { name: 'Puff Puff', category: 'starter', priceCents: 700 },
-  { name: 'Chapman', category: 'beverage', priceCents: 900 },
-  { name: 'Hibiscus Cooler', category: 'beverage', priceCents: 700 },
-  { name: 'Palm Wine', category: 'beverage', priceCents: 1100 },
-  { name: 'Lager Draft', category: 'bar', priceCents: 800 },
-  { name: 'House Red Blend', category: 'bar', priceCents: 1400 },
-  { name: 'Signature Cocktail', category: 'bar', priceCents: 1600 },
-  { name: 'Brunch Jollof + Egg', category: 'brunch', priceCents: 2200 },
-  { name: 'Akara & Bread', category: 'brunch', priceCents: 1800 },
-  { name: 'Goat Stew', category: 'entree', priceCents: 3000 },
+export const MENU = [
+  { name: 'Puff Puff', category: 'starter', priceCents: 800 },
+  { name: 'Meat Pie', category: 'starter', priceCents: 700 },
+  { name: 'Beef Suya', category: 'starter', priceCents: 1600 },
+  { name: 'Asun', category: 'starter', priceCents: 1800 },
+  { name: 'Gizdodo', category: 'starter', priceCents: 1500 },
   { name: 'Moi Moi', category: 'side', priceCents: 800 },
+  { name: 'Akara', category: 'brunch', priceCents: 900 },
+  { name: 'Goat Pepper Soup', category: 'starter', priceCents: 1400 },
+  { name: 'Catfish Pepper Soup', category: 'starter', priceCents: 1600 },
+  { name: 'Nkwobi', category: 'starter', priceCents: 1800 },
+  { name: 'Jollof Rice', category: 'entree', priceCents: 1800 },
+  { name: 'Coconut Fried Rice', category: 'entree', priceCents: 1800 },
+  { name: 'Ofada Rice & Ayamase', category: 'entree', priceCents: 2600 },
+  { name: 'Egusi & Pounded Yam', category: 'entree', priceCents: 2400 },
+  { name: 'Efo Riro & Eba', category: 'entree', priceCents: 2200 },
+  { name: 'Okra Soup & Semo', category: 'entree', priceCents: 2200 },
+  { name: 'Ogbono & Fufu', category: 'entree', priceCents: 2200 },
+  { name: 'Whole Grilled Tilapia', category: 'entree', priceCents: 2800 },
+  { name: 'Grilled Catfish', category: 'entree', priceCents: 2600 },
+  { name: 'Grilled Chicken', category: 'entree', priceCents: 2200 },
+  { name: 'Goat Meat Plate', category: 'entree', priceCents: 2400 },
+  { name: 'Fried Plantain', category: 'side', priceCents: 700 },
+  { name: 'Jollof & Fried Egg', category: 'brunch', priceCents: 1600 },
+  { name: 'Akara & Pap', category: 'brunch', priceCents: 1400 },
+  { name: 'Chapman', category: 'beverage', priceCents: 800 },
+  { name: 'Zobo', category: 'beverage', priceCents: 600 },
+  { name: 'Palm Wine', category: 'beverage', priceCents: 1000 },
+  { name: 'Malta Guinness', category: 'beverage', priceCents: 500 },
+  { name: 'Guinness Foreign Extra', category: 'bar', priceCents: 700 },
+  { name: 'Heineken', category: 'bar', priceCents: 600 },
+  { name: 'Hennessy & Coke', category: 'bar', priceCents: 1600 },
+  { name: 'D\'USSÉ Sidecar', category: 'bar', priceCents: 1800 },
+  { name: 'House Red', category: 'bar', priceCents: 1200 },
+  { name: 'Moët Brut', category: 'bar', priceCents: 2200 },
 ];
+
+type StockSpec = {
+  name: string;
+  category: 'spirit' | 'wine' | 'beer' | 'mixer' | 'garnish' | 'supply' | 'protein' | 'produce' | 'dairy' | 'dry_goods' | 'bakery' | 'frozen';
+  area: string;
+  unit: string;
+  parLevel: number;
+  onHand: number;
+  unitCostCents: number;
+  supplier: string;
+};
+
+export function inventoryCatalog(): StockSpec[] {
+  return [
+    { name: 'Hennessy VS', category: 'spirit', area: 'Bar', unit: 'bottle', parLevel: 6, onHand: 8, unitCostCents: 4200, supplier: 'Spec\'s' },
+    { name: 'Hennessy VSOP', category: 'spirit', area: 'Bar', unit: 'bottle', parLevel: 3, onHand: 3, unitCostCents: 6800, supplier: 'Spec\'s' },
+    { name: 'Rémy Martin VSOP', category: 'spirit', area: 'Bar', unit: 'bottle', parLevel: 3, onHand: 4, unitCostCents: 5400, supplier: 'Spec\'s' },
+    { name: 'D\'USSÉ VSOP', category: 'spirit', area: 'Bar', unit: 'bottle', parLevel: 3, onHand: 2, unitCostCents: 6200, supplier: 'Spec\'s' },
+    { name: 'Jameson', category: 'spirit', area: 'Bar', unit: 'bottle', parLevel: 4, onHand: 5, unitCostCents: 2800, supplier: 'Spec\'s' },
+    { name: 'Tito\'s Handmade Vodka', category: 'spirit', area: 'Bar', unit: 'bottle', parLevel: 6, onHand: 7, unitCostCents: 2200, supplier: 'Spec\'s' },
+    { name: 'Cîroc', category: 'spirit', area: 'Bar', unit: 'bottle', parLevel: 4, onHand: 4, unitCostCents: 3200, supplier: 'Spec\'s' },
+    { name: 'Casamigos Blanco', category: 'spirit', area: 'Bar', unit: 'bottle', parLevel: 4, onHand: 5, unitCostCents: 4800, supplier: 'Spec\'s' },
+    { name: 'Patrón Silver', category: 'spirit', area: 'Bar', unit: 'bottle', parLevel: 3, onHand: 3, unitCostCents: 4500, supplier: 'Spec\'s' },
+    { name: 'Bombay Sapphire', category: 'spirit', area: 'Bar', unit: 'bottle', parLevel: 3, onHand: 4, unitCostCents: 2600, supplier: 'Spec\'s' },
+    { name: 'Moët & Chandon Brut', category: 'wine', area: 'Bar', unit: 'bottle', parLevel: 6, onHand: 8, unitCostCents: 4800, supplier: 'Spec\'s' },
+    { name: 'Veuve Clicquot Yellow Label', category: 'wine', area: 'Bar', unit: 'bottle', parLevel: 4, onHand: 3, unitCostCents: 6200, supplier: 'Spec\'s' },
+    { name: 'House Cabernet', category: 'wine', area: 'Bar', unit: 'bottle', parLevel: 8, onHand: 10, unitCostCents: 1100, supplier: 'Spec\'s' },
+    { name: 'House Sauvignon Blanc', category: 'wine', area: 'Bar', unit: 'bottle', parLevel: 8, onHand: 9, unitCostCents: 1100, supplier: 'Spec\'s' },
+    { name: 'Guinness Foreign Extra Stout', category: 'beer', area: 'Bar', unit: 'bottle', parLevel: 48, onHand: 60, unitCostCents: 220, supplier: 'Houston Distributing' },
+    { name: 'Heineken', category: 'beer', area: 'Bar', unit: 'bottle', parLevel: 36, onHand: 28, unitCostCents: 180, supplier: 'Houston Distributing' },
+    { name: 'Bud Light', category: 'beer', area: 'Bar', unit: 'bottle', parLevel: 24, onHand: 30, unitCostCents: 120, supplier: 'Houston Distributing' },
+    { name: 'Modelo Especial', category: 'beer', area: 'Bar', unit: 'bottle', parLevel: 24, onHand: 24, unitCostCents: 160, supplier: 'Houston Distributing' },
+    { name: 'Malta Guinness', category: 'mixer', area: 'Bar', unit: 'bottle', parLevel: 24, onHand: 30, unitCostCents: 150, supplier: 'AFRI-GROCERS' },
+    { name: 'Chapman Mix', category: 'mixer', area: 'Bar', unit: 'bottle', parLevel: 12, onHand: 14, unitCostCents: 400, supplier: 'AFRI-GROCERS' },
+    { name: 'Coca-Cola', category: 'mixer', area: 'Bar', unit: 'case', parLevel: 6, onHand: 8, unitCostCents: 900, supplier: 'Houston Distributing' },
+    { name: 'Angostura Bitters', category: 'mixer', area: 'Bar', unit: 'bottle', parLevel: 2, onHand: 2, unitCostCents: 1200, supplier: 'Spec\'s' },
+    { name: 'Lime Juice', category: 'mixer', area: 'Bar', unit: 'bottle', parLevel: 6, onHand: 5, unitCostCents: 350, supplier: 'Restaurant Depot' },
+    { name: 'Orange Wheels', category: 'garnish', area: 'Bar', unit: 'each', parLevel: 40, onHand: 48, unitCostCents: 25, supplier: 'Restaurant Depot' },
+    { name: 'Cucumber', category: 'garnish', area: 'Bar', unit: 'each', parLevel: 12, onHand: 10, unitCostCents: 80, supplier: 'Restaurant Depot' },
+    { name: 'Bar Straws', category: 'supply', area: 'Bar', unit: 'box', parLevel: 4, onHand: 6, unitCostCents: 600, supplier: 'Restaurant Depot' },
+    { name: 'Goat Meat', category: 'protein', area: 'Walk-in', unit: 'lb', parLevel: 40, onHand: 46, unitCostCents: 620, supplier: 'Halal Houston Meats' },
+    { name: 'Beef (suya / stew)', category: 'protein', area: 'Walk-in', unit: 'lb', parLevel: 25, onHand: 28, unitCostCents: 540, supplier: 'Halal Houston Meats' },
+    { name: 'Chicken', category: 'protein', area: 'Walk-in', unit: 'lb', parLevel: 30, onHand: 32, unitCostCents: 280, supplier: 'Halal Houston Meats' },
+    { name: 'Turkey Wings', category: 'protein', area: 'Walk-in', unit: 'lb', parLevel: 12, onHand: 10, unitCostCents: 320, supplier: 'Halal Houston Meats' },
+    { name: 'Whole Tilapia', category: 'protein', area: 'Walk-in', unit: 'each', parLevel: 24, onHand: 18, unitCostCents: 750, supplier: 'Gulf Seafood' },
+    { name: 'Catfish', category: 'protein', area: 'Walk-in', unit: 'lb', parLevel: 16, onHand: 18, unitCostCents: 680, supplier: 'Gulf Seafood' },
+    { name: 'Assorted Offal', category: 'protein', area: 'Walk-in', unit: 'lb', parLevel: 8, onHand: 9, unitCostCents: 400, supplier: 'Halal Houston Meats' },
+    { name: 'Gizzard', category: 'protein', area: 'Walk-in', unit: 'lb', parLevel: 8, onHand: 8, unitCostCents: 260, supplier: 'Halal Houston Meats' },
+    { name: 'Long-grain Rice', category: 'dry_goods', area: 'Dry store', unit: 'lb', parLevel: 50, onHand: 55, unitCostCents: 90, supplier: 'Restaurant Depot' },
+    { name: 'Ofada Rice', category: 'dry_goods', area: 'Dry store', unit: 'lb', parLevel: 15, onHand: 16, unitCostCents: 220, supplier: 'AFRI-GROCERS' },
+    { name: 'Pounded Yam Flour', category: 'dry_goods', area: 'Dry store', unit: 'bag', parLevel: 12, onHand: 14, unitCostCents: 1800, supplier: 'AFRI-GROCERS' },
+    { name: 'Garri (Eba)', category: 'dry_goods', area: 'Dry store', unit: 'bag', parLevel: 8, onHand: 9, unitCostCents: 1400, supplier: 'AFRI-GROCERS' },
+    { name: 'Semolina', category: 'dry_goods', area: 'Dry store', unit: 'bag', parLevel: 6, onHand: 6, unitCostCents: 1200, supplier: 'AFRI-GROCERS' },
+    { name: 'Egusi Seeds', category: 'dry_goods', area: 'Dry store', unit: 'lb', parLevel: 8, onHand: 9, unitCostCents: 450, supplier: 'AFRI-GROCERS' },
+    { name: 'Ogbono Seeds', category: 'dry_goods', area: 'Dry store', unit: 'lb', parLevel: 4, onHand: 3, unitCostCents: 520, supplier: 'AFRI-GROCERS' },
+    { name: 'Palm Oil', category: 'dry_goods', area: 'Dry store', unit: 'jug', parLevel: 6, onHand: 8, unitCostCents: 1600, supplier: 'AFRI-GROCERS' },
+    { name: 'Crayfish', category: 'dry_goods', area: 'Dry store', unit: 'lb', parLevel: 4, onHand: 5, unitCostCents: 900, supplier: 'AFRI-GROCERS' },
+    { name: 'Stockfish', category: 'dry_goods', area: 'Dry store', unit: 'lb', parLevel: 5, onHand: 6, unitCostCents: 1400, supplier: 'AFRI-GROCERS' },
+    { name: 'Cameroon Pepper', category: 'dry_goods', area: 'Dry store', unit: 'lb', parLevel: 3, onHand: 3, unitCostCents: 800, supplier: 'AFRI-GROCERS' },
+    { name: 'Locust Beans (Iru)', category: 'dry_goods', area: 'Dry store', unit: 'lb', parLevel: 2, onHand: 2, unitCostCents: 1100, supplier: 'AFRI-GROCERS' },
+    { name: 'Roma Tomatoes', category: 'produce', area: 'Walk-in', unit: 'lb', parLevel: 25, onHand: 22, unitCostCents: 120, supplier: 'Restaurant Depot' },
+    { name: 'Red Bell Pepper', category: 'produce', area: 'Walk-in', unit: 'lb', parLevel: 12, onHand: 14, unitCostCents: 180, supplier: 'Restaurant Depot' },
+    { name: 'Habanero / Scotch Bonnet', category: 'produce', area: 'Walk-in', unit: 'lb', parLevel: 6, onHand: 7, unitCostCents: 350, supplier: 'Restaurant Depot' },
+    { name: 'Yellow Onion', category: 'produce', area: 'Walk-in', unit: 'lb', parLevel: 20, onHand: 24, unitCostCents: 80, supplier: 'Restaurant Depot' },
+    { name: 'Ugu / Spinach', category: 'produce', area: 'Walk-in', unit: 'lb', parLevel: 12, onHand: 10, unitCostCents: 250, supplier: 'AFRI-GROCERS' },
+    { name: 'Okra', category: 'produce', area: 'Walk-in', unit: 'lb', parLevel: 8, onHand: 9, unitCostCents: 200, supplier: 'Restaurant Depot' },
+    { name: 'Ripe Plantain', category: 'produce', area: 'Walk-in', unit: 'each', parLevel: 40, onHand: 48, unitCostCents: 75, supplier: 'Restaurant Depot' },
+    { name: 'Ginger', category: 'produce', area: 'Walk-in', unit: 'lb', parLevel: 4, onHand: 5, unitCostCents: 220, supplier: 'Restaurant Depot' },
+    { name: 'Garlic', category: 'produce', area: 'Walk-in', unit: 'lb', parLevel: 3, onHand: 3, unitCostCents: 180, supplier: 'Restaurant Depot' },
+    { name: 'Hibiscus (Zobo)', category: 'produce', area: 'Dry store', unit: 'lb', parLevel: 4, onHand: 5, unitCostCents: 600, supplier: 'AFRI-GROCERS' },
+    { name: 'Eggs', category: 'dairy', area: 'Walk-in', unit: 'dozen', parLevel: 8, onHand: 10, unitCostCents: 280, supplier: 'Restaurant Depot' },
+    { name: 'Heavy Cream', category: 'dairy', area: 'Walk-in', unit: 'quart', parLevel: 4, onHand: 4, unitCostCents: 450, supplier: 'Restaurant Depot' },
+    { name: 'Meat Pie Dough', category: 'bakery', area: 'Walk-in', unit: 'sheet', parLevel: 10, onHand: 12, unitCostCents: 350, supplier: 'House prep' },
+    { name: 'Puff Puff Mix', category: 'bakery', area: 'Dry store', unit: 'lb', parLevel: 8, onHand: 9, unitCostCents: 180, supplier: 'House prep' },
+    { name: 'Frozen Snail', category: 'frozen', area: 'Freezer', unit: 'lb', parLevel: 4, onHand: 5, unitCostCents: 1600, supplier: 'AFRI-GROCERS' },
+    { name: 'Palm Wine', category: 'beer', area: 'Walk-in', unit: 'jug', parLevel: 6, onHand: 8, unitCostCents: 900, supplier: 'AFRI-GROCERS' },
+  ].map((item) => ({
+    ...item,
+    parLevel: item.parLevel * 3,
+    onHand: item.onHand * 3,
+  }));
+}
 
 const DAY_SALES_WEIGHT = [0.21, 0.055, 0.062, 0.076, 0.124, 0.221, 0.252];
 const WEEK_MULT: Record<string, number> = {
@@ -271,6 +369,10 @@ const WEEK_MULT: Record<string, number> = {
   '2026-09-06': 1.07,
   '2026-09-13': 0.99,
 };
+
+function weekStartFor(iso: string): string {
+  return addDays(iso, -dayIndex(iso));
+}
 
 type Need = { jobTitle: string; start: number; end: number; count: number; station?: string };
 
@@ -308,11 +410,6 @@ function coverage(iso: string): Need[] {
         ]
       : []),
   ];
-}
-
-function weekStartFor(iso: string): string {
-  const dow = dayIndex(iso);
-  return addDays(iso, -dow);
 }
 
 function layoutTables(): Array<{
@@ -400,6 +497,7 @@ async function wipePreviousDemo(prisma: PrismaClient, venueId: string) {
   await prisma.reservation.deleteMany({ where: { venueId, tags: { has: DEMO_NOTE } } });
   await prisma.guest.deleteMany({ where: { venueId, email: { endsWith: GUEST_EMAIL_SUFFIX } } });
   await prisma.posCheck.deleteMany({ where: { venueId, externalCheckId: { startsWith: POS_PREFIX } } });
+  await prisma.barInventoryItem.deleteMany({ where: { venueId, notes: DEMO_NOTE } });
   await prisma.scheduleShift.deleteMany({ where: { venueId, notes: DEMO_NOTE } });
   await prisma.profile.deleteMany({ where: { venueId, email: { endsWith: STAFF_EMAIL_SUFFIX } } });
 }
@@ -949,6 +1047,25 @@ async function main() {
     const salesCents = checks.reduce((s, c) => s + (c.totalCents as number), 0);
     console.log(`Created ${checks.length} paid checks totaling $${(salesCents / 100).toFixed(0)}`);
 
+    await prisma.barInventoryItem.deleteMany({ where: { venueId: venue.id, notes: DEMO_NOTE } });
+    await prisma.barInventoryItem.createMany({
+      data: inventoryCatalog().map((item) => ({
+        venueId: venue.id,
+        name: item.name,
+        normalizedName: item.name.trim().toLowerCase(),
+        category: item.category,
+        area: item.area,
+        unit: item.unit,
+        parLevel: item.parLevel,
+        onHand: item.onHand,
+        unitCostCents: item.unitCostCents,
+        supplier: item.supplier,
+        notes: DEMO_NOTE,
+        lastCountedAt: zonedDate(LAST_SALES_DATE, '10:00'),
+      })),
+    });
+    console.log(`Created ${inventoryCatalog().length} inventory items`);
+
     await prisma.posConnection.upsert({
       where: { venueId_provider: { venueId: venue.id, provider: 'generic' } },
       create: { venueId: venue.id, provider: 'generic', status: 'connected' },
@@ -977,7 +1094,10 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error(error instanceof Error ? error.message : error);
-  process.exit(1);
-});
+const isDirect = process.argv[1]?.replace(/\\/g, '/').includes('seed-enish-houston');
+if (isDirect) {
+  main().catch((error) => {
+    console.error(error instanceof Error ? error.message : error);
+    process.exit(1);
+  });
+}
