@@ -26,6 +26,11 @@ type NotificationItem = {
 
 const todayLabel = new Intl.DateTimeFormat('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 
+// The API caps `limit` at 200; past that, notifications belong in a screen of
+// their own rather than an ever-growing panel.
+const NOTIFICATION_PAGE_SIZE = 20;
+const NOTIFICATION_MAX = 200;
+
 function HomeScreen() {
   usePushNotifications();
   const venue = useAuthStore((state) => state.venue);
@@ -33,7 +38,11 @@ function HomeScreen() {
   const { isReady } = useAuthenticatedSession();
   const palette = useDesignTheme();
   const { data: dashboard, error: dashboardError, isLoading: dashboardLoading, refetch: refetchDashboard } = useQueryState(api.app.getDashboard, isReady ? {} : 'skip');
-  const notifications = useQuery(api.app.getNotifications, isReady ? {} : 'skip');
+  // Only the newest few are shown, and older ones used to be unreachable
+  // entirely — an unread notification past the newest 20 could not be read at
+  // all. Both the fetch and the rendered slice grow together.
+  const [notificationLimit, setNotificationLimit] = useState(NOTIFICATION_PAGE_SIZE);
+  const notifications = useQuery(api.app.getNotifications, isReady ? { limit: notificationLimit } : 'skip');
   const markNotificationRead = useMutation(api.app.markNotificationRead);
   const upsertManagerGoal = useMutation(api.operations.upsertManagerGoal);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -50,11 +59,15 @@ function HomeScreen() {
   // These three feed the readiness/flow/pulse cards below with fallbacks like
   // "Open checks: 0" and "No upcoming events" — indistinguishable from a
   // genuinely quiet day unless a fetch failure is called out separately.
+  // Any one of the three failing is enough to make the cards below lie: they
+  // fall back to "0" and "No upcoming events", which reads as a quiet venue.
+  // The old condition required all three to be missing, so a single failed
+  // fetch showed a confidently wrong readiness figure with no warning.
   const commandCenterLoadFailed =
     isReady && canManage && Boolean(venue?.id) &&
-    !managerDashboardQuery.isLoading && !dailyBriefQuery.isLoading && !commandCenterQuery.isLoading &&
-    managerDashboard === undefined && dailyBrief === undefined && commandCenter === undefined &&
-    Boolean(managerDashboardQuery.error || dailyBriefQuery.error || commandCenterQuery.error);
+    ((!managerDashboardQuery.isLoading && managerDashboard === undefined && Boolean(managerDashboardQuery.error))
+      || (!dailyBriefQuery.isLoading && dailyBrief === undefined && Boolean(dailyBriefQuery.error))
+      || (!commandCenterQuery.isLoading && commandCenter === undefined && Boolean(commandCenterQuery.error)));
   const notificationsList = (notifications ?? []) as NotificationItem[];
   const unreadCount = notificationsList.filter((item) => !item.read).length;
   const readiness = commandCenter?.readiness;
@@ -149,13 +162,21 @@ function HomeScreen() {
               <CommandText palette={palette} variant="title">Notifications</CommandText>
               {unreadCount ? <CommandButton palette={palette} onPress={() => void markAllRead()}>Mark all read</CommandButton> : null}
             </View>
-            {notificationsList.length ? notificationsList.slice(0, 4).map((item) => (
+            {notificationsList.length ? notificationsList.map((item) => (
               <Pressable
                 accessibilityRole="button" key={item._id} onPress={() => !item.read && void markNotificationRead({ notificationId: item._id })} style={{ paddingVertical: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderColor: palette.divider }}>
                 <CommandText palette={palette} variant="body" style={{ fontWeight: item.read ? '500' : '800' }}>{item.title}</CommandText>
                 <CommandText palette={palette} variant="caption">{item.body}</CommandText>
               </Pressable>
             )) : <CommandText palette={palette} variant="caption">You are all caught up.</CommandText>}
+            {notificationsList.length >= notificationLimit && notificationLimit < NOTIFICATION_MAX ? (
+              <CommandButton
+                palette={palette}
+                onPress={() => setNotificationLimit((limit) => Math.min(limit + NOTIFICATION_PAGE_SIZE, NOTIFICATION_MAX))}
+              >
+                Load more
+              </CommandButton>
+            ) : null}
           </View>
         ) : null}
 

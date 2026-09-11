@@ -5,10 +5,11 @@ export default defineConfig({
   // local environment snapshot.
   envDir: false,
   test: {
-    exclude: [...configDefaults.exclude, '.claude/**', 'tests/ui/**', '**/*.integration.spec.ts'],
+    exclude: [...configDefaults.exclude, '.claude/**', 'dist-site/**', 'tests/ui/**', '**/*.integration.spec.ts'],
     coverage: {
       provider: 'v8',
       reporter: ['text-summary'],
+      reportsDirectory: 'coverage/core',
       // Include untested source files so coverage cannot be made to look high
       // by simply omitting difficult modules from the report.
       all: true,

@@ -35,6 +35,9 @@ export class ExecutionAutopilotService {
         title: input.title,
       },
     });
+    // A late retry must not recreate actionable tasks for a cancelled event.
+    // Keep the archived workspace and its history intact.
+    if (workspace.isArchived) return workspace;
     const setup = input.setupStyle?.trim() || 'event space';
     const tasks = [
       { templateKey: 'event-brief', title: `Review ${input.title} event brief`, department: 'approvals', dueAt: input.startsAt },

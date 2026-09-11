@@ -147,7 +147,9 @@ describe('StaffRequestsController', () => {
       },
       profile: { findUniqueOrThrow: vi.fn().mockResolvedValue({ id: 'manager-1', fullName: 'Manager' }) },
       venue: { findUnique: vi.fn().mockResolvedValue({ timezone: 'UTC' }) },
-      timeEntry: { findFirst: vi.fn().mockResolvedValue(null), create },
+      // findMany is the same-day punch lookup (no punch that day); findFirst
+      // remains the open-entry and overlap checks.
+      timeEntry: { findMany: vi.fn().mockResolvedValue([]), findFirst: vi.fn().mockResolvedValue(null), create },
     };
     const controller = new StaffRequestsController(
       { $transaction: vi.fn((callback) => callback(tx)) } as any,
@@ -195,7 +197,9 @@ describe('StaffRequestsController', () => {
       },
       profile: { findUniqueOrThrow: vi.fn().mockResolvedValue({ id: 'manager-1', fullName: 'Manager' }) },
       venue: { findUnique: vi.fn().mockResolvedValue({ timezone: 'UTC' }) },
-      timeEntry: { findFirst: vi.fn().mockResolvedValue(null), create },
+      // findMany is the same-day punch lookup (no punch that day); findFirst
+      // remains the open-entry and overlap checks.
+      timeEntry: { findMany: vi.fn().mockResolvedValue([]), findFirst: vi.fn().mockResolvedValue(null), create },
     };
     const controller = new StaffRequestsController(
       { $transaction: vi.fn((callback) => callback(tx)) } as any,
@@ -237,11 +241,10 @@ describe('StaffRequestsController', () => {
       profile: { findUniqueOrThrow: vi.fn().mockResolvedValue({ id: 'manager-1', fullName: 'Manager' }) },
       venue: { findUnique: vi.fn().mockResolvedValue({ timezone: 'UTC' }) },
       timeEntry: {
-        // First findFirst call: "existing entry for this day" lookup — none.
-        // Second: the new overlap check — an existing closed punch collides.
-        findFirst: vi.fn()
-          .mockResolvedValueOnce(null)
-          .mockResolvedValueOnce({ id: 'entry-existing' }),
+        // No punch on the day being corrected, so a new entry would be
+        // created — but the overlap check finds an existing closed punch.
+        findMany: vi.fn().mockResolvedValue([]),
+        findFirst: vi.fn().mockResolvedValue({ id: 'entry-existing' }),
         create,
       },
     };
@@ -283,5 +286,108 @@ describe('StaffRequestsController', () => {
       request.id,
       { status: 'approved' } as any,
     )).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('refuses a correction when several punches share the day it names', async () => {
+    // Regression (E04): the day lookup took whichever punch came back first, so
+    // an approval could land on a different punch than the request described.
+    const create = vi.fn();
+    const tx = {
+      $executeRaw: vi.fn().mockResolvedValue(undefined),
+      staffRequest: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: 'req-1',
+          venueId: 'venue-1',
+          profileId: 'staff-1',
+          kind: 'time_correction',
+          status: 'pending',
+          availability: { clockInAt: new Date('2026-09-02T15:00:00Z').getTime(), clockOutAt: new Date('2026-09-02T20:00:00Z').getTime() },
+        }),
+        update: vi.fn().mockResolvedValue({}),
+      },
+      profile: { findUniqueOrThrow: vi.fn().mockResolvedValue({ id: 'manager-1', fullName: 'Manager' }) },
+      venue: { findUnique: vi.fn().mockResolvedValue({ timezone: 'UTC' }) },
+      timeEntry: {
+        findMany: vi.fn().mockResolvedValue([{ id: 'entry-a' }, { id: 'entry-b' }]),
+        findFirst: vi.fn().mockResolvedValue(null),
+        create,
+      },
+    };
+    const controller = new StaffRequestsController(
+      { $transaction: vi.fn((callback: any) => callback(tx)) } as any,
+      { notifyProfile: vi.fn().mockResolvedValue(undefined) } as any,
+      { sendToProfile: vi.fn().mockResolvedValue(undefined) } as any,
+    );
+
+    await expect(controller.reviewStaffRequest(
+      { venueId: 'venue-1', profileId: 'manager-1', role: 'manager', allAccess: false } as any,
+      'req-1',
+      { status: 'approved' } as any,
+    )).rejects.toThrow('several punches on that day');
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('rejects approving a drop-shift request when the shift no longer matches (already reassigned)', async () => {
+    const now = new Date('2026-08-24T12:00:00.000Z');
+    const request = {
+      id: 'request-drop', venueId: 'venue-1', profileId: 'profile-1',
+      kind: 'drop_shift', status: 'pending', title: 'Drop shift', details: '',
+      requestedForDate: null, requestedShiftId: 'shift-1', requestedRangeStart: null,
+      requestedRangeEnd: null, availability: null,
+      reviewerId: null, reviewedAt: null, responseNotes: null,
+      createdAt: now, updatedAt: now,
+    };
+    // The shift no longer has profile-1 assigned (reassigned or dropped
+    // already), so the guarded updateMany's where-clause matches 0 rows.
+    const updateMany = vi.fn().mockResolvedValue({ count: 0 });
+    const tx = {
+      $executeRaw: vi.fn().mockResolvedValue(1),
+      staffRequest: { findUnique: vi.fn().mockResolvedValue(request) },
+      profile: { findUniqueOrThrow: vi.fn().mockResolvedValue({ id: 'manager-1', fullName: 'Manager' }) },
+      scheduleShift: { updateMany },
+    };
+    const controller = new StaffRequestsController(
+      { $transaction: vi.fn((callback: any) => callback(tx)) } as any,
+      { notifyProfile: vi.fn().mockResolvedValue(undefined) } as any,
+      { sendToProfile: vi.fn().mockResolvedValue(undefined) } as any,
+    );
+
+    await expect(controller.reviewStaffRequest(
+      { venueId: 'venue-1', profileId: 'manager-1', role: 'manager' } as any,
+      request.id,
+      { status: 'approved' } as any,
+    )).rejects.toThrow('no longer matches the request');
+  });
+
+  it('rejects approving an add-shift request when the open shift was already claimed', async () => {
+    const now = new Date('2026-08-24T12:00:00.000Z');
+    const request = {
+      id: 'request-add', venueId: 'venue-1', profileId: 'profile-1',
+      kind: 'add_shift', status: 'pending', title: 'Add shift', details: '',
+      requestedForDate: null, requestedShiftId: 'shift-2', requestedRangeStart: null,
+      requestedRangeEnd: null, availability: null,
+      reviewerId: null, reviewedAt: null, responseNotes: null,
+      createdAt: now, updatedAt: now,
+    };
+    // The shift is no longer open (profileId: null no longer matches), so
+    // the guarded updateMany's where-clause matches 0 rows.
+    const updateMany = vi.fn().mockResolvedValue({ count: 0 });
+    const tx = {
+      $executeRaw: vi.fn().mockResolvedValue(1),
+      staffRequest: { findUnique: vi.fn().mockResolvedValue(request) },
+      profile: { findUniqueOrThrow: vi.fn().mockResolvedValue({ id: 'manager-1', fullName: 'Manager' }) },
+      scheduleShift: { updateMany },
+    };
+    const controller = new StaffRequestsController(
+      { $transaction: vi.fn((callback: any) => callback(tx)) } as any,
+      { notifyProfile: vi.fn().mockResolvedValue(undefined) } as any,
+      { sendToProfile: vi.fn().mockResolvedValue(undefined) } as any,
+    );
+
+    await expect(controller.reviewStaffRequest(
+      { venueId: 'venue-1', profileId: 'manager-1', role: 'manager' } as any,
+      request.id,
+      { status: 'approved' } as any,
+    )).rejects.toThrow('no longer open');
   });
 });

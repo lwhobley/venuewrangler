@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Image, KeyboardAvoidingView, Linking, Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import * as Haptics from 'expo-haptics';
+import { notifySuccess } from '../../lib/feedback';
 import { Button, Card, Checkbox, Chip, SegmentedButtons, Text, TextInput } from 'react-native-paper';
 import { appApi } from '../../lib/api-client';
 import { userFromProfile, venueFromAuth } from '../../lib/session-from-auth';
@@ -92,14 +92,18 @@ export default function SignInScreen() {
       venue: venueFromAuth(profile, venue),
       token,
     });
-    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    notifySuccess();
     // Any unverified account must return to verification, including a user who
     // closed the app midway through invited signup and signs in again later.
     // verify-email.tsx calls redeemInvite / redeemMyInvite after code entry
     // to finalize venue membership before taking the user into the app.
     if (!profile.emailVerified) {
-      if (options?.inviteToken) {
-        router.replace({ pathname: '/(auth)/verify-email', params: { invite: options.inviteToken } });
+      const emailSendFailed = (last as { verificationEmailSent?: boolean | null }).verificationEmailSent === false;
+      if (options?.inviteToken || emailSendFailed) {
+        router.replace({ pathname: '/(auth)/verify-email', params: {
+          ...(options?.inviteToken ? { invite: options.inviteToken } : {}),
+          ...(emailSendFailed ? { emailSendFailed: '1' } : {}),
+        } });
       } else {
         router.replace('/(auth)/verify-email');
       }

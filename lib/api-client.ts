@@ -152,6 +152,8 @@ export function resolveMediaUrl(path: string): string {
 }
 
 type RequestOptions = {
+  expectedProfileId?: string;
+  expectedVenueId?: string;
   method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
   body?: unknown;
   signal?: AbortSignal;
@@ -159,6 +161,11 @@ type RequestOptions = {
 };
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const current = useAuthStore.getState();
+  if ((options.expectedProfileId && current.user?.id !== options.expectedProfileId) ||
+      (options.expectedVenueId && current.venue?.id !== options.expectedVenueId)) {
+    throw new ApiError('The inventory operation belongs to a different account or workplace.', 409);
+  }
   const token = useAuthStore.getState().token;
   const venueId = useAuthStore.getState().venue?.id;
   const timeout = options.timeoutMs ?? 30_000;

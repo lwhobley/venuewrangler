@@ -12,6 +12,8 @@ import { AutoScheduleModal } from './AutoScheduleModal';
 import { ScheduleSkeleton } from './ScheduleSkeleton';
 import { CollapsibleSection } from '../AppCard';
 import { calendarSegmentsForDay } from '../../lib/schedule-segments';
+import { zonedIsoDate, zonedWeekDates } from '../../lib/zoned-datetime';
+import { correctionSummary } from '../../lib/staff-request-summary';
 
 type ShiftSnapshot = {
   dayIndex: number;
@@ -101,7 +103,7 @@ type Staff = {
   availability: AvailabilityRow[];
 };
 type Template = { _id: Id<'scheduleTemplates'>; name: string; shiftCount: number };
-type StaffRequest = { _id: Id<'staffRequests'>; kind: string; status: string; title: string; details: string };
+type StaffRequest = { _id: Id<'staffRequests'>; kind: string; status: string; title: string; details: string; availability?: unknown };
 type LaborForecastDay = {
   dayIndex: number;
   dayLabel: string;
@@ -147,7 +149,7 @@ function overlaps(aStart: number, aEnd: number, bStart: number, bEnd: number) {
   return false;
 }
 
-export function ManagerCalendar({ venueId }: { venueId: Id<'venues'> }) {
+export function ManagerCalendar({ venueId, timeZone }: { venueId: Id<'venues'>; timeZone?: string | null }) {
   const isDesktop = useIsDesktop();
   const [weekOffset, setWeekOffset] = useState(0);
 
@@ -168,42 +170,36 @@ export function ManagerCalendar({ venueId }: { venueId: Id<'venues'> }) {
 
   const [subTab, setSubTab] = useState<'planner' | 'analytics' | 'staffing'>('planner');
 
+  // The week the manager is looking at must be the venue's week, not the
+  // device's. A manager travelling, working remotely, or opening the app near
+  // midnight was otherwise shown a different week than the staff app, which
+  // already anchors on the venue day (MyShifts). zonedWeekDates returns
+  // UTC-anchored calendar dates, so every read below uses UTC getters and
+  // timeZone: 'UTC' formatting — mixing in device-local accessors is what
+  // reintroduces the drift.
   const weekStart = useMemo(() => {
-    const today = new Date();
-    const sunday = new Date(today);
-    sunday.setDate(today.getDate() - today.getDay() + weekOffset * 7);
-    sunday.setHours(0, 0, 0, 0);
-    return sunday;
-  }, [weekOffset]);
+    const venueSunday = zonedWeekDates(timeZone)[0];
+    return new Date(venueSunday.getTime() + weekOffset * 7 * 24 * 60 * 60 * 1000);
+  }, [timeZone, weekOffset]);
 
-  const selectedWeekStart = `${weekStart.getFullYear()}-${String(weekStart.getMonth() + 1).padStart(2, '0')}-${String(weekStart.getDate()).padStart(2, '0')}`;
+  const selectedWeekStart = weekStart.toISOString().slice(0, 10);
   const { data, error, isLoading, refetch } = useQueryState(api.scheduling.getManagerSchedule, { venueId, weekStart: selectedWeekStart });
   const forecast = useQuery(api.scheduling.getLaborForecast, { venueId, weekStart: selectedWeekStart }) as LaborForecast | undefined;
   const templates = useQuery(api.scheduling.listScheduleTemplates, { venueId });
   const requestRows = useQuery(api.app.listStaffRequests, { venueId });
 
-  const dayDate = (dayIndex: number) => {
-    const d = new Date(weekStart);
-    d.setDate(weekStart.getDate() + dayIndex);
-    return d;
-  };
+  const dayDate = (dayIndex: number) => new Date(weekStart.getTime() + dayIndex * 24 * 60 * 60 * 1000);
 
-  const formatDayDate = (dayIndex: number) =>
-    dayDate(dayIndex).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const dayLabelFormat = (date: Date) =>
+    new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }).format(date);
 
-  const formatDayNum = (dayIndex: number) => String(dayDate(dayIndex).getDate());
+  const formatDayDate = (dayIndex: number) => dayLabelFormat(dayDate(dayIndex));
 
-  const isToday = (dayIndex: number) => {
-    const today = new Date();
-    const d = dayDate(dayIndex);
-    return d.getFullYear() === today.getFullYear() && d.getMonth() === today.getMonth() && d.getDate() === today.getDate();
-  };
+  const formatDayNum = (dayIndex: number) => String(dayDate(dayIndex).getUTCDate());
 
-  const weekRangeLabel = () => {
-    const sunStr = dayDate(0).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    const satStr = dayDate(6).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    return `${sunStr} – ${satStr}`;
-  };
+  const isToday = (dayIndex: number) => dayDate(dayIndex).toISOString().slice(0, 10) === zonedIsoDate(timeZone);
+
+  const weekRangeLabel = () => `${dayLabelFormat(dayDate(0))} – ${dayLabelFormat(dayDate(6))}`;
 
   const [selectedShiftId, setSelectedShiftId] = useState<Id<'scheduleShifts'> | null>(null);
   const [showEditor, setShowEditor] = useState(false);
@@ -921,6 +917,9 @@ export function ManagerCalendar({ venueId }: { venueId: Id<'venues'> }) {
                 <View key={request._id} style={{ gap: 2, paddingVertical: 4 }}>
                   <Text style={{ color: colors.charcoal, fontWeight: '700' }}>{request.title}</Text>
                   <Text style={{ color: colors.muted, fontSize: 12 }}>{request.kind.replace('_', ' ')} · {request.details}</Text>
+                  {correctionSummary(request, timeZone) ? (
+                    <Text style={{ color: colors.charcoal, fontSize: 12, fontWeight: '700' }}>{correctionSummary(request, timeZone)}</Text>
+                  ) : null}
                 </View>
               ))}
             </Card.Content>

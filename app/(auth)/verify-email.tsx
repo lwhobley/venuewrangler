@@ -11,7 +11,10 @@ import { useI18n } from '../../lib/i18n';
 
 export default function VerifyEmailScreen() {
   const { t } = useI18n();
-  const { invite } = useLocalSearchParams<{ invite?: string }>();
+  const { invite, emailSendFailed } = useLocalSearchParams<{ invite?: string; emailSendFailed?: string }>();
+  // Signup could not deliver the code. Say so plainly instead of leaving
+  // someone waiting on an inbox that will never receive it.
+  const deliveryFailed = emailSendFailed === '1';
   const user = useAuthStore((state: AuthState) => state.user);
   const setSession = useAuthStore((state: AuthState) => state.setSession);
   const clearSession = useAuthStore((state: AuthState) => state.clearSession);
@@ -20,20 +23,28 @@ export default function VerifyEmailScreen() {
   const [code, setCode] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [resending, setResending] = useState(false);
+  const [codeVerified, setCodeVerified] = useState(false);
+  const codeVerifiedRef = useRef(false);
   // Synchronous guards; "Resend" in particular sent two verification emails.
   const submittingRef = useRef(false);
   const resendingRef = useRef(false);
 
   const verify = async () => {
     if (submittingRef.current) return;
-    if (!code.trim()) {
+    if (!codeVerifiedRef.current && !code.trim()) {
       Alert.alert(t('verifyEmail.codeRequiredTitle'), t('verifyEmail.codeRequiredMessage'));
       return;
     }
     submittingRef.current = true;
     setSubmitting(true);
     try {
-      await appApi.verifyEmail({ code: code.trim() });
+      // Verification consumes the code. A later network failure during invite
+      // redemption must retry that step, not submit the consumed code again.
+      if (!codeVerifiedRef.current) {
+        await appApi.verifyEmail({ code: code.trim() });
+        codeVerifiedRef.current = true;
+        setCodeVerified(true);
+      }
       const redemption = typeof invite === 'string' && invite
         ? await appApi.redeemInvite(invite)
         : await appApi.redeemMyInvite();
@@ -72,7 +83,7 @@ export default function VerifyEmailScreen() {
   };
 
   const resend = async () => {
-    if (resendingRef.current) return;
+    if (resendingRef.current || submittingRef.current || codeVerifiedRef.current) return;
     resendingRef.current = true;
     setResending(true);
     try {
@@ -101,11 +112,18 @@ export default function VerifyEmailScreen() {
 
         <Card style={styles.card}>
           <Card.Content style={{ gap: spacing.md }}>
+            {deliveryFailed ? (
+              <View style={{ gap: 4, padding: spacing.sm, borderRadius: 8, backgroundColor: '#FDE7E9' }}>
+                <Text style={{ fontWeight: '700', color: '#A81C24' }}>{t('verifyEmail.deliveryFailedTitle')}</Text>
+                <Text variant="bodySmall" style={{ color: '#A81C24' }}>{t('verifyEmail.deliveryFailedMessage')}</Text>
+              </View>
+            ) : null}
             <TextInput
               {...inputProps}
               label={t('verifyEmail.codeLabel')}
               value={code}
               onChangeText={setCode}
+              editable={!submitting && !codeVerified}
               keyboardType="number-pad"
               autoCapitalize="none"
               mode="outlined"
@@ -117,7 +135,7 @@ export default function VerifyEmailScreen() {
             <Button mode="contained" buttonColor={colors.primary} textColor={colors.buttonText} loading={submitting} disabled={submitting} onPress={() => void verify()}>
               {t('verifyEmail.verifyButton')}
             </Button>
-            <Button mode="text" textColor={colors.primary} loading={resending} disabled={resending} onPress={() => void resend()}>
+            <Button mode="text" textColor={colors.primary} loading={resending} disabled={resending || submitting || codeVerified} onPress={() => void resend()}>
               {t('verifyEmail.resendButton')}
             </Button>
           </Card.Content>

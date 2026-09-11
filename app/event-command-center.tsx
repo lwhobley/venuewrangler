@@ -1,5 +1,5 @@
 import { useLocalSearchParams, router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { Button, TextInput } from 'react-native-paper';
 import { useMutation, useQueryState } from '../lib/railway-hooks';
@@ -37,18 +37,28 @@ export default function EventCommandCenterScreen() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
 
+  // A ref, not `generationState`: the state starts at 'loading', so a guard
+  // reading it turned the very first call into a no-op and the screen sat on
+  // "Loading event workspace…" forever with a real workspace behind it. The ref
+  // still collapses a genuine double-invoke (StrictMode's double effect, or a
+  // Try again pressed twice).
+  const preparingRef = useRef(false);
+
   const prepareWorkspace = async () => {
-    if (generationState === 'loading') return;
+    if (preparingRef.current) return;
     if (!eventId) {
       setGenerationState('error');
       return;
     }
+    preparingRef.current = true;
     setGenerationState('loading');
     try {
       await generateWorkspace({ eventId });
       setGenerationState('ready');
     } catch {
       setGenerationState('error');
+    } finally {
+      preparingRef.current = false;
     }
   };
 

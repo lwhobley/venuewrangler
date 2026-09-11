@@ -192,6 +192,14 @@ export class PosController {
     if (!connection?.webhookSecret || !secretsMatch(secret, connection.webhookSecret)) {
       throw new UnauthorizedException('Invalid webhook secret');
     }
+    // Pausing a connection has to stop the data, not just relabel the
+    // integration screen. The credential stays valid (pause is reversible and
+    // must not force a secret rotation), so the pause is enforced here: a
+    // provider that keeps sending gets a clear refusal rather than silently
+    // updating a venue that believes the feed is off.
+    if (connection.status === 'paused') {
+      throw new ForbiddenException('This POS connection is paused. Resume it in Venue Wrangler to accept updates.');
+    }
     await assertWithinSharedRateLimit(this.prisma, `pos-ingest:${venueId}:${getClientIp(request)}`, INGEST_RATE_LIMIT_MAX, INGEST_RATE_LIMIT_WINDOW_MS, 'Too many webhook requests.');
 
     // class-validator's @IsNumber() accepts NaN/Infinity, which would surface
@@ -208,37 +216,77 @@ export class PosController {
       }
     }
 
-    // Batch upserts into chunked transactions (not one single transaction for
-    // the whole payload) so a large delivery (up to MAX_INGEST_ROWS checks +
-    // MAX_INGEST_ROWS labor punches) can't hold one transaction's locks for an
-    // extended period.
+    // A paid/void check is a closed financial record, not a mutable draft.
+    // The previous fix checked closed status with a separate findMany before
+    // building the upserts, which left a TOCTOU window (a concurrent
+    // delivery could close the check between the check and the write) and
+    // blocked every field equally — including a tip adjustment a POS
+    // commonly sends after the guest signs, which is a legitimate post-close
+    // update, not a rewrite attempt. Each check is now a single atomic
+    // INSERT ... ON CONFLICT DO UPDATE: the core sale amounts (subtotal,
+    // tax, discount, comp, promo) and the itemization (menuItems) are locked
+    // once the existing row's status is paid/void, via a CASE against the
+    // row being upserted — checked and written in one statement, so there is
+    // no window between them. Tip, total (which a tip adjustment necessarily
+    // changes), status itself (a paid check being voided is a real
+    // correction), and non-financial metadata all remain freely correctable
+    // after close.
+    const checkOperations = (body.checks ?? []).map((check) => {
+      const menuItemsJson = check.menuItems ? JSON.stringify(check.menuItems) : null;
+      return this.prisma.$executeRaw(Prisma.sql`
+        INSERT INTO "PosCheck" (
+          "id", "venueId", "provider", "externalCheckId", "tableLabel", "serverName", "guestName",
+          "openedAt", "closedAt", "subtotalCents", "taxCents", "tipCents", "totalCents",
+          "discountCents", "compCents", "promoCents", "guestCount", "revenueCenter", "tenderType",
+          "menuItems", "status", "updatedAt"
+        ) VALUES (
+          gen_random_uuid()::text, ${venueId}, ${provider}::"PosProvider", ${check.externalCheckId},
+          ${check.tableLabel ?? null}, ${check.serverName ?? null}, ${check.guestName ?? null},
+          (${new Date(check.openedAt)}::timestamptz AT TIME ZONE 'UTC'),
+          (${check.closedAt != null ? new Date(check.closedAt) : null}::timestamptz AT TIME ZONE 'UTC'),
+          ${check.subtotalCents}, ${check.taxCents ?? null}, ${check.tipCents}, ${check.totalCents},
+          ${check.discountCents ?? null}, ${check.compCents ?? null}, ${check.promoCents ?? null},
+          ${check.guestCount ?? null}, ${check.revenueCenter ?? null}, ${check.tenderType ?? null},
+          ${menuItemsJson}::jsonb, ${(check.status ?? 'open') as PosCheckStatus}::"PosCheckStatus", NOW()
+        )
+        ON CONFLICT ("venueId", "provider", "externalCheckId") DO UPDATE SET
+          "tableLabel" = EXCLUDED."tableLabel",
+          "serverName" = EXCLUDED."serverName",
+          "guestName" = EXCLUDED."guestName",
+          "openedAt" = EXCLUDED."openedAt",
+          "closedAt" = EXCLUDED."closedAt",
+          "subtotalCents" = CASE WHEN "PosCheck"."status" IN ('paid', 'void') THEN "PosCheck"."subtotalCents" ELSE EXCLUDED."subtotalCents" END,
+          "taxCents" = CASE WHEN "PosCheck"."status" IN ('paid', 'void') THEN "PosCheck"."taxCents" ELSE EXCLUDED."taxCents" END,
+          "discountCents" = CASE WHEN "PosCheck"."status" IN ('paid', 'void') THEN "PosCheck"."discountCents" ELSE EXCLUDED."discountCents" END,
+          "compCents" = CASE WHEN "PosCheck"."status" IN ('paid', 'void') THEN "PosCheck"."compCents" ELSE EXCLUDED."compCents" END,
+          "promoCents" = CASE WHEN "PosCheck"."status" IN ('paid', 'void') THEN "PosCheck"."promoCents" ELSE EXCLUDED."promoCents" END,
+          "tipCents" = EXCLUDED."tipCents",
+          "totalCents" = EXCLUDED."totalCents",
+          "guestCount" = EXCLUDED."guestCount",
+          "revenueCenter" = EXCLUDED."revenueCenter",
+          "tenderType" = EXCLUDED."tenderType",
+          "menuItems" = CASE WHEN "PosCheck"."status" IN ('paid', 'void') THEN "PosCheck"."menuItems" ELSE EXCLUDED."menuItems" END,
+          -- paid<->void is a real correction (a disputed charge, a voided-in-
+          -- error check reinstated). Closed -> 'open' is not: it would reopen
+          -- a settled check, and the CASE guards above key off status = 'paid'
+          -- or 'void' to decide whether a field is locked — so a late/stale
+          -- 'open' delivery reopening it would silently unlock every guarded
+          -- field for whatever delivery comes next. Once closed, stay closed.
+          "status" = CASE
+            WHEN "PosCheck"."status" IN ('paid', 'void') AND EXCLUDED."status" = 'open' THEN "PosCheck"."status"
+            ELSE EXCLUDED."status"
+          END,
+          "updatedAt" = NOW()
+        WHERE NOT ("PosCheck"."status" IN ('paid', 'void') AND EXCLUDED."status" = 'open')
+      `);
+    });
+
+    // Batch into chunked transactions (not one single transaction for the
+    // whole payload) so a large delivery (up to MAX_INGEST_ROWS checks +
+    // MAX_INGEST_ROWS labor punches) can't hold one transaction's locks for
+    // an extended period.
     const operations = [
-      ...( body.checks ?? []).map((check) => {
-        const data = {
-          tableLabel: check.tableLabel ?? null,
-          serverName: check.serverName ?? null,
-          guestName: check.guestName ?? null,
-          openedAt: new Date(check.openedAt),
-          closedAt: check.closedAt ? new Date(check.closedAt) : null,
-          subtotalCents: check.subtotalCents,
-          taxCents: check.taxCents ?? null,
-          tipCents: check.tipCents,
-          totalCents: check.totalCents,
-          discountCents: check.discountCents ?? null,
-          compCents: check.compCents ?? null,
-          promoCents: check.promoCents ?? null,
-          guestCount: check.guestCount ?? null,
-          revenueCenter: check.revenueCenter ?? null,
-          tenderType: check.tenderType ?? null,
-          menuItems: check.menuItems ? (check.menuItems as unknown as Prisma.InputJsonValue) : undefined,
-          status: (check.status ?? 'open') as PosCheckStatus,
-        };
-        return this.prisma.posCheck.upsert({
-          where: { venueId_provider_externalCheckId: { venueId, provider, externalCheckId: check.externalCheckId } },
-          create: { venueId, provider, externalCheckId: check.externalCheckId, ...data },
-          update: data,
-        });
-      }),
+      ...checkOperations,
       ...(body.laborPunches ?? []).map((punch) => {
         const data = {
           employeeName: punch.employeeName,
@@ -271,7 +319,7 @@ export class PosController {
       await this.prisma.$transaction(operations.slice(i, i + INGEST_CHUNK_SIZE));
     }
 
-    const checksUpserted = (body.checks ?? []).length;
+    const checksUpserted = checkOperations.length;
     const laborUpserted = (body.laborPunches ?? []).length;
 
     await this.prisma.posConnection.update({ where: { id: connection.id }, data: { lastSyncAt: new Date() } });

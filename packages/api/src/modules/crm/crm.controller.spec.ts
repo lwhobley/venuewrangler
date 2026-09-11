@@ -502,7 +502,7 @@ describe('CrmController', () => {
           paymentSchedule: [expect.objectContaining({ amountCents: 100000, type: 'deposit' })],
         }),
       }));
-      expect(result).toEqual({ contractId: 'contract-new' });
+      expect(result).toEqual({ contractId: 'contract-new', contractNumber: expect.any(String), alreadyExisted: false });
     });
 
     it('leaves the payment schedule empty when the BEO has no deposit', async () => {
@@ -838,4 +838,92 @@ describe('CrmController', () => {
       expect(result).toEqual({ subject: 'Hi', body: 'Body' });
     });
   });
+
+  describe('saveLead guest linkage', () => {
+    it('refuses a guestId that belongs to another venue', async () => {
+      const { controller, prisma } = makeController();
+      // No guest with this id at venue-1 — the id names another venue's guest.
+      prisma.guest.findFirst.mockResolvedValue(null);
+
+      await expect(
+        controller.saveLead(managerScope, { fullName: 'Jo', guestId: 'guest-other-venue' } as any),
+      ).rejects.toThrow('Guest not found at this venue.');
+
+      expect(prisma.guest.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 'guest-other-venue', venueId: 'venue-1' } }),
+      );
+      expect(prisma.crmLead.create).not.toHaveBeenCalled();
+    });
+
+    it('persists a guestId that does belong to this venue', async () => {
+      const { controller, prisma } = makeController();
+      prisma.guest.findFirst.mockResolvedValue({ id: 'guest-1' });
+
+      await controller.saveLead(managerScope, { fullName: 'Jo', guestId: 'guest-1' } as any);
+
+      expect(prisma.crmLead.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ guestId: 'guest-1' }) }),
+      );
+    });
+
+    it('matches an existing venue guest by email when no guestId is supplied', async () => {
+      const { controller, prisma } = makeController();
+      prisma.guest.findFirst.mockResolvedValue({ id: 'guest-7' });
+
+      await controller.saveLead(managerScope, { fullName: 'Jo', email: 'Jo@Example.com ' } as any);
+
+      expect(prisma.crmLead.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ guestId: 'guest-7' }) }),
+      );
+    });
+  });
+
+
+  describe('saveBeo assigned rep validation', () => {
+    const beo = {
+      id: 'beo-1',
+      venueId: 'venue-1',
+      leadId: 'lead-1',
+      eventName: 'Gala',
+      status: 'draft',
+      assignedRepId: 'rep-departed',
+      eventDate: null,
+    };
+
+    it('does not re-validate a rep that is not being changed', async () => {
+      // saveBeo rewrites every column, so every save resends assignedRepId.
+      // Confirming a BEO must not 400 because the rep assigned months ago has
+      // since left the venue.
+      const { controller, prisma } = makeController();
+      prisma.crmBeo.findFirst.mockResolvedValue(beo);
+      prisma.crmLead.findFirst.mockResolvedValue({ id: 'lead-1' });
+      // The departed rep resolves to no active member.
+      prisma.profile.findFirst.mockResolvedValue(null);
+
+      await controller.saveBeo(managerScope, {
+        beoId: 'beo-1',
+        leadId: 'lead-1',
+        eventName: 'Gala',
+        assignedRepId: 'rep-departed',
+        status: 'confirmed',
+      } as any);
+
+      expect(prisma.crmBeo.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ assignedRepId: 'rep-departed' }) }),
+      );
+    });
+
+    it('still rejects assigning a rep who is not an active member', async () => {
+      const { controller, prisma } = makeController();
+      prisma.crmBeo.findFirst.mockResolvedValue(beo);
+      prisma.profile.findFirst.mockResolvedValue(null);
+
+      await expect(controller.saveBeo(managerScope, {
+        beoId: 'beo-1',
+        eventName: 'Gala',
+        assignedRepId: 'rep-someone-else',
+      } as any)).rejects.toThrow('Assigned representative must be an active member of this venue.');
+    });
+  });
+
 });

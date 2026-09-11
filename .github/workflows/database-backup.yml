@@ -94,17 +94,42 @@ jobs:
           docker run --rm --user "$(id -u):$(id -g)" --volume /tmp:/backup \
             postgres:17-alpine@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193 \
             pg_restore --list "/backup/$(basename "$dump")" >/dev/null
+          # The dump is --schema=public, so extensions living outside public are
+          # not carried in it. Two tables (TableAssignment, TimeEntry) declare
+          # GiST exclusion constraints whose text-equality operators come from
+          # btree_gist; without it every restore drill failed on those two
+          # constraints and took the whole backup job with it. Production keeps
+          # btree_gist in the `extensions` schema (Supabase's convention), so
+          # create both here and put that schema on the search_path, matching
+          # how the constraints resolve in production.
+          docker run --rm --network host \
+            postgres:17-alpine@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193 \
+            psql "$RESTORE_DRILL_DATABASE_URL" -v ON_ERROR_STOP=1 -c \
+            'CREATE SCHEMA IF NOT EXISTS extensions; CREATE EXTENSION IF NOT EXISTS btree_gist WITH SCHEMA extensions;'
+          docker run --rm --network host \
+            postgres:17-alpine@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193 \
+            psql "$RESTORE_DRILL_DATABASE_URL" -v ON_ERROR_STOP=1 -c \
+            "ALTER DATABASE \"$restore_database\" SET search_path = public, extensions;"
           # Prove recoverability, not merely archive readability. This target is
           # a dedicated disposable database enforced by the checks above.
+          # --exit-on-error: pg_restore otherwise reports "errors ignored on
+          # restore: N" and still exits non-zero at the end, which said nothing
+          # about which object failed. Failing at the first error names it.
           docker run --rm --network host --user "$(id -u):$(id -g)" \
             --volume /tmp:/backup \
             postgres:17-alpine@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193 \
-            pg_restore --clean --if-exists --no-owner --no-acl \
+            pg_restore --clean --if-exists --no-owner --no-acl --exit-on-error \
             --dbname "$RESTORE_DRILL_DATABASE_URL" "/backup/$(basename "$dump")"
           docker run --rm --network host \
             postgres:17-alpine@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193 \
             psql "$RESTORE_DRILL_DATABASE_URL" -v ON_ERROR_STOP=1 -Atc \
             'SELECT COUNT(*) > 0 FROM "_prisma_migrations" WHERE finished_at IS NOT NULL' | grep -qx t
+          # The restore is only proven if the constraints came back with it:
+          # these two are exactly what was silently failing before.
+          docker run --rm --network host \
+            postgres:17-alpine@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193 \
+            psql "$RESTORE_DRILL_DATABASE_URL" -v ON_ERROR_STOP=1 -Atc \
+            'SELECT COUNT(*) = 2 FROM pg_constraint WHERE conname IN ('"'"'TableAssignment_no_overlap_excl'"'"', '"'"'TimeEntry_no_overlap_excl'"'"')' | grep -qx t
           gzip --best "$dump"
           gzip --test "$archive"
           aws s3 cp "$archive" "s3://${BACKUP_BUCKET}/database-backups/$(basename "$archive")" \

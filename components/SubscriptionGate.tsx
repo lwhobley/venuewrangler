@@ -39,7 +39,7 @@ export function SubscriptionGate({ children }: { children?: unknown }) {
   const hydrated = useAuthStore((state: AuthState) => state.hydrated);
   const user = useAuthStore((state: AuthState) => state.user);
   const token = useAuthStore((state: AuthState) => state.token);
-  const setSession = useAuthStore((state: AuthState) => state.setSession);
+  const syncProfile = useAuthStore((state: AuthState) => state.syncProfile);
   const clearSession = useAuthStore((state: AuthState) => state.clearSession);
   // Shares the ['app','getMe',...] cache key with useVenueAuth instead of a
   // separate ['app','me',...] entry — see auth-readiness.ts for why.
@@ -89,28 +89,37 @@ export function SubscriptionGate({ children }: { children?: unknown }) {
   useEffect(() => {
     if (!me?.profile || !user) return;
     const p = me.profile;
+    // Compare the normalized values that would be written, not the raw
+    // response: an undefined jobTitle read as different from the stored empty
+    // string on every pass, so the write never settled.
+    const nextJobTitle = p.jobTitle ?? '';
+    const nextVenueId = p.venueId ?? null;
     const same =
       user.role === p.role &&
       user.full_name === p.fullName &&
       user.email_verified === (p.emailVerified === true) &&
-      user.job_title === p.jobTitle &&
+      user.job_title === nextJobTitle &&
       user.all_access === (p.allAccess === true) &&
-      user.venue_id === (p.venueId ?? null);
+      user.venue_id === nextVenueId;
     if (same) return;
-    setSession({
+    // syncProfile, not setSession: this is the same account and venue with
+    // fresher details. setSession bumps authEpoch, which clears the query
+    // cache, which refetches /me, which lands back here — the loop that made
+    // the web build reload itself until the API rate-limited it.
+    syncProfile({
       user: {
         id: p._id,
         email: p.email,
         full_name: p.fullName,
         email_verified: p.emailVerified === true,
         role: p.role,
-        job_title: p.jobTitle,
-        venue_id: p.venueId ?? null,
+        job_title: nextJobTitle,
+        venue_id: nextVenueId,
         all_access: p.allAccess === true,
       },
       venue: me.venue ? venueFromApi(me.venue) : null,
     });
-  }, [me, user, setSession]);
+  }, [me, user, syncProfile]);
 
   const { isPremium, isLoading: isPremiumLoading } = useA0Purchases();
   const allAccess = hasAllAccess(me?.profile?.allAccess);

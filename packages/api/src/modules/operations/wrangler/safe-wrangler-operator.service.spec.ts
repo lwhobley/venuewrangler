@@ -232,6 +232,30 @@ describe('SafeWranglerOperatorService', () => {
     expect(parsed).toEqual({ tool: 'CLEAR_TABLE', args: {}, summary: 'Clear the requested table.' });
   });
 
+  it('routes both singular and plural lead phrasing to the CRM tool', async () => {
+    // Tightening the trigger from includes('lead') to a word-boundary match
+    // dropped the plural, and "show me my leads" then fell all the way through
+    // to the no-AI BadRequestException.
+    const service = new WranglerOperatorService({} as never);
+
+    for (const text of ['show me my leads', 'find the lead for Acme']) {
+      expect((service as any).fallbackParse(text)).toEqual(
+        expect.objectContaining({ tool: 'FIND_CRM_LEAD' }),
+      );
+    }
+  });
+
+  it('still ignores a word that merely contains "lead"', async () => {
+    // "leader" is not a lead. Allowing the plural must not reopen the loose
+    // substring match E10 removed: an ambiguous phrase belongs with the AI
+    // planner, not misrouted to CRM.
+    const service = new WranglerOperatorService({} as never);
+
+    expect(() => (service as any).fallbackParse('who is the team leader')).toThrow(
+      'AI operator requires GEMINI_API_KEY',
+    );
+  });
+
   it('rejects invalid table statuses before Prisma receives them', async () => {
     const prisma = {
       floorPlan: { findFirst: vi.fn().mockResolvedValue({ id: 'plan-1' }) },

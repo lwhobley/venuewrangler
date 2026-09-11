@@ -18,6 +18,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { VenueScope } from '../../venue/venue-scope.decorator';
 import type { VenueScopedRequest } from '../../venue/venue-scope.interceptor';
 import { syncTeamMemberCount } from '../../common/team-sync';
+import { todayInZone, weekStartFor } from '../../common/pay-period';
 import { AuditService } from '../audit/audit.service';
 import { rosterInvitedTemplate, rosterProfileUpdatedTemplate } from '../../email/templates/roster';
 
@@ -219,6 +220,9 @@ export class StaffController {
       throw new ForbiddenException('Staff member does not belong to this venue');
     }
 
+    const venue = await this.prisma.venue.findUnique({ where: { id: scope.venueId }, select: { timezone: true } });
+    const currentWeekStart = weekStartFor(todayInZone(venue?.timezone ?? null));
+
     const updated = await this.prisma.$transaction(async (tx) => {
       await this.assertCanManageTarget(scope, staff, true, tx);
       const u = await tx.profile.update({
@@ -231,6 +235,16 @@ export class StaffController {
           isOpen: false,
           clockOutAt: new Date(),
         },
+      });
+      // A revoked employee is no longer expected to show up. Past/current-week
+      // shifts stay assigned (they're worked or in-progress, and payroll comes
+      // from TimeEntry/PosLaborPunch, not this row), but anything from the
+      // current week onward is opened back up so a manager sees the real gap
+      // instead of a published schedule that quietly assumes someone who no
+      // longer works here.
+      await tx.scheduleShift.updateMany({
+        where: { venueId: scope.venueId, profileId: staff.id, weekStart: { gte: currentWeekStart } },
+        data: { profileId: null, status: 'open' },
       });
       if (staff.userId) {
         const activeElsewhere = await tx.profile.count({

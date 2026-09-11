@@ -1,12 +1,14 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Role, TableStatus, CrmLeadStatus } from '@prisma/client';
 import { canManageRole } from '../../../auth/roles';
+import { canAccessConversation } from '../../../common/conversation-access';
 import { callAiJson, resolveAiApiKey, resolveAiModel } from '../../../common/ai-json-parse';
 import { weekStartFor } from '../../../common/pay-period';
 import { adjacentWeekStarts, previousOvernightFilter, shiftsOverlap } from '../../../common/shift-overlap';
 import { syncTeamMemberCount } from '../../../common/team-sync';
 import { normalizedShiftEnd, zonedDateBounds, zonedIsoDate } from '../../../common/venue-time';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { InventoryMovementService } from '../../bar-inventory/inventory-movement.service';
 import { runWithoutTenant } from '../../../prisma/tenant-context';
 
 const DEFAULT_MODEL = 'gemini-flash-latest';
@@ -114,7 +116,7 @@ Rules:
 export class WranglerOperatorService {
   private readonly logger = new Logger(WranglerOperatorService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly inventory?: InventoryMovementService) {}
 
   async plan(input: { venueId: string; timezone?: string | null; command: string; actor: Actor }) {
     const command = input.command.trim();
@@ -125,7 +127,7 @@ export class WranglerOperatorService {
     const risk = this.riskFor(parsed.tool);
 
     if (risk === 'read') {
-      const result = await this.executeRead(input.venueId, input.timezone, parsed.tool, parsed.args);
+      const result = await this.executeRead(input.venueId, input.timezone, parsed.tool, parsed.args, input.actor);
       return { status: 'executed' as const, tool: parsed.tool, risk, summary: parsed.summary, result };
     }
 
@@ -147,17 +149,17 @@ export class WranglerOperatorService {
     };
   }
 
-  async execute(input: { venueId: string; timezone?: string | null; actor: Actor; plan: OperatorPlan }): Promise<OperatorExecutionResponse> {
+  async execute(input: { venueId: string; timezone?: string | null; actor: Actor; plan: OperatorPlan; requestId?: string }): Promise<OperatorExecutionResponse> {
     if (!this.canManage(input.actor)) throw new ForbiddenException('Manager access required for Wrangler operator actions');
     if (!ALLOWED_TOOLS.includes(input.plan.tool)) throw new BadRequestException('Unsupported Wrangler operator tool');
     const risk = this.riskFor(input.plan.tool);
     if (risk === 'read') {
-      const result = await this.executeRead(input.venueId, input.timezone, input.plan.tool, input.plan.args);
+      const result = await this.executeRead(input.venueId, input.timezone, input.plan.tool, input.plan.args, input.actor);
       return { ok: true, tool: input.plan.tool, risk, result };
     }
 
     const normalized = await this.resolveWritePlan(input.venueId, input.timezone, { ...input.plan, risk });
-    const result = await this.executeWrite(input.venueId, input.timezone, input.actor, normalized);
+    const result = await this.executeWrite(input.venueId, input.timezone, input.actor, normalized, input.requestId);
     await this.writeAudit(input.venueId, input.actor, normalized, result);
     return { ok: true, tool: normalized.tool, risk, result };
   }
@@ -198,13 +200,13 @@ export class WranglerOperatorService {
       }
       return { tool: 'LIST_WAITLIST', args: {}, summary: 'Show active waitlist.' };
     }
-    if (lower.includes('sales') || lower.includes('revenue') || lower.includes('pulse') || lower.includes('totals')) {
+    if (lower.includes('sales') || lower.includes('revenue') || lower.includes('pulse') || /\b(?:sales|revenue|daily)\s+totals?\b/i.test(lower)) {
       return { tool: 'GET_SALES_PULSE', args: {}, summary: 'Show current sales pulse.' };
     }
-    if (lower.includes('integration') || lower.includes('pos status') || lower.includes('connections')) {
+    if (lower.includes('integration') || lower.includes('pos status') || /\b(?:pos|api|system)\s+connections?\b/i.test(lower)) {
       return { tool: 'LIST_INTEGRATIONS', args: {}, summary: 'Check integration connections.' };
     }
-    if (lower.includes('crm') || lower.includes('lead')) {
+    if (lower.includes('crm') || /\bleads?\b/i.test(lower)) {
       if (lower.includes('add') || lower.includes('create')) {
         const name = text.replace(/.*?(?:add|create)\s+(?:lead\s+)?/i, '').trim();
         return { tool: 'CREATE_CRM_LEAD', args: name ? { fullName: name } : {}, summary: `Create CRM lead ${name}.` };
@@ -218,7 +220,7 @@ export class WranglerOperatorService {
       }
       return { tool: 'SEARCH_CHAT', args: { query: text }, summary: 'Search chat messages.' };
     }
-    if (lower.includes('stock') || lower.includes('inventory') || lower.includes('86')) {
+    if (lower.includes('stock') || lower.includes('inventory') || /\b86\b/i.test(lower)) {
       if (lower.startsWith('86 ') || lower.includes('mark 86')) {
         const item = text.replace(/.*?(?:86|mark 86)\s+/i, '').trim();
         return { tool: 'UPDATE_ITEM_86', args: { itemName: item, isEightySix: true }, summary: `86 item ${item}.` };
@@ -230,15 +232,19 @@ export class WranglerOperatorService {
       const name = addShiftMatch ? addShiftMatch[1].trim() : '';
       return { tool: 'CREATE_SHIFT', args: name ? { staffName: name } : {}, summary: `Add shift for ${name || 'staff'}.` };
     }
-    if (lower.includes('reservation') || lower.startsWith('find ')) {
+    if (lower.includes('reservation') || lower.includes('booking') || /^(?:find|look\s*up|show)\s+(?:a\s+|the\s+)?(?:reservation|booking)\b/i.test(lower)) {
       const findReservation = lower.match(/(?:find|look up|lookup|show)\s+(?:the\s+)?(?:reservation\s+(?:for\s+)?)?(.+)/i);
-      return { tool: 'FIND_RESERVATION', args: { guestName: findReservation ? findReservation[1].replace(/\breservation\b/gi, '').trim() : '' }, summary: 'Find reservation.' };
+      return { tool: 'FIND_RESERVATION', args: { guestName: findReservation ? findReservation[1].replace(/\b(?:reservation|booking)\b/gi, '').trim() : '' }, summary: 'Find reservation.' };
     }
     if (lower.includes('clock') || lower.includes('punch')) {
       return { tool: 'LIST_CLOCKS', args: {}, summary: 'Look up clock records.' };
     }
-    if (lower.includes('working') || lower.includes('schedule')) return { tool: 'LIST_SCHEDULE', args: {}, summary: 'Show schedule.' };
-    if (lower.includes('staff') || lower.includes('bartender') || lower.includes('server')) return { tool: 'FIND_STAFF', args: {}, summary: 'Search staff roster.' };
+    if (/\b(?:schedule|roster)\b/i.test(lower) || /\bwho(?:'s|\s+is)\s+working\b/i.test(lower) || /\bworking\s+(?:today|tonight|now|this\s+shift)\b/i.test(lower)) {
+      return { tool: 'LIST_SCHEDULE', args: {}, summary: 'Show schedule.' };
+    }
+    if (lower.includes('staff') || lower.includes('bartender') || lower.includes('server') || lower.includes('employee') || /^(?:find|search|lookup)\s+(?:staff|employee|server|bartender)\b/i.test(lower)) {
+      return { tool: 'FIND_STAFF', args: {}, summary: 'Search staff roster.' };
+    }
     throw new BadRequestException('AI operator requires GEMINI_API_KEY for write commands and complex requests');
   }
 
@@ -260,7 +266,7 @@ export class WranglerOperatorService {
     return 'operational_write';
   }
 
-  private async executeRead(venueId: string, timezone: string | null | undefined, tool: OperatorTool, args: Record<string, unknown>) {
+  private async executeRead(venueId: string, timezone: string | null | undefined, tool: OperatorTool, args: Record<string, unknown>, actor: Actor) {
     if (tool === 'FIND_RESERVATION') {
       const guestName = this.cleanText(args.guestName);
       const where: any = { venueId, deletedAt: null, ...(guestName ? { guestName: { contains: guestName, mode: 'insensitive' } } : {}) };
@@ -296,11 +302,17 @@ export class WranglerOperatorService {
 
     if (tool === 'SEARCH_CHAT') {
       const query = this.cleanText(args.query);
+      // Venue scope is not membership. Chat already refuses to open a
+      // conversation the caller does not belong to; searching through Wrangler
+      // must honour the same rule, or a manager can read a private staff DM by
+      // asking for it in words instead of opening it.
       const convs = await this.prisma.conversation.findMany({
-        where: { venueId },
+        where: { venueId, memberIds: { has: actor.profileId } },
         take: 20,
       });
-      const convIds = convs.map((c) => c.id);
+      const convIds = convs
+        .filter((c) => canAccessConversation(c.memberIds, c.type, actor.profileId))
+        .map((c) => c.id);
       const messages = await this.prisma.message.findMany({
         where: {
           conversationId: { in: convIds },
@@ -323,7 +335,7 @@ export class WranglerOperatorService {
         where: { venueId, kind: 'eighty_six', status: 'open' },
         take: 100,
       });
-      let result = barItems.map((item) => ({ id: item.id, name: item.name, category: item.category, onHand: item.onHand, parLevel: item.parLevel, isLow: item.onHand <= item.parLevel }));
+      let result = barItems.map((item) => ({ id: item.id, name: item.name, category: item.category, onHand: item.onHand, parLevel: item.parLevel, isLow: item.onHand < item.parLevel }));
       if (lowStockOnly) result = result.filter((i) => i.isLow);
       return {
         inventory: result,
@@ -565,7 +577,7 @@ export class WranglerOperatorService {
     return { ...plan, args, preview } as ResolvedOperatorPlan;
   }
 
-  private async executeWrite(venueId: string, timezone: string | null | undefined, actor: Actor, plan: ResolvedOperatorPlan) {
+  private async executeWrite(venueId: string, timezone: string | null | undefined, actor: Actor, plan: ResolvedOperatorPlan, requestId?: string) {
     const args = plan.args;
 
     if (plan.tool === 'CLEAR_TABLE' || plan.tool === 'UPDATE_TABLE_STATUS') {
@@ -682,15 +694,22 @@ export class WranglerOperatorService {
     if (plan.tool === 'UPDATE_BAR_STOCK') {
       const itemName = String(args.itemName);
       const onHand = Number(args.onHand);
-      const item = await this.prisma.barInventoryItem.findFirst({
-        where: { venueId, name: { contains: itemName, mode: 'insensitive' } },
+      const items = await this.prisma.barInventoryItem.findMany({
+        where: { venueId, name: { equals: itemName, mode: 'insensitive' } },
+        take: 2,
       });
+      if (items.length > 1) throw new BadRequestException('Inventory name is ambiguous. Use the stock screen to select the item.');
+      const item = items[0];
       if (!item) throw new NotFoundException(`Inventory item "${itemName}" not found`);
-      const row = await this.prisma.barInventoryItem.update({
-        where: { id: item.id },
-        data: { onHand, lastCountedAt: new Date() },
-      });
-      return { id: row.id, name: row.name, onHand: row.onHand, parLevel: row.parLevel };
+      if (!this.inventory) throw new BadRequestException('Inventory service is unavailable');
+      // requestId is optional (older clients don't send one yet) — when
+      // present it lets a retried execute() call replay instead of creating
+      // a second movement row and re-firing manager alerts; when absent this
+      // behaves exactly as before (no idempotency protection, no regression).
+      const operationId = requestId ? `wrangler-${requestId}` : undefined;
+      const { movement } = await this.inventory.record({ venueId, itemId: item.id, createdBy: actor.profileId,
+        movementType: 'count', quantity: onHand, notes: 'Wrangler operator count', operationId });
+      return { id: item.id, name: item.name, onHand: movement.nextOnHand, parLevel: item.parLevel };
     }
 
     if (plan.tool === 'CREATE_SHIFT') {

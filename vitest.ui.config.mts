@@ -17,6 +17,7 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text-summary'],
+      reportsDirectory: 'coverage/ui',
       all: true,
       include: ['app/**/*.tsx', 'components/**/*.tsx'],
       exclude: ['**/*.spec.tsx'],
@@ -30,11 +31,14 @@ export default defineConfig({
       // doesn't flake on minor variance).
       // Raised again after the desktop-web layout specs (measured: statements
       // 6.44, branches 6.03, functions 4.98, lines 6.94).
+      // Raised after onboarding recovery coverage (8.49/7.46/6.20/9.12).
+      // Raised after complete shared components & screen coverage push
+      // (measured: statements 56.83, branches 48.80, functions 49.56, lines 59.84).
       thresholds: {
-        statements: 6.3,
-        branches: 5.9,
-        functions: 4.8,
-        lines: 6.8,
+        statements: 56.0,
+        branches: 48.0,
+        functions: 49.0,
+        lines: 59.0,
       },
     } as any,
   },

@@ -31,6 +31,12 @@ const DOCUMENT_CATEGORIES = ['sop', 'manual', 'recipe', 'menu', 'training', 'for
 type DocumentCategoryValue = (typeof DOCUMENT_CATEGORIES)[number];
 type Scope = VenueScopedRequest['venueScope'];
 
+// sop/manual/recipe/menu/training are the working-floor library every staff
+// member needs. 'form' and 'other' are the catch-all categories that end up
+// holding HR paperwork, so they're manager-only -- unlike the rest of this
+// controller, which is deliberately staff-readable.
+const MANAGER_ONLY_CATEGORIES: ReadonlySet<DocumentCategoryValue> = new Set(['form', 'other']);
+
 class UploadDocumentDto {
   @IsString()
   @MaxLength(120)
@@ -80,8 +86,12 @@ export class DocumentsController {
     // stay well under this for any real venue. Without a bound this query
     // grows without limit over a venue's lifetime.
     const LIST_CAP = 1000;
+    const isManager = canManageVenue(scope.role, scope.allAccess);
     const documents = await this.prisma.venueDocument.findMany({
-      where: { venueId: scope.venueId },
+      where: {
+        venueId: scope.venueId,
+        ...(isManager ? {} : { category: { notIn: Array.from(MANAGER_ONLY_CATEGORIES) } }),
+      },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       include: { uploadedBy: { select: { fullName: true } } },
       take: LIST_CAP,
@@ -157,6 +167,12 @@ export class DocumentsController {
       where: { id, venueId: scope.venueId },
     });
     if (!document) throw new NotFoundException('Document not found');
+    if (
+      MANAGER_ONLY_CATEGORIES.has(document.category as DocumentCategoryValue) &&
+      !canManageVenue(scope.role, scope.allAccess)
+    ) {
+      throw new NotFoundException('Document not found');
+    }
     let url: string;
     try {
       url = await this.storage.getPresignedUrl(document.s3Key, document.fileName, document.mimeType);
@@ -164,7 +180,7 @@ export class DocumentsController {
       this.logger.error(`Document access storage failed for document ${document.id}`, error instanceof Error ? error.stack : undefined);
       throw new ServiceUnavailableException('Document storage is temporarily unavailable. Please try again.');
     }
-    return { url, expiresInSeconds: 300 };
+    return { url, expiresInSeconds: 120 };
   }
 
   @RequireSubscription('active')

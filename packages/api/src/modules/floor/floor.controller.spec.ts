@@ -9,7 +9,7 @@ function makeController() {
     saveFloorPlan: vi.fn().mockResolvedValue({ ok: true }),
     clearActiveFloorPlan: vi.fn().mockResolvedValue({ deletedTables: 2, deletedChairs: 1 }),
     getUnassignedReservations: vi.fn().mockResolvedValue([{ id: 'res-1' }]),
-    getOpenWaitlist: vi.fn().mockResolvedValue([{ id: 'wl-1' }]),
+    getOpenWaitlist: vi.fn().mockResolvedValue([{ id: 'wl-1', guestName: 'Alex', phone: '555-1234', notes: 'allergic to nuts' }]),
     addToWaitlist: vi.fn().mockResolvedValue({ _id: 'wl-1', id: 'wl-1' }),
     removeFromWaitlist: vi.fn().mockResolvedValue({ ok: true }),
     markWaitlistReady: vi.fn().mockResolvedValue({ ok: true }),
@@ -137,6 +137,18 @@ describe('FloorController', () => {
       const { controller, floor } = makeController();
       await expect(controller.getOpenWaitlist(undefined as any)).resolves.toEqual([]);
       expect(floor.getOpenWaitlist).not.toHaveBeenCalled();
+    });
+
+    it('strips guest phone and notes from the waitlist for non-managers', async () => {
+      const { controller } = makeController();
+      const result = await controller.getOpenWaitlist(staffScope);
+      expect(result).toEqual([{ id: 'wl-1', guestName: 'Alex', phone: null, notes: null }]);
+    });
+
+    it('returns guest phone and notes on the waitlist for managers', async () => {
+      const { controller } = makeController();
+      const result = await controller.getOpenWaitlist(managerScope);
+      expect(result).toEqual([{ id: 'wl-1', guestName: 'Alex', phone: '555-1234', notes: 'allergic to nuts' }]);
     });
   });
 

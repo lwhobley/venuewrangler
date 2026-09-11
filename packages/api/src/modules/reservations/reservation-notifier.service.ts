@@ -3,6 +3,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { EmailService } from '../../email/email.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { reservationConfirmedTemplate, reservationReminderTemplate, tableReadyTemplate } from '../../email/templates/reservations';
+import { runWithoutTenant } from '../../prisma/tenant-context';
 
 const REMINDER_WINDOW_MIN_HOURS = 20;
 const REMINDER_WINDOW_MAX_HOURS = 28;
@@ -77,6 +78,17 @@ export class ReservationNotifierService {
    */
   @Cron(CronExpression.EVERY_HOUR)
   async sendUpcomingReminders(): Promise<{ sent: number }> {
+    // Explicit, not incidental: this cron intentionally scans reservations
+    // across every venue in one batch. Nothing binds a tenant context today
+    // outside of AuthGuard's per-request enterTenant(), but that is an
+    // implicit assumption a scheduler-triggered method should not rely on —
+    // if it ever ran inside a bound tenant context, the Prisma extension
+    // would silently narrow this query to one venue and every other venue's
+    // reminders would stop sending with no error.
+    return runWithoutTenant(() => this.runUpcomingReminders());
+  }
+
+  private async runUpcomingReminders(): Promise<{ sent: number }> {
     const now = Date.now();
     const minTime = new Date(now + REMINDER_WINDOW_MIN_HOURS * 60 * 60 * 1000);
     const maxTime = new Date(now + REMINDER_WINDOW_MAX_HOURS * 60 * 60 * 1000);

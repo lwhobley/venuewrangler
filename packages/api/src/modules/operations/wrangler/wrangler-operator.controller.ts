@@ -1,5 +1,5 @@
 import { Body, Controller, ForbiddenException, Post } from '@nestjs/common';
-import { IsObject, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsObject, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 import { canManageVenue } from '../../../auth/roles';
 import { RequireSubscription } from '../../../billing/require-subscription.decorator';
 import { VenueScope } from '../../../venue/venue-scope.decorator';
@@ -22,6 +22,15 @@ class WranglerOperatorPlanDto {
 class WranglerOperatorExecuteDto {
   @IsObject()
   plan!: Record<string, unknown>;
+
+  // Optional today so older clients keep working unchanged. When the client
+  // generates one per user action and resends the same value on a retried
+  // execute() call, write tools that support idempotency (currently
+  // UPDATE_BAR_STOCK) can dedupe the retry instead of double-applying it.
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  requestId?: string;
 }
 
 @Controller('v1/operations/wrangler/operator')
@@ -78,6 +87,7 @@ export class WranglerOperatorController {
       timezone: venue.timezone,
       actor: { profileId: scope.profileId, fullName: scope.fullName, role: scope.role, allAccess: scope.allAccess },
       plan,
+      requestId: body.requestId,
     });
   }
 }

@@ -9,37 +9,8 @@ import {
   type WranglerOperatorPlan,
   type WranglerSnapshot,
 } from '../lib/useWrangler';
+import { formatOperatorResult } from '../lib/wrangler-result-format';
 
-function formatOperatorResult(result: unknown): string {
-  if (Array.isArray(result)) {
-    if (result.length === 0) return 'No matching records found.';
-    return result.slice(0, 8).map((row) => {
-      if (!row || typeof row !== 'object') return String(row);
-      const item = row as Record<string, unknown>;
-      const name = String(item.guestName ?? item.staffName ?? item.fullName ?? item.jobTitle ?? item.label ?? item.title ?? item.name ?? 'Record');
-      const pieces: string[] = [];
-      if (item.partySize != null) pieces.push(`party ${item.partySize}`);
-      if (item.status != null) pieces.push(String(item.status));
-      if (item.startMinutes != null && item.endMinutes != null) pieces.push(`${item.startMinutes}-${item.endMinutes}`);
-      if (item.clockInAt != null) pieces.push(`in ${new Date(Number(item.clockInAt)).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`);
-      if (item.clockOutAt != null) pieces.push(`out ${new Date(Number(item.clockOutAt)).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`);
-      if (item.reservationTime != null) pieces.push(new Date(Number(item.reservationTime)).toLocaleString());
-      if (item.jobTitle != null && name !== String(item.jobTitle)) pieces.push(String(item.jobTitle));
-      return `• ${name}${pieces.length ? ` — ${pieces.join(' · ')}` : ''}`;
-    }).join('\n');
-  }
-  if (result && typeof result === 'object') {
-    const item = result as Record<string, unknown>;
-    const name = String(item.guestName ?? item.staffName ?? item.fullName ?? item.jobTitle ?? item.label ?? item.title ?? item.itemName ?? item.name ?? 'Done');
-    const pieces: string[] = [];
-    if (item.partySize != null) pieces.push(`party ${item.partySize}`);
-    if (item.status != null) pieces.push(String(item.status));
-    if (item.onHand != null) pieces.push(`on hand: ${item.onHand}`);
-    if (item.startMinutes != null && item.endMinutes != null) pieces.push(`${item.startMinutes}-${item.endMinutes}`);
-    return `• ${name}${pieces.length ? ` — ${pieces.join(' · ')}` : ''}`;
-  }
-  return result == null ? 'Done.' : String(result);
-}
 
 export function WranglerIntelligencePanel({
   snapshot,

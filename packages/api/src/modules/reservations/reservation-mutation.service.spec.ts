@@ -25,6 +25,9 @@ describe('ReservationMutationService', () => {
       reservation: {
         create: vi.fn().mockResolvedValue(reservation),
       },
+      guest: {
+        findFirst: vi.fn().mockResolvedValue({ id: 'guest-9' }),
+      },
     });
     const service = new ReservationMutationService(prisma as any);
 
@@ -52,8 +55,17 @@ describe('ReservationMutationService', () => {
         guestPhone: '555-1212',
         guestEmail: 'guest@example.com',
         durationMinutes: 90,
+        // The booking is filed under the recognised guest, not just their name.
+        guestId: 'guest-9',
       }),
     });
+    expect(prisma.guest.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        venueId: 'venue-1',
+        deletedAt: null,
+        OR: [{ email: 'guest@example.com' }, { phone: '5551212' }],
+      }),
+    }));
   });
 
   it('persists legacy table numbers as conflict-checked relational assignments', async () => {
@@ -325,4 +337,66 @@ describe('ReservationMutationService', () => {
       BadRequestException,
     );
   });
+
+  describe('cancellation cascades', () => {
+    const makePrisma = () => withTransaction({
+      reservation: {
+        findFirst: vi.fn().mockResolvedValue({ id: 'reservation-1', status: 'seated', tags: ['beo:beo-1'] }),
+        update: vi.fn().mockResolvedValue({ id: 'reservation-1' }),
+      },
+      tableAssignment: {
+        findMany: vi.fn().mockResolvedValue([{ tableId: 'table-1' }]),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
+      tableState: {
+        findMany: vi.fn().mockResolvedValue([{ tableId: 'table-1', status: 'seated' }]),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
+      crmBeo: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+      eventExecutionWorkspace: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+    });
+
+    it('frees the tables it released instead of leaving them showing occupied', async () => {
+      // Releasing a TableAssignment does not move TableState, so without the
+      // refresh the floor plan kept an occupied table with nothing to release.
+      const prisma = makePrisma();
+      // No assignment covers "now" once the holds are released.
+      prisma.tableAssignment.findMany
+        .mockResolvedValueOnce([{ tableId: 'table-1' }])
+        .mockResolvedValue([]);
+
+      await new ReservationMutationService(prisma as any).removeReservation({
+        venueId: 'venue-1',
+        reservationId: 'reservation-1',
+      });
+
+      expect(prisma.tableAssignment.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ releasedReason: 'cancelled' }) }),
+      );
+      expect(prisma.tableState.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ tableId: 'table-1' }),
+          data: expect.objectContaining({ status: 'available' }),
+        }),
+      );
+    });
+
+    it('cancels the BEO the reservation was created for', async () => {
+      const prisma = makePrisma();
+      prisma.tableAssignment.findMany.mockResolvedValue([]);
+
+      await new ReservationMutationService(prisma as any).removeReservation({
+        venueId: 'venue-1',
+        reservationId: 'reservation-1',
+      });
+
+      expect(prisma.crmBeo.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ id: 'beo-1', venueId: 'venue-1' }),
+          data: expect.objectContaining({ status: 'cancelled' }),
+        }),
+      );
+    });
+  });
+
 });

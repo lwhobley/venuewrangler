@@ -8,7 +8,7 @@ import {
   View,
 } from 'react-native';
 import { router } from 'expo-router';
-import * as Haptics from 'expo-haptics';
+import { notifySuccess } from '../../lib/feedback';
 import { Button, Card, Text, TextInput } from 'react-native-paper';
 import { appApi } from '../../lib/api-client';
 import { authCardStyle, authColors as colors, authInputProps as inputProps, spacing, type } from '../../lib/theme';
@@ -40,7 +40,7 @@ export default function InviteCheckScreen() {
         ? { email: trimmed }
         : { phone: trimmed };
       await appApi.inviteCheck(body);
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      notifySuccess();
       setStage({ kind: 'submitted' });
     } catch (e) {
       Alert.alert(t('inviteCheck.errorTitle'), e instanceof Error ? e.message : t('inviteCheck.genericError'));

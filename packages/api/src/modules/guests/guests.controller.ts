@@ -423,7 +423,7 @@ export class GuestsController {
 
     if (body.guestId) {
       const existing = await this.prisma.guest.findFirst({
-        where: { id: body.guestId, venueId: scope.venueId },
+        where: { id: body.guestId, venueId: scope.venueId, deletedAt: null },
       });
       if (!existing) throw new BadRequestException('Guest not found');
       const updated = await this.prisma.guest.update({ where: { id: existing.id }, data });
@@ -438,7 +438,7 @@ export class GuestsController {
   @Delete(':id')
   async removeGuest(@VenueScope() scope: Scope, @Param('id') id: string) {
     this.requireManager(scope);
-    const guest = await this.prisma.guest.findFirst({ where: { id, venueId: scope.venueId } });
+    const guest = await this.prisma.guest.findFirst({ where: { id, venueId: scope.venueId, deletedAt: null } });
     if (!guest) throw new BadRequestException('Guest not found');
     await this.prisma.$transaction(async (tx) => {
       await tx.guest.update({

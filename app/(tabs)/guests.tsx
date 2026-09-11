@@ -232,16 +232,42 @@ function GuestsScreen() {
   );
 }
 
+// Server caps `limit` at 200 (guests.controller.ts). Beyond that, searching is
+// the right tool, and the button says so rather than paging forever.
+const GUEST_PAGE_SIZE = 100;
+const GUEST_MAX_PAGE_SIZE = 200;
+
+function useDebouncedValue<T>(value: T, delayMs: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(value), delayMs);
+    return () => clearTimeout(timer);
+  }, [value, delayMs]);
+  return debounced;
+}
+
 function GuestsScreenInner() {
   const { t } = useI18n();
   const { venue, isReady, canManage } = useVenueAuth();
-  const guestList = useQuery(api.guests.listGuests, isReady && canManage && venue?.id ? { venueId: venue.id } : 'skip') as GuestListResponse | undefined;
+  const [query, setQuery] = useState('');
+  // The directory used to load one page and filter it in JS, so a venue with
+  // more than a page of guests simply could not find the rest by searching —
+  // the guest existed, the search said no. The term goes to the server (which
+  // has matched name/email/phone all along) and the page size steps up on
+  // demand for browsing without a term.
+  const debouncedQuery = useDebouncedValue(query, 250);
+  const [pageSize, setPageSize] = useState(GUEST_PAGE_SIZE);
+  const guestList = useQuery(
+    api.guests.listGuests,
+    isReady && canManage && venue?.id
+      ? { venueId: venue.id, limit: pageSize, ...(debouncedQuery.trim() ? { search: debouncedQuery.trim() } : {}) }
+      : 'skip',
+  ) as GuestListResponse | undefined;
   const guests = guestList?.guests;
   const upsertGuest = useMutation(api.guests.upsertGuest);
   const ingestLeads = useMutation(api.guests.ingestLeads);
   const removeGuest = useMutation(api.guests.removeGuest);
 
-  const [query, setQuery] = useState('');
   const [segment, setSegment] = useState<Segment>('all');
   const [showForm, setShowForm] = useState(false);
   const [showLeadImport, setShowLeadImport] = useState(false);
@@ -290,7 +316,13 @@ function GuestsScreenInner() {
     if (!selectedGuestId && guests?.[0]) setSelectedGuestId(guests[0]._id);
   }, [guests, selectedGuestId]);
 
+  useEffect(() => {
+    setPageSize(GUEST_PAGE_SIZE);
+  }, [debouncedQuery]);
+
   const filtered = useMemo(() => {
+    // The search term is applied by the server; anything still typed but not
+    // yet debounced is narrowed here so the list does not lag the keystroke.
     const q = query.trim().toLowerCase();
     const rows = guests ?? [];
     return rows.filter((guest) => {
@@ -583,6 +615,18 @@ function GuestsScreenInner() {
           <Text variant="titleMedium" style={{ fontWeight: '800', color: colors.charcoal }}>
             {t('guests.list.guestsCount', { count: guestList?.totalCount ?? filtered.length })}
           </Text>
+          {guestList && guestList.totalCount > (guests?.length ?? 0) ? (
+            <Button
+              mode="outlined"
+              textColor={colors.primary}
+              onPress={() => setPageSize((size) => Math.min(size + GUEST_PAGE_SIZE, GUEST_MAX_PAGE_SIZE))}
+              disabled={pageSize >= GUEST_MAX_PAGE_SIZE}
+            >
+              {pageSize >= GUEST_MAX_PAGE_SIZE
+                ? `Showing the first ${GUEST_MAX_PAGE_SIZE} — search to narrow`
+                : `Show more (${guests?.length ?? 0} of ${guestList.totalCount})`}
+            </Button>
+          ) : null}
         </View>
       }
       ListEmptyComponent={

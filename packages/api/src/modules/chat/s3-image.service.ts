@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { randomBytes } from 'crypto';
 
@@ -38,13 +38,18 @@ export class S3ImageService {
    * no auth at all once issued, so keep the window tight — it's only meant to
    * be followed immediately via the 302 redirect from the media-access route.
    */
-  async getPresignedUrl(key: string, expiresInSeconds = 300): Promise<string> {
+  async getPresignedUrl(key: string, expiresInSeconds = 120): Promise<string> {
     const { GetObjectCommand } = await import('@aws-sdk/client-s3');
     return getSignedUrl(
       this.s3,
       new GetObjectCommand({ Bucket: this.bucket, Key: key }),
       { expiresIn: expiresInSeconds },
     );
+  }
+
+  /** Read a private image for the token-checked API streaming route. */
+  async getObject(key: string) {
+    return this.s3.send(new GetObjectCommand({ Bucket: this.bucket, Key: key }));
   }
 
   /** Hard-delete an object (e.g. on chat message delete). */

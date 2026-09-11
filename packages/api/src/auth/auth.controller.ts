@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Logger, Optional, Post, Req, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Logger, Optional, Post, Req, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Throttle } from '@nestjs/throttler';
 import { Role } from '@prisma/client';
@@ -99,6 +99,12 @@ class VerifyEmailDto {
   @IsString()
   @Matches(/^\d{10}$/)
   code!: string;
+}
+
+class ConfirmAdoptionDto {
+  @IsString()
+  @MaxLength(64)
+  profileId!: string;
 }
 
 class ForgotPasswordDto {
@@ -315,9 +321,11 @@ export class AuthController {
     // Swallow delivery errors: the account is already created and the session
     // token is ready to return. The user can request a new code from the
     // verify-email screen if the email didn't arrive.
+    let verificationEmailSent = !emailInvite ? false : null;
     if (!emailInvite) {
       try {
         await this.sendVerificationEmail(nextUserId, email, sessionResult.profile.fullName);
+        verificationEmailSent = true;
       } catch (err: any) {
         // Identify by user id, never the address. Cloud Run logs are retained
         // and fan out to downstream sinks, so an email here is PII at rest for
@@ -326,7 +334,11 @@ export class AuthController {
         this.logger.error(`Verification email failed for user ${nextUserId}: ${err?.message ?? String(err)}`);
       }
     }
-    return sessionResult;
+    // The failure is still swallowed — the account exists and the session token
+    // is ready, so failing the signup would be worse. But it is reported now:
+    // the app used to tell people to check an inbox for a code that was never
+    // sent, with no way to tell that from a slow delivery.
+    return { ...sessionResult, verificationEmailSent };
   }
 
   // Authenticated (not @Public): the global AuthGuard requires a valid bearer
@@ -605,6 +617,23 @@ export class AuthController {
     return { ok: true };
   }
 
+  // Explicit, user-initiated confirmation of a pendingAdoption candidate
+  // returned by a login/signup response. Nothing changes until the person
+  // actually confirms — see AuthService.confirmProfileAdoption for why this
+  // can no longer happen automatically.
+  @Post('confirm-adoption')
+  async confirmAdoption(@Req() request: Request, @CurrentUser() user: AuthUser, @Body() body: ConfirmAdoptionDto) {
+    await assertWithinSharedRateLimit(this.prisma, `confirm-adoption:${user.sub}`, 10, AUTH_RATE_LIMIT_WINDOW_MS);
+    await assertWithinSharedRateLimit(this.prisma, `confirm-adoption:ip:${getClientIp(request)}`, 10, AUTH_RATE_LIMIT_WINDOW_MS);
+    const profile = await this.authService.confirmProfileAdoption(user.sub, body.profileId);
+    return { profile: mapProfile(profile, true), venue: profile.venue ? mapVenue(profile.venue) : null };
+  }
+
+  @Get('pending-adoption')
+  async pendingAdoption(@CurrentUser() user: AuthUser) {
+    return { pendingAdoption: await this.authService.pendingProfileAdoption(user.sub) };
+  }
+
   // Revoke every session for the account (all devices).
   @AllowUnverifiedEmail()
   @Post('logout-all')
@@ -619,7 +648,7 @@ export class AuthController {
   }
 
   private async issueSession(userId: string, email: string, fullName?: string, inviteToken?: string, rawPhone?: string) {
-    const { session, profile } = await this.authService.issueSession(userId, email, fullName, inviteToken, rawPhone);
+    const { session, profile, pendingAdoption } = await this.authService.issueSession(userId, email, fullName, inviteToken, rawPhone);
     const account = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { emailVerifiedAt: true },
@@ -663,6 +692,11 @@ export class AuthController {
       profile: mapProfile(profile, emailVerified),
       venue: emailVerified && isActiveMembership(profile.membershipStatus) && profile.venue ? mapVenue(profile.venue) : null,
       venues,
+      // A roster row elsewhere matched this account's verified email. Not
+      // applied automatically — the client should prompt ("You appear to be
+      // on the roster at {venueName} as {role} — join?") and call
+      // POST /v1/auth/confirm-adoption only if the person confirms.
+      pendingAdoption: pendingAdoption ?? null,
     };
   }
 

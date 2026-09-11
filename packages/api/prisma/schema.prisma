@@ -342,6 +342,9 @@ model Venue {
   venueType                     String?
   staffRange                    String?
   weeklyLaborBudgetHours        Float?
+  // Venue-wide publish markers. Superseded by SchedulePublication for the
+  // per-week state; kept because existing rows are the only record of what was
+  // published before that table existed.
   schedulePublishedAt           DateTime?
   schedulePublishedById         String?
   scheduleUpdatedAfterPublishAt DateTime?
@@ -368,6 +371,7 @@ model Venue {
   pushTokens                    PushToken[]
   timeEntries                   TimeEntry[]
   blackoutDates                 BlackoutDate[]
+  schedulePublications          SchedulePublication[]
   staffRequests                 StaffRequest[]
   guests                        Guest[]
   reservations                  Reservation[]
@@ -416,6 +420,7 @@ model Venue {
   aiUsageEvents                 AiUsageEvent[]
   aiBudgetReservations          AiBudgetReservation[]
   joinRequests                  WorkplaceJoinRequest[]
+  joinRequestEvents             WorkplaceJoinRequestEvent[]
   eventExecutionWorkspaces      EventExecutionWorkspace[]
   documents                     VenueDocument[]
 }
@@ -499,6 +504,28 @@ model ScheduleShift {
   @@index([profileId])
   @@index([venueId, weekStart])
   @@index([venueId, profileId, weekStart, dayIndex])
+}
+
+/**
+ * Per-week publish state. The venue previously carried a single
+ * schedulePublishedAt covering every week at once, so publishing one week
+ * marked them all published and the manager's "Draft" badge could disagree with
+ * what staff were already being shown. One row per published week; a week with
+ * no row has never been published.
+ */
+model SchedulePublication {
+  id            String   @id @default(cuid())
+  venueId       String
+  // Sunday (YYYY-MM-DD), matching ScheduleShift.weekStart.
+  weekStart     String
+  publishedAt   DateTime
+  publishedById String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  venue         Venue    @relation(fields: [venueId], references: [id], onDelete: Cascade)
+
+  @@unique([venueId, weekStart])
+  @@index([venueId])
 }
 
 model BlackoutDate {
@@ -726,6 +753,89 @@ model RetainedTimeEntry {
   @@index([retainedAt])
 }
 
+// Same pattern as RetainedTimeEntry: PosCheck/PosLaborPunch are onDelete:
+// Cascade from Venue, so account deletion (the only place a Venue is ever
+// deleted — see app.controller.ts) archives them here first. No Venue FK, so
+// the row survives the cascade. Unlike TimeEntry these are not the departing
+// account's own personal data (no profileId link), so nothing here needs
+// pseudonymizing — they retain venue revenue/labor history the same way
+// RetainedTimeEntry retains co-workers' wage history.
+model RetainedPosCheck {
+  id              String    @id @default(cuid())
+  originVenueId   String
+  originVenueName String?
+  provider        String
+  externalCheckId String
+  tableLabel      String?
+  serverName      String?
+  guestName       String?
+  openedAt        DateTime
+  closedAt        DateTime?
+  subtotalCents   Int
+  taxCents        Int?
+  tipCents        Int
+  totalCents      Int
+  status          String
+  originUpdatedAt DateTime
+  retainedAt      DateTime  @default(now())
+
+  @@index([originVenueId])
+  @@index([retainedAt])
+}
+
+model RetainedPosLaborPunch {
+  id                 String    @id @default(cuid())
+  originVenueId      String
+  originVenueName    String?
+  provider           String
+  externalEmployeeId String
+  employeeName       String
+  clockInAt          DateTime
+  clockOutAt         DateTime?
+  regularMinutes     Int?
+  overtimeMinutes    Int?
+  regularPayCents    Int?
+  overtimePayCents   Int?
+  totalPayCents      Int?
+  businessDate       String
+  retainedAt         DateTime  @default(now())
+
+  @@index([originVenueId])
+  @@index([retainedAt])
+}
+
+// Same pattern as RetainedTimeEntry: StaffRequest.profile is onDelete:
+// Cascade, and an APPROVED time-off/PTO/sick request is the paper trail for
+// why sickHoursAccrued/ptoHoursAccrued changed on the departing account's
+// Profile (see staff-requests.controller.ts) — the same wage/hour compliance
+// category that justified retaining TimeEntry in the first place. Only
+// approved requests are archived; pending/denied/cancelled ones never
+// affected pay and are left to the ordinary Cascade. This IS the departing
+// account's own personal data, so the name is pseudonymized like
+// RetainedTimeEntry, not preserved like RetainedPosCheck.
+model RetainedStaffRequest {
+  id                  String    @id @default(cuid())
+  originVenueId       String
+  originVenueName     String?
+  // Pseudonymized (deleted_user_<profileId>), same as RetainedTimeEntry —
+  // this lets multiple retained records be correlated to the same former
+  // employee without retaining their actual name.
+  profileFullName     String?
+  kind                String
+  title               String
+  details             String
+  requestedForDate    String?
+  requestedRangeStart String?
+  requestedRangeEnd   String?
+  responseNotes       String?
+  originCreatedAt     DateTime
+  originReviewedAt    DateTime?
+  retainedAt          DateTime  @default(now())
+
+  @@index([originVenueId])
+  @@index([retainedAt])
+}
+
 model ObjectDeletionJob {
   id          String    @id @default(cuid())
   objectKeys  String[]
@@ -801,7 +911,7 @@ model PushToken {
   id         String   @id @default(cuid())
   venueId    String
   profileId  String
-  token      String   @unique
+  token      String
   platform   String
   enabled    Boolean
   lastSeenAt DateTime
@@ -810,8 +920,14 @@ model PushToken {
   venue      Venue    @relation(fields: [venueId], references: [id], onDelete: Cascade)
   profile    Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
 
+  // Scoped per venue, not global: the same physical device token is
+  // legitimately registered at multiple venues for a staff member who works
+  // more than one (notifications.service.ts already scopes delivery by
+  // venueId, so this is a genuine multi-row case, not a collision to reject).
+  @@unique([venueId, token])
   @@index([profileId])
   @@index([venueId])
+  @@index([token])
 }
 
 // NOTE: a partial unique index exists in SQL only (Prisma cannot express it):
@@ -860,17 +976,24 @@ model TimeEntry {
 model ShiftSwap {
   id                 String         @id @default(cuid())
   venueId            String
-  requesterProfileId String
+  // Nullable + SetNull (not Cascade): a shift swap is a two-party record, and
+  // deleting ONE party's account (which removes every profile they hold,
+  // across every venue — see app.controller.ts's account-delete flow) used to
+  // cascade-delete the entire row, silently destroying the OTHER, still-active
+  // party's pending/accepted swap with no trace. The row now survives with a
+  // null party instead. Every read site must treat a null id as "that party
+  // no longer has an account" rather than assuming it's always populated.
+  requesterProfileId String?
   requesterShiftId   String
-  targetProfileId    String
+  targetProfileId    String?
   targetShiftId      String?
   status             String
   note               String?
   createdAt          DateTime       @default(now())
   updatedAt          DateTime       @updatedAt
   venue              Venue          @relation(fields: [venueId], references: [id], onDelete: Cascade)
-  requesterProfile   Profile        @relation("ShiftSwapRequesterProfile", fields: [requesterProfileId], references: [id], onDelete: Cascade)
-  targetProfile      Profile        @relation("ShiftSwapTargetProfile", fields: [targetProfileId], references: [id], onDelete: Cascade)
+  requesterProfile   Profile?       @relation("ShiftSwapRequesterProfile", fields: [requesterProfileId], references: [id], onDelete: SetNull)
+  targetProfile      Profile?       @relation("ShiftSwapTargetProfile", fields: [targetProfileId], references: [id], onDelete: SetNull)
   requesterShift     ScheduleShift  @relation("ShiftSwapRequesterShift", fields: [requesterShiftId], references: [id], onDelete: Cascade)
   targetShift        ScheduleShift? @relation("ShiftSwapTargetShift", fields: [targetShiftId], references: [id], onDelete: SetNull)
   messages           Message[]
@@ -973,7 +1096,15 @@ model Reservation {
   syncEvents          ReservationSyncEvent[]
   tableAssignments    TableAssignment[]
 
-  @@unique([venueId, source, externalId])
+  // externalId is nullable (direct/manual reservations have none), and
+  // Postgres treats every NULL as distinct — a plain composite unique here
+  // does nothing to prevent duplicate "no external id" bookings. A partial
+  // unique index exists in SQL only (Prisma cannot express WHERE on
+  // @@unique): "Reservation_venueId_source_externalId_key" ON
+  // ("venueId", "source", "externalId") WHERE "externalId" IS NOT NULL
+  // (migration 20260910050000). If `prisma migrate dev` ever proposes
+  // dropping that index for this plain one, delete that statement.
+  @@index([venueId, source, externalId])
   @@index([venueId, reservationTime])
   @@index([venueId, status])
   @@index([guestId])
@@ -1333,7 +1464,11 @@ model CrmContract {
   // every write site (crm.controller.ts).
   beo                 CrmBeo?        @relation(fields: [beoId], references: [id], onDelete: SetNull)
 
-  @@unique([contractNumber])
+  // Scoped per venue, not global: contractNumber is a random per-tenant
+  // identifier (see makeContractNumber() in crm.controller.ts), and a global
+  // unique let one venue's number collide with another's, rejecting an
+  // unrelated venue's contract creation outright.
+  @@unique([venueId, contractNumber])
   @@index([venueId])
   @@index([leadId])
   @@index([beoId])
@@ -1393,6 +1528,11 @@ model Subscription {
   cancelledAt            DateTime?
   externalSubscriptionId String?               @unique
   externalCustomerId     String?
+  // One canonical RevenueCat customer allocation; never copied to covered venues.
+  revenueCatSubscriberId String?               @unique
+  billingSubscriptionId  String?
+  billingSubscription    Subscription?         @relation("VenueBillingCoverage", fields: [billingSubscriptionId], references: [id], onDelete: SetNull)
+  coveredSubscriptions   Subscription[]        @relation("VenueBillingCoverage")
   dataRetentionWarnedAt  DateTime?
   lastStripeEventAt      DateTime?
   lastRevenueCatEventAt  DateTime?
@@ -1402,6 +1542,7 @@ model Subscription {
 
   @@index([status])
   @@index([externalCustomerId])
+  @@index([billingSubscriptionId])
 }
 
 model SubscriptionEvent {
@@ -1601,16 +1742,25 @@ model BarInventoryItem {
   @@index([venueId, category])
   @@index([venueId, name])
   @@unique([venueId, normalizedName])
+  // A barcode has to identify one item: the SKU lookup takes the first match,
+  // so two items sharing one opened whichever row came back. NULLs stay
+  // distinct in Postgres, so items with no SKU are unconstrained.
+  @@unique([venueId, sku])
 }
 
 model BarInventoryMovement {
   id             String               @id @default(cuid())
+  operationId    String?
   venueId        String
   itemId         String
   movementType   BarStockMovementType
   quantity       Float
   previousOnHand Float
   nextOnHand     Float
+  // Unit cost as of this movement. Without it, waste and comp were valued at
+  // the item's current cost, so editing today's cost rewrote the value of
+  // every past waste record. Null only for rows written before this column.
+  unitCostCents  Int?
   notes          String?
   createdBy      String
   createdAt      DateTime             @default(now())
@@ -1619,6 +1769,7 @@ model BarInventoryMovement {
 
   @@index([venueId, createdAt])
   @@index([itemId, createdAt])
+  @@unique([venueId, operationId])
 }
 
 model PrepBoardItem {
@@ -1793,6 +1944,7 @@ model EventExecutionWorkspace {
   sourceType String
   sourceId   String
   title      String
+  isArchived Boolean                      @default(false)
   createdAt  DateTime                     @default(now())
   updatedAt  DateTime                     @updatedAt
   venue      Venue                        @relation(fields: [venueId], references: [id], onDelete: Cascade)
@@ -1981,15 +2133,23 @@ model WorkplaceJoinRequest {
 model WorkplaceJoinRequestEvent {
   id        String               @id @default(cuid())
   requestId String
+  // Denormalized from the parent request at write time (see the SQL
+  // functions that insert these rows) so this table is directly
+  // tenant-scoped rather than only reachable safely through the
+  // WorkplaceJoinRequest relation. SetNull, not Cascade, matching AuditLog's
+  // pattern: an event's history outlives the venue it happened at.
+  venueId   String?
   actorId   String?
   eventType String
   payload   Json?
   createdAt DateTime             @default(now())
   request   WorkplaceJoinRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  venue     Venue?               @relation(fields: [venueId], references: [id], onDelete: SetNull)
   actor     User?                @relation(fields: [actorId], references: [id], onDelete: SetNull)
 
   @@index([requestId, createdAt])
   @@index([actorId])
+  @@index([venueId])
 }
 
 model RateLimitBucket {

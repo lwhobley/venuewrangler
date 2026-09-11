@@ -2,6 +2,47 @@ import { BadRequestException } from '@nestjs/common';
 import { describe, expect, it, vi } from 'vitest';
 import { WranglerOperatorService } from './wrangler-operator.service';
 
+describe('Wrangler inventory writes', () => {
+  const actor = { profileId: 'p1', fullName: 'Manager', role: 'manager', allAccess: false };
+  const plan = { tool: 'UPDATE_BAR_STOCK', args: { itemName: 'House Vodka', onHand: 3 }, summary: 'Count', risk: 'write' };
+
+  it('uses the shared movement service with an exact venue-scoped item', async () => {
+    const findMany = vi.fn(async () => [{ id: 'i1', name: 'House Vodka', parLevel: 5 }]);
+    const record = vi.fn(async () => ({ movement: { nextOnHand: 3 } }));
+    const service = new WranglerOperatorService({ barInventoryItem: { findMany }, auditLog: { create: vi.fn() } } as never, { record } as never);
+    await service.execute({ venueId: 'v1', actor, plan } as never);
+    expect(findMany).toHaveBeenCalledWith({ where: { venueId: 'v1', name: { equals: 'House Vodka', mode: 'insensitive' } }, take: 2 });
+    expect(record).toHaveBeenCalledWith(expect.objectContaining({ venueId: 'v1', itemId: 'i1', createdBy: 'p1', movementType: 'count', quantity: 3 }));
+  });
+
+  it('passes no operationId when the caller sends no requestId (unchanged behavior for older clients)', async () => {
+    const findMany = vi.fn(async () => [{ id: 'i1', name: 'House Vodka', parLevel: 5 }]);
+    const record = vi.fn(async () => ({ movement: { nextOnHand: 3 } }));
+    const service = new WranglerOperatorService({ barInventoryItem: { findMany }, auditLog: { create: vi.fn() } } as never, { record } as never);
+
+    await service.execute({ venueId: 'v1', actor, plan } as never);
+
+    expect(record).toHaveBeenCalledWith(expect.objectContaining({ operationId: undefined }));
+  });
+
+  it('derives a stable operationId from requestId so a retried execute() can be deduped', async () => {
+    const findMany = vi.fn(async () => [{ id: 'i1', name: 'House Vodka', parLevel: 5 }]);
+    const record = vi.fn(async () => ({ movement: { nextOnHand: 3 } }));
+    const service = new WranglerOperatorService({ barInventoryItem: { findMany }, auditLog: { create: vi.fn() } } as never, { record } as never);
+
+    await service.execute({ venueId: 'v1', actor, plan, requestId: 'req-abc' } as never);
+
+    expect(record).toHaveBeenCalledWith(expect.objectContaining({ operationId: 'wrangler-req-abc' }));
+  });
+
+  it('rejects an ambiguous inventory name without updating stock', async () => {
+    const record = vi.fn();
+    const service = new WranglerOperatorService({ barInventoryItem: { findMany: vi.fn(async () => [{ id: 'i1' }, { id: 'i2' }]) } } as never, { record } as never);
+    await expect(service.execute({ venueId: 'v1', actor, plan } as never)).rejects.toThrow('ambiguous');
+    expect(record).not.toHaveBeenCalled();
+  });
+});
+
 // Covers the read-path tool branches inside the private executeRead() method
 // (FIND_RESERVATION, LIST_WAITLIST, FIND_CRM_LEAD, SEARCH_CHAT, LIST_INVENTORY,
 // GET_SALES_PULSE, LIST_INTEGRATIONS, FIND_STAFF, LIST_SCHEDULE, LIST_CLOCKS).
@@ -9,9 +50,11 @@ import { WranglerOperatorService } from './wrangler-operator.service';
 // already used for fallbackParse() in safe-wrangler-operator.service.spec.ts,
 // since executeRead is not part of the public API.
 describe('WranglerOperatorService executeRead', () => {
+  const actor = { profileId: 'profile-1', fullName: 'Casey Manager', role: 'manager', allAccess: false };
+
   function callRead(prisma: any, tool: string, args: Record<string, unknown> = {}, timezone: string | null | undefined = 'UTC') {
     const service = new WranglerOperatorService(prisma as never);
-    return (service as any).executeRead('venue-1', timezone, tool, args);
+    return (service as any).executeRead('venue-1', timezone, tool, args, actor);
   }
 
   describe('FIND_RESERVATION', () => {
@@ -118,22 +161,50 @@ describe('WranglerOperatorService executeRead', () => {
   });
 
   describe('SEARCH_CHAT', () => {
-    it('scopes messages to conversations in the venue and filters by query text', async () => {
+    it('scopes messages to the caller\'s own conversations and filters by query text', async () => {
       const prisma = {
-        conversation: { findMany: vi.fn().mockResolvedValue([{ id: 'conv-1' }, { id: 'conv-2' }]) },
+        conversation: {
+          findMany: vi.fn().mockResolvedValue([
+            { id: 'conv-1', type: 'group', memberIds: ['profile-1', 'profile-2'] },
+            { id: 'conv-2', type: 'dm', memberIds: ['profile-1', 'profile-3'] },
+          ]),
+        },
         message: { findMany: vi.fn().mockResolvedValue([{ id: 'msg-1', text: 'run food to table 5', createdAt: new Date('2026-08-03T18:00:00Z'), conversationId: 'conv-1' }]) },
       };
 
       const result = await callRead(prisma, 'SEARCH_CHAT', { query: 'food' });
 
-      expect(prisma.conversation.findMany).toHaveBeenCalledWith({ where: { venueId: 'venue-1' }, take: 20 });
+      expect(prisma.conversation.findMany).toHaveBeenCalledWith({
+        where: { venueId: 'venue-1', memberIds: { has: 'profile-1' } },
+        take: 20,
+      });
       expect(prisma.message.findMany).toHaveBeenCalledWith(expect.objectContaining({
         where: expect.objectContaining({ conversationId: { in: ['conv-1', 'conv-2'] }, text: { contains: 'food', mode: 'insensitive' } }),
       }));
       expect(result).toEqual([{ id: 'msg-1', text: 'run food to table 5', createdAt: new Date('2026-08-03T18:00:00Z').getTime(), conversationId: 'conv-1' }]);
     });
 
-    it('searches with an empty conversation scope when the venue has no conversations', async () => {
+    it('excludes a venue conversation the caller does not belong to', async () => {
+      const prisma = {
+        conversation: {
+          findMany: vi.fn().mockResolvedValue([
+            { id: 'conv-1', type: 'dm', memberIds: ['profile-1', 'profile-2'] },
+            // A row the membership predicate would not return; belt and braces
+            // in case the filter is ever loosened, the access rule still holds.
+            { id: 'private-dm', type: 'dm', memberIds: ['profile-8', 'profile-9'] },
+          ]),
+        },
+        message: { findMany: vi.fn().mockResolvedValue([]) },
+      };
+
+      await callRead(prisma, 'SEARCH_CHAT', { query: 'raise' });
+
+      expect(prisma.message.findMany).toHaveBeenCalledWith(expect.objectContaining({
+        where: expect.objectContaining({ conversationId: { in: ['conv-1'] } }),
+      }));
+    });
+
+    it('searches with an empty conversation scope when the caller has no conversations', async () => {
       const prisma = {
         conversation: { findMany: vi.fn().mockResolvedValue([]) },
         message: { findMany: vi.fn().mockResolvedValue([]) },

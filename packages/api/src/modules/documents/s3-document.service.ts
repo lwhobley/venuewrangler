@@ -32,7 +32,7 @@ export class S3DocumentService {
     return key;
   }
 
-  async getPresignedUrl(key: string, fileName: string, mimeType: string): Promise<string> {
+  async getPresignedUrl(key: string, fileName: string, mimeType: string, expiresInSeconds = 120): Promise<string> {
     const isSafeImage = mimeType.startsWith('image/') && mimeType !== 'image/svg+xml';
     const isPdf = mimeType === 'application/pdf';
     const disposition = isSafeImage || isPdf ? 'inline' : 'attachment';
@@ -46,7 +46,7 @@ export class S3DocumentService {
         ResponseContentType: isSafeImage || isPdf ? mimeType : 'application/octet-stream',
         ResponseContentDisposition: `${disposition}; filename="${safeName}"`,
       }),
-      { expiresIn: 300 },
+      { expiresIn: expiresInSeconds },
     );
   }
 

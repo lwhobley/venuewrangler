@@ -188,6 +188,7 @@ describe('BillingController applySubscription P2002 handling', () => {
 
   it('ignores single-venue RevenueCat events when the owner has more than one venue', async () => {
     const prisma = {
+      subscription: { findMany: vi.fn().mockResolvedValue([]) },
       venue: { findUnique: vi.fn().mockResolvedValue(null) },
       profile: {
         findMany: vi.fn().mockResolvedValue([
@@ -229,9 +230,10 @@ describe('BillingController applySubscription P2002 handling', () => {
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
-  it('applies a multi-venue RevenueCat entitlement to every owned venue', async () => {
+  it('updates only the canonical payer for a multi-venue RevenueCat entitlement', async () => {
     const updatedVenueIds: string[] = [];
     const prisma = {
+      subscription: { findMany: vi.fn().mockResolvedValue([{ venueId: 'venue-a' }]) },
       venue: { findUnique: vi.fn().mockResolvedValue(null) },
       profile: { findMany: vi.fn().mockResolvedValue([{ venueId: 'venue-a' }, { venueId: 'venue-b' }]) },
       $transaction: vi.fn().mockImplementation(async (cb: any) => cb({
@@ -270,7 +272,8 @@ describe('BillingController applySubscription P2002 handling', () => {
       } as any,
     );
 
-    expect(updatedVenueIds).toEqual(['venue-a', 'venue-b']);
+    expect(updatedVenueIds).toEqual(['venue-a']);
+    expect(prisma.$transaction).toHaveBeenCalledOnce();
   });
 
   it('ignores a RevenueCat app_user_id that happens to match another venue\'s id', async () => {
@@ -280,6 +283,7 @@ describe('BillingController applySubscription P2002 handling', () => {
     // rather than resolving straight to the victim's venue.
     const venueFindUnique = vi.fn();
     const prisma = {
+      subscription: { findMany: vi.fn().mockResolvedValue([]) },
       venue: { findUnique: venueFindUnique },
       profile: { findMany: vi.fn().mockResolvedValue([]) },
       $transaction: vi.fn(),

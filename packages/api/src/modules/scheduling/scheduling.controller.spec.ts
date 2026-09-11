@@ -25,6 +25,16 @@ function makeController() {
       findUniqueOrThrow: vi.fn().mockResolvedValue({ ...bigVenue }),
       update: vi.fn().mockResolvedValue({}),
     },
+    schedulePublication: {
+      // Default: the week under test is published, which is what staff and
+      // manager views both assumed before publish state became per-week.
+      findUnique: vi.fn().mockResolvedValue(null),
+      findMany: vi.fn().mockImplementation(({ where }: any) => {
+        const weeks: string[] = where?.weekStart?.in ?? [];
+        return Promise.resolve(weeks.map((weekStart) => ({ weekStart })));
+      }),
+      upsert: vi.fn().mockResolvedValue({}),
+    },
     blackoutDate: {
       findMany: vi.fn().mockResolvedValue([]),
       create: vi.fn().mockResolvedValue({ id: 'blackout-1' }),
@@ -705,9 +715,51 @@ describe('SchedulingController', () => {
       expect(result.proposals[0]).toEqual(expect.objectContaining({ profileId: 'staff-1', reason: 'assigned' }));
       expect(result.filled).toBe(1);
     });
+
+    it('enforces existing weekly hours so a candidate already assigned 36 hours is not assigned a 5-hour shift', async () => {
+      const { controller, prisma } = makeController();
+      prisma.scheduleShift.findMany.mockResolvedValue([
+        // Staff 1 already has 36 hours (2160 minutes) scheduled this week
+        { id: 'shift-existing', dayIndex: 0, startMinutes: 600, endMinutes: 2760, jobTitle: 'Server', station: 'Floor', status: 'scheduled', profileId: 'staff-1', weekStart: '2026-07-12' },
+        // Open shift is 5 hours (300 minutes), which would put staff 1 at 41 hours
+        { id: 'shift-open', dayIndex: 2, startMinutes: 600, endMinutes: 900, jobTitle: 'Server', station: 'Floor', status: 'open', profileId: null, weekStart: '2026-07-12' },
+      ]);
+      prisma.profile.findMany.mockResolvedValue([{ id: 'staff-1', fullName: 'Alex', jobTitle: 'Server', role: 'staff' }]);
+      const result = await controller.previewAutoSchedule(managerScope, '2026-07-12');
+
+      expect(result.proposals[0]).toEqual(expect.objectContaining({ profileId: null, reason: 'labor_cap' }));
+      expect(result.filled).toBe(0);
+    });
+
+    it('enforces weekly labor budget ceiling across the venue', async () => {
+      const { controller, prisma } = makeController();
+      prisma.venue.findUnique.mockResolvedValue({ ...bigVenue, weeklyLaborBudgetHours: 10 });
+      prisma.scheduleShift.findMany.mockResolvedValue([
+        // 8 hours already assigned
+        { id: 'shift-existing', dayIndex: 0, startMinutes: 600, endMinutes: 1080, jobTitle: 'Server', station: 'Floor', status: 'scheduled', profileId: 'staff-1', weekStart: '2026-07-12' },
+        // Open shift is 3 hours (180 minutes), which exceeds the 10 hour budget (8 + 3 = 11 > 10)
+        { id: 'shift-open', dayIndex: 2, startMinutes: 600, endMinutes: 780, jobTitle: 'Server', station: 'Floor', status: 'open', profileId: null, weekStart: '2026-07-12' },
+      ]);
+      prisma.profile.findMany.mockResolvedValue([{ id: 'staff-2', fullName: 'Sam', jobTitle: 'Server', role: 'staff' }]);
+      const result = await controller.previewAutoSchedule(managerScope, '2026-07-12');
+
+      expect(result.proposals[0]).toEqual(expect.objectContaining({ profileId: null, reason: 'exceeds_labor_budget' }));
+      expect(result.filled).toBe(0);
+    });
   });
 
   describe('applyAutoSchedule', () => {
+    it('counts all persisted assigned shifts without querying a nonexistent cancelled status', async () => {
+      const { controller, prisma, assignments } = makeController();
+      assignments.applyOpenAssignments.mockResolvedValue({ assigned: 0, skipped: 0, assignedShifts: [] });
+
+      await controller.applyAutoSchedule(managerScope, { assignments: [], weekStartDate: '2026-07-12' });
+
+      expect(prisma.scheduleShift.findMany).toHaveBeenCalledWith(expect.objectContaining({
+        where: { venueId: 'venue-1', weekStart: '2026-07-12', profileId: { not: null } },
+      }));
+    });
+
     it('delegates to applyOpenAssignments with a canAssign gate that defaults to available', async () => {
       const { controller, assignments } = makeController();
       assignments.applyOpenAssignments.mockResolvedValue({ assigned: 1, skipped: 0, assignedShifts: [] });
@@ -738,6 +790,62 @@ describe('SchedulingController', () => {
 
       expect(result).toEqual({ assigned: 1, skipped: 0 });
       expect(email.send).toHaveBeenCalledWith(expect.objectContaining({ to: 'staff1@test.com' }));
+    });
+
+    it('enforces the 40h cap and the venue labor budget through canAssign', async () => {
+      const { controller, prisma, assignments } = makeController();
+      prisma.venue.findUnique.mockResolvedValue({ ...bigVenue, weeklyLaborBudgetHours: 100 });
+      // staff-1 already sits at 38h (2280 min) for the week.
+      prisma.scheduleShift.findMany.mockResolvedValue([
+        { profileId: 'staff-1', startMinutes: 600, endMinutes: 2880 },
+      ]);
+      assignments.applyOpenAssignments.mockResolvedValue({ assigned: 0, skipped: 1, assignedShifts: [] });
+
+      await controller.applyAutoSchedule(managerScope, {
+        assignments: [{ shiftId: 'shift-1', profileId: 'staff-1' }],
+      });
+
+      const { canAssign } = assignments.applyOpenAssignments.mock.calls[0][0];
+      // 38h + 1h fits; 38h + 3h would cross 40h.
+      expect(canAssign({ shift: { dayIndex: 1, startMinutes: 600, endMinutes: 660 }, profileId: 'staff-1' })).toBe(true);
+      expect(canAssign({ shift: { dayIndex: 1, startMinutes: 600, endMinutes: 780 }, profileId: 'staff-1' })).toBe(false);
+    });
+
+    it('does not spend the labor budget on a shift the write rejected', async () => {
+      const { controller, prisma, assignments } = makeController();
+      // A 3h budget: exactly one 2h shift fits, so an over-count is visible.
+      prisma.venue.findUnique.mockResolvedValue({ ...bigVenue, weeklyLaborBudgetHours: 3 });
+      prisma.scheduleShift.findMany.mockResolvedValue([]);
+      assignments.applyOpenAssignments.mockResolvedValue({ assigned: 0, skipped: 2, assignedShifts: [] });
+
+      await controller.applyAutoSchedule(managerScope, {
+        assignments: [{ shiftId: 'shift-1', profileId: 'staff-1' }, { shiftId: 'shift-2', profileId: 'staff-2' }],
+      });
+
+      const { canAssign } = assignments.applyOpenAssignments.mock.calls[0][0];
+      const twoHourShift = { dayIndex: 1, startMinutes: 600, endMinutes: 720 };
+      // First shift passes the gate but its transaction fails, so onAssigned
+      // never runs. The next shift must still find the budget unspent.
+      expect(canAssign({ shift: twoHourShift, profileId: 'staff-1' })).toBe(true);
+      expect(canAssign({ shift: twoHourShift, profileId: 'staff-2' })).toBe(true);
+    });
+
+    it('spends the labor budget once a shift is durably assigned', async () => {
+      const { controller, prisma, assignments } = makeController();
+      prisma.venue.findUnique.mockResolvedValue({ ...bigVenue, weeklyLaborBudgetHours: 3 });
+      prisma.scheduleShift.findMany.mockResolvedValue([]);
+      assignments.applyOpenAssignments.mockResolvedValue({ assigned: 1, skipped: 0, assignedShifts: [] });
+
+      await controller.applyAutoSchedule(managerScope, {
+        assignments: [{ shiftId: 'shift-1', profileId: 'staff-1' }, { shiftId: 'shift-2', profileId: 'staff-2' }],
+      });
+
+      const { canAssign, onAssigned } = assignments.applyOpenAssignments.mock.calls[0][0];
+      const twoHourShift = { dayIndex: 1, startMinutes: 600, endMinutes: 720 };
+      expect(canAssign({ shift: twoHourShift, profileId: 'staff-1' })).toBe(true);
+      onAssigned({ shift: twoHourShift, profileId: 'staff-1' });
+      // 2h of a 3h budget is gone, so a second 2h shift no longer fits.
+      expect(canAssign({ shift: twoHourShift, profileId: 'staff-2' })).toBe(false);
     });
   });
 
@@ -958,6 +1066,25 @@ describe('SchedulingController', () => {
       expect(result.mine).toHaveLength(1);
       expect(result.open).toHaveLength(1);
       expect(result.roster).toHaveLength(7);
+    });
+
+    it('shows staff nothing for a week that has not been published', async () => {
+      // Regression: publish state was one venue-wide timestamp and staff shifts
+      // were never gated on it, so a manager could be looking at a schedule
+      // marked Draft while their team was already working from those shifts.
+      const { controller, prisma } = makeController();
+      prisma.schedulePublication.findMany.mockResolvedValue([]);
+      prisma.scheduleShift.findMany.mockResolvedValue([
+        { id: 's1', profileId: 'staff-1', dayIndex: 1, startMinutes: 600, endMinutes: 900, jobTitle: 'Server', station: 'Floor', status: 'scheduled', notes: null, profile: { fullName: 'Staff One' } },
+      ]);
+
+      const result = await controller.getMySchedule(staffScope);
+
+      expect(result.mine).toEqual([]);
+      expect(result.open).toEqual([]);
+      expect(result.publishState).toEqual({ status: 'draft', weekStart: expect.any(String) });
+      // The shifts are never even read for an unpublished week.
+      expect(prisma.scheduleShift.findMany).not.toHaveBeenCalled();
     });
   });
 });

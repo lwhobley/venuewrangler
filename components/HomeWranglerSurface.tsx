@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Alert, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { Button } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { CommandText } from './FutureUI';
@@ -11,6 +12,7 @@ import {
   useWranglerOperatorPlan,
   type WranglerOperatorPlan,
 } from '../lib/useWrangler';
+import { formatOperatorResult } from '../lib/wrangler-result-format';
 
 type Props = {
   enabled: boolean;
@@ -23,36 +25,6 @@ function statusLabel(status?: string) {
   return 'SERVICE UNDER CONTROL';
 }
 
-function formatOperatorResult(result: unknown): string {
-  if (Array.isArray(result)) {
-    if (result.length === 0) return 'No matching records found.';
-    return result
-      .slice(0, 5)
-      .map((row) => {
-        if (!row || typeof row !== 'object') return String(row);
-        const item = row as Record<string, unknown>;
-        const name = String(item.guestName ?? item.staffName ?? item.fullName ?? item.jobTitle ?? item.label ?? item.title ?? item.name ?? 'Record');
-        const pieces: string[] = [];
-        if (item.partySize != null) pieces.push(`party ${item.partySize}`);
-        if (item.status != null) pieces.push(String(item.status));
-        if (item.startMinutes != null && item.endMinutes != null) pieces.push(`${item.startMinutes}-${item.endMinutes}`);
-        if (item.clockInAt != null) pieces.push(`in ${new Date(Number(item.clockInAt)).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`);
-        return `• ${name}${pieces.length ? ` — ${pieces.join(' · ')}` : ''}`;
-      })
-      .join('\n');
-  }
-  if (result && typeof result === 'object') {
-    const item = result as Record<string, unknown>;
-    const name = String(item.guestName ?? item.staffName ?? item.fullName ?? item.jobTitle ?? item.label ?? item.title ?? item.itemName ?? item.name ?? 'Done');
-    const pieces: string[] = [];
-    if (item.partySize != null) pieces.push(`party ${item.partySize}`);
-    if (item.status != null) pieces.push(String(item.status));
-    if (item.onHand != null) pieces.push(`on hand: ${item.onHand}`);
-    if (item.startMinutes != null && item.endMinutes != null) pieces.push(`${item.startMinutes}-${item.endMinutes}`);
-    return `• ${name}${pieces.length ? ` — ${pieces.join(' · ')}` : ''}`;
-  }
-  return result == null ? 'Done.' : String(result);
-}
 
 function isCommandInput(text: string): boolean {
   return /^\s*(?:clear|bus|add|schedule|create|86|update|set|remove|assign|post|cancel|correct|mark|clean)\b/i.test(text);
@@ -74,6 +46,19 @@ export function HomeWranglerSurface({ enabled }: Props) {
   const snapshot = wrangler.data;
 
   if (!enabled) return null;
+
+  // A failed first snapshot left this on "Building the live service picture…"
+  // for good: there is no second attempt to wait for, and the copy reads like
+  // progress. Say it failed and offer the retry.
+  if (!snapshot && wrangler.error) {
+    return (
+      <View style={{ marginHorizontal: spacing.lg, marginTop: -1, borderWidth: StyleSheet.hairlineWidth, borderColor: palette.border, backgroundColor: palette.surface, padding: spacing.md, gap: spacing.sm }}>
+        <CommandText palette={palette} variant="label">THE WRANGLER</CommandText>
+        <CommandText palette={palette} variant="caption">The live service picture could not be loaded.</CommandText>
+        <Button compact mode="outlined" textColor={palette.primary} onPress={() => void wrangler.refetch()}>Try again</Button>
+      </View>
+    );
+  }
 
   if (wrangler.isLoading || !snapshot) {
     return (

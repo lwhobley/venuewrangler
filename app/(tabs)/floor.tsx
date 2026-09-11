@@ -124,6 +124,10 @@ type WaitlistItem = {
   requestedAt: number;
   source: string;
   status: string;
+  // A party marked Ready stays in this queue (it is the only queue with a Seat
+  // action); isReady is how the host tells the two apart.
+  isReady?: boolean;
+  readyAt?: number | null;
   notes: string | null;
 };
 
@@ -332,7 +336,7 @@ function FloorScreen() {
             <>
               <View style={{ paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border }}>
                 <Text style={{ fontWeight: '700' }}>{nextParty.guestName} · {nextParty.partySize}</Text>
-                <Text style={{ color: colors.muted, fontSize: 12 }}>{'reservationTime' in nextParty ? `Reservation at ${formatTime(nextParty.reservationTime)}` : 'Waiting for a table'}</Text>
+                <Text style={{ color: colors.muted, fontSize: 12 }}>{'reservationTime' in nextParty ? `Reservation at ${formatTime(nextParty.reservationTime)}` : (nextParty as WaitlistItem).isReady ? 'Ready to seat' : 'Waiting for a table'}</Text>
               </View>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
                 {recommendedForNext.length ? recommendedForNext.map((item) => (

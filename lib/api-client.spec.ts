@@ -24,6 +24,12 @@ function abortableFetch() {
 }
 
 describe('apiRequest cancellation', () => {
+  it('rejects queued inventory belonging to a different account before sending it', async () => {
+    const fetch = vi.fn();
+    vi.stubGlobal('fetch', fetch);
+    await expect(apiRequest('/v1/bar-inventory/i1/movement', { method: 'POST', expectedProfileId: 'other-profile', expectedVenueId: 'v1' })).rejects.toMatchObject({ status: 409 });
+    expect(fetch).not.toHaveBeenCalled();
+  });
   afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllGlobals();

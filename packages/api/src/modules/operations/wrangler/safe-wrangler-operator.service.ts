@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { canManageVenue } from '../../../auth/roles';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { InventoryMovementService } from '../../bar-inventory/inventory-movement.service';
 import { ReservationMutationService } from '../../reservations/reservation-mutation.service';
 import { SchedulingAssignmentService } from '../../scheduling/scheduling-assignment.service';
 import { weekStartFor } from '../../../common/pay-period';
@@ -61,8 +62,9 @@ export class SafeWranglerOperatorService {
     private readonly prisma: PrismaService,
     private readonly reservations: ReservationMutationService,
     private readonly scheduling: SchedulingAssignmentService,
+    inventory?: InventoryMovementService,
   ) {
-    this.parser = new WranglerOperatorService(prisma);
+    this.parser = new WranglerOperatorService(prisma, inventory);
   }
 
   async plan(input: any): Promise<any> {

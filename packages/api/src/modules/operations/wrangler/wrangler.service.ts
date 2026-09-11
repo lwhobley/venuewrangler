@@ -96,7 +96,7 @@ export class WranglerService {
     ]);
 
     const openShiftCount = shifts.filter((shift) => shift.status === 'open').length;
-    const lowStockItems = barItems.filter((item) => item.onHand <= item.parLevel);
+    const lowStockItems = barItems.filter((item) => item.onHand < item.parLevel);
     const eightySixCount = prepItems.filter((item) => item.kind === 'eighty_six').length;
     const seatedTables = tableStates.filter((table) => table.status === 'seated').length;
     const servicePhase = deriveWranglerServicePhase({ now: nowMs, reservations: reservations.map((reservation) => ({ reservationTime: reservation.reservationTime.getTime(), durationMinutes: reservation.durationMinutes, status: reservation.status })), seatedTables });

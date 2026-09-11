@@ -2,6 +2,26 @@ import { describe, expect, it, vi } from 'vitest';
 import { ExecutionAutopilotService } from './execution-autopilot.service';
 
 describe('ExecutionAutopilotService', () => {
+  it('does not regenerate operational work for an archived workspace', async () => {
+    const workspace = { id: 'workspace-cancelled', isArchived: true };
+    const prisma = {
+      eventExecutionWorkspace: { upsert: vi.fn().mockResolvedValue(workspace) },
+      eventExecutionTask: { upsert: vi.fn() },
+      eventExecutionTimelineItem: { upsert: vi.fn() },
+      eventExecutionVendor: { upsert: vi.fn(), deleteMany: vi.fn() },
+    } as any;
+
+    const result = await new ExecutionAutopilotService(prisma).ensureWorkspace({
+      venueId: 'venue-1', sourceType: 'reservation', sourceId: 'reservation-1', title: 'Cancelled event',
+      startsAt: new Date('2026-09-03T18:00:00Z'), endsAt: new Date('2026-09-03T22:00:00Z'),
+    });
+
+    expect(result).toBe(workspace);
+    expect(prisma.eventExecutionTask.upsert).not.toHaveBeenCalled();
+    expect(prisma.eventExecutionTimelineItem.upsert).not.toHaveBeenCalled();
+    expect(prisma.eventExecutionVendor.upsert).not.toHaveBeenCalled();
+  });
+
   it('reconciles stable template rows without resetting user state', async () => {
     const prisma = {
       eventExecutionWorkspace: { upsert: vi.fn().mockResolvedValue({ id: 'workspace-1' }) },

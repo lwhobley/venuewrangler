@@ -41,6 +41,19 @@ describe('e2e smoke: auth, billing, scheduling', () => {
     ]);
     venueIds = [activeVenue.id, expiredVenue.id];
 
+    await prisma.subscription.create({
+      data: {
+        venueId: activeVenue.id,
+        status: 'active',
+        platform: 'stripe',
+        planId: 'single',
+        priceCents: 4900,
+        currency: 'USD',
+        cancelAtPeriodEnd: false,
+        currentPeriodEnd: new Date('2030-01-01'),
+      },
+    });
+
     const [activeUser, expiredUser] = await Promise.all([
       prisma.user.create({ data: { email: 'e2e-active@test.local', emailVerifiedAt: new Date() } }),
       prisma.user.create({ data: { email: 'e2e-expired@test.local', emailVerifiedAt: new Date() } }),
@@ -81,7 +94,10 @@ describe('e2e smoke: auth, billing, scheduling', () => {
       await prisma.profile.deleteMany({ where: { userId: { in: userIds } } });
       await prisma.user.deleteMany({ where: { id: { in: userIds } } });
     }
-    if (venueIds.length) await prisma.venue.deleteMany({ where: { id: { in: venueIds } } });
+    if (venueIds.length) {
+      await prisma.subscription.deleteMany({ where: { venueId: { in: venueIds } } });
+      await prisma.venue.deleteMany({ where: { id: { in: venueIds } } });
+    }
     await teardown();
   });
 

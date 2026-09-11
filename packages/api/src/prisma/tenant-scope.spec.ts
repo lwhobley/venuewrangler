@@ -74,6 +74,8 @@ describe('shouldScopeOperation', () => {
 
   it('leaves unknown operations unscoped', () => {
     expect(shouldScopeOperation('$queryRaw')).toBe(false);
+    expect(shouldScopeOperation('$executeRaw')).toBe(false);
+    expect(shouldScopeOperation('$queryRawUnsafe')).toBe(false);
   });
 });
 

@@ -1,0 +1,7 @@
+# Venue Wrangler marketing site. The marketing pages are for indexing; the
+# signed-in app under /app is not, and neither is the post-signup confirmation.
+User-agent: *
+Disallow: /app/
+Disallow: /join/success/
+
+Sitemap: https://venuewrangler.com/sitemap.xml

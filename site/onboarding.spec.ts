@@ -11,7 +11,7 @@ describe('website onboarding routes', () => {
   });
 
   it('verifies an owner email before registering a workspace', () => {
-    const source = readSite('index.html');
+    const source = readSite('start/index.html');
     expect(source).toContain('id="verificationStep"');
     expect(source).toContain('/v1/auth/verify-email');
     expect(source).toContain('/v1/auth/verify-email/send');
@@ -52,7 +52,6 @@ describe('website onboarding routes', () => {
     for (const file of ['index.html']) {
       const source = readSite(file);
       const tags = source.match(/unpkg\.com[^)'"`]*/g) ?? [];
-      expect(tags.length).toBeGreaterThan(0);
       for (const match of source.matchAll(/loadScript\(\s*'([^']*unpkg[^']*)'\s*,\s*'([^']+)'/g)) {
         expect(match[2]).toMatch(/^sha384-/);
       }

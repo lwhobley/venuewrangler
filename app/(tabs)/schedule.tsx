@@ -11,6 +11,7 @@ import { colors, radius, spacing } from '../../lib/theme';
 import { useDesktopContentStyle } from '../../lib/responsive';
 import { useVenueAuth } from '../../lib/useVenueAuth';
 import { errorMessage } from '../../lib/format';
+import { correctionSummary } from '../../lib/staff-request-summary';
 import { ManagerCalendar } from '../../components/schedule/ManagerCalendar';
 import { MyShifts } from '../../components/schedule/MyShifts';
 import { BlackoutManager } from '../../components/schedule/BlackoutManager';
@@ -19,14 +20,17 @@ import { LaborForecastPanel } from '../../components/schedule/LaborForecastPanel
 type StaffRequest = {
   _id: string;
   title: string;
-  kind: 'add_shift' | 'drop_shift' | 'time_off' | 'sick_leave' | 'other';
+  kind: 'add_shift' | 'drop_shift' | 'time_off' | 'sick_leave' | 'time_correction' | 'shift_swap' | 'open_shift' | 'other';
   status: 'pending' | 'approved' | 'denied' | 'cancelled';
   details: string;
+  // The correction payload the server applies on approval. Rendered next to
+  // `details` so the approver sees the times, not only the explanation.
+  availability?: unknown;
 };
 
 type SwapRow = { _id: Id<'shiftSwaps'>; status: string; requesterName: string; targetName: string; requesterShift: string; targetShift: string | null };
 
-function RequestQueue({ venueId }: { venueId: Id<'venues'> }) {
+function RequestQueue({ venueId, timeZone }: { venueId: Id<'venues'>; timeZone?: string | null }) {
   const { t } = useI18n();
   const queueQuery = useQuery(api.app.listStaffRequests, { venueId });
   const reviewRequest = useMutation(api.app.reviewStaffRequest);
@@ -89,6 +93,9 @@ function RequestQueue({ venueId }: { venueId: Id<'venues'> }) {
               <Text style={{ fontWeight: '700' }}>{request.title}</Text>
               <Text style={{ color: colors.muted }}>{request.kind.replace('_', ' ')} · {request.status}</Text>
               <Text>{request.details}</Text>
+              {correctionSummary(request, timeZone) ? (
+                <Text style={{ fontWeight: '700', color: colors.charcoal }}>{correctionSummary(request, timeZone)}</Text>
+              ) : null}
               {request.status === 'pending' ? (
                 <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
                   <Button compact mode="contained" buttonColor={colors.primary} disabled={busy} onPress={() => void safe(() => reviewRequest({ requestId: request._id as Id<'staffRequests'>, status: 'approved' }), t('schedule.requestApproved'))} accessibilityLabel={t('schedule.approveRequest')}>{t('schedule.approve')}</Button>
@@ -150,11 +157,11 @@ function ScheduleScreen() {
           />
           <AnimatedTab tabKey={managerTab}>
             {managerTab === 'calendar' ? (
-              <ManagerCalendar venueId={venue.id} />
+              <ManagerCalendar venueId={venue.id} timeZone={venue.timezone ?? null} />
             ) : managerTab === 'forecast' ? (
               <LaborForecastPanel venueId={venue.id} />
             ) : managerTab === 'requests' ? (
-              <RequestQueue venueId={venue.id} />
+              <RequestQueue venueId={venue.id} timeZone={venue.timezone ?? null} />
             ) : (
               <BlackoutManager venueId={venue.id} />
             )}

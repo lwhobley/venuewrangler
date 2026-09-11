@@ -172,6 +172,39 @@ describe('Reports screen', () => {
     expect(json).toMatch(/period=[^"]*Aug/);
   });
 
+  it('labels the period from the venue-timezone ISO days the API resolved', async () => {
+    // periodStart/periodEnd are epoch bounds that render in the device's
+    // timezone, so a venue-midnight boundary can print the previous day. The
+    // API also returns the ISO days it resolved; prefer those.
+    state.payroll.data = {
+      byEmployee: [],
+      totals: {
+        totalHours: 0,
+        employeeCount: 0,
+        // 2026-09-01T00:00 in a UTC+13 venue is still Aug 31 for a UTC reader.
+        periodStart: Date.UTC(2026, 7, 31, 11, 0),
+        periodEnd: Date.UTC(2026, 8, 30, 10, 59),
+        startDate: '2026-09-01',
+        endDate: '2026-09-30',
+      },
+    };
+    const renderer = render();
+    await act(async () => renderer.render(<ReportsScreen />));
+
+    expect(output(renderer)).toMatch(/period=[^"]*Sep 1 – Sep 30/);
+  });
+
+  it('falls back to the epoch bounds when the API sends no ISO days', async () => {
+    state.payroll.data = {
+      byEmployee: [],
+      totals: { totalHours: 0, employeeCount: 0, periodStart: Date.UTC(2026, 7, 16, 12), periodEnd: Date.UTC(2026, 7, 30, 12) },
+    };
+    const renderer = render();
+    await act(async () => renderer.render(<ReportsScreen />));
+
+    expect(output(renderer)).toMatch(/period=[^"]*Aug/);
+  });
+
   it('sends ISO period strings so the export DTO accepts the request', async () => {
     state.recordExport.mockResolvedValueOnce({ id: 'export-1' });
     const renderer = render();

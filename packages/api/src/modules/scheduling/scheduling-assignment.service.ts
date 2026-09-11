@@ -152,11 +152,29 @@ export class SchedulingAssignmentService {
     const shift = await this.getVenueShift(args.venueId, args.shiftId);
 
     if (!args.profileId) {
-      await this.prisma.scheduleShift.update({
-        where: { id: shift.id },
-        data: { profileId: null, status: 'open' },
+      // This bare update used to run with no lock and no re-check, so a
+      // concurrent claim/assign for this exact shift (both of which DO run
+      // under withSerializableRetry + an advisory lock below) could commit
+      // a new profileId a moment before this unassign silently overwrote it
+      // back to open — the claiming staff member would vanish from the
+      // shift with no error surfaced to either caller.
+      await withSerializableRetry(this.prisma, async (tx) => {
+        const current = await tx.scheduleShift.findFirst({
+          where: { id: shift.id, venueId: args.venueId },
+        });
+        if (!current) throw new NotFoundException('Shift not found');
+        if (current.profileId) {
+          await this.lockAssignmentKeys(tx, this.profileLockKeys(args.venueId, current.profileId, current));
+        }
+        await tx.scheduleShift.update({
+          where: { id: current.id },
+          data: { profileId: null, status: 'open' },
+        });
+        await tx.venue.update({
+          where: { id: args.venueId },
+          data: { scheduleUpdatedAfterPublishAt: new Date() },
+        });
       });
-      await this.markScheduleEdited(args.venueId);
       return { shift, nextProfileId: null };
     }
 
@@ -457,6 +475,20 @@ export class SchedulingAssignmentService {
         if (!currentSwap || !['accepted', 'proposed'].includes(currentSwap.status)) {
           throw new BadRequestException('Swap is not pending');
         }
+        // A party's profile can be gone (see the schema comment on
+        // ShiftSwap.requesterProfileId/targetProfileId) if that account was
+        // deleted after this swap was proposed/accepted. There is no one to
+        // assign the shift to on that side, so the swap cannot be completed —
+        // decline it instead of leaving it stuck as pending forever.
+        if (!currentSwap.requesterProfileId || !currentSwap.targetProfileId) {
+          await tx.shiftSwap.updateMany({
+            where: { id: currentSwap.id, status: { in: ['accepted', 'proposed'] } },
+            data: { status: 'declined' },
+          });
+          throw new BadRequestException('One of the parties in this swap no longer has an account. The swap has been declined.');
+        }
+        const requesterProfileId = currentSwap.requesterProfileId;
+        const targetProfileId = currentSwap.targetProfileId;
 
         const requesterShift = await tx.scheduleShift.findFirst({
           where: { id: currentSwap.requesterShiftId, venueId: args.venueId },
@@ -470,19 +502,19 @@ export class SchedulingAssignmentService {
           throw new NotFoundException('Shift not found');
         }
 
-        await this.assertNotUnavailable(tx, args.venueId, currentSwap.targetProfileId, requesterShift);
+        await this.assertNotUnavailable(tx, args.venueId, targetProfileId, requesterShift);
         if (targetShift) {
-          await this.assertNotUnavailable(tx, args.venueId, currentSwap.requesterProfileId, targetShift);
+          await this.assertNotUnavailable(tx, args.venueId, requesterProfileId, targetShift);
         }
 
         await this.lockAssignmentKeys(tx, [
-          ...this.profileLockKeys(args.venueId, currentSwap.targetProfileId, requesterShift),
-          ...(targetShift ? this.profileLockKeys(args.venueId, currentSwap.requesterProfileId, targetShift) : []),
+          ...this.profileLockKeys(args.venueId, targetProfileId, requesterShift),
+          ...(targetShift ? this.profileLockKeys(args.venueId, requesterProfileId, targetShift) : []),
         ]);
         await this.assertNoDoubleBookInWeekTx(
           tx,
           args.venueId,
-          currentSwap.targetProfileId,
+          targetProfileId,
           requesterShift.weekStart,
           requesterShift.dayIndex,
           requesterShift.startMinutes,
@@ -494,7 +526,7 @@ export class SchedulingAssignmentService {
           await this.assertNoDoubleBookInWeekTx(
             tx,
             args.venueId,
-            currentSwap.requesterProfileId,
+            requesterProfileId,
             targetShift.weekStart,
             targetShift.dayIndex,
             targetShift.startMinutes,
@@ -505,12 +537,12 @@ export class SchedulingAssignmentService {
         }
         await tx.scheduleShift.update({
           where: { id: requesterShift.id },
-          data: { profileId: currentSwap.targetProfileId, status: 'scheduled' },
+          data: { profileId: targetProfileId, status: 'scheduled' },
         });
         if (targetShift) {
           await tx.scheduleShift.update({
             where: { id: targetShift.id },
-            data: { profileId: currentSwap.requesterProfileId, status: 'scheduled' },
+            data: { profileId: requesterProfileId, status: 'scheduled' },
           });
         }
         const reviewed = await tx.shiftSwap.updateMany({
@@ -586,6 +618,15 @@ export class SchedulingAssignmentService {
       };
       profileId: string;
     }) => boolean | Promise<boolean>;
+    // Called only after a shift is durably assigned. canAssign runs before the
+    // transaction, which can still reject the write (double-book, no longer
+    // open, newly unavailable), so a caller tracking running totals — weekly
+    // hours, a labor budget — must accumulate here rather than in canAssign,
+    // or a shift that was skipped still spends against the cap.
+    onAssigned?: (input: {
+      shift: { dayIndex: number; startMinutes: number; endMinutes: number };
+      profileId: string;
+    }) => void;
   }) {
     let assigned = 0;
     let skipped = 0;
@@ -645,6 +686,7 @@ export class SchedulingAssignmentService {
       }
 
       assigned += 1;
+      args.onAssigned?.({ shift, profileId: assignment.profileId });
       assignedShifts.push({
         profileId: assignment.profileId,
         shiftId: shift.id,

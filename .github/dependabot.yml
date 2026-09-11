@@ -14,23 +14,24 @@ updates:
     # Expo SDK pins the versions of React, React Native, and the native
     # modules that ship with it; `expo-doctor` fails the Mobile CI job when
     # any of them drifts off the SDK-supported range. Dependabot has no view
-    # of that constraint, so a major bump here is never mergeable on its own
-    # — it is only correct as part of an Expo SDK upgrade, which moves all of
-    # them together. react-native-gesture-handler 2.32.0 -> 3.2.1 landed this
-    # way and left Mobile CI red across six runs.
+    # of that constraint, so a bump here is never mergeable on its own — it
+    # is only correct as part of an Expo SDK upgrade, which moves all of them
+    # together. react-native-gesture-handler 2.32.0 -> 3.2.1 landed this way
+    # and left Mobile CI red across six runs.
     #
-    # Minor and patch updates still come through; only majors are held.
+    # This previously held majors only, on the assumption that minor and
+    # patch bumps were safe. They are not: the SDK pins exact versions, so
+    # react-dom 19.2.3 -> 19.2.8 (patch), react-native 0.86.3 -> 0.87.1
+    # (minor) and react-native-safe-area-context 5.7.0 -> 5.9.1 (minor) all
+    # failed Mobile CI for this same reason and were closed unmerged.
+    # `npx expo install --check` is the source of truth for this set; it
+    # reports "Dependencies are up to date" at the pinned versions.
     ignore:
       - dependency-name: "react"
-        update-types: ["version-update:semver-major"]
       - dependency-name: "react-dom"
-        update-types: ["version-update:semver-major"]
       - dependency-name: "react-native"
-        update-types: ["version-update:semver-major"]
       - dependency-name: "react-native-*"
-        update-types: ["version-update:semver-major"]
       - dependency-name: "@sentry/react-native"
-        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: github-actions
     directory: "/"

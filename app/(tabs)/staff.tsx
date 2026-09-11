@@ -135,17 +135,18 @@ export default function StaffScreenWrapper() {
 }
 
 function StaffScreen() {
-  const { venue, isReady, profileLoading, profileError, refetchProfile, canManage } = useVenueAuth();
+  const { venue, isReady, me, profileLoading, profileError, refetchProfile, canManage } = useVenueAuth();
   const { t } = useI18n();
+  const canElevate = Boolean(me?.profile?.role === 'owner' || me?.profile?.role === 'admin' || me?.profile?.allAccess);
   const ACCESS_LEVELS: Array<{ value: 'admin' | 'manager' | 'staff'; label: string }> = [
     { value: 'admin', label: t('staff.roleAdmin') },
     { value: 'manager', label: t('staff.roleManager') },
     { value: 'staff', label: t('staff.roleStaff') },
   ];
-  const LINK_ACCESS_LEVELS: Array<{ value: AccessRole; label: string }> = [
-    { value: 'manager', label: t('staff.roleManager') },
-    { value: 'staff', label: t('staff.roleStaff') },
-  ];
+  const LINK_ACCESS_LEVELS: Array<{ value: AccessRole; label: string }> = useMemo(() => [
+    ...(canElevate ? [{ value: 'manager' as const, label: t('staff.roleManager') }] : []),
+    { value: 'staff' as const, label: t('staff.roleStaff') },
+  ], [canElevate, t]);
   const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null);
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -198,9 +199,10 @@ function StaffScreen() {
     setInviteLinkMsg(null);
     setGeneratingLink(true);
     try {
+      const effectiveRole = canElevate ? inviteLinkRole : 'staff';
       const { inviteUrl } = await createInvite({
         venueId: venue.id,
-        role: inviteLinkRole,
+        role: effectiveRole,
         jobTitle: inviteLinkPosition.trim() || 'Team Member',
       });
       await Share.share({ message: t('staff.shareMessage', { venue: venue.name, url: inviteUrl }) });

@@ -6,9 +6,7 @@
 - Cloud Run service: `venue-wrangler-api` in `us-east1`
 - The `venue_wrangler_5xx` log-based metric counts HTTP 5xx responses.
 - Alert policy: `Venue Wrangler API 5xx errors` (`projects/venuewrangler/alertPolicies/7994759751285739344`).
-- The policy is enabled and sends email notifications through the production alerts notification channel.
-
-Keep a second notification destination (for example, an on-call webhook) for a staffed production launch.
+- The policy is enabled and sends email notifications to both the primary notification channel (`projects/venuewrangler/notificationChannels/526772857379885924`, `lwhobley@gmail.com`) and secondary destination (`projects/venuewrangler/notificationChannels/5688119539037926179`, `venuewrangler@gmail.com`).
 
 ## Rollback
 
@@ -47,8 +45,12 @@ ClamAV daemon before S3 upload. Configure `CLAMAV_HOST` and ensure Cloud Run can
 reach TCP port `3310`; the deployment workflow records the approved host on the
 candidate revision. Uploads fail closed if the scanner is absent, times out, or
 returns an indeterminate result. Do not expose the ClamAV daemon to the public
-internet. Legacy OLE Office formats (`.doc`, `.xls`, `.ppt`) are intentionally
-blocked; use modern `.docx`, `.xlsx`, or `.pptx` files.
+internet. In the production GCP project, ClamAV is deployed in the GKE cluster
+`stadium-wrangler-broker` under the `clamav` namespace with an internal load
+balancer service (`10.142.15.221:3310`), reachable from Cloud Run via the
+`stadium-cloud-run` Serverless VPC Access connector. Legacy OLE Office formats
+(`.doc`, `.xls`, `.ppt`) are intentionally blocked; use modern `.docx`, `.xlsx`,
+or `.pptx` files.
 
 ## Retention cleanup
 

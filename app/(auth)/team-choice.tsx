@@ -5,6 +5,7 @@ import { authCardStyle, authColors as colors, spacing, type } from '../../lib/th
 import { Kicker } from '../../components/AppCard';
 import { useAuthStore, type AuthState } from '../../lib/auth-store';
 import { useI18n } from '../../lib/i18n';
+import { WorkplaceAdoption } from '../../components/WorkplaceAdoption';
 
 export default function TeamChoiceScreen() {
   const { t } = useI18n();
@@ -43,6 +44,7 @@ export default function TeamChoiceScreen() {
           </Text>
         </View>
 
+        <WorkplaceAdoption />
         <Card style={styles.card}>
           <Card.Content style={{ gap: spacing.sm }}>
             <Text variant="titleMedium" style={{ fontWeight: '700', color: colors.text }}>{t('teamChoice.cardTitle')}</Text>

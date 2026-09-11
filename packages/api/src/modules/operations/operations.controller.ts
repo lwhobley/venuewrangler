@@ -1,3 +1,4 @@
+import { streamPrivateImage } from '../../common/stream-private-image';
 import {
   BadRequestException,
   Body,
@@ -260,8 +261,8 @@ export class OperationsController {
     private readonly prisma: PrismaService,
     private readonly mediaAccess: MediaAccessService,
     private readonly s3ImageService: S3ImageService,
+    private readonly malwareScanner: DocumentMalwareScannerService,
     @Optional() private readonly executionAutopilot?: ExecutionAutopilotService,
-    @Optional() private readonly malwareScanner?: DocumentMalwareScannerService,
   ) {}
 
   @RequireSubscription('active')
@@ -462,7 +463,7 @@ export class OperationsController {
       this.prisma.posCheck.count({ where: { venueId, status: 'open' } }),
     ]);
 
-    const lowStockItems = barItems.filter((item) => item.onHand <= item.parLevel).slice(0, 8);
+    const lowStockItems = barItems.filter((item) => item.onHand < item.parLevel).slice(0, 8);
     const reservationsById = new Map(reservations.map((reservation) => [reservation.id, reservation]));
     const covers = reservations.reduce((sum, row) => sum + row.partySize, 0);
     const posCovers = posChecks.reduce((sum, row) => sum + (row.guestCount ?? 0), 0);
@@ -587,7 +588,7 @@ export class OperationsController {
     const todayEnd = new Date(bounds.end);
     const dayIndex = zonedDayOfWeek(timezone, now.getTime());
     const [events, reservations, shifts, checklistItems, checklistCompletions, floorPlan, beos] = await Promise.all([
-      this.prisma.venueEvent.findMany({ where: { venueId, startsAt: { gte: todayStart, lt: todayEnd } }, orderBy: { startsAt: 'asc' }, take: 50 }),
+      this.prisma.venueEvent.findMany({ where: { venueId, startsAt: { gte: todayStart, lt: todayEnd }, OR: [{ reservationId: null }, { reservation: { deletedAt: null, status: { not: 'cancelled' } } }] }, orderBy: { startsAt: 'asc' }, take: 50 }),
       this.prisma.reservation.findMany({
         where: { venueId, reservationTime: { gte: todayStart, lt: todayEnd }, status: { notIn: ['cancelled', 'no_show'] } },
         include: { tableAssignments: { where: { releasedAt: null }, select: { id: true } } },
@@ -612,7 +613,7 @@ export class OperationsController {
       ...beos.map((beo) => ({ sourceType: 'beo', sourceId: beo.id })),
     ];
     const executionWorkspaces = executionSources.length === 0 ? [] : await this.prisma.eventExecutionWorkspace.findMany({
-      where: { venueId, OR: executionSources },
+      where: { venueId, isArchived: false, OR: executionSources },
       include: {
         tasks: true,
         timeline: true,
@@ -687,7 +688,7 @@ export class OperationsController {
   @Patch('command-center/tasks/:taskId')
   async updateExecutionTask(@CurrentUser() user: AuthUser, @Param('taskId') taskId: string, @Body() body: UpdateExecutionTaskDto) {
     const profile = await this.requireManagerProfile(user);
-    const executionTask = await this.prisma.eventExecutionTask.findFirst({ where: { id: taskId, venueId: profile.venueId! } });
+    const executionTask = await this.prisma.eventExecutionTask.findFirst({ where: { id: taskId, venueId: profile.venueId!, workspace: { isArchived: false } } });
     if (executionTask) {
       const updated = await this.prisma.eventExecutionTask.update({ where: { id: executionTask.id }, data: { status: body.status, completedBy: body.status === 'done' ? profile.id : null, completedAt: body.status === 'done' ? new Date() : null } });
       await this.prisma.auditLog.create({ data: { venueId: profile.venueId!, actorProfileId: profile.id, actorName: profile.fullName, actorRole: profile.role, entityType: 'event_execution_task', entityId: executionTask.id, action: body.status === 'done' ? 'execution_task_completed' : 'execution_task_reopened', summary: `${body.status === 'done' ? 'Completed' : 'Reopened'} event task: ${executionTask.title}` } });
@@ -700,7 +701,7 @@ export class OperationsController {
   @Patch('command-center/timeline/:itemId')
   async updateExecutionTimeline(@CurrentUser() user: AuthUser, @Param('itemId') itemId: string, @Body() body: UpdateExecutionTimelineDto) {
     const profile = await this.requireManagerProfile(user);
-    const item = await this.prisma.eventExecutionTimelineItem.findFirst({ where: { id: itemId, venueId: profile.venueId! } });
+    const item = await this.prisma.eventExecutionTimelineItem.findFirst({ where: { id: itemId, venueId: profile.venueId!, workspace: { isArchived: false } } });
     if (!item) throw new NotFoundException('Timeline item not found');
     const updated = await this.prisma.eventExecutionTimelineItem.update({ where: { id: item.id }, data: { status: body.status, completedAt: body.status === 'done' ? new Date() : null } });
     await this.prisma.auditLog.create({ data: { venueId: profile.venueId!, actorProfileId: profile.id, actorName: profile.fullName, actorRole: profile.role, entityType: 'event_execution_timeline', entityId: item.id, action: body.status === 'done' ? 'timeline_item_completed' : 'timeline_item_reopened', summary: `${body.status === 'done' ? 'Completed' : 'Reopened'} timeline item: ${item.title}` } });
@@ -711,7 +712,7 @@ export class OperationsController {
   @Patch('command-center/vendors/:vendorId')
   async updateExecutionVendor(@CurrentUser() user: AuthUser, @Param('vendorId') vendorId: string, @Body() body: UpdateExecutionVendorDto) {
     const profile = await this.requireManagerProfile(user);
-    const vendor = await this.prisma.eventExecutionVendor.findFirst({ where: { id: vendorId, venueId: profile.venueId! } });
+    const vendor = await this.prisma.eventExecutionVendor.findFirst({ where: { id: vendorId, venueId: profile.venueId!, workspace: { isArchived: false } } });
     if (!vendor) throw new NotFoundException('Execution vendor not found');
     const now = new Date();
     const updated = await this.prisma.eventExecutionVendor.update({ where: { id: vendor.id }, data: { status: body.status, ...(body.status === 'confirmed' ? { confirmedAt: now } : {}), ...(body.status === 'arrived' ? { confirmedAt: vendor.confirmedAt ?? now, arrivedAt: now } : {}) } });
@@ -725,7 +726,7 @@ export class OperationsController {
     const profile = await this.requireManagerProfile(user);
     const source = await this.getExecutionSource(profile.venueId!, eventId);
     if (!source) throw new NotFoundException('Event not found');
-    const workspace = await this.prisma.eventExecutionWorkspace.findFirst({ where: { venueId: profile.venueId!, sourceType: source.input.sourceType, sourceId: source.input.sourceId } });
+    const workspace = await this.prisma.eventExecutionWorkspace.findFirst({ where: { venueId: profile.venueId!, sourceType: source.input.sourceType, sourceId: source.input.sourceId, isArchived: false } });
     if (!workspace) throw new NotFoundException('Execution workspace not found');
     const title = body.title.trim();
     if (!title) throw new BadRequestException('Incident title is required');
@@ -738,7 +739,7 @@ export class OperationsController {
   @Patch('command-center/incidents/:incidentId')
   async resolveExecutionIncident(@CurrentUser() user: AuthUser, @Param('incidentId') incidentId: string, @Body() body: UpdateExecutionIncidentDto) {
     const profile = await this.requireManagerProfile(user);
-    const incident = await this.prisma.eventExecutionIncident.findFirst({ where: { id: incidentId, venueId: profile.venueId! } });
+    const incident = await this.prisma.eventExecutionIncident.findFirst({ where: { id: incidentId, venueId: profile.venueId!, workspace: { isArchived: false } } });
     if (!incident) throw new NotFoundException('Execution incident not found');
     const resolved = body.status === 'resolved';
     const updated = await this.prisma.eventExecutionIncident.update({ where: { id: incident.id }, data: { status: body.status, resolvedBy: resolved ? profile.id : null, resolvedAt: resolved ? new Date() : null } });
@@ -766,7 +767,7 @@ export class OperationsController {
     if (!source) throw new NotFoundException('Event not found');
     const { venueEvent, reservation, beo, input } = source;
     const start = input.startsAt;
-    const workspace = await this.prisma.eventExecutionWorkspace.findFirst({ where: { venueId, sourceType: input.sourceType, sourceId: input.sourceId }, include: { tasks: { orderBy: { createdAt: 'asc' } }, timeline: { orderBy: { startsAt: 'asc' } }, vendors: { orderBy: { createdAt: 'asc' } }, incidents: { orderBy: { createdAt: 'desc' } } } });
+    const workspace = await this.prisma.eventExecutionWorkspace.findFirst({ where: { venueId, sourceType: input.sourceType, sourceId: input.sourceId, isArchived: false }, include: { tasks: { orderBy: { createdAt: 'asc' } }, timeline: { orderBy: { startsAt: 'asc' } }, vendors: { orderBy: { createdAt: 'asc' } }, incidents: { orderBy: { createdAt: 'desc' } } } });
     if (!workspace) throw new NotFoundException('Execution workspace not found');
     const tasks = workspace.tasks;
     const eventWeekStart = weekStartFor(zonedIsoDate(profile.venue?.timezone, start.getTime()));
@@ -1029,9 +1030,7 @@ export class OperationsController {
       if (data.length === 0) throw new BadRequestException('Photo is empty');
       if (data.length > MAX_PHOTO_BYTES) throw new BadRequestException('Photo is too large (max 5MB)');
       const mime = assertAllowedImageBytes(data, body.photoMimeType);
-      if (this.malwareScanner) {
-        await this.malwareScanner.assertClean(data);
-      }
+      await this.malwareScanner.assertClean(data);
       photoKey = await this.s3ImageService.upload(data, mime, venueId);
     }
     const completedAt = new Date();
@@ -1074,11 +1073,14 @@ export class OperationsController {
   ) {
     const completion = await this.prisma.checklistCompletion.findUnique({ where: { id: completionId } });
     if (!completion?.photoKey) throw new NotFoundException('Photo not found');
-    await this.mediaAccess.assertToken(token, 'checklist-photo', completionId, completion.venueId);
-    const url = await this.s3ImageService.getPresignedUrl(completion.photoKey);
-    res.setHeader('Cache-Control', 'no-store');
-    res.setHeader('Referrer-Policy', 'no-referrer');
-    return res.redirect(302, url);
+    try {
+      await this.mediaAccess.assertToken(token, 'checklist-photo', completionId, completion.venueId);
+    } catch {
+      // Same response either way an unauthenticated caller can't tell a
+      // real-but-wrong-token completion id from one that doesn't exist at all.
+      throw new NotFoundException('Photo not found');
+    }
+    return streamPrivateImage(await this.s3ImageService.getObject(completion.photoKey), res);
   }
 
   private async ensureChecklistCompletions(venueId: string, templateItemIds: string[], date: string) {
@@ -1112,6 +1114,7 @@ export class OperationsController {
     const reservation = initialReservation ?? (venueEvent?.reservationId
       ? await this.prisma.reservation.findFirst({ where: { id: venueEvent.reservationId, venueId }, include: { tableAssignments: { where: { releasedAt: null }, select: { id: true, tableId: true } } } })
       : null);
+    if (reservation?.status === 'cancelled' || reservation?.deletedAt || beo?.status === 'cancelled') return null;
     if (!venueEvent && !reservation && !beo) return null;
     const startsAt = venueEvent?.startsAt ?? reservation?.reservationTime ?? beo!.eventDate!;
     if (!startsAt) return null;

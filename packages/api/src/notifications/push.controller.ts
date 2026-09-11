@@ -35,15 +35,19 @@ export class PushController {
     };
 
     const pushToken = await this.prisma.$transaction(async (tx) => {
-      // Serialize registration by token so a token already owned by another
-      // profile cannot be rebound during a concurrent request.
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${token}))`;
-      const existing = await tx.pushToken.findUnique({ where: { token } });
-      if (existing && (existing.profileId !== scope.profileId || existing.venueId !== scope.venueId)) {
-        throw new ConflictException('This device token is already registered to another profile.');
+      // Serialize registration by (venue, token) so the same pair cannot be
+      // rebound to a different profile during a concurrent request. A token
+      // may legitimately hold separate rows across venues (a staff member's
+      // device registered at more than one workplace) — that is not a
+      // conflict, only a second profile claiming the same token *within the
+      // same venue* is.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`push-token:${scope.venueId}:${token}`}))`;
+      const existing = await tx.pushToken.findUnique({ where: { venueId_token: { venueId: scope.venueId, token } } });
+      if (existing && existing.profileId !== scope.profileId) {
+        throw new ConflictException('This device token is already registered to another profile at this venue.');
       }
       return tx.pushToken.upsert({
-        where: { token },
+        where: { venueId_token: { venueId: scope.venueId, token } },
         create: { ...data, token },
         update: data,
       });

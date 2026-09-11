@@ -130,17 +130,21 @@ describe('FloorService regressions', () => {
   });
 
   it('requires an existing merge to be split before those tables are merged again', async () => {
-    const prisma = {
-      floorPlan: { findFirst: vi.fn().mockResolvedValue({ tables: [{ id: 't1' }, { id: 't2' }] }) },
+    const transaction = {
+      $executeRaw: vi.fn().mockResolvedValue(undefined),
       tableState: { findMany: vi.fn().mockResolvedValue([
         { id: 's1', tableId: 't1', status: 'seated', mergeGroupId: 'group-1' },
         { id: 's2', tableId: 't2', status: 'seated', mergeGroupId: 'group-1' },
       ]), updateMany: vi.fn() },
     };
+    const prisma = {
+      floorPlan: { findFirst: vi.fn().mockResolvedValue({ tables: [{ id: 't1' }, { id: 't2' }] }) },
+      $transaction: vi.fn((callback: (tx: typeof transaction) => unknown) => callback(transaction)),
+    };
     const service = new FloorService(prisma as any, {} as any);
 
     await expect(service.mergeTablesForParty('venue-1', ['t1', 't2'], 6)).rejects.toThrow(ConflictException);
-    expect(prisma.tableState.updateMany).not.toHaveBeenCalled();
+    expect(transaction.tableState.updateMany).not.toHaveBeenCalled();
   });
 
   it('rejects a table-status write that loses an optimistic concurrency race', async () => {
@@ -160,4 +164,273 @@ describe('FloorService regressions', () => {
       where: { id: 'state-1', venueId: 'venue-1', lastActivityAt },
     }));
   });
+  it('keeps a party marked Ready in the queue that offers the Seat action', async () => {
+    // Regression: getOpenWaitlist filtered to status 'waiting', while
+    // markWaitlistReady moves the row to 'assigned' — so marking a party Ready
+    // removed it from the only list a host can seat from.
+    const prisma = {
+      waitlist: {
+        findMany: vi.fn().mockResolvedValue([
+          { id: 'w-1', guestName: 'Ana', partySize: 2, guestPhone: null, notes: null, status: 'assigned', readyAt: new Date('2026-09-02T18:00:00Z'), requestedAt: new Date('2026-09-02T17:30:00Z') },
+        ]),
+      },
+    };
+    const service = new FloorService(prisma as any, {} as any);
+
+    const rows = await service.getOpenWaitlist('venue-1');
+
+    expect(prisma.waitlist.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { venueId: 'venue-1', status: { in: ['waiting', 'assigned'] } },
+    }));
+    expect(rows).toHaveLength(1);
+    expect(rows[0].isReady).toBe(true);
+  });
+
+  it('walks seated bookings back when clearing the floor plan deletes their assignments', async () => {
+    // Regression: clearing the plan deleted the assignments but left the
+    // reservation reading 'seated' and the waitlist entry 'seated'/'assigned',
+    // pointing at a table that no longer exists.
+    const prisma = {
+      floorPlan: {
+        findFirst: vi.fn().mockResolvedValue({ id: 'plan-1', tables: [{ id: 't1' }], chairs: [{ id: 'c1' }] }),
+        update: vi.fn(),
+      },
+      tableAssignment: {
+        findMany: vi.fn().mockResolvedValue([
+          { reservationId: 'res-1', waitlistId: null },
+          { reservationId: null, waitlistId: 'w-1' },
+        ]),
+        deleteMany: vi.fn(),
+      },
+      tableState: { deleteMany: vi.fn() },
+      floorChair: { deleteMany: vi.fn() },
+      floorTable: { deleteMany: vi.fn() },
+      reservation: { updateMany: vi.fn() },
+      waitlist: { updateMany: vi.fn() },
+      $transaction: vi.fn().mockResolvedValue([]),
+    };
+    const service = new FloorService(prisma as any, {} as any);
+
+    const result = await service.clearActiveFloorPlan('venue-1');
+
+    expect(prisma.reservation.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: ['res-1'] }, venueId: 'venue-1', status: 'seated' },
+      data: { status: 'confirmed' },
+    });
+    expect(prisma.waitlist.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: ['w-1'] }, venueId: 'venue-1', status: { in: ['seated', 'assigned'] } },
+      data: { status: 'waiting', readyAt: null },
+    });
+    expect(result.releasedReservations).toBe(1);
+    expect(result.releasedWaitlistEntries).toBe(1);
+  });
+
+  describe('refreshTableStates via releaseAssignment', () => {
+    const makePrisma = (currentStatus: string) => {
+      const prisma: any = {
+        $executeRaw: vi.fn().mockResolvedValue(undefined),
+        tableAssignment: {
+          findFirst: vi.fn().mockResolvedValue({ id: 'assign-1', tableId: 'table-1', reservationId: null, waitlistId: null }),
+          updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+          findMany: vi.fn().mockResolvedValue([]),
+          count: vi.fn().mockResolvedValue(0),
+        },
+        tableState: {
+          findMany: vi.fn().mockResolvedValue([{ tableId: 'table-1', status: currentStatus }]),
+          updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+        },
+        floorTable: { findFirst: vi.fn().mockResolvedValue({ seats: 0 }) },
+      };
+      prisma.$transaction = vi.fn((callback: (t: typeof prisma) => unknown) => callback(prisma));
+      return prisma;
+    };
+
+    it.each(['dirty', 'out_of_service'])(
+      'leaves a %s table in that state when no seating is active on it',
+      async (status) => {
+        const prisma = makePrisma(status);
+        await new FloorService(prisma as any, {} as any).releaseAssignment('venue-1', 'assign-1');
+
+        const stateWrite = prisma.tableState.updateMany.mock.calls.at(-1)?.[0];
+        expect(stateWrite.data).not.toHaveProperty('status');
+        expect(stateWrite.data).toEqual(expect.objectContaining({ partySize: null, seatedAt: null }));
+      },
+    );
+
+    it('returns a held party to the queue instead of completing them', async () => {
+      // getOpenWaitlist lists 'waiting' and 'assigned' only, and it is the one
+      // list with a Seat action — completing an 'assigned' party made them
+      // vanish and left re-seating throwing NotFound.
+      const prisma = makePrisma('held');
+      prisma.tableAssignment.findFirst.mockResolvedValue({ id: 'assign-1', tableId: 'table-1', reservationId: null, waitlistId: 'wl-1' });
+      (prisma as any).waitlist = {
+        findFirst: vi.fn().mockResolvedValue({ status: 'assigned' }),
+        update: vi.fn().mockResolvedValue({}),
+      };
+
+      await new FloorService(prisma as any, {} as any).releaseAssignment('venue-1', 'assign-1');
+
+      expect((prisma as any).waitlist.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { status: 'waiting', readyAt: null } }),
+      );
+    });
+
+    it('completes a seated party when their table is released', async () => {
+      const prisma = makePrisma('seated');
+      prisma.tableAssignment.findFirst.mockResolvedValue({ id: 'assign-1', tableId: 'table-1', reservationId: null, waitlistId: 'wl-1' });
+      (prisma as any).waitlist = {
+        findFirst: vi.fn().mockResolvedValue({ status: 'seated' }),
+        update: vi.fn().mockResolvedValue({}),
+      };
+
+      await new FloorService(prisma as any, {} as any).releaseAssignment('venue-1', 'assign-1');
+
+      expect((prisma as any).waitlist.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { status: 'completed' } }),
+      );
+    });
+
+    it('frees an ordinary table back to available', async () => {
+      const prisma = makePrisma('seated');
+      await new FloorService(prisma as any, {} as any).releaseAssignment('venue-1', 'assign-1');
+
+      const stateWrite = prisma.tableState.updateMany.mock.calls.at(-1)?.[0];
+      expect(stateWrite.data).toEqual(expect.objectContaining({ status: 'available', partySize: null }));
+    });
+  });
+
+
+  describe('seating window', () => {
+    const makeAssignPrisma = () => {
+      const tx = {
+        tableAssignment: {
+          findMany: vi.fn().mockResolvedValue([]),
+          findFirst: vi.fn().mockResolvedValue(null),
+          updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+          create: vi.fn().mockResolvedValue({}),
+        },
+        tableState: { updateMany: vi.fn().mockResolvedValue({ count: 1 }), findMany: vi.fn().mockResolvedValue([]) },
+        reservation: { update: vi.fn().mockResolvedValue({}) },
+      };
+      const prisma: any = {
+        reservation: { findFirst: vi.fn().mockResolvedValue({ id: 'res-1', partySize: 4, durationMinutes: 120, reservationTime: new Date() }) },
+        floorPlan: { findFirst: vi.fn().mockResolvedValue({ tables: [{ id: 'table-1' }] }) },
+        tableAssignment: tx.tableAssignment,
+        tableState: tx.tableState,
+        $transaction: vi.fn((cb: any) => cb(tx)),
+      };
+      return { prisma, tx };
+    };
+
+    it('rejects assigning a table to a cancelled reservation that was never soft-deleted', async () => {
+      // Cancelling a reservation (reservation-mutation.service.ts's
+      // saveReservation cancel path) sets status: 'cancelled' without ever
+      // setting deletedAt — the two are independent. A closed reservation
+      // must not be seatable just because it still passes deletedAt: null.
+      const { prisma } = makeAssignPrisma();
+      prisma.reservation.findFirst.mockResolvedValue({
+        id: 'res-1', partySize: 4, durationMinutes: 120, reservationTime: new Date(), status: 'cancelled',
+      });
+
+      await expect(
+        new FloorService(prisma, {} as any).assignReservationToTables('venue-1', 'res-1', ['table-1'], {}),
+      ).rejects.toThrow('cancelled reservation cannot be assigned');
+      expect(prisma.floorPlan.findFirst).not.toHaveBeenCalled();
+    });
+
+    it('seats a party who arrived before their booking time', async () => {
+      // The host screen sends the reservation's scheduled startsAt, so an early
+      // seat has a window that has not opened yet. It must still take the table.
+      const { prisma, tx } = makeAssignPrisma();
+      const inThirtyMinutes = Date.now() + 30 * 60 * 1000;
+
+      await new FloorService(prisma, {} as any).assignReservationToTables('venue-1', 'res-1', ['table-1'], {
+        holdType: 'seated',
+        startsAt: inThirtyMinutes,
+        endsAt: inThirtyMinutes + 120 * 60 * 1000,
+      });
+
+      expect(tx.tableState.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ status: 'seated' }) }),
+      );
+      expect(tx.reservation.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { status: 'seated' } }),
+      );
+    });
+
+    it('records an early seating as starting now, not at the booked time', async () => {
+      // Consumers select assignments with startsAt <= now < endsAt. Persisting
+      // the scheduled 19:00 start while writing a seated TableState left the
+      // two disagreeing: merging the party's tables threw, and any refresh
+      // before 19:00 reset the table to available with guests still at it.
+      const { prisma, tx } = makeAssignPrisma();
+      const before = Date.now();
+      const inThirtyMinutes = before + 30 * 60 * 1000;
+
+      await new FloorService(prisma, {} as any).assignReservationToTables('venue-1', 'res-1', ['table-1'], {
+        holdType: 'seated',
+        startsAt: inThirtyMinutes,
+        endsAt: inThirtyMinutes + 120 * 60 * 1000,
+      });
+
+      const row = tx.tableAssignment.create.mock.calls[0][0].data;
+      expect(row.startsAt.getTime()).toBeGreaterThanOrEqual(before);
+      expect(row.startsAt.getTime()).toBeLessThan(inThirtyMinutes);
+      // The booked duration is preserved, just shifted.
+      expect(row.endsAt.getTime() - row.startsAt.getTime()).toBe(120 * 60 * 1000);
+      expect(row.startsAt.getTime()).toBeLessThanOrEqual(Date.now());
+      expect(row.endsAt.getTime()).toBeGreaterThan(Date.now());
+    });
+
+    it('records a late seating as starting now too', async () => {
+      const { prisma, tx } = makeAssignPrisma();
+      const threeHoursAgo = Date.now() - 3 * 60 * 60 * 1000;
+
+      await new FloorService(prisma, {} as any).assignReservationToTables('venue-1', 'res-1', ['table-1'], {
+        holdType: 'seated',
+        startsAt: threeHoursAgo,
+        endsAt: threeHoursAgo + 90 * 60 * 1000,
+      });
+
+      const row = tx.tableAssignment.create.mock.calls[0][0].data;
+      // The booked window closed an hour and a half ago; a party sitting down
+      // now still has to occupy the table now.
+      expect(row.endsAt.getTime()).toBeGreaterThan(Date.now());
+      expect(row.startsAt.getTime()).toBeLessThanOrEqual(Date.now());
+    });
+
+    it('keeps a future reservation hold on its booked window', async () => {
+      const { prisma, tx } = makeAssignPrisma();
+      const tomorrow = Date.now() + 24 * 60 * 60 * 1000;
+
+      await new FloorService(prisma, {} as any).assignReservationToTables('venue-1', 'res-1', ['table-1'], {
+        holdType: 'reserved',
+        startsAt: tomorrow,
+        endsAt: tomorrow + 120 * 60 * 1000,
+      });
+
+      const row = tx.tableAssignment.create.mock.calls[0][0].data;
+      expect(row.startsAt.getTime()).toBe(tomorrow);
+    });
+
+    it('leaves the table free for a reservation hold whose window has not opened', async () => {
+      const { prisma, tx } = makeAssignPrisma();
+      const tomorrow = Date.now() + 24 * 60 * 60 * 1000;
+
+      await new FloorService(prisma, {} as any).assignReservationToTables('venue-1', 'res-1', ['table-1'], {
+        holdType: 'reserved',
+        startsAt: tomorrow,
+        endsAt: tomorrow + 120 * 60 * 1000,
+      });
+
+      // The hold is recorded, but the table stays free until its window opens:
+      // the only state write is the refresh settling it back to available.
+      const statuses = tx.tableState.updateMany.mock.calls.map((call: any[]) => call[0].data.status);
+      expect(statuses).not.toContain('reserved');
+      expect(statuses).not.toContain('seated');
+      expect(statuses).toContain('available');
+      expect(tx.reservation.update).not.toHaveBeenCalled();
+    });
+  });
+
 });

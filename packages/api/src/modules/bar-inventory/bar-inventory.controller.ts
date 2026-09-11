@@ -28,6 +28,7 @@ import { NotificationsService } from '../../notifications/notifications.service'
 import { EmailService } from '../../email/email.service';
 import { BarInventoryParserService } from './bar-inventory-parser.service';
 import { BarInventoryReportsService } from './bar-inventory-reports.service';
+import { InventoryMovementService } from './inventory-movement.service';
 
 const CATEGORIES = [
   'spirit', 'wine', 'beer', 'mixer', 'garnish', 'supply', 'other',
@@ -97,6 +98,11 @@ class UpsertBarItemDto {
 }
 
 class RecordMovementDto {
+  @IsOptional()
+  @IsString()
+  @Matches(/^[A-Za-z0-9_-]{1,100}$/)
+  operationId?: string;
+
   @IsIn(MOVEMENT_TYPES)
   movementType!: BarStockMovementType;
 
@@ -329,6 +335,7 @@ export class BarInventoryController {
     private readonly email: EmailService,
     private readonly parser: BarInventoryParserService,
     private readonly reports: BarInventoryReportsService,
+    private readonly movements: InventoryMovementService = new InventoryMovementService(prisma, notifications),
   ) {}
 
   @RequireSubscription('active')
@@ -348,7 +355,7 @@ export class BarInventoryController {
     const sorted = items.slice().sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
     return {
       items: sorted.map((item) => mapItem(item, includeCosts)),
-      lowStockCount: items.filter((item) => item.onHand <= item.parLevel).length,
+      lowStockCount: items.filter((item) => item.onHand < item.parLevel).length,
       totalValueCents: includeCosts
         ? items.reduce(
           (sum, item) => sum + Math.round(item.onHand * (item.unitCostCents ?? 0)),
@@ -401,6 +408,13 @@ export class BarInventoryController {
       return mapItem(created);
     } catch (error: any) {
       if (error?.code === 'P2002') {
+        // Two unique constraints now guard this table; say which one was hit,
+        // because "name already exists" on a barcode clash sent managers
+        // hunting for a duplicate name that was not there.
+        const target = Array.isArray(error?.meta?.target) ? error.meta.target.join(',') : String(error?.meta?.target ?? '');
+        if (target.includes('sku')) {
+          throw new ConflictException('Another item in this venue already uses that barcode. Scanning it must open exactly one item.');
+        }
         throw new ConflictException('An inventory item with this name already exists.');
       }
       throw error;
@@ -416,55 +430,7 @@ export class BarInventoryController {
   ) {
     const profile = await this.requireManagerProfile(user);
     const venueId = profile.venueId!;
-    // Regression for VW-07: quantity had no sign constraint, so a 'waste'
-    // movement with a positive quantity silently increased stock instead of
-    // reducing it. The app itself already submits waste/comp as negative and
-    // received as positive (see app/(tabs)/bar-stock.tsx) — this just makes
-    // that convention a server-enforced invariant rather than a client habit.
-    if ((body.movementType === 'waste' || body.movementType === 'comp') && body.quantity > 0) {
-      throw new BadRequestException(`A ${body.movementType} movement must reduce stock. Use a negative quantity.`);
-    }
-    if (body.movementType === 'received' && body.quantity < 0) {
-      throw new BadRequestException('A received movement must be positive.');
-    }
-    const { movement, item, previousOnHand, nextOnHand } = await this.prisma.$transaction(async (tx) => {
-      const lockKey = `bar-inventory-${itemId}`;
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`;
-      const item = await tx.barInventoryItem.findFirst({ where: { id: itemId, venueId } });
-      if (!item) throw new NotFoundException('Item not found');
-      const previousOnHand = item.onHand;
-      const nextOnHand =
-        body.movementType === 'count'
-          ? Math.max(0, body.quantity)
-          : Math.max(0, previousOnHand + body.quantity);
-      const now = new Date();
-      await tx.barInventoryItem.update({
-        where: { id: item.id },
-        data: {
-          onHand: nextOnHand,
-          lastCountedAt: body.movementType === 'count' ? now : item.lastCountedAt,
-          updatedAt: now,
-        },
-      });
-      const movement = await tx.barInventoryMovement.create({
-        data: {
-          venueId,
-          itemId: item.id,
-          movementType: body.movementType,
-          quantity: body.quantity,
-          previousOnHand,
-          nextOnHand,
-          notes: cleanText(body.notes) ?? null,
-          createdBy: profile.id,
-          createdAt: now,
-        },
-      });
-      return { movement, item, previousOnHand, nextOnHand };
-    });
-
-    // Fire-and-forget alerts after the transaction commits
-    void this.fireInventoryAlerts({ venueId, item, previousOnHand, nextOnHand, movementType: body.movementType, quantity: body.quantity });
-
+    const { movement } = await this.movements.record({ ...body, venueId, itemId, createdBy: profile.id });
     return { _id: movement.id };
   }
 
@@ -592,10 +558,11 @@ export class BarInventoryController {
   async exportStockCsv(@CurrentUser() user: AuthUser) {
     const profile = await this.requireManagerProfile(user);
     const venueId = profile.venueId!;
+    // A stock export is the whole stock list; a row cap here silently ships a
+    // short CSV that reads as complete.
     const items = await this.prisma.barInventoryItem.findMany({
       where: { venueId },
       orderBy: { name: 'asc' },
-      take: 500,
     });
     const headers = ['Name', 'Category', 'Area', 'Unit', 'On Hand', 'Par Level', 'Unit Cost ($)', 'Supplier', 'SKU', 'Last Counted'];
     const rows = [headers.map(csvCell).join(',')];
@@ -623,10 +590,11 @@ export class BarInventoryController {
     const profile = await this.requireManagerProfile(user);
     const venueId = profile.venueId!;
     const twoWeeksAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
+    // Already bounded to the last two weeks; capping rows on top of that drops
+    // the oldest movements out of the export without saying so.
     const movements = await this.prisma.barInventoryMovement.findMany({
       where: { venueId, createdAt: { gte: twoWeeksAgo } },
       orderBy: { createdAt: 'desc' },
-      take: 1000,
     });
     const itemIds = Array.from(new Set(movements.map((m) => m.itemId)));
     const profileIds = Array.from(new Set(movements.map((m) => m.createdBy).filter(Boolean)));
@@ -700,19 +668,27 @@ export class BarInventoryController {
   ) {
     const profile = await this.requireManagerProfile(user);
     const venueId = profile.venueId!;
-    const item = await this.prisma.barInventoryItem.findFirst({ where: { id: itemId, venueId } });
-    if (!item) throw new NotFoundException('Item not found');
-    const oldCost = item.unitCostCents ?? 0;
     const newCost = Math.max(0, Math.round(body.unitCostCents));
-    if (oldCost === newCost) return mapItem(item);
     const now = new Date();
-    const [updated] = await this.prisma.$transaction([
-      this.prisma.barInventoryItem.update({
+    // Same advisory lock InventoryMovementService.record() takes on this item,
+    // so a concurrent count/waste/received movement cannot commit a new
+    // onHand between the read below and this transaction's write — without
+    // it, the correction movement's previousOnHand/nextOnHand snapshot could
+    // already be stale by the time it lands, misrepresenting the cost-history
+    // ledger at the exact moment stock was moving.
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const lockKey = `bar-inventory-${itemId}`;
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`;
+      const item = await tx.barInventoryItem.findFirst({ where: { id: itemId, venueId } });
+      if (!item) throw new NotFoundException('Item not found');
+      const oldCost = item.unitCostCents ?? 0;
+      if (oldCost === newCost) return item;
+      const result = await tx.barInventoryItem.update({
         where: { id: item.id },
         data: { unitCostCents: newCost, updatedAt: now },
-      }),
+      });
       // Write a zero-quantity correction so cost history is queryable from movement log
-      this.prisma.barInventoryMovement.create({
+      await tx.barInventoryMovement.create({
         data: {
           venueId,
           itemId: item.id,
@@ -724,8 +700,9 @@ export class BarInventoryController {
           createdBy: profile.id,
           createdAt: now,
         },
-      }),
-    ]);
+      });
+      return result;
+    });
     return mapItem(updated);
   }
 
@@ -775,16 +752,32 @@ export class BarInventoryController {
   @Get('prep-board')
   async listPrepBoard(@CurrentUser() user: AuthUser) {
     const profile = await this.requireManagerProfile(user);
-    const items = await this.prisma.prepBoardItem.findMany({
-      where: { venueId: profile.venueId!, status: { not: 'cancelled' } },
-      orderBy: [{ status: 'asc' }, { kind: 'asc' }, { createdAt: 'desc' }],
-      take: 100,
-    });
+    const venueId = profile.venueId!;
+    // Open work first. Ordering by status text put 'done' ahead of 'open'
+    // alphabetically, so once a venue had 100 completed items the still-open
+    // prep and 86 work fell off the end of the page and out of the board.
+    const [openItems, recentlyDone, openCount, eightySixCount, prepCount] = await Promise.all([
+      this.prisma.prepBoardItem.findMany({
+        where: { venueId, status: 'open' },
+        orderBy: [{ kind: 'asc' }, { createdAt: 'desc' }],
+        take: 200,
+      }),
+      this.prisma.prepBoardItem.findMany({
+        where: { venueId, status: { notIn: ['cancelled', 'open'] } },
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+      }),
+      // Counted in the database, not off the truncated page: the totals used to
+      // shrink as soon as the list was capped.
+      this.prisma.prepBoardItem.count({ where: { venueId, status: 'open' } }),
+      this.prisma.prepBoardItem.count({ where: { venueId, status: 'open', kind: 'eighty_six' } }),
+      this.prisma.prepBoardItem.count({ where: { venueId, status: 'open', kind: 'prep' } }),
+    ]);
     return {
-      items: items.map(mapPrepBoardItem),
-      openCount: items.filter((item) => item.status === 'open').length,
-      eightySixCount: items.filter((item) => item.status === 'open' && item.kind === 'eighty_six').length,
-      prepCount: items.filter((item) => item.status === 'open' && item.kind === 'prep').length,
+      items: [...openItems, ...recentlyDone].map(mapPrepBoardItem),
+      openCount,
+      eightySixCount,
+      prepCount,
     };
   }
 
@@ -855,7 +848,7 @@ export class BarInventoryController {
   async sendPurchaseOrderEmail(@CurrentUser() user: AuthUser) {
     const profile = await this.requireManagerProfile(user);
     const venueId = profile.venueId!;
-    const items = await this.prisma.barInventoryItem.findMany({ where: { venueId }, orderBy: [{ supplier: 'asc' }, { name: 'asc' }], take: 500 });
+    const items = await this.prisma.barInventoryItem.findMany({ where: { venueId }, orderBy: [{ supplier: 'asc' }, { name: 'asc' }] });
     const belowPar = items.filter((i) => i.onHand < i.parLevel);
     if (belowPar.length === 0) return { sent: false, reason: 'All items at or above par — nothing to order.' };
 
@@ -901,10 +894,10 @@ export class BarInventoryController {
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
     const [items, movements] = await Promise.all([
-      this.prisma.barInventoryItem.findMany({ where: { venueId }, take: 500 }),
+      this.prisma.barInventoryItem.findMany({ where: { venueId } }),
       this.prisma.barInventoryMovement.findMany({
         where: { venueId, createdAt: { gte: thirtyDaysAgo } },
-        select: { itemId: true, movementType: true, quantity: true },
+        select: { itemId: true, movementType: true, quantity: true, unitCostCents: true },
       }),
     ]);
 
@@ -917,7 +910,9 @@ export class BarInventoryController {
     for (const m of movements) {
       const item = itemMap.get(m.itemId);
       if (!item) continue;
-      const cost = item.unitCostCents ?? 0;
+      // The cost recorded with the movement, falling back to the item's
+      // current cost only for rows written before movements carried one.
+      const cost = m.unitCostCents ?? item.unitCostCents ?? 0;
       if (m.movementType === 'waste') wasteCents += Math.abs(m.quantity) * cost;
       if (m.movementType === 'comp') compCents += Math.abs(m.quantity) * cost;
     }
@@ -1003,55 +998,6 @@ export class BarInventoryController {
     };
   }
 
-  private fireInventoryAlerts(args: {
-    venueId: string;
-    item: { id: string; name: string; parLevel: number; unitCostCents: number | null };
-    previousOnHand: number;
-    nextOnHand: number;
-    movementType: string;
-    quantity: number;
-  }) {
-    void this.fireInventoryAlertsInBackground(args).catch((error) => {
-      this.logger.error(
-        `Inventory alert delivery failed: ${error instanceof Error ? error.message : String(error)}`,
-        error instanceof Error ? error.stack : undefined,
-      );
-    });
-  }
-
-  private async fireInventoryAlertsInBackground(args: {
-    venueId: string;
-    item: { id: string; name: string; parLevel: number; unitCostCents: number | null };
-    previousOnHand: number;
-    nextOnHand: number;
-    movementType: string;
-    quantity: number;
-  }) {
-    const { venueId, item, previousOnHand, nextOnHand, movementType, quantity } = args;
-
-    // Low-stock alert: just crossed below par
-    if (previousOnHand >= item.parLevel && nextOnHand < item.parLevel) {
-      await this.notifications.notifyManagers({
-        venueId,
-        kind: 'inventory_low_stock',
-        title: `Low stock: ${item.name}`,
-        body: `${nextOnHand} ${nextOnHand === 1 ? 'unit' : 'units'} remaining (par ${item.parLevel})`,
-      });
-    }
-
-    // Large waste/comp alert: loss > $50 in cost
-    if ((movementType === 'waste' || movementType === 'comp') && item.unitCostCents != null) {
-      const lossCents = Math.abs(quantity) * item.unitCostCents;
-      if (lossCents >= 5000) {
-        await this.notifications.notifyManagers({
-          venueId,
-          kind: 'inventory_large_loss',
-          title: `Large ${movementType} recorded`,
-          body: `${Math.abs(quantity)} × ${item.name} — est. $${(lossCents / 100).toFixed(2)} loss`,
-        });
-      }
-    }
-  }
 
   private async getProfile(user: AuthUser) {
     return this.prisma.profile.findFirst({

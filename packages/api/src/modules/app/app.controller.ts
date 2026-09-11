@@ -1,4 +1,4 @@
-import { BadRequestException, Body, ConflictException, Controller, Delete, ForbiddenException, Get, Header, HttpException, HttpStatus, Logger, NotFoundException, Optional, Param, Patch, Post, Req, UnauthorizedException, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, ConflictException, Controller, Delete, ForbiddenException, Get, Header, HttpException, HttpStatus, Logger, NotFoundException, Optional, Param, Patch, Post, Query, Req, UnauthorizedException, UseGuards } from '@nestjs/common';
 import { IsBoolean, IsEmail, IsIn, IsNumber, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 import { Prisma, ReservationStatus, Role } from '@prisma/client';
 import { randomBytes, randomInt } from 'crypto';
@@ -9,28 +9,30 @@ import { CurrentUser } from '../../auth/current-user.decorator';
 import type { AuthUser } from '../../auth/auth.guard';
 import { canManageVenue, isAdminRole, isOwnerOrAdminRole } from '../../auth/roles';
 import { RequireSubscription } from '../../billing/require-subscription.decorator';
-import { closeOpenBreaks, unpaidBreakMs } from '../../common/break-duration';
+import { assertCoverageCapacity, COVERED_SUBSCRIPTION_DATA, effectiveSubscriptionStatus, isMultiVenuePlan } from '../../billing/billing-coverage';
+import { closeOpenBreaks, parseTimeBreaks, unpaidBreakMs } from '../../common/break-duration';
 import { csvCell, csvDocument } from '../../common/csv';
-import { getClientIp } from '../../common/http';
+import { getClientIp, venueIdHeader } from '../../common/http';
 import { hashInviteToken } from '../../common/invite-token';
 import { assertWithinSharedRateLimit } from '../../common/rate-limit';
 import { sanitizeForEmail } from '../../common/sanitize-email-text';
 import { buildClockAlerts, clockAlertShiftWindow } from '../../common/clock-alerts';
 import { todayInZone, weekStartFor } from '../../common/pay-period';
-import { isIanaTimeZone, zonedDayBounds } from '../../common/venue-time';
+import { isIanaTimeZone, zonedDateBounds, zonedDayBounds } from '../../common/venue-time';
 import { EmailService } from '../../email/email.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { runWithoutTenant } from '../../prisma/tenant-context';
 import { mapClockEntry, mapProfile, mapShift, mapVenue, toMs } from './app-mappers';
 import { accountDeletedTemplate, accountUpdatedTemplate, teamInviteTemplate } from '../../email/templates/account';
 import { ProfileService } from './profile.service';
-import { isActiveMembership } from '../../common/membership';
+import { ACTIVE_MEMBERSHIP, isActiveMembership } from '../../common/membership';
 import { syncTeamMemberCount } from '../../common/team-sync';
 import { MediaCleanupService } from '../media-cleanup/media-cleanup.service';
 import { endBreakForProfile, startBreakForProfile } from '../time-clock/break-transitions';
 import { Audited } from '../audit/audited.decorator';
 
 const TRIAL_DURATION_MS = 14 * 24 * 60 * 60 * 1000;
+const MAX_TIME_ENTRIES_CSV_ROWS = 5_000;
 
 function parseVenueTimeZone(value: string | undefined): string | undefined {
   if (value == null || value.trim() === '') return undefined;
@@ -221,6 +223,35 @@ function planForStaffRange(range: string) {
   return { planId: FLAT_PLAN_ID, priceCents: FLAT_PLAN_PRICE_CENTS };
 }
 
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Venue-local [start, end) for an export's selected period. Both dates are
+ * inclusive calendar days in the venue's own timezone, so a manager in another
+ * timezone gets the venue's days rather than their device's. No dates means no
+ * range: the export falls back to its recent-rows behaviour rather than
+ * silently returning an arbitrary window.
+ */
+function resolveExportRange(
+  timezone: string | null,
+  startDate?: string,
+  endDate?: string,
+): { start: Date; end: Date } | null {
+  if (!startDate && !endDate) return null;
+  const startIso = startDate ?? endDate!;
+  const endIso = endDate ?? startDate!;
+  if (!ISO_DATE.test(startIso) || !ISO_DATE.test(endIso)) {
+    throw new BadRequestException('startDate and endDate must be YYYY-MM-DD.');
+  }
+  if (endIso < startIso) {
+    throw new BadRequestException('endDate must not be before startDate.');
+  }
+  return {
+    start: new Date(zonedDateBounds(timezone, startIso).start),
+    end: new Date(zonedDateBounds(timezone, endIso).end),
+  };
+}
+
 @Controller('v1/app')
 export class AppController {
   private readonly logger = new Logger(AppController.name);
@@ -235,7 +266,7 @@ export class AppController {
   @UseGuards(AuthGuard)
   @Get('me')
   async getMe(@CurrentUser() user: AuthUser, @Req() req: Request) {
-    const requestedVenueId = (req.headers['x-venue-id'] as string | undefined) || user.venueId || undefined;
+    const requestedVenueId = venueIdHeader(req.headers) || user.venueId || undefined;
     let profile = await this.getProfile(user, requestedVenueId);
     if (!profile) {
       profile = await this.prisma.profile.findFirst({
@@ -394,10 +425,13 @@ export class AppController {
       }
 
       const isAdditionalVenue = venueIds.length > 0;
+      let billingSubscriptionId: string | null = null;
       if (isAdditionalVenue) {
         const hasMultiPlan = await tx.subscription.findFirst({
           where: {
             venueId: { in: venueIds },
+            billingSubscriptionId: null,
+            venue: { profiles: { some: { userId: user.sub, role: { in: ['owner', 'admin'] }, OR: [{ membershipStatus: null }, { membershipStatus: 'active' }] } } },
             status: { in: ['active', 'trialing'] },
             OR: [
               { planId: MULTI_VENUE_PLAN_ID },
@@ -405,9 +439,8 @@ export class AppController {
               { planId: { contains: 'multi' } },
             ],
           },
-          select: { id: true },
         });
-        if (!hasMultiPlan) {
+        if (!hasMultiPlan || !isMultiVenuePlan(hasMultiPlan) || !['active', 'trialing'].includes(effectiveSubscriptionStatus(hasMultiPlan))) {
           throw new HttpException(
             {
               statusCode: 402,
@@ -417,6 +450,14 @@ export class AppController {
             HttpStatus.PAYMENT_REQUIRED,
           );
         }
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`billing:${hasMultiPlan.venueId}`}))`;
+        // Re-read under the payer lock in case cancellation raced registration.
+        const payer = await tx.subscription.findUnique({ where: { id: hasMultiPlan.id } });
+        if (!payer || !isMultiVenuePlan(payer) || !['active', 'trialing'].includes(effectiveSubscriptionStatus(payer))) {
+          throw new BadRequestException('The paying subscription is no longer active.');
+        }
+        await assertCoverageCapacity(tx, payer.id);
+        billingSubscriptionId = payer.id;
       }
 
       const plan = isAdditionalVenue
@@ -461,6 +502,7 @@ export class AppController {
           trialStartedAt,
           trialEndsAt,
           cancelAtPeriodEnd: false,
+          ...(billingSubscriptionId ? { ...COVERED_SUBSCRIPTION_DATA, billingSubscriptionId } : {}),
         },
       });
       const profile = await tx.profile.create({
@@ -562,13 +604,16 @@ export class AppController {
         take: 14,
       }),
       this.prisma.scheduleShift.groupBy({ by: ['status'], where: shiftWhere, _count: { _all: true } }),
-      canManage ? this.prisma.profile.count({ where: { venueId: profile.venueId! } }) : Promise.resolve(0),
+      // Revoked staff keep their venueId (deactivateVenueStaff only flips
+      // membershipStatus), so an unfiltered count here inflates headcount
+      // forever after any turnover — it never shrinks as people leave.
+      canManage ? this.prisma.profile.count({ where: { venueId: profile.venueId!, OR: ACTIVE_MEMBERSHIP } }) : Promise.resolve(0),
       canManage
         ? this.prisma.timeEntry.findMany({
             where: {
               venueId: profile.venueId!,
               isOpen: true,
-              profile: { OR: [{ membershipStatus: null }, { membershipStatus: 'active' }] },
+              profile: { OR: ACTIVE_MEMBERSHIP },
             },
             include: { profile: true, venue: true },
             take: 50,
@@ -683,20 +728,47 @@ export class AppController {
   @Get('time-entries/csv')
   @Header('Content-Type', 'text/csv; charset=utf-8')
   @Header('Content-Disposition', 'attachment; filename="time-entries.csv"')
-  async exportTimeEntriesCsv(@CurrentUser() user: AuthUser) {
+  async exportTimeEntriesCsv(
+    @CurrentUser() user: AuthUser,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
     const profile = await this.requireManagerProfile(user);
     const venueId = profile.venueId!;
+    // The export ignored the period the manager had selected and returned the
+    // most recent 1000 punches whatever the screen said, so a chosen range and
+    // the file that came back could describe different weeks.
+    const venue = await this.prisma.venue.findUnique({ where: { id: venueId }, select: { timezone: true } });
+    const timezone = venue?.timezone ?? null;
+    const range = resolveExportRange(timezone, startDate, endDate);
     const entries = await this.prisma.timeEntry.findMany({
-      where: { venueId },
+      where: {
+        venueId,
+        ...(range ? { clockInAt: { gte: range.start, lt: range.end } } : {}),
+      },
       include: { profile: true },
       orderBy: { clockInAt: 'desc' },
-      take: 1000,
+      take: MAX_TIME_ENTRIES_CSV_ROWS + 1,
     });
-    const header = 'id,memberId,memberName,clockInAt,clockOutAt,hoursWorked\n';
+    // This used to silently cap at 5000 and return whatever fit — ordered
+    // newest-first, so a manager exporting a long/unbounded range got the
+    // most recent punches with the oldest ones missing and no indication
+    // anything was cut. Match payroll's export: refuse rather than return a
+    // silently incomplete file.
+    if (entries.length > MAX_TIME_ENTRIES_CSV_ROWS) {
+      throw new BadRequestException('This export is too large. Choose a smaller date range; no partial export was generated.');
+    }
+    const header = 'id,memberId,memberName,clockInAt,clockOutAt,unpaidBreakHours,hoursWorked\n';
     const rows = entries
       .map((e) => {
+        // Unpaid breaks were never deducted here, so this export disagreed with
+        // payroll — which does deduct them — for the same punches.
+        const unpaidMs = parseTimeBreaks(e.breaks)
+          .filter((b) => b.type === 'unpaid')
+          .reduce((sum, b) => sum + unpaidBreakMs(b.startAt, b.endAt), 0);
+        const unpaidHours = Math.round((unpaidMs / 3600000) * 100) / 100;
         const hours = e.clockOutAt
-          ? Math.round(((e.clockOutAt.getTime() - e.clockInAt.getTime()) / 3600000) * 100) / 100
+          ? Math.round((Math.max(0, e.clockOutAt.getTime() - e.clockInAt.getTime() - unpaidMs) / 3600000) * 100) / 100
           : '';
         return [
           csvCell(e.id),
@@ -704,6 +776,7 @@ export class AppController {
           csvCell(e.profile?.fullName ?? e.profileFullName ?? 'Former staff'),
           csvCell(e.clockInAt.toISOString()),
           csvCell(e.clockOutAt?.toISOString() ?? ''),
+          csvCell(unpaidHours),
           csvCell(hours),
         ].join(',');
       })
@@ -716,8 +789,14 @@ export class AppController {
   @UseGuards(AuthGuard)
   @RequireSubscription()
   @Get('notifications')
-  async getNotifications(@CurrentUser() user: AuthUser) {
+  async getNotifications(@CurrentUser() user: AuthUser, @Query('limit') limitQuery?: string) {
     const profile = await this.requireVenueProfile(user);
+    // The list was hard-capped at 20 with no way to reach anything older, so an
+    // unread notification past the newest 20 could not be read at all. The cap
+    // stays (this is a list, not an archive) but the caller can now ask for
+    // more, which is what the Load more control does.
+    const requested = Number(limitQuery);
+    const limit = Number.isFinite(requested) ? Math.min(Math.max(1, Math.floor(requested)), 200) : 20;
     const rows = await this.prisma.notificationEvent.findMany({
       where: {
         venueId: profile.venueId!,
@@ -728,7 +807,7 @@ export class AppController {
         ],
       },
       orderBy: { createdAt: 'desc' },
-      take: 20,
+      take: limit,
     });
     const reads = await this.prisma.notificationRead.findMany({
       where: { profileId: profile.id, notificationId: { in: rows.map((row) => row.id) } },
@@ -906,10 +985,11 @@ export class AppController {
   async createInvite(@CurrentUser() user: AuthUser, @Body() body: CreateInviteDto) {
     const profile = await this.requireManagerProfile(user);
     // Only owner, admin, or allAccess profiles may create manager-level invites.
-    // A plain manager can only invite staff, matching the canManageRole policy
-    // enforced on direct staff edits.
     const canElevate = profile.role === 'owner' || profile.role === 'admin' || profile.allAccess;
-    const inviteRole = body.role === 'manager' && canElevate ? 'manager' : 'staff';
+    if (body.role === 'manager' && !canElevate) {
+      throw new ForbiddenException('Only owners and administrators can invite managers.');
+    }
+    const inviteRole = body.role === 'manager' ? 'manager' : 'staff';
     const email = body.email?.trim().toLowerCase() || null;
     if (inviteRole === 'manager' && !email) {
       throw new BadRequestException('Manager invites require an email address.');
@@ -984,6 +1064,10 @@ export class AppController {
   @Public()
   @Get('invite/:code')
   async previewInvite(@Req() request: Request, @Param('code') rawCode: string) {
+    const code = rawCode?.trim();
+    if (!code || code.length < 4 || code.length > 64) {
+      throw new BadRequestException('Invalid invite code format.');
+    }
     await assertWithinSharedRateLimit(
       this.prisma,
       'public-invite:global',
@@ -996,7 +1080,7 @@ export class AppController {
       PUBLIC_INVITE_RATE_LIMIT_MAX,
       PUBLIC_INVITE_RATE_LIMIT_WINDOW_MS,
     );
-    const invite = await this.findRedeemableInvite({ codeOrToken: rawCode });
+    const invite = await this.findRedeemableInvite({ codeOrToken: code });
     if (!invite) throw new NotFoundException('That invite code is invalid, used, or expired.');
     const venue = await this.prisma.venue.findUnique({ where: { id: invite.venueId }, select: { name: true } });
     return {
@@ -1109,12 +1193,20 @@ export class AppController {
           where: { id: profile.id },
         });
 
-        // Adopt the unclaimed profile
+        // Adopt the unclaimed profile, keeping the role the manager set on the
+        // roster. Forcing 'staff' here silently demoted anyone added as a
+        // manager: the roster said manager, the account that claimed it was
+        // staff, and the person landed in a workspace missing the controls
+        // they had been told to expect. Owner and admin are not adoptable this
+        // way — those roles are granted deliberately, not by claiming a roster
+        // row — so they fall back to manager.
+        const rosterRole = unclaimedProfile.role;
+        const adoptedRole: Role = rosterRole === 'owner' || rosterRole === 'admin' ? 'manager' : rosterRole;
         return tx.profile.update({
           where: { id: unclaimedProfile.id },
           data: {
             userId: user.sub,
-            role: 'staff',
+            role: adoptedRole,
           },
           include: { venue: true },
         });
@@ -1208,6 +1300,31 @@ export class AppController {
         }
       }
 
+      if (venuesToDelete.length > 0) {
+        // A venue being deleted may itself be the "billing venue" that covers
+        // other venues' subscriptions (Subscription.billingSubscriptionId).
+        // That FK is onDelete: SetNull, so deleting it silently cuts the
+        // covered venues off their paid plan with no warning. Block it
+        // instead — the covered venues must be reassigned first.
+        const coveringSubscriptions = await tx.subscription.findMany({
+          where: { venueId: { in: venuesToDelete } },
+          select: { id: true },
+        });
+        if (coveringSubscriptions.length > 0) {
+          const coveredElsewhere = await tx.subscription.count({
+            where: {
+              billingSubscriptionId: { in: coveringSubscriptions.map((s) => s.id) },
+              venueId: { notIn: venuesToDelete },
+            },
+          });
+          if (coveredElsewhere > 0) {
+            throw new ConflictException(
+              'This account owns a venue whose subscription covers other venues’ billing. Reassign that coverage before deleting this account.',
+            );
+          }
+        }
+      }
+
       const mediaJobIds: string[] = [];
       if (venuesToDelete.length > 0) {
         const venueList = Prisma.join(venuesToDelete);
@@ -1275,6 +1392,43 @@ export class AppController {
           WHERE t."venueId" IN (${venueList})
         `);
 
+        // Same archive-before-cascade need as TimeEntry above: PosCheck and
+        // PosLaborPunch are onDelete: Cascade from Venue with no other
+        // retention path, so this venue's revenue and labor history would
+        // otherwise be destroyed outright. Neither table carries a profileId
+        // link to the departing account, so — unlike TimeEntry — nothing here
+        // is that account's own personal data requiring pseudonymization.
+        await tx.$executeRaw(Prisma.sql`
+          INSERT INTO "RetainedPosCheck" (
+            "id", "originVenueId", "originVenueName", "provider", "externalCheckId",
+            "tableLabel", "serverName", "guestName", "openedAt", "closedAt",
+            "subtotalCents", "taxCents", "tipCents", "totalCents", "status",
+            "originUpdatedAt", "retainedAt"
+          )
+          SELECT
+            ${`retained-${deletionRunId}-`} || c."id", c."venueId", v."name", c."provider"::text, c."externalCheckId",
+            c."tableLabel", c."serverName", c."guestName", c."openedAt", c."closedAt",
+            c."subtotalCents", c."taxCents", c."tipCents", c."totalCents", c."status"::text,
+            c."updatedAt", NOW()
+          FROM "PosCheck" c
+          JOIN "Venue" v ON v."id" = c."venueId"
+          WHERE c."venueId" IN (${venueList})
+        `);
+        await tx.$executeRaw(Prisma.sql`
+          INSERT INTO "RetainedPosLaborPunch" (
+            "id", "originVenueId", "originVenueName", "provider", "externalEmployeeId",
+            "employeeName", "clockInAt", "clockOutAt", "regularMinutes", "overtimeMinutes",
+            "regularPayCents", "overtimePayCents", "totalPayCents", "businessDate", "retainedAt"
+          )
+          SELECT
+            ${`retained-${deletionRunId}-`} || l."id", l."venueId", v."name", l."provider"::text, l."externalEmployeeId",
+            l."employeeName", l."clockInAt", l."clockOutAt", l."regularMinutes", l."overtimeMinutes",
+            l."regularPayCents", l."overtimePayCents", l."totalPayCents", l."businessDate", NOW()
+          FROM "PosLaborPunch" l
+          JOIN "Venue" v ON v."id" = l."venueId"
+          WHERE l."venueId" IN (${venueList})
+        `);
+
         // Profile.venue uses SetNull because profiles can temporarily be
         // venueless during onboarding. Tenant offboarding is different: remove
         // every venue profile explicitly before the Venue cascade.
@@ -1315,6 +1469,27 @@ export class AppController {
           });
         }
         await tx.scheduleShift.updateMany({ where: { profileId: { in: profileIds } }, data: { profileId: null, status: 'open' } });
+
+        // Archive-before-cascade, same reasoning as TimeEntry above: an
+        // approved StaffRequest is the paper trail for why this profile's
+        // PTO/sick balance changed, and StaffRequest.profile is onDelete:
+        // Cascade. Only approved requests carry that compliance value —
+        // pending/denied/cancelled ones never affected pay and are left to
+        // the ordinary cascade.
+        await tx.$executeRaw(Prisma.sql`
+          INSERT INTO "RetainedStaffRequest" (
+            "id", "originVenueId", "originVenueName", "profileFullName", "kind", "title", "details",
+            "requestedForDate", "requestedRangeStart", "requestedRangeEnd", "responseNotes",
+            "originCreatedAt", "originReviewedAt", "retainedAt"
+          )
+          SELECT
+            ${`retained-${deletionRunId}-`} || r."id", r."venueId", v."name", ${`deleted_user_`} || r."profileId",
+            r."kind", r."title", r."details", r."requestedForDate", r."requestedRangeStart", r."requestedRangeEnd",
+            r."responseNotes", r."createdAt", r."reviewedAt", NOW()
+          FROM "StaffRequest" r
+          JOIN "Venue" v ON v."id" = r."venueId"
+          WHERE r."profileId" IN (${Prisma.join(profileIds)}) AND r."status" = 'approved'
+        `);
       }
       await tx.session.deleteMany({ where: { userId: user.sub } });
       await tx.authAccount.deleteMany({ where: { userId: user.sub } });

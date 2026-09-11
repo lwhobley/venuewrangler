@@ -50,6 +50,14 @@ class SaveReservationDto {
   @MaxLength(64)
   reservationId?: string;
 
+  // Optional: when the form recognised a returning guest it can say which one.
+  // Left unset, the service still resolves the guest from email/phone, so a
+  // booking is attached to the profile either way.
+  @IsString()
+  @IsOptional()
+  @MaxLength(64)
+  guestId?: string;
+
   @IsString()
   @MaxLength(200)
   guestName!: string;
@@ -507,6 +515,7 @@ export class ReservationsController {
     const { reservation, previousStatus } = await this.mutations.saveReservation({
       venueId: scope.venueId,
       reservationId: body.reservationId,
+      guestId: body.guestId,
       guestName: body.guestName,
       partySize: body.partySize,
       reservationTime: body.reservationTime,

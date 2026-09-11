@@ -334,7 +334,7 @@ function SalesScreen() {
   const { venue, isReady, profileLoading, profileError, refetchProfile, canManage } = useVenueAuth();
 
   const [tab, setTab] = useState<'summary' | 'servers' | 'items' | 'labor'>('summary');
-  const { selected: dateRange, setSelected: setDateRange, presets } = useDateRange('today');
+  const { selected: dateRange, setSelected: setDateRange, presets } = useDateRange('today', venue?.timezone);
 
   if (!venue?.id) {
     return (

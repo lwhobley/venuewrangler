@@ -1,4 +1,4 @@
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { describe, expect, it, vi } from 'vitest';
 import { assertWithinSharedRateLimit } from '../../common/rate-limit';
 import { AppController } from './app.controller';
@@ -17,6 +17,19 @@ describe('AppController invite preview', () => {
     await expect(controller.previewInvite({ ip: '127.0.0.1' } as any, 'bad-code'))
       .rejects.toBeInstanceOf(NotFoundException);
     expect(assertWithinSharedRateLimit).toHaveBeenCalled();
+  });
+
+  it('rejects malformed or unbounded invite codes with BadRequestException', async () => {
+    const prisma = { invite: { findFirst: vi.fn() } };
+    const controller = new AppController(prisma as any, {} as any, {} as any);
+
+    await expect(controller.previewInvite({ ip: '127.0.0.1' } as any, ''))
+      .rejects.toBeInstanceOf(BadRequestException);
+    await expect(controller.previewInvite({ ip: '127.0.0.1' } as any, 'abc'))
+      .rejects.toBeInstanceOf(BadRequestException);
+    await expect(controller.previewInvite({ ip: '127.0.0.1' } as any, 'a'.repeat(65)))
+      .rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.invite.findFirst).not.toHaveBeenCalled();
   });
 
   it('returns only the team name for a valid public invite', async () => {
@@ -100,7 +113,7 @@ describe('AppController redeem-my-invite', () => {
         findUnique: vi.fn().mockResolvedValue({ id: 'profile-temp', venueId: null, venue: null }),
         findFirst: vi.fn().mockImplementation((args: any) => {
           if (args?.where?.userId === 'user-new') return Promise.resolve({ id: 'profile-temp', venueId: null, venue: null });
-          return Promise.resolve({ id: 'profile-roster', venueId: 'venue-b', venue: { id: 'venue-b' } });
+          return Promise.resolve({ id: 'profile-roster', role: 'staff', venueId: 'venue-b', venue: { id: 'venue-b' } });
         }),
         findMany: vi.fn().mockResolvedValue([]),
         delete: vi.fn(),
@@ -119,6 +132,69 @@ describe('AppController redeem-my-invite', () => {
     expect(prisma.profile.delete).toHaveBeenCalledWith({ where: { id: 'profile-temp' } });
     expect(prisma.profile.update).toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: 'profile-roster' }, data: { userId: 'user-new', role: 'staff' } }),
+    );
+  });
+
+  it('keeps the role the manager put on the roster instead of forcing staff', async () => {
+    // Regression (E02): adoption hardcoded 'staff', so someone added to the
+    // roster as a manager claimed their account and landed in a workspace
+    // without the controls they had been told to expect.
+    const adopted = {
+      id: 'profile-roster',
+      email: 'mo@example.com',
+      fullName: 'Mo Manager',
+      role: 'manager',
+      jobTitle: 'GM',
+      venueId: 'venue-b',
+      allAccess: false,
+      venue: { id: 'venue-b', name: 'Venue B', latitude: 3, longitude: 4, geofenceRadiusM: 150 },
+    };
+    const prisma: any = {
+      user: { findUnique: vi.fn().mockResolvedValue({ email: 'mo@example.com', emailVerifiedAt: new Date() }) },
+      profile: {
+        findUnique: vi.fn().mockResolvedValue({ id: 'profile-temp', venueId: null, venue: null }),
+        findFirst: vi.fn().mockImplementation((args: any) => {
+          if (args?.where?.userId === 'user-mo') return Promise.resolve({ id: 'profile-temp', venueId: null, venue: null });
+          return Promise.resolve({ id: 'profile-roster', role: 'manager', venueId: 'venue-b', venue: { id: 'venue-b' } });
+        }),
+        findMany: vi.fn().mockResolvedValue([]),
+        delete: vi.fn(),
+        update: vi.fn().mockResolvedValue(adopted),
+      },
+      invite: { findMany: vi.fn().mockResolvedValue([]) },
+      $transaction: vi.fn(async (fn: any) => fn(prisma)),
+    };
+    const controller = new AppController(prisma, {} as any, new ProfileService(prisma));
+
+    await controller.redeemMyInvite({ sub: 'user-mo' } as any);
+
+    expect(prisma.profile.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { userId: 'user-mo', role: 'manager' } }),
+    );
+  });
+
+  it('does not hand out owner or admin by claiming a roster row', async () => {
+    const prisma: any = {
+      user: { findUnique: vi.fn().mockResolvedValue({ email: 'o@example.com', emailVerifiedAt: new Date() }) },
+      profile: {
+        findUnique: vi.fn().mockResolvedValue({ id: 'profile-temp', venueId: null, venue: null }),
+        findFirst: vi.fn().mockImplementation((args: any) => {
+          if (args?.where?.userId === 'user-o') return Promise.resolve({ id: 'profile-temp', venueId: null, venue: null });
+          return Promise.resolve({ id: 'profile-roster', role: 'owner', venueId: 'venue-b', venue: { id: 'venue-b' } });
+        }),
+        findMany: vi.fn().mockResolvedValue([]),
+        delete: vi.fn(),
+        update: vi.fn().mockResolvedValue({ id: 'profile-roster', role: 'manager', venueId: 'venue-b', venue: { id: 'venue-b', name: 'B', latitude: 1, longitude: 2, geofenceRadiusM: 150 } }),
+      },
+      invite: { findMany: vi.fn().mockResolvedValue([]) },
+      $transaction: vi.fn(async (fn: any) => fn(prisma)),
+    };
+    const controller = new AppController(prisma, {} as any, new ProfileService(prisma));
+
+    await controller.redeemMyInvite({ sub: 'user-o' } as any);
+
+    expect(prisma.profile.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { userId: 'user-o', role: 'manager' } }),
     );
   });
 });
@@ -305,7 +381,9 @@ describe('AppController multi-venue invariants', () => {
       },
       subscription: {
         create: vi.fn().mockResolvedValue({}),
-        findFirst: vi.fn().mockResolvedValue({ id: 'sub-multi' }),
+        findFirst: vi.fn().mockResolvedValue({ id: 'sub-multi', venueId: 'venue-a', status: 'active', planId: 'venueflow_multi_venue_5', platform: 'stripe' }),
+        findUnique: vi.fn().mockResolvedValue({ id: 'sub-multi', venueId: 'venue-a', status: 'active', planId: 'venueflow_multi_venue_5', platform: 'stripe' }),
+        count: vi.fn().mockResolvedValue(0),
       },
       staffOnboardingTask: { createMany: vi.fn().mockResolvedValue({ count: 0 }) },
       team: { upsert: vi.fn().mockResolvedValue({}) },
@@ -324,6 +402,9 @@ describe('AppController multi-venue invariants', () => {
     );
 
     expect(prisma.profile.delete).not.toHaveBeenCalled();
+    expect(prisma.subscription.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({
+      billingSubscriptionId: 'sub-multi', status: 'expired', trialEndsAt: null,
+    }) }));
   });
 
   it('refuses to create a venue at the 0,0 geofence sentinel', async () => {
@@ -365,6 +446,7 @@ describe('AppController multi-venue invariants', () => {
         deleteMany: vi.fn(),
       },
       pushToken: { deleteMany: vi.fn() }, availability: { deleteMany: vi.fn() },
+      subscription: { findMany: vi.fn().mockResolvedValue([]), count: vi.fn().mockResolvedValue(0) },
       timeEntry: { updateMany: vi.fn(), update: vi.fn(), findMany: vi.fn().mockResolvedValue([]) }, scheduleShift: { updateMany: vi.fn() },
       session: { deleteMany: vi.fn() }, authAccount: { deleteMany: vi.fn() },
     };
@@ -391,6 +473,7 @@ describe('AppController multi-venue invariants', () => {
         deleteMany: vi.fn(),
       },
       pushToken: { deleteMany: vi.fn() }, availability: { deleteMany: vi.fn() },
+      subscription: { findMany: vi.fn().mockResolvedValue([]), count: vi.fn().mockResolvedValue(0) },
       timeEntry: { updateMany: vi.fn(), update: vi.fn(), findMany: vi.fn().mockResolvedValue([]) }, scheduleShift: { updateMany: vi.fn() },
       session: { deleteMany: vi.fn() }, authAccount: { deleteMany: vi.fn() },
     };
@@ -426,6 +509,7 @@ describe('AppController multi-venue invariants', () => {
       objectDeletionJob: { create: vi.fn() },
       retainedTimeEntry: { createMany: vi.fn() },
       pushToken: { deleteMany: vi.fn() }, availability: { deleteMany: vi.fn() },
+      subscription: { findMany: vi.fn().mockResolvedValue([]), count: vi.fn().mockResolvedValue(0) },
       timeEntry: { updateMany: vi.fn(), update: vi.fn(), findMany: vi.fn().mockResolvedValue([]), deleteMany: vi.fn(), count: vi.fn().mockResolvedValue(0) },
       scheduleShift: { updateMany: vi.fn() },
       session: { deleteMany: vi.fn() }, authAccount: { deleteMany: vi.fn() },
@@ -469,6 +553,7 @@ describe('AppController multi-venue invariants', () => {
       objectDeletionJob: { create: vi.fn() },
       retainedTimeEntry: { createMany: vi.fn() },
       pushToken: { deleteMany: vi.fn() }, availability: { deleteMany: vi.fn() },
+      subscription: { findMany: vi.fn().mockResolvedValue([]), count: vi.fn().mockResolvedValue(0) },
       timeEntry: { updateMany: vi.fn(), update: vi.fn(), findMany: vi.fn().mockResolvedValue([]) },
       scheduleShift: { updateMany: vi.fn() },
       session: { deleteMany: vi.fn() }, authAccount: { deleteMany: vi.fn() },
@@ -528,6 +613,7 @@ describe('AppController multi-venue invariants', () => {
       objectDeletionJob: { create: vi.fn() },
       retainedTimeEntry: { createMany: vi.fn() },
       pushToken: { deleteMany: vi.fn() }, availability: { deleteMany: vi.fn() },
+      subscription: { findMany: vi.fn().mockResolvedValue([]), count: vi.fn().mockResolvedValue(0) },
       // First call returns the page, second returns empty to end the loop.
       timeEntry: {
         updateMany: vi.fn(),
@@ -547,21 +633,77 @@ describe('AppController multi-venue invariants', () => {
 
     await controller.deleteMyAccount({ sub: 'user-1' } as any, { deleteOwnedVenues: true });
 
-    const archiveSql = prisma.$executeRaw.mock.calls.at(-1)[0];
-    const archiveText = archiveSql.strings.join('');
-    expect(archiveText).toContain('INSERT INTO "RetainedTimeEntry"');
+    // $executeRaw is invoked two ways in this flow: tagged-template calls
+    // (`` tx.$executeRaw`...` ``, where call[0] is the raw strings array) for
+    // advisory locks, and `tx.$executeRaw(Prisma.sql`...`)` (call[0] is a Sql
+    // object with a .strings property) for the archive inserts. Normalize both.
+    const executeRawCalls = prisma.$executeRaw.mock.calls.map((call: any, index: number) => {
+      const raw = call[0];
+      const text = Array.isArray(raw) ? raw.join('') : String(raw?.strings?.join('') ?? raw);
+      return { text, order: prisma.$executeRaw.mock.invocationCallOrder[index] };
+    });
+    const findArchiveCall = (table: string) => {
+      const found = executeRawCalls.find((call: any) => call.text.includes(`INSERT INTO "${table}"`));
+      if (!found) throw new Error(`No archive INSERT found for ${table}`);
+      return found;
+    };
+
+    const timeEntryArchive = findArchiveCall('RetainedTimeEntry');
     // Pseudonymize the departing account's own rows only. Co-workers keep their
     // real name/email — an anonymized wage record cannot satisfy FLSA §516.2,
     // so blanket-anonymizing the venue would retain the rows and still lose the
     // compliance value they exist for.
-    expect(archiveText).toContain("'deleted_user_' || t.\"profileId\"");
-    expect(archiveText).toContain('CASE WHEN t."profileId" IS NOT NULL');
-    expect(archiveText).toContain('ELSE t."profileFullName" END');
-    expect(archiveText).toContain('ELSE p."email" END');
-    // And the archive must happen before the cascade, not after.
-    const archiveOrder = prisma.$executeRaw.mock.invocationCallOrder.at(-1);
+    expect(timeEntryArchive.text).toContain("'deleted_user_' || t.\"profileId\"");
+    expect(timeEntryArchive.text).toContain('CASE WHEN t."profileId" IS NOT NULL');
+    expect(timeEntryArchive.text).toContain('ELSE t."profileFullName" END');
+    expect(timeEntryArchive.text).toContain('ELSE p."email" END');
+
+    // PosCheck/PosLaborPunch are also Cascade from Venue with no other
+    // retention path — they must be archived before the cascade too.
+    const posCheckArchive = findArchiveCall('RetainedPosCheck');
+    const posLaborArchive = findArchiveCall('RetainedPosLaborPunch');
+
+    // And every archive insert must happen before the cascade, not after.
     const cascadeOrder = prisma.venue.deleteMany.mock.invocationCallOrder[0];
-    expect(archiveOrder).toBeLessThan(cascadeOrder);
+    expect(timeEntryArchive.order).toBeLessThan(cascadeOrder);
+    expect(posCheckArchive.order).toBeLessThan(cascadeOrder);
+    expect(posLaborArchive.order).toBeLessThan(cascadeOrder);
+  });
+
+  it('refuses to delete a venue whose subscription still covers another venue\'s billing', async () => {
+    const profiles = [
+      { id: 'profile-sole', email: 'owner@example.com', fullName: 'Sole Owner', role: 'owner', venueId: 'venue-billing', membershipStatus: 'active' },
+    ];
+    const prisma: any = {
+      $executeRaw: vi.fn().mockResolvedValue(undefined),
+      $queryRaw: vi.fn().mockResolvedValue([]),
+      user: { findUnique: vi.fn().mockResolvedValue({ email: 'owner@example.com' }), deleteMany: vi.fn() },
+      profile: {
+        findMany: vi.fn().mockResolvedValue(profiles),
+        count: vi.fn().mockResolvedValue(1),
+        deleteMany: vi.fn(),
+      },
+      venue: { deleteMany: vi.fn(), findMany: vi.fn().mockResolvedValue([]) },
+      subscription: {
+        findMany: vi.fn().mockResolvedValue([{ id: 'sub-billing' }]),
+        // Another venue's subscription still points at this one as its
+        // billing parent — the venue-billing account cannot be deleted
+        // without silently cutting that other venue off its paid plan.
+        count: vi.fn().mockResolvedValue(1),
+      },
+    };
+    prisma.$transaction = vi.fn(async (callback: any) => callback(prisma));
+    const controller = new AppController(prisma, { send: vi.fn() } as any, {} as any);
+
+    await expect(controller.deleteMyAccount(
+      { sub: 'user-1' } as any,
+      { deleteOwnedVenues: true },
+    )).rejects.toThrow('covers other venues');
+
+    expect(prisma.venue.deleteMany).not.toHaveBeenCalled();
+    expect(prisma.subscription.count).toHaveBeenCalledWith({
+      where: { billingSubscriptionId: { in: ['sub-billing'] }, venueId: { notIn: ['venue-billing'] } },
+    });
   });
 
   it('closes a still-running punch with a real clock-out so the final shift stays payable', async () => {
@@ -583,6 +725,7 @@ describe('AppController multi-venue invariants', () => {
       objectDeletionJob: { create: vi.fn() },
       retainedTimeEntry: { createMany: vi.fn() },
       pushToken: { deleteMany: vi.fn() }, availability: { deleteMany: vi.fn() },
+      subscription: { findMany: vi.fn().mockResolvedValue([]), count: vi.fn().mockResolvedValue(0) },
       timeEntry: {
         updateMany: vi.fn(),
         update: vi.fn(),
@@ -621,6 +764,55 @@ describe('AppController multi-venue invariants', () => {
       ([args]: any[]) => typeof args?.data?.profileFullName === 'string',
     );
     expect(closeOrder).toBeLessThan(prisma.timeEntry.updateMany.mock.invocationCallOrder[renameCall]);
+  });
+
+  it('archives an approved staff request before the profile cascade destroys it', async () => {
+    const profiles = [
+      { id: 'profile-leaver', email: 'leaver@example.com', fullName: 'Lee Leaver', role: 'staff', venueId: 'venue-other', membershipStatus: 'active' },
+    ];
+    const prisma: any = {
+      $executeRaw: vi.fn().mockResolvedValue(undefined),
+      $queryRaw: vi.fn().mockResolvedValue([]),
+      user: { findUnique: vi.fn().mockResolvedValue({ email: 'leaver@example.com' }), deleteMany: vi.fn() },
+      profile: {
+        findMany: vi.fn().mockResolvedValue(profiles),
+        count: vi.fn().mockResolvedValue(3),
+        deleteMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
+      venue: { deleteMany: vi.fn(), findMany: vi.fn().mockResolvedValue([]) },
+      objectDeletionJob: { create: vi.fn() },
+      pushToken: { deleteMany: vi.fn() }, availability: { deleteMany: vi.fn() },
+      subscription: { findMany: vi.fn().mockResolvedValue([]), count: vi.fn().mockResolvedValue(0) },
+      timeEntry: {
+        updateMany: vi.fn(), update: vi.fn(), deleteMany: vi.fn(),
+        findMany: vi.fn().mockResolvedValue([]), count: vi.fn().mockResolvedValue(0),
+      },
+      scheduleShift: { updateMany: vi.fn() },
+      session: { deleteMany: vi.fn() }, authAccount: { deleteMany: vi.fn() },
+      team: { upsert: vi.fn() },
+    };
+    prisma.$transaction = vi.fn(async (callback: any) => callback(prisma));
+    const controller = new AppController(prisma, { send: vi.fn() } as any, {} as any);
+
+    await controller.deleteMyAccount({ sub: 'user-1' } as any);
+
+    // $executeRaw is invoked two ways in this flow: tagged-template calls
+    // (call[0] is the raw strings array) for advisory locks, and
+    // `tx.$executeRaw(Prisma.sql...)` (call[0] is a Sql object with a
+    // .strings property) for archive inserts. Normalize both.
+    const sqlTextOf = (call: any) => {
+      const raw = call[0];
+      return Array.isArray(raw) ? raw.join('') : String(raw?.strings?.join('') ?? raw);
+    };
+    const archiveCallIndex = prisma.$executeRaw.mock.calls.findIndex(
+      (call: any) => sqlTextOf(call).includes('INSERT INTO "RetainedStaffRequest"'),
+    );
+    expect(archiveCallIndex).toBeGreaterThanOrEqual(0);
+    expect(sqlTextOf(prisma.$executeRaw.mock.calls[archiveCallIndex])).toContain('"status" = \'approved\'');
+    // Archived before the profile row (and its StaffRequest cascade) is gone.
+    const archiveOrder = prisma.$executeRaw.mock.invocationCallOrder[archiveCallIndex];
+    const profileDeleteOrder = prisma.profile.deleteMany.mock.invocationCallOrder[0];
+    expect(archiveOrder).toBeLessThan(profileDeleteOrder);
   });
 });
 
@@ -681,4 +873,65 @@ describe('AppController createInvite', () => {
     expect(deleteMany).not.toHaveBeenCalled();
     expect(create).toHaveBeenCalledOnce();
   });
+
+  it('throws ForbiddenException when a non-elevated manager attempts to create a manager invite', async () => {
+    const plainManagerProfile = {
+      id: 'profile-mgr', userId: 'user-2', venueId: 'venue-1', role: 'manager',
+      allAccess: false, membershipStatus: 'active', fullName: 'Plain Manager',
+      venue: { id: 'venue-1', name: 'Test Venue' },
+    };
+    const prisma: any = {
+      profile: { findFirst: vi.fn().mockResolvedValue(plainManagerProfile) },
+    };
+    const profiles = new ProfileService(prisma);
+    const email = { send: vi.fn().mockResolvedValue(undefined) };
+    const controller = new AppController(prisma, email as any, profiles);
+
+    await expect(
+      controller.createInvite(
+        { sub: 'user-2' } as any,
+        { role: 'manager', jobTitle: 'Assistant Manager', email: 'mgr@example.com' } as any,
+      ),
+    ).rejects.toThrow('Only owners and administrators can invite managers.');
+  });
 });
+
+describe('AppController exportTimeEntriesCsv', () => {
+  it('refuses to export rather than silently truncate when the range has too many rows', async () => {
+    const overCap = Array.from({ length: 5001 }, (_, i) => ({
+      id: `entry-${i}`,
+      clockInAt: new Date(),
+      clockOutAt: new Date(),
+      breaks: null,
+      profile: { fullName: 'Staff Member' },
+    }));
+    const prisma: any = {
+      venue: { findUnique: vi.fn().mockResolvedValue({ timezone: 'UTC' }) },
+      timeEntry: { findMany: vi.fn().mockResolvedValue(overCap) },
+    };
+    const profiles = { requireManagerProfile: vi.fn().mockResolvedValue({ venueId: 'venue-1' }) };
+    const controller = new AppController(prisma, {} as any, profiles as any);
+
+    await expect(controller.exportTimeEntriesCsv({ sub: 'manager-1' } as any))
+      .rejects.toThrow('too large');
+    expect(prisma.timeEntry.findMany).toHaveBeenCalledWith(expect.objectContaining({ take: 5001 }));
+  });
+
+  it('exports normally when the range is within the row cap', async () => {
+    const prisma: any = {
+      venue: { findUnique: vi.fn().mockResolvedValue({ timezone: 'UTC' }) },
+      timeEntry: {
+        findMany: vi.fn().mockResolvedValue([
+          { id: 'entry-1', clockInAt: new Date('2026-01-01T00:00:00Z'), clockOutAt: new Date('2026-01-01T08:00:00Z'), breaks: null, profile: { fullName: 'Staff Member' } },
+        ]),
+      },
+    };
+    const profiles = { requireManagerProfile: vi.fn().mockResolvedValue({ venueId: 'venue-1' }) };
+    const controller = new AppController(prisma, {} as any, profiles as any);
+
+    const csv = await controller.exportTimeEntriesCsv({ sub: 'manager-1' } as any);
+
+    expect(csv).toContain('Staff Member');
+  });
+});
+

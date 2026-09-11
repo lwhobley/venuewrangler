@@ -30,6 +30,7 @@ function makeController() {
     },
     venue: { findUnique: vi.fn().mockResolvedValue({ timezone: 'America/New_York' }) },
     $queryRaw: vi.fn().mockResolvedValue([]),
+    $executeRaw: vi.fn().mockResolvedValue(undefined),
     $transaction: vi.fn().mockImplementation((ops: any[]) => Promise.all(ops)),
   } as any;
   const controller = new PosController(prisma);
@@ -91,6 +92,19 @@ describe('PosController', () => {
         .rejects.toThrow('Invalid webhook secret');
     });
 
+    it('refuses an update for a paused connection even with a valid secret', async () => {
+      // Regression: pausing changed what the integrations screen said but did
+      // not stop the next valid delivery, so a venue that had switched the feed
+      // off kept receiving POS data. The secret stays valid because pausing is
+      // reversible and must not force a rotation.
+      const { controller, prisma } = makeController();
+      prisma.posConnection.findFirst.mockResolvedValue({ id: 'conn-1', status: 'paused', webhookSecret: hashWebhookSecret('secret') });
+
+      await expect(controller.ingest(makeRequest(), 'venue-1', 'secret', { provider: 'toast' } as any))
+        .rejects.toThrow('This POS connection is paused. Resume it in Venue Wrangler to accept updates.');
+      expect(prisma.posCheck.upsert).not.toHaveBeenCalled();
+    });
+
     it('rejects when the connection has no webhook secret configured', async () => {
       const { controller, prisma } = makeController();
       prisma.posConnection.findFirst.mockResolvedValue({ id: 'conn-1', webhookSecret: null });
@@ -98,6 +112,14 @@ describe('PosController', () => {
       await expect(controller.ingest(makeRequest(), 'venue-1', 'any-secret', { provider: 'toast' } as any))
         .rejects.toThrow('Invalid webhook secret');
     });
+
+    // $executeRaw is invoked as `this.prisma.$executeRaw(Prisma.sql\`...\`)`
+    // — a single argument that is a Sql object with .strings/.values, not a
+    // tagged-template call. Pull the interpolated values back out to assert
+    // on them without hardcoding the exact SQL text.
+    function sqlValuesOf(call: any): any[] {
+      return call[0].values;
+    }
 
     it('upserts checks and labor punches, then records lastSyncAt', async () => {
       const { controller, prisma } = makeController();
@@ -114,9 +136,10 @@ describe('PosController', () => {
         }],
       } as any);
 
-      expect(prisma.posCheck.upsert).toHaveBeenCalledWith(expect.objectContaining({
-        where: { venueId_provider_externalCheckId: { venueId: 'venue-1', provider: 'toast', externalCheckId: 'chk-1' } },
-      }));
+      expect(prisma.$executeRaw).toHaveBeenCalledTimes(1);
+      expect(sqlValuesOf(prisma.$executeRaw.mock.calls[0])).toEqual(
+        expect.arrayContaining(['venue-1', 'chk-1']),
+      );
       expect(prisma.posLaborPunch.upsert).toHaveBeenCalledWith(expect.objectContaining({
         where: {
           venueId_provider_externalEmployeeId_businessDate: {
@@ -129,6 +152,38 @@ describe('PosController', () => {
         data: { lastSyncAt: expect.any(Date) },
       });
       expect(result).toEqual({ ok: true, checksUpserted: 1, laborUpserted: 1 });
+    });
+
+    it('locks the core sale amounts once closed, in the same statement that still allows a tip/status correction', async () => {
+      // Real Postgres enforcement of the paid/void guard is covered by
+      // pos-check-immutability.integration.spec.ts — a mocked $executeRaw
+      // can't execute the CASE logic. This only proves the query construction
+      // and parameter passing are correct: every check goes through the same
+      // single atomic call, with no separate pre-check step to race against.
+      const { controller, prisma } = makeController();
+      const secret = 'correct-secret';
+      prisma.posConnection.findFirst.mockResolvedValue({ id: 'conn-1', webhookSecret: hashWebhookSecret(secret) });
+
+      const result = await controller.ingest(makeRequest(), 'venue-1', secret, {
+        provider: 'toast',
+        checks: [
+          { externalCheckId: 'chk-closed', openedAt: Date.now(), subtotalCents: 999, totalCents: 999, tipCents: 0, status: 'paid' },
+          { externalCheckId: 'chk-open', openedAt: Date.now(), subtotalCents: 500, totalCents: 550, tipCents: 50 },
+        ],
+      } as any);
+
+      expect(prisma.posCheck.findMany).not.toHaveBeenCalled();
+      expect(prisma.$executeRaw).toHaveBeenCalledTimes(2);
+      const sqlText = String(prisma.$executeRaw.mock.calls[0][0].strings.join(''));
+      expect(sqlText).toContain('ON CONFLICT');
+      expect(sqlText).toContain('IN (\'paid\', \'void\')');
+      // paid<->void is a real correction; closed -> 'open' is not (it would
+      // silently unlock the CASE-guarded fields for the next delivery).
+      expect(sqlText).toContain('EXCLUDED."status" = \'open\'');
+      // menuItems is locked the same way as the amount fields once closed,
+      // not left freely rewritable metadata.
+      expect(sqlText).toContain('"menuItems" = CASE WHEN "PosCheck"."status" IN (\'paid\', \'void\') THEN "PosCheck"."menuItems"');
+      expect(result.checksUpserted).toBe(2);
     });
 
     it('chunks large ingest batches into multiple transactions', async () => {

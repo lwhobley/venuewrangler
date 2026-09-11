@@ -18,7 +18,9 @@ export function csvDocument(rows: string[]): string {
 export function csvCell(value: string | number | null | undefined): string {
   if (value == null) return '""';
   let text = String(value);
-  if (typeof value === 'string' && /^[=+\-@\t\r]/.test(text)) {
+  // Leading whitespace doesn't stop a spreadsheet app from treating the
+  // cell as a formula -- several trim before deciding, so check past it too.
+  if (typeof value === 'string' && /^[\s]*[=+\-@\t\r]/.test(text)) {
     text = `'${text}`;
   }
   return `"${text.replace(/"/g, '""')}"`;

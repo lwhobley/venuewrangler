@@ -54,6 +54,11 @@ type BeoRow = {
   menuBarPackage?: string;
   specialRequirements?: string;
   internalNotes?: string;
+  // saveBeo rewrites every BEO column from the request body, so a partial save
+  // nulls whatever it omits. These three are not shown on the card but must
+  // still be echoed back by any action that saves one.
+  depositDueDate?: number | null;
+  assignedRepId?: string | null;
   status: string;
   updatedAt: number;
 };
@@ -320,6 +325,51 @@ export function CrmSalesWorkspace({ venueId, enabled }: { venueId: Id<'venues'> 
     }
   };
 
+  const confirmBeo = async (beo: BeoRow) => {
+    if (crmBusyRef.current || !venueId) return;
+    // The API only creates the reservation and blocks tables for a BEO that
+    // has an event date. Confirming without one is a status change and nothing
+    // more, so ask for the date instead of reporting a sync that won't happen.
+    if (!beo.eventDate) {
+      setMessage(`Add an event date to "${beo.eventName}" before confirming — the reservation and table hold are created from it.`);
+      return;
+    }
+    crmBusyRef.current = true;
+    try {
+      await saveBeo({
+        venueId,
+        beoId: beo._id,
+        // Confirming is a status change, but saveBeo replaces every column, so
+        // resend the whole record. Dropping leadId here silently unlinked the
+        // BEO from its lead and left syncBeoToReservation building the
+        // reservation with no guest name, phone, email or guest id.
+        leadId: beo.leadId ?? undefined,
+        eventName: beo.eventName,
+        eventDate: new Date(beo.eventDate).getTime(),
+        eventType: beo.eventType ?? undefined,
+        guestCount: beo.guestCount ?? undefined,
+        venueSpace: beo.venueSpace ?? undefined,
+        setupStyle: beo.setupStyle ?? undefined,
+        fbMinimumCents: beo.fbMinimumCents ?? undefined,
+        depositCents: beo.depositCents ?? undefined,
+        menuAppetizers: beo.menuAppetizers ?? undefined,
+        menuEntrees: beo.menuEntrees ?? undefined,
+        menuDesserts: beo.menuDesserts ?? undefined,
+        menuBarPackage: beo.menuBarPackage ?? undefined,
+        specialRequirements: beo.specialRequirements ?? undefined,
+        internalNotes: beo.internalNotes ?? undefined,
+        depositDueDate: beo.depositDueDate ?? undefined,
+        assignedRepId: beo.assignedRepId ?? undefined,
+        status: 'confirmed',
+      });
+      setMessage(`BEO "${beo.eventName}" confirmed and synced to reservations.`);
+    } catch (err) {
+      setMessage(`Failed to confirm BEO: ${errorMessage(err)}`);
+    } finally {
+      crmBusyRef.current = false;
+    }
+  };
+
   if (!enabled || !venueId) return null;
 
   return (
@@ -431,11 +481,13 @@ export function CrmSalesWorkspace({ venueId, enabled }: { venueId: Id<'venues'> 
           ) : null}
 
           {view === 'events' ? (
-            <EventsView beos={beos} onConvert={async (beoId) => {
+            <EventsView beos={beos} onConfirm={confirmBeo} onConvert={async (beoId) => {
               if (!venueId) return;
               try {
-                await convertBeoToContract({ venueId, beoId });
-                setMessage('Converted BEO to contract.');
+                const result = await convertBeoToContract({ venueId, beoId }) as { alreadyExisted?: boolean } | undefined;
+                setMessage(result?.alreadyExisted
+                  ? 'This event already has a contract — opening the existing one rather than issuing a second.'
+                  : 'Converted BEO to contract.');
               } catch (err) {
                 setMessage(`Failed to convert: ${errorMessage(err)}`);
               }
@@ -485,6 +537,7 @@ export function CrmSalesWorkspace({ venueId, enabled }: { venueId: Id<'venues'> 
           detail={detail}
           activity={leadActivity ?? []}
           beos={detail?.beos ?? []}
+          onConfirmBeo={confirmBeo}
           onEmailBeo={async (beoId, toEmail, message) => {
             try {
               await emailBeo({ venueId, beoId, toEmail, message });
@@ -603,7 +656,15 @@ function ContactsView({ leads, search, onSearch, onSelectLead }: { leads: LeadRo
   );
 }
 
-function EventsView({ beos, onConvert }: { beos: BeoRow[] | undefined; onConvert: (beoId: Id<'crmBeos'>) => Promise<void> }) {
+function EventsView({
+  beos,
+  onConvert,
+  onConfirm,
+}: {
+  beos: BeoRow[] | undefined;
+  onConvert: (beoId: Id<'crmBeos'>) => Promise<void>;
+  onConfirm?: (beo: BeoRow) => Promise<void>;
+}) {
   return (
     <View style={{ gap: spacing.sm }}>
       {(beos ?? []).length === 0 ? <EmptyLine text="No BEO drafts yet." /> : (beos ?? []).map((beo) => (
@@ -632,7 +693,14 @@ function EventsView({ beos, onConvert }: { beos: BeoRow[] | undefined; onConvert
               <Text style={{ fontWeight: '800' }}>{item.label}: </Text>{item.value}
             </Text>
           ))}
-          <Button compact mode="outlined" icon="file-sign" textColor={colors.primary} onPress={() => void onConvert(beo._id)}>Convert to contract</Button>
+          <View style={{ flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' }}>
+            {beo.status !== 'confirmed' && beo.status !== 'cancelled' && onConfirm ? (
+              <Button compact mode="contained" buttonColor={colors.primary} icon="check-circle" onPress={() => void onConfirm(beo)}>
+                Confirm BEO
+              </Button>
+            ) : null}
+            <Button compact mode="outlined" icon="file-sign" textColor={colors.primary} onPress={() => void onConvert(beo._id)}>Convert to contract</Button>
+          </View>
         </View>
       ))}
     </View>
@@ -659,6 +727,7 @@ function LeadDetailPanel({
   detail,
   activity,
   beos,
+  onConfirmBeo,
   onEmailBeo,
   noteText,
   onNoteText,
@@ -669,6 +738,7 @@ function LeadDetailPanel({
   detail: LeadDetail | null | undefined;
   activity: ActivityRow[];
   beos: BeoRow[];
+  onConfirmBeo?: (beo: BeoRow) => Promise<void>;
   onEmailBeo: (beoId: string, toEmail: string, message?: string) => Promise<void>;
   noteText: string;
   onNoteText: (value: string) => void;
@@ -755,10 +825,17 @@ function LeadDetailPanel({
                       </View>
                     </View>
                   ) : (
-                    <Button compact mode="text" textColor={colors.primary} icon="email-outline" onPress={() => {
-                      setEmailingBeoId(beo._id);
-                      setEmailTo(lead?.email ?? '');
-                    }}>Email to client</Button>
+                    <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                      {beo.status !== 'confirmed' && beo.status !== 'cancelled' && onConfirmBeo ? (
+                        <Button compact mode="contained" buttonColor={colors.primary} icon="check-circle" onPress={() => void onConfirmBeo(beo)}>
+                          Confirm BEO
+                        </Button>
+                      ) : null}
+                      <Button compact mode="text" textColor={colors.primary} icon="email-outline" onPress={() => {
+                        setEmailingBeoId(beo._id);
+                        setEmailTo(lead?.email ?? '');
+                      }}>Email to client</Button>
+                    </View>
                   )}
                 </View>
               ))}

@@ -1,0 +1,5 @@
+{
+  "version": 1,
+  "include": ["/app", "/app/*"],
+  "exclude": ["/app/_expo/*", "/app/assets/*"]
+}

@@ -6,7 +6,6 @@ import { Public } from '../auth/public.decorator';
 import { getClientIp } from '../common/http';
 import { assertWithinSharedRateLimit } from '../common/rate-limit';
 import { secretsMatch, verifyStripeSignature } from '../common/webhook-auth';
-import { ACTIVE_MEMBERSHIP } from '../common/membership';
 import { PrismaService } from '../prisma/prisma.service';
 
 type RevenueCatWebhookBody = {
@@ -14,6 +13,7 @@ type RevenueCatWebhookBody = {
     id?: string;
     type?: string;
     app_user_id?: string;
+    original_app_user_id?: string;
     product_id?: string;
     entitlement_ids?: string[];
     transaction_id?: string;
@@ -136,7 +136,7 @@ export class BillingController {
       return { ok: true, ignored: true };
     }
 
-    const venueIds = await this.resolveRevenueCatVenueIds(subscriberId, event.entitlement_ids);
+    const venueIds = await this.resolveRevenueCatVenueIds(subscriberId, event.original_app_user_id, event.original_transaction_id);
     if (venueIds.length === 0) {
       return { ok: true, ignored: true };
     }
@@ -146,7 +146,7 @@ export class BillingController {
         venueId,
         status,
         planId: event.product_id ?? 'apple_subscription',
-        externalSubscriptionId: event.original_transaction_id ?? event.transaction_id ?? null,
+        externalSubscriptionId: event.original_transaction_id ?? null,
         externalCustomerId: subscriberId,
         currentPeriodStart: event.purchased_at_ms ? new Date(event.purchased_at_ms) : null,
         currentPeriodEnd: event.expiration_at_ms ? new Date(event.expiration_at_ms) : null,
@@ -514,29 +514,26 @@ export class BillingController {
     }
   }
 
-  private async resolveRevenueCatVenueIds(subscriberId: string, entitlementIds?: string[]): Promise<string[]> {
-    // subscriberId is RevenueCat's app_user_id, which this app sets to our
-    // internal userId (see lib/purchases.native.ts). Older clients briefly
-    // sent venueId instead, which made a Venue.id lookup here a live IDOR:
-    // any attacker who set app_user_id to a victim's venueId could trigger a
-    // purchase/cancel against that venue. Resolve only through Profile
-    // membership — never trust subscriberId as a Venue.id directly.
-    const profiles = await this.prisma.profile.findMany({
-      where: {
-        userId: subscriberId,
-        venueId: { not: null },
-        OR: ACTIVE_MEMBERSHIP,
-        role: { in: ['owner', 'admin'] },
-      },
-      select: { venueId: true },
-      orderBy: { createdAt: 'desc' },
+  private async resolveRevenueCatVenueIds(subscriberId: string, originalSubscriberId?: string, transactionId?: string): Promise<string[]> {
+    // Resolve only a durable allocation, never every venue in a user's current
+    // memberships. A webhook before the first authenticated sync is ignored;
+    // sync reads the provider's current state and establishes the allocation.
+    if (transactionId) {
+      const transaction = await this.prisma.subscription.findUnique({
+        where: { externalSubscriptionId: transactionId },
+        select: { venueId: true, platform: true },
+      });
+      if (transaction?.platform === 'apple') return [transaction.venueId];
+    }
+    const ids = [...new Set([subscriberId, originalSubscriberId].filter((id): id is string => Boolean(id)))];
+    const allocations = await this.prisma.subscription.findMany({
+      where: { platform: 'apple', billingSubscriptionId: null, OR: [
+        { revenueCatSubscriberId: { in: ids } },
+        // Legacy webhook-bound rows remain usable only if unambiguous.
+        { revenueCatSubscriberId: null, externalCustomerId: { in: ids } },
+      ] },
+      select: { venueId: true }, take: 2,
     });
-    const venueIds = Array.from(new Set(profiles.map((profile) => profile.venueId).filter((id): id is string => Boolean(id))));
-    const isMulti = (entitlementIds ?? []).some((id) => id.toLowerCase().includes('multi'));
-    if (isMulti) return venueIds;
-    if (venueIds.length === 1) return venueIds;
-    // A user id is not an unambiguous venue binding for a single-venue
-    // purchase. Fail closed instead of assigning the entitlement arbitrarily.
-    return [];
+    return allocations.length === 1 ? [allocations[0].venueId] : [];
   }
 }

@@ -22,7 +22,7 @@ const queryRoutes: Record<string, Route> = {
   'app.getMe': { path: '/v1/app/me' },
   'app.getVenueJoinCode': { path: '/v1/app/venue/join-code' },
   'app.getDashboard': { path: '/v1/app/dashboard' },
-  'app.getNotifications': { path: '/v1/app/notifications' },
+  'app.getNotifications': { path: (args) => `/v1/app/notifications${args?.limit ? `?limit=${args.limit}` : ''}` },
   'app.getClockBoard': { path: '/v1/time-clock/board' },
   'app.getMyTimeClock': { path: '/v1/time-clock/me' },
   'app.getMyVenueBilling': { path: '/v1/app/billing' },
@@ -31,7 +31,12 @@ const queryRoutes: Record<string, Route> = {
   'app.listStaffAuditLog': { path: '/v1/app/staff/audit-log' },
   'app.listStaffRequests': { path: '/v1/staff-requests' },
   'app.getManagerInsights': { path: '/v1/app/manager-insights' },
-  'app.exportTimeEntriesCsv': { path: '/v1/app/time-entries/csv' },
+  'app.exportTimeEntriesCsv': {
+    // The selected period travels with the request; without it the export
+    // returned recent punches regardless of what the screen showed.
+    path: (args) =>
+      `/v1/app/time-entries/csv${args?.startDate ? `?startDate=${encodeURIComponent(args.startDate)}&endDate=${encodeURIComponent(args.endDate ?? args.startDate)}` : ''}`,
+  },
   'staffAuth.listVenueRoles': { path: '/v1/app/venue-roles' },
   'scheduling.listBlackouts': { path: '/v1/scheduling/blackouts' },
   'scheduling.getManagerSchedule': { path: (args) => `/v1/scheduling/manager${args?.weekStart ? `?weekStart=${encodeURIComponent(args.weekStart)}` : ''}` },
@@ -56,7 +61,10 @@ const queryRoutes: Record<string, Route> = {
     path: (args) => `/v1/operations/checklist?kind=${encodeURIComponent(args.kind)}${args?.date ? `&date=${encodeURIComponent(args.date)}` : ''}`,
   },
   'reservations.getReservationsPage': { path: '/v1/reservations' },
-  'reservations.exportReservationsCsv': { path: '/v1/reservations/export-csv' },
+  'reservations.exportReservationsCsv': {
+    path: (args) =>
+      `/v1/reservations/export-csv${args?.startDate ? `?startDate=${encodeURIComponent(args.startDate)}&endDate=${encodeURIComponent(args.endDate ?? args.startDate)}` : ''}`,
+  },
   'payroll.getPayrollSummary': { path: (args) => `/v1/payroll/summary${args.startDate ? `?startDate=${args.startDate}&endDate=${args.endDate ?? ''}` : ''}` },
   'payroll.exportPayrollCsv': { path: (args) => `/v1/payroll/export-csv${args.startDate ? `?startDate=${args.startDate}&endDate=${args.endDate ?? ''}` : ''}` },
   'barInventory.getBarStock': { path: '/v1/bar-inventory' },
@@ -226,54 +234,54 @@ const mutationRoutes: Record<string, Route> = {
     path: '/v1/operations/checklist/items',
     method: 'POST',
     body: ({ kind, title, requiresPhoto }) => ({ kind, title, requiresPhoto }),
-    invalidate: [['operations', 'getChecklist']],
+    invalidate: [['operations', 'getChecklist'], ...readinessInvalidations()],
   },
   'operations.removeChecklistItem': {
     path: (args) => `/v1/operations/checklist/items/${enc(args.id ?? args)}`,
     method: 'DELETE',
-    invalidate: [['operations', 'getChecklist']],
+    invalidate: [['operations', 'getChecklist'], ...readinessInvalidations()],
   },
   'operations.completeChecklistItem': {
     path: (args) => `/v1/operations/checklist/complete/${enc(args.completionId)}`,
     method: 'POST',
     body: ({ photoBase64, photoMimeType }) => ({ photoBase64, photoMimeType }),
-    invalidate: [['operations', 'getChecklist']],
+    invalidate: [['operations', 'getChecklist'], ...readinessInvalidations()],
   },
   'operations.generateExecutionWorkspace': {
     path: (args) => `/v1/operations/command-center/events/${enc(args.eventId ?? args.id)}/generate`,
     method: 'POST',
     body: () => ({}),
-    invalidate: [['operations', 'getCommandCenter'], ['operations', 'getCommandCenterEvent']],
+    invalidate: [['operations', 'getCommandCenterEvent'], ...readinessInvalidations()],
   },
   'operations.updateExecutionTask': {
     path: (args) => `/v1/operations/command-center/tasks/${enc(args.taskId ?? args.id)}`,
     method: 'PATCH',
     body: ({ status }) => ({ status }),
-    invalidate: [['operations', 'getCommandCenter'], ['operations', 'getCommandCenterEvent'], ['operations', 'getDailyBrief'], ['barInventory', 'listPrepBoard']],
+    invalidate: [['operations', 'getCommandCenterEvent'], ['barInventory', 'listPrepBoard'], ...readinessInvalidations()],
   },
   'operations.updateExecutionTimeline': {
     path: (args) => `/v1/operations/command-center/timeline/${enc(args.itemId ?? args.id)}`,
     method: 'PATCH',
     body: ({ status }) => ({ status }),
-    invalidate: [['operations', 'getCommandCenterEvent']],
+    invalidate: [['operations', 'getCommandCenterEvent'], ...readinessInvalidations()],
   },
   'operations.updateExecutionVendor': {
     path: (args) => `/v1/operations/command-center/vendors/${enc(args.vendorId ?? args.id)}`,
     method: 'PATCH',
     body: ({ status }) => ({ status }),
-    invalidate: [['operations', 'getCommandCenterEvent']],
+    invalidate: [['operations', 'getCommandCenterEvent'], ...readinessInvalidations()],
   },
   'operations.createExecutionIncident': {
     path: (args) => `/v1/operations/command-center/events/${enc(args.eventId)}/incidents`,
     method: 'POST',
     body: ({ title, severity, blocksReadiness }) => ({ title, severity, blocksReadiness }),
-    invalidate: [['operations', 'getCommandCenterEvent']],
+    invalidate: [['operations', 'getCommandCenterEvent'], ...readinessInvalidations()],
   },
   'operations.resolveExecutionIncident': {
     path: (args) => `/v1/operations/command-center/incidents/${enc(args.incidentId ?? args.id)}`,
     method: 'PATCH',
     body: ({ status }) => ({ status }),
-    invalidate: [['operations', 'getCommandCenterEvent']],
+    invalidate: [['operations', 'getCommandCenterEvent'], ...readinessInvalidations()],
   },
   'app.createStaffRequest': {
     path: '/v1/staff-requests',
@@ -401,11 +409,11 @@ const mutationRoutes: Record<string, Route> = {
   'reservationIntegrations.upsertReservationConnection': { path: '/v1/integrations/reservations', method: 'POST', body: stripVenue },
   'guests.rotateLeadsWebhookSecret': { path: '/v1/guests/rotate-webhook-secret', method: 'POST', body: () => ({}), invalidate: [['guests', 'listGuests']] },
   'operations.upsertManagerGoal': { path: '/v1/operations/manager-goal', method: 'PATCH', body: stripVenue, invalidate: [['operations', 'getManagerDashboard']] },
-  'barInventory.upsertBarItem': { path: '/v1/bar-inventory', method: 'POST', body: stripVenue, invalidate: [['barInventory', 'getBarStock']] },
-  'barInventory.recordBarStockMovement': { path: (args) => `/v1/bar-inventory/${enc(args.itemId)}/movement`, method: 'POST', body: ({ movementType, quantity, notes }) => ({ movementType, quantity, notes }), invalidate: [['barInventory', 'getBarStock']] },
-  'barInventory.importParsedBarItems': { path: '/v1/bar-inventory/import', method: 'POST', body: ({ items }) => ({ items }), invalidate: [['barInventory', 'getBarStock']] },
+  'barInventory.upsertBarItem': { path: '/v1/bar-inventory', method: 'POST', body: stripVenue, invalidate: inventoryInvalidations() },
+  'barInventory.recordBarStockMovement': { path: (args) => `/v1/bar-inventory/${enc(args.itemId)}/movement`, method: 'POST', body: ({ movementType, quantity, notes, operationId }) => ({ movementType, quantity, notes, operationId }), invalidate: inventoryInvalidations() },
+  'barInventory.importParsedBarItems': { path: '/v1/bar-inventory/import', method: 'POST', body: ({ items }) => ({ items }), invalidate: inventoryInvalidations() },
   'barInventory.parseBarInventoryInput': { path: '/v1/bar-inventory/parse', method: 'POST', body: ({ text, imageBase64, imageMimeType }) => ({ text, imageBase64, imageMimeType }) },
-  'barInventory.updateItemCost': { path: (args) => `/v1/bar-inventory/${enc(args.itemId)}/cost`, method: 'PATCH', body: ({ unitCostCents }) => ({ unitCostCents }), invalidate: [['barInventory', 'getBarStock']] },
+  'barInventory.updateItemCost': { path: (args) => `/v1/bar-inventory/${enc(args.itemId)}/cost`, method: 'PATCH', body: ({ unitCostCents }) => ({ unitCostCents }), invalidate: inventoryInvalidations() },
   'barInventory.lookupBySku': { path: (args) => `/v1/bar-inventory/sku/${encodeURIComponent(args.sku)}`, method: 'GET' },
   'barInventory.sendPurchaseOrderEmail': { path: '/v1/bar-inventory/purchase-order/send-email', method: 'POST', body: () => ({}) },
   'barInventory.sendInventoryDigest': { path: '/v1/bar-inventory/send-digest', method: 'POST', body: () => ({}) },
@@ -413,13 +421,13 @@ const mutationRoutes: Record<string, Route> = {
     path: '/v1/bar-inventory/prep-board',
     method: 'POST',
     body: ({ itemId, kind, title, quantity, unit, station, notes, dueDate, status }) => ({ itemId, kind, title, quantity, unit, station, notes, dueDate, status }),
-    invalidate: [['barInventory', 'listPrepBoard'], ['operations', 'getDailyBrief']],
+    invalidate: [['barInventory', 'listPrepBoard'], ...readinessInvalidations()],
   },
   'barInventory.updatePrepBoardItemStatus': {
     path: (args) => `/v1/bar-inventory/prep-board/${enc(args.itemId ?? args.id)}/status`,
     method: 'PATCH',
     body: ({ status }) => ({ status }),
-    invalidate: [['barInventory', 'listPrepBoard'], ['operations', 'getDailyBrief']],
+    invalidate: [['barInventory', 'listPrepBoard'], ...readinessInvalidations()],
   },
   'chat.ensureChatSetup': { path: '/v1/chat/setup', method: 'POST', body: () => ({}), invalidate: [['chat', 'listConversations']] },
   'chat.openDm': { path: '/v1/chat/dm', method: 'POST', body: ({ targetProfileId }) => ({ targetProfileId }), invalidate: [['chat', 'listConversations']] },
@@ -628,6 +636,8 @@ function getKey(ref: RailwayFunctionRef) {
 function requestRoute<T>(route: Route, args: any, signal?: AbortSignal): Promise<T> {
   const path = typeof route.path === 'function' ? route.path(args ?? {}) : route.path;
   return apiRequest<T>(path, {
+    expectedProfileId: args?.ownerId,
+    expectedVenueId: args?.ownerId ? args?.venueId : undefined,
     method: route.method ?? 'GET',
     signal,
     timeoutMs: route.timeoutMs,
@@ -667,8 +677,41 @@ function floorInvalidations() {
   return [...floorActiveInvalidations(), ...floorWaitlistInvalidations(), ['floor', 'getFloorStats']];
 }
 
+function inventoryInvalidations() {
+  // Every derived inventory view, not just the stock list. A movement or a cost
+  // change feeds the reorder list, velocity, shrinkage and aging reports too;
+  // invalidating only getBarStock left an already-open purchase order telling
+  // the manager to reorder an item that had just been counted back to par.
+  return [
+    ['barInventory', 'getBarStock'],
+    ['barInventory', 'getPurchaseOrder'],
+    ['barInventory', 'getUsageVelocity'],
+    ['barInventory', 'getShrinkageReport'],
+    ['barInventory', 'getAgingReport'],
+    ['barInventory', 'getItemMovements'],
+    ['barInventory', 'getCostHistory'],
+  ];
+}
+
+/**
+ * Home's readiness score is computed from the checklist, staffing and event
+ * work. A mutation that moves any of those has to invalidate the Home queries
+ * as well, or Home keeps reporting a venue ready while the screen the manager
+ * just used says otherwise.
+ */
+function readinessInvalidations() {
+  return [['app', 'getDashboard'], ['operations', 'getCommandCenter'], ['operations', 'getManagerDashboard'], ['operations', 'getDailyBrief']];
+}
+
 function scheduleInvalidations() {
-  return [['scheduling', 'getManagerSchedule'], ['scheduling', 'getLaborForecast'], ['scheduling', 'getMySchedule'], ['scheduling', 'getMyShiftSwaps'], ['scheduling', 'listShiftSwaps']];
+  return [
+    ['scheduling', 'getManagerSchedule'],
+    ['scheduling', 'getLaborForecast'],
+    ['scheduling', 'getMySchedule'],
+    ['scheduling', 'getMyShiftSwaps'],
+    ['scheduling', 'listShiftSwaps'],
+    ...readinessInvalidations(),
+  ];
 }
 
 function normalizeReservationTimeInput(value: unknown) {

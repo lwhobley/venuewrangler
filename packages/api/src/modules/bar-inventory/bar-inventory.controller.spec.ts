@@ -648,8 +648,12 @@ describe('BarInventoryController', () => {
 
       await controller.updateItemCost(managerUser, 'item-1', { unitCostCents: 1800 } as any);
 
-      expect(prisma.$transaction).not.toHaveBeenCalled();
+      // The item is now read under the same advisory lock movements take (so
+      // a concurrent movement can't race the no-op check), so $transaction is
+      // always entered — but nothing is written when the cost hasn't changed.
+      expect(prisma.$transaction).toHaveBeenCalledOnce();
       expect(prisma.barInventoryItem.update).not.toHaveBeenCalled();
+      expect(prisma.barInventoryMovement.create).not.toHaveBeenCalled();
     });
 
     it('throws NotFoundException for a missing item', async () => {
@@ -675,6 +679,32 @@ describe('BarInventoryController', () => {
       expect(result.items.map((i: any) => i.name)).toEqual(['Amaro', 'Zinfandel']);
       expect(result.lowStockCount).toBe(1);
       expect(result.totalValueCents).toBe(10 * 1000 + 1 * 2000);
+    });
+
+    it('counts an item exactly at par as stocked, matching the purchase-order rule', async () => {
+      // The reorder rule everywhere is onHand < parLevel. An item sitting
+      // exactly at par is not reordered, so it must not be counted as low
+      // either, or the badge disagrees with the purchase order it links to.
+      const { controller, prisma } = makeController();
+      prisma.barInventoryItem.findMany.mockResolvedValue([
+        makeItem({ id: 'at-par', name: 'At Par', onHand: 4, parLevel: 4 }),
+        makeItem({ id: 'below', name: 'Below Par', onHand: 3, parLevel: 4 }),
+      ]);
+
+      const result = await controller.getBarStock(managerUser);
+
+      expect(result.lowStockCount).toBe(1);
+    });
+
+    it('exports every stock row rather than a capped page', async () => {
+      const { controller, prisma } = makeController();
+      prisma.barInventoryItem.findMany.mockResolvedValue([makeItem()]);
+
+      await controller.exportStockCsv(managerUser);
+
+      expect(prisma.barInventoryItem.findMany).toHaveBeenCalledWith(
+        expect.not.objectContaining({ take: expect.anything() }),
+      );
     });
 
     it('delegates getShrinkageReport to the reports service, scoped by venue', async () => {

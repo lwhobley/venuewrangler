@@ -241,8 +241,12 @@ describe('AuthService.issueSession branch coverage', () => {
     expect(tx.invite.update).not.toHaveBeenCalled();
   });
 
-  it('adopts a pre-existing placeholder profile by verified email match, deleting the stale profile and logging it', async () => {
-    const existingProfile = { id: 'existing-1', userId: 'user-1', venueId: null, fullName: 'Placeholder Self' };
+  it('surfaces a matching unclaimed roster row as pendingAdoption instead of merging it automatically', async () => {
+    // A bare verified-email match used to be adopted silently on every login
+    // with no invite-token proof and no confirmation — see AuthService's
+    // findAdoptableProfile doc comment. It must now only ever be a candidate
+    // the caller confirms via confirmProfileAdoption().
+    const existingProfile = { id: 'existing-1', userId: 'user-1', venueId: null, fullName: 'Placeholder Self', trialEndsAt: new Date() };
     const placeholderProfile = {
       id: 'placeholder-1',
       userId: null,
@@ -251,15 +255,16 @@ describe('AuthService.issueSession branch coverage', () => {
       role: 'manager',
       venue: { id: 'venue-9', name: 'Other Venue' },
     };
-    const adoptedProfile = { ...placeholderProfile, userId: 'user-1' };
+    const updatedExistingProfile = { ...existingProfile, email: 'manager@example.com' };
     const tx = {
       invite: { updateMany: vi.fn(), update: vi.fn() },
       profile: {
         findFirst: vi.fn()
           .mockResolvedValueOnce(existingProfile) // existingByUser lookup (where: { userId })
+          .mockResolvedValueOnce(null) // no established workplace profile
           .mockResolvedValueOnce(placeholderProfile), // adoptableProfile lookup
-        delete: vi.fn().mockResolvedValue(existingProfile),
-        update: vi.fn().mockResolvedValue(adoptedProfile),
+        delete: vi.fn(),
+        update: vi.fn().mockResolvedValue(updatedExistingProfile),
         create: vi.fn(),
       },
       auditLog: { create: vi.fn().mockResolvedValue({}) },
@@ -274,20 +279,56 @@ describe('AuthService.issueSession branch coverage', () => {
 
     const result = await service.issueSession('user-1', 'manager@example.com');
 
-    expect(tx.profile.delete).toHaveBeenCalledWith({ where: { id: 'existing-1' } });
+    // Nothing about the caller's own profile changes because of the match.
+    expect(tx.profile.delete).not.toHaveBeenCalled();
     expect(tx.profile.update).toHaveBeenCalledWith({
-      where: { id: 'placeholder-1' },
-      data: { userId: 'user-1', role: 'staff', membershipStatus: 'pending' },
+      where: { id: 'existing-1' },
+      data: { email: 'manager@example.com' },
       include: { venue: true },
     });
-    expect(tx.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({
-        venueId: 'venue-9',
-        targetProfileId: 'placeholder-1',
-        action: 'profile_adopted',
-      }),
-    }));
-    expect(result.profile).toBe(adoptedProfile);
+    expect(tx.auditLog.create).not.toHaveBeenCalled();
+    expect(result.profile).toBe(updatedExistingProfile);
+    expect(result.pendingAdoption).toEqual({
+      profileId: 'placeholder-1',
+      venueId: 'venue-9',
+      venueName: 'Other Venue',
+      role: 'manager',
+    });
+  });
+
+  it('does not surface pendingAdoption when the caller already belongs to a different venue', async () => {
+    const existingProfile = { id: 'existing-1', userId: 'user-1', venueId: 'venue-1', fullName: 'Real Member', trialEndsAt: new Date() };
+    const placeholderProfile = {
+      id: 'placeholder-1',
+      userId: null,
+      venueId: 'venue-9',
+      fullName: 'Invited Manager',
+      role: 'manager',
+      venue: { id: 'venue-9', name: 'Other Venue' },
+    };
+    const tx = {
+      invite: { updateMany: vi.fn(), update: vi.fn() },
+      profile: {
+        findFirst: vi.fn()
+          .mockResolvedValueOnce(existingProfile)
+          .mockResolvedValueOnce(placeholderProfile),
+        delete: vi.fn(),
+        update: vi.fn().mockResolvedValue(existingProfile),
+        create: vi.fn(),
+      },
+      auditLog: { create: vi.fn() },
+    };
+    const prisma = {
+      user: { findUnique: vi.fn().mockResolvedValue({ emailVerifiedAt: new Date() }) },
+      invite: { findFirst: vi.fn() },
+      session: { create: vi.fn().mockResolvedValue({ id: 'session-1' }) },
+      $transaction: vi.fn((callback: (transaction: typeof tx) => unknown) => callback(tx)),
+    };
+    const service = new AuthService(prisma as never);
+
+    const result = await service.issueSession('user-1', 'manager@example.com');
+
+    expect(result.pendingAdoption).toBeNull();
   });
 
   it('creates a new profile for the invited venue when the user already has a profile at a different venue', async () => {
@@ -385,5 +426,124 @@ describe('AuthService.issueSession branch coverage', () => {
     });
     expect(tx.profile.create).not.toHaveBeenCalled();
     expect(result.profile).toBe(updatedProfile);
+  });
+});
+
+describe('AuthService.confirmProfileAdoption', () => {
+  it('adopts the candidate profile after re-validating it is still unclaimed and matches the caller\'s verified email', async () => {
+    const candidate = {
+      id: 'placeholder-1',
+      userId: null,
+      email: 'manager@example.com',
+      venueId: 'venue-9',
+      role: 'manager',
+      venue: { id: 'venue-9', name: 'Other Venue' },
+    };
+    const adopted = { ...candidate, userId: 'user-1', membershipStatus: 'active' };
+    const tx = {
+      profile: {
+        findFirst: vi.fn()
+          .mockResolvedValueOnce(candidate) // candidate re-check
+          .mockResolvedValueOnce(null), // existingByUser lookup
+        delete: vi.fn(),
+        update: vi.fn().mockResolvedValue(adopted),
+      },
+      auditLog: { create: vi.fn().mockResolvedValue({}) },
+    };
+    const prisma = {
+      user: { findUnique: vi.fn().mockResolvedValue({ email: 'manager@example.com', emailVerifiedAt: new Date() }) },
+      $transaction: vi.fn((callback: (transaction: typeof tx) => unknown) => callback(tx)),
+    };
+    const service = new AuthService(prisma as never);
+
+    const result = await service.confirmProfileAdoption('user-1', 'placeholder-1');
+
+    expect(tx.profile.delete).not.toHaveBeenCalled();
+    // membershipStatus must be 'active', not 'pending' — AuthGuard only ever
+    // resolves null/'active' profiles (ACTIVE_MEMBERSHIP), and nothing else
+    // in the system would activate a row created by this confirm flow.
+    expect(tx.profile.update).toHaveBeenCalledWith({
+      where: expect.objectContaining({ id: 'placeholder-1', userId: null, OR: [{ membershipStatus: null }, { membershipStatus: 'active' }] }),
+      data: { userId: 'user-1', role: 'manager', membershipStatus: 'active' },
+      include: { venue: true },
+    });
+    expect(tx.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ action: 'profile_adopted', targetProfileId: 'placeholder-1' }),
+    }));
+    expect(result).toBe(adopted);
+  });
+
+  it('preserves the caller\'s venueless profile and its related history when adopting', async () => {
+    const existingByUser = { id: 'existing-1', userId: 'user-1', venueId: null };
+    const candidate = {
+      id: 'placeholder-1', userId: null, email: 'manager@example.com', venueId: 'venue-9', role: 'staff',
+      venue: { id: 'venue-9', name: 'Other Venue' },
+    };
+    const tx = {
+      profile: {
+        findFirst: vi.fn().mockResolvedValueOnce(candidate).mockResolvedValueOnce(existingByUser),
+        delete: vi.fn().mockResolvedValue(existingByUser),
+        update: vi.fn().mockResolvedValue({ ...candidate, userId: 'user-1' }),
+      },
+      auditLog: { create: vi.fn().mockResolvedValue({}) },
+    };
+    const prisma = {
+      user: { findUnique: vi.fn().mockResolvedValue({ email: 'manager@example.com', emailVerifiedAt: new Date() }) },
+      $transaction: vi.fn((callback: (transaction: typeof tx) => unknown) => callback(tx)),
+    };
+    const service = new AuthService(prisma as never);
+
+    await service.confirmProfileAdoption('user-1', 'placeholder-1');
+
+    expect(tx.profile.delete).not.toHaveBeenCalled();
+  });
+
+  it('rejects when the caller already belongs to a different venue', async () => {
+    const existingByUser = { id: 'existing-1', userId: 'user-1', venueId: 'venue-1' };
+    const candidate = {
+      id: 'placeholder-1', userId: null, email: 'manager@example.com', venueId: 'venue-9', role: 'staff',
+      venue: { id: 'venue-9', name: 'Other Venue' },
+    };
+    const tx = {
+      profile: {
+        findFirst: vi.fn().mockResolvedValueOnce(candidate).mockResolvedValueOnce(existingByUser),
+        delete: vi.fn(),
+        update: vi.fn(),
+      },
+      auditLog: { create: vi.fn() },
+    };
+    const prisma = {
+      user: { findUnique: vi.fn().mockResolvedValue({ email: 'manager@example.com', emailVerifiedAt: new Date() }) },
+      $transaction: vi.fn((callback: (transaction: typeof tx) => unknown) => callback(tx)),
+    };
+    const service = new AuthService(prisma as never);
+
+    await expect(service.confirmProfileAdoption('user-1', 'placeholder-1')).rejects.toThrow(UnauthorizedException);
+    expect(tx.profile.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects when the candidate no longer matches (already claimed, deleted, or a stale id)', async () => {
+    const tx = {
+      profile: { findFirst: vi.fn().mockResolvedValue(null), delete: vi.fn(), update: vi.fn() },
+      auditLog: { create: vi.fn() },
+    };
+    const prisma = {
+      user: { findUnique: vi.fn().mockResolvedValue({ email: 'manager@example.com', emailVerifiedAt: new Date() }) },
+      $transaction: vi.fn((callback: (transaction: typeof tx) => unknown) => callback(tx)),
+    };
+    const service = new AuthService(prisma as never);
+
+    await expect(service.confirmProfileAdoption('user-1', 'stale-id')).rejects.toThrow(UnauthorizedException);
+  });
+
+  it('rejects when the account has not verified its email', async () => {
+    const prisma = {
+      user: { findUnique: vi.fn().mockResolvedValue({ email: 'manager@example.com', emailVerifiedAt: null }) },
+      $transaction: vi.fn(),
+    };
+    const service = new AuthService(prisma as never);
+
+    await expect(service.confirmProfileAdoption('user-1', 'placeholder-1')).rejects.toThrow(UnauthorizedException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 });

@@ -38,6 +38,7 @@ import {
   inventoryRowsForWindow,
   nextInventoryWindow,
 } from '../../lib/inventory-window';
+import { useOfflineInventoryQueue } from '../../lib/offline-inventory-queue';
 
 const beverageCategories = ['spirit', 'wine', 'beer', 'mixer', 'garnish'] as const;
 const foodCategories = ['protein', 'produce', 'dairy', 'dry_goods', 'bakery', 'frozen'] as const;
@@ -99,7 +100,7 @@ const addItemNumberField = { flexGrow: 1, flexShrink: 1, flexBasis: 120, minWidt
 
 function BarStockScreen() {
   const { t } = useI18n();
-  const { venue, isReady, canManage, profileLoading, profileError, refetchProfile } = useVenueAuth();
+  const { venue, user, isReady, canManage, profileLoading, profileError, refetchProfile } = useVenueAuth();
   // Inventory (stock levels) is visible to every venue member; edits below stay
   // manager-only. The velocity/prep-board/report queries remain manager-gated.
   const stock = useQuery(api.barInventory.getBarStock, isReady && venue?.id ? { venueId: venue.id } : 'skip') as BarStock | null | undefined;
@@ -115,6 +116,57 @@ function BarStockScreen() {
   const sendDigest = useMutation(api.barInventory.sendInventoryDigest);
   const upsertPrepBoardItem = useMutation(api.barInventory.upsertPrepBoardItem);
   const updatePrepBoardItemStatus = useMutation(api.barInventory.updatePrepBoardItemStatus);
+  const {
+    queue: offlineQueue,
+    pendingCount: offlinePendingCount,
+    isSyncing: isOfflineSyncing,
+    syncNow: syncOfflineQueue,
+    enqueue: enqueueOfflineMovement,
+    getOptimisticOnHand,
+  } = useOfflineInventoryQueue(venue?.id, user?.id);
+
+  const handleSyncOffline = useCallback(async (automatic = false) => {
+    if (!canManage || !venue?.id || offlinePendingCount === 0 || isOfflineSyncing) return;
+    if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.onLine === false) return;
+    try {
+    const result = await syncOfflineQueue(async (params) => {
+      return await recordMovement(params);
+    }, automatic);
+    if (result.synced > 0) {
+      setMessage(t('barStock.messages.offlineSyncSuccess', { count: result.synced }));
+    } else if (result.failed > 0) {
+      setMessage(t('barStock.messages.offlineSyncFailed', { count: result.failed }));
+    }
+    } catch (error) {
+      setMessage(errorMessage(error, t('barStock.messages.errorUpdateStockCount')));
+    }
+  }, [canManage, venue?.id, offlinePendingCount, isOfflineSyncing, syncOfflineQueue, recordMovement, t]);
+
+  const syncHandlerRef = useRef(handleSyncOffline);
+  syncHandlerRef.current = handleSyncOffline;
+
+  useFocusEffect(
+    useCallback(() => {
+      // A stable focus subscription prevents isSyncing toggles from restarting
+      // retries. Retry at most three times per visit, with increasing delays.
+      let cancelled = false;
+      let attempt = 0;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const retry = async () => {
+        if (cancelled) return;
+        await syncHandlerRef.current(true);
+        if (!cancelled && attempt < 3) {
+          timer = setTimeout(() => { void retry(); }, 30_000 * 2 ** attempt++);
+        }
+      };
+      void retry();
+      return () => {
+        cancelled = true;
+        clearTimeout(timer);
+        setShowScanner(false);
+      };
+    }, [venue?.id]),
+  );
 
   const [name, setName] = useState('');
   const [category, setCategory] = useState<Category>('spirit');
@@ -163,15 +215,6 @@ function BarStockScreen() {
   const [prepStation, setPrepStation] = useState('');
   const [prepNotes, setPrepNotes] = useState('');
   const [prepDueDate, setPrepDueDate] = useState('');
-
-  useFocusEffect(
-    useCallback(() => {
-      return () => {
-        setShowScanner(false);
-      };
-    }, []),
-  );
-
   const stockCsv = useQuery(api.barInventory.exportStockCsv, isReady && canManage && showStockCsv ? {} : 'skip') as string | null | undefined;
   const movementCsv = useQuery(api.barInventory.exportMovementsCsv, isReady && canManage && showMovementCsv ? {} : 'skip') as string | null | undefined;
   const shrinkageData = useQuery(api.barInventory.getShrinkageReport, isReady && canManage && showShrinkage ? {} : 'skip') as ShrinkageData | null | undefined;
@@ -180,7 +223,14 @@ function BarStockScreen() {
   const costHistory = useQuery(api.barInventory.getCostHistory, isReady && canManage && costHistoryItemId ? { itemId: costHistoryItemId } : 'skip') as { itemName: string; currentCostCents: number | null; entries: CostHistoryEntry[] } | null | undefined;
   const agingReport = useQuery(api.barInventory.getAgingReport, isReady && canManage && showAgingReport ? {} : 'skip') as AgingReport | null | undefined;
 
-  const allItems = useMemo(() => (stock?.items ?? []) as BarItem[], [stock]);
+  const allItems = useMemo(() => {
+    const rawItems = (stock?.items ?? []) as BarItem[];
+    if (offlineQueue.length === 0) return rawItems;
+    return rawItems.map((it) => ({
+      ...it,
+      onHand: getOptimisticOnHand(it._id, it.onHand),
+    }));
+  }, [stock, offlineQueue, getOptimisticOnHand]);
 
   const items = useMemo(() => {
     return allItems.filter(item => {
@@ -189,7 +239,7 @@ function BarStockScreen() {
     });
   }, [allItems, activeTab]);
 
-  const lowItems = useMemo(() => items.filter((item) => item.onHand <= item.parLevel), [items]);
+  const lowItems = useMemo(() => items.filter((item) => item.onHand < item.parLevel), [items]);
 
   const activeLowStockCount = lowItems.length;
   const activeTotalValueCents = useMemo(() => {
@@ -297,27 +347,58 @@ function BarStockScreen() {
   const recordInventoryMovement = async (itemId: Id<'barInventoryItems'>, movementType: MovementType, quantity: number) => {
     if (!venue?.id) { setMessage(t('barStock.messages.noVenue')); return; }
     setMessage(null);
-    try { await recordMovement({ venueId: venue.id, itemId, movementType, quantity }); }
-    catch (e) { setMessage(errorMessage(e, t('barStock.messages.errorUpdateStockCount'))); }
+    const targetItem = allItems.find((i) => i._id === itemId);
+    try {
+      await enqueueOfflineMovement({
+        itemId,
+        itemName: targetItem?.name,
+        movementType,
+        quantity,
+      });
+      const result = await syncOfflineQueue(recordMovement);
+      if (result.failed) setMessage(t('barStock.messages.offlineMovementQueued'));
+    } catch (e) {
+      setMessage(errorMessage(e, t('barStock.messages.errorUpdateStockCount')));
+    }
   };
 
   const submitCount = useCallback(async () => {
     if (!venue?.id || countIndex >= countItems.length) return;
     const item = countItems[countIndex];
     const qty = Number(countValue);
-    if (isNaN(qty) || qty < 0) { setMessage(t('barStock.messages.invalidCount')); return; }
+    if (!Number.isFinite(qty) || qty < 0) { setMessage(t('barStock.messages.invalidCount')); return; }
+    let isOffline = false;
     try {
-      await recordMovement({ venueId: venue.id, itemId: item._id, movementType: 'count', quantity: qty });
-      if (countIndex + 1 < countItems.length) {
-        setCountIndex(countIndex + 1);
-        setCountValue(String(countItems[countIndex + 1].onHand));
+      await enqueueOfflineMovement({
+        itemId: item._id,
+        itemName: item.name,
+        movementType: 'count',
+        quantity: qty,
+      });
+    } catch (e) {
+      setMessage(errorMessage(e, t('barStock.messages.errorUpdateStockCount')));
+      return; // Never advance past a count that was not durably saved.
+    }
+    try {
+      isOffline = (await syncOfflineQueue(recordMovement)).failed > 0;
+    } catch { isOffline = true; }
+
+    if (countIndex + 1 < countItems.length) {
+      setCountIndex(countIndex + 1);
+      setCountValue(String(countItems[countIndex + 1].onHand));
+      if (isOffline) {
+        setMessage(t('barStock.messages.offlineQueued'));
+      }
+    } else {
+      setCountMode(false);
+      setCountIndex(0);
+      if (isOffline) {
+        setMessage(t('barStock.messages.offlineQueued'));
       } else {
-        setCountMode(false);
-        setCountIndex(0);
         setMessage(t('barStock.messages.countComplete', { count: countItems.length }));
       }
-    } catch (e) { setMessage(errorMessage(e, t('barStock.messages.errorRecordCount'))); }
-  }, [venue?.id, countIndex, countItems, countValue, recordMovement, t]);
+    }
+  }, [venue?.id, countIndex, countItems, countValue, recordMovement, enqueueOfflineMovement, syncOfflineQueue, t]);
 
   const openScanner = async () => {
     setScanMsg(null); setScannedItem(null);
@@ -460,7 +541,7 @@ function BarStockScreen() {
                         <Text style={{ fontWeight: '700' }}>{item.name}</Text>
                         <Text style={{ color: colors.muted }}>{item.category} · {item.area ?? t('barStock.list.unassigned')}</Text>
                       </View>
-                      <Chip compact style={{ backgroundColor: item.onHand <= item.parLevel ? accents[4].bg : accents[2].bg }}>
+                      <Chip compact style={{ backgroundColor: item.onHand < item.parLevel ? accents[4].bg : accents[2].bg }}>
                         {item.onHand} / {item.parLevel}
                       </Chip>
                     </View>
@@ -512,6 +593,28 @@ function BarStockScreen() {
         <View style={{ height: 4, backgroundColor: colors.border, borderRadius: 2, overflow: 'hidden' }}>
           <View style={{ height: 4, width: `${Math.round(((countIndex + 1) / countItems.length) * 100)}%`, backgroundColor: colors.primary, borderRadius: 2 }} />
         </View>
+        {offlinePendingCount > 0 && (
+          <Card style={{ backgroundColor: '#fff3cd', borderColor: '#ffeeba', borderWidth: 1, borderRadius: radius.sharp }}>
+            <Card.Content style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.xs }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs, flex: 1 }}>
+                <MaterialCommunityIcons name="cloud-sync-outline" size={20} color="#856404" />
+                <Text style={{ color: '#856404', fontWeight: '600', fontSize: 13 }}>
+                  {t('barStock.messages.offlinePendingBanner', { count: offlinePendingCount })}
+                </Text>
+              </View>
+              <Button
+                compact
+                mode="text"
+                textColor="#856404"
+                loading={isOfflineSyncing}
+                disabled={isOfflineSyncing}
+                onPress={() => void handleSyncOffline()}
+              >
+                {t('barStock.messages.syncNow')}
+              </Button>
+            </Card.Content>
+          </Card>
+        )}
         {isNewArea && (
           <Card style={{ backgroundColor: accents[1].bg, borderRadius: radius.sharp }}>
             <Card.Content style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
@@ -561,6 +664,29 @@ function BarStockScreen() {
       showsVerticalScrollIndicator={false}
     >
       <SectionHeader kicker={t('barStock.header.kicker')} title={t('barStock.header.title')} subtitle={t('barStock.header.managerSubtitle')} />
+
+      {offlinePendingCount > 0 && (
+        <Card style={{ backgroundColor: '#fff3cd', borderColor: '#ffeeba', borderWidth: 1, borderRadius: radius.sharp }}>
+          <Card.Content style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.xs }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs, flex: 1 }}>
+              <MaterialCommunityIcons name="cloud-sync-outline" size={20} color="#856404" />
+              <Text style={{ color: '#856404', fontWeight: '600', fontSize: 13 }}>
+                {t('barStock.messages.offlinePendingBanner', { count: offlinePendingCount })}
+              </Text>
+            </View>
+            <Button
+              compact
+              mode="text"
+              textColor="#856404"
+              loading={isOfflineSyncing}
+              disabled={isOfflineSyncing}
+              onPress={() => void handleSyncOffline()}
+            >
+              {t('barStock.messages.syncNow')}
+            </Button>
+          </Card.Content>
+        </Card>
+      )}
 
       <View style={{ flexDirection: 'row', backgroundColor: colors.surface, borderRadius: 12, padding: 4, marginVertical: 4 }}>
         <Button 
@@ -904,7 +1030,7 @@ function BarStockScreen() {
                     <Text style={{ fontWeight: '700' }}>{item.name}</Text>
                     <Text style={{ color: colors.muted }}>{item.category} · {item.area ?? t('barStock.list.unassigned')} · {money(item.unitCostCents)} / {item.unit}</Text>
                   </View>
-                  <Chip compact style={{ backgroundColor: item.onHand <= item.parLevel ? accents[4].bg : accents[2].bg }}>
+                  <Chip compact style={{ backgroundColor: item.onHand < item.parLevel ? accents[4].bg : accents[2].bg }}>
                     {item.onHand} / {item.parLevel}
                   </Chip>
                 </View>

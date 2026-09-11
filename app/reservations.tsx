@@ -282,7 +282,7 @@ function ReservationsScreen() {
     }
   };
 
-  const { selected: listDateRange, setSelected: setListDateRange, presets: listPresets } = useDateRange('today');
+  const { selected: listDateRange, setSelected: setListDateRange, presets: listPresets } = useDateRange('today', venue?.timezone);
 
   const sorted = useMemo(() => {
     const { startTs, endTs } = listDateRange;

@@ -8,6 +8,7 @@ on:
       - 'package-lock.json'
       - 'packages/api/package.json'
       - '.github/workflows/dependency-audit.yml'
+      - 'scripts/audit-gate.mjs'
   push:
     branches: [main]
     paths:
@@ -15,6 +16,7 @@ on:
       - 'package-lock.json'
       - 'packages/api/package.json'
       - '.github/workflows/dependency-audit.yml'
+      - 'scripts/audit-gate.mjs'
   schedule:
     - cron: '30 12 * * 1'
   workflow_dispatch:
@@ -34,7 +36,7 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Fail on high/critical API production vulnerabilities
-        run: npm audit --omit=dev --workspace=@venue-wrangler/api --audit-level=high
+        run: node scripts/audit-gate.mjs --omit=dev --workspace=@venue-wrangler/api
       - name: Verify the patched Prisma config override remains compatible
         run: |
           set -Eeuo pipefail
@@ -53,7 +55,7 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Fail on high/critical mobile production vulnerabilities
-        run: npm audit --omit=dev --audit-level=high
+        run: node scripts/audit-gate.mjs --omit=dev
 
   full-inventory:
     name: Full dependency inventory
@@ -65,10 +67,15 @@ jobs:
     # The tree is clean as of its removal, and a clean baseline is exactly when
     # this can be enforced.
     #
-    # If a future dev-tooling advisory has genuinely no fix, do not silently
-    # revert this to continue-on-error: add a documented `npm audit
-    # --exclude`/override entry in the same commit, the way the RLS migration
-    # gate lists its exemptions explicitly.
+    # If a future advisory has genuinely no fix, do not silently revert this to
+    # continue-on-error: add a documented exemption in the same commit, the way
+    # the RLS migration gate lists its exemptions explicitly.
+    #
+    # `npm audit` has no per-advisory exclude flag, so all three jobs run
+    # scripts/audit-gate.mjs, which wraps `npm audit --json` and fails on any
+    # high/critical advisory not listed in its ALLOWED table. Each entry
+    # records why it is accepted and what makes it removable, and an entry that
+    # stops matching the tree fails the build so exemptions cannot rot.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -77,4 +84,4 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Report all high/critical vulnerabilities including dev tooling
-        run: npm audit --audit-level=high
+        run: node scripts/audit-gate.mjs

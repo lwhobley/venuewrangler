@@ -3,6 +3,7 @@ import { Prisma, ReservationSource, ReservationStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { withSerializableRetry } from '../../common/tx-retry';
 import { ExecutionAutopilotService } from '../operations/execution-autopilot.service';
+import { refreshTableStates } from '../floor/table-state';
 
 // A completed, no-show, or cancelled reservation is a closed record. Nothing
 // here models the full transition graph (requested/confirmed/checked_in/
@@ -11,7 +12,7 @@ import { ExecutionAutopilotService } from '../operations/execution-autopilot.ser
 // — only that a closed reservation cannot become active again. Without this,
 // `saveReservation`'s generic upsert accepted `cancelled -> seated` as a
 // plain cast with no validation at all.
-const TERMINAL_RESERVATION_STATUSES: ReadonlySet<ReservationStatus> = new Set(['completed', 'no_show', 'cancelled']);
+export const TERMINAL_RESERVATION_STATUSES: ReadonlySet<ReservationStatus> = new Set(['completed', 'no_show', 'cancelled']);
 
 function assertReservationTransitionAllowed(from: ReservationStatus, to: ReservationStatus) {
   if (from === to) return;
@@ -57,6 +58,7 @@ export class ReservationMutationService {
     beoStatus?: string;
     estimatedValueCents?: number;
     depositDueCents?: number;
+    guestId?: string | null;
   }) {
     const guestName = args.guestName.trim();
     if (!guestName) throw new BadRequestException('Guest name is required');
@@ -67,8 +69,15 @@ export class ReservationMutationService {
       throw new BadRequestException('Invalid reservation time');
     }
 
+    const guestId = await this.resolveGuestId(args.venueId, {
+      guestId: args.guestId,
+      email: args.email,
+      phone: args.phone,
+    });
+
     const data = {
       venueId: args.venueId,
+      guestId,
       guestName,
       partySize: args.partySize,
       reservationTime,
@@ -104,7 +113,7 @@ export class ReservationMutationService {
       await this.assertNoHoldConflict(transaction, args.venueId, reservationTime, data.durationMinutes);
       if (args.reservationId) {
         const existing = await transaction.reservation.findFirst({
-          where: { id: args.reservationId, venueId: args.venueId },
+          where: { id: args.reservationId, venueId: args.venueId, deletedAt: null },
         });
         if (!existing) throw new BadRequestException('Reservation not found');
         assertReservationTransitionAllowed(existing.status, data.status);
@@ -113,6 +122,38 @@ export class ReservationMutationService {
           where: { id: existing.id },
           data,
         });
+        if (data.status === 'cancelled') {
+          const now = new Date();
+          // Capture the tables before releasing: releasing an assignment does
+          // not move TableState, so without the refresh below the floor plan
+          // keeps showing an occupied table with nothing left to release.
+          const heldTables = await transaction.tableAssignment.findMany({
+            where: { venueId: args.venueId, reservationId: existing.id, releasedAt: null },
+            select: { tableId: true },
+          });
+          await transaction.tableAssignment.updateMany({
+            where: { venueId: args.venueId, reservationId: existing.id, releasedAt: null },
+            data: { releasedAt: now, releasedReason: 'cancelled' },
+          });
+          await refreshTableStates(transaction, args.venueId, heldTables.map((t) => t.tableId));
+          const beoTag = existing.tags.find((t) => t.startsWith('beo:'));
+          if (beoTag) {
+            await transaction.crmBeo.updateMany({
+              where: { id: beoTag.slice(4), venueId: args.venueId },
+              data: { status: 'cancelled', updatedAt: now },
+            });
+          }
+          await transaction.eventExecutionWorkspace.updateMany({
+            where: {
+              venueId: args.venueId,
+              OR: [
+                { sourceType: 'reservation', sourceId: existing.id },
+                ...(beoTag ? [{ sourceType: 'beo', sourceId: beoTag.slice(4) }] : []),
+              ],
+            },
+            data: { isArchived: true },
+          });
+        }
         await this.syncTableAssignments(transaction, updated, args.tableIds ?? args.tableNumbers);
         await this.ensureExecutionWorkspace(updated, transaction);
         return { reservation: updated, previousStatus: existing.status };
@@ -196,13 +237,42 @@ export class ReservationMutationService {
     reservationId: string;
   }) {
     const reservation = await this.prisma.reservation.findFirst({
-      where: { id: args.reservationId, venueId: args.venueId },
+      where: { id: args.reservationId, venueId: args.venueId, deletedAt: null },
     });
     if (!reservation) throw new BadRequestException('Reservation not found');
 
-    await this.prisma.reservation.update({
-      where: { id: reservation.id },
-      data: { deletedAt: new Date() },
+    const now = new Date();
+    await this.prisma.$transaction(async (tx) => {
+      await tx.reservation.update({
+        where: { id: reservation.id },
+        data: { status: 'cancelled', eventStatus: 'cancelled', deletedAt: now },
+      });
+      const heldTables = await tx.tableAssignment.findMany({
+        where: { venueId: args.venueId, reservationId: reservation.id, releasedAt: null },
+        select: { tableId: true },
+      });
+      await tx.tableAssignment.updateMany({
+        where: { venueId: args.venueId, reservationId: reservation.id, releasedAt: null },
+        data: { releasedAt: now, releasedReason: 'cancelled' },
+      });
+      await refreshTableStates(tx, args.venueId, heldTables.map((t) => t.tableId));
+      const beoTag = reservation.tags.find((t) => t.startsWith('beo:'));
+      if (beoTag) {
+        await tx.crmBeo.updateMany({
+          where: { id: beoTag.slice(4), venueId: args.venueId },
+          data: { status: 'cancelled', updatedAt: now },
+        });
+      }
+      await tx.eventExecutionWorkspace.updateMany({
+        where: {
+          venueId: args.venueId,
+          OR: [
+            { sourceType: 'reservation', sourceId: reservation.id },
+            ...(beoTag ? [{ sourceType: 'beo', sourceId: beoTag.slice(4) }] : []),
+          ],
+        },
+        data: { isArchived: true },
+      });
     });
   }
 
@@ -296,6 +366,49 @@ export class ReservationMutationService {
         },
       });
     }
+  }
+
+  /**
+   * A reservation used to store the guest's name, email and phone as loose text
+   * and never set guestId, so the booking existed while the guest's own profile
+   * still showed no upcoming reservation — the app could recognise a returning
+   * guest at the top of the form and then file the booking under nobody.
+   *
+   * Resolution order: an explicit guestId (verified against this venue, so a
+   * client cannot attach a booking to another tenant's guest), then the same
+   * email/phone match the autofill endpoint uses to recognise the guest in the
+   * first place. Returns null rather than inventing a guest: creating profiles
+   * from every walk-in is a separate product decision.
+   */
+  private async resolveGuestId(
+    venueId: string,
+    contact: { guestId?: string | null; email?: string; phone?: string },
+  ): Promise<string | null> {
+    if (contact.guestId) {
+      const claimed = await this.prisma.guest.findFirst({
+        where: { id: contact.guestId, venueId, deletedAt: null },
+        select: { id: true },
+      });
+      if (claimed) return claimed.id;
+      throw new BadRequestException('That guest does not belong to this venue.');
+    }
+
+    const email = contact.email?.trim().toLowerCase() || null;
+    const phone = contact.phone?.replace(/[^\d+]/g, '') || null;
+    if (!email && !phone) return null;
+
+    const match = await this.prisma.guest.findFirst({
+      where: {
+        venueId,
+        deletedAt: null,
+        OR: [
+          ...(email ? [{ email }] : []),
+          ...(phone ? [{ phone }] : []),
+        ],
+      },
+      select: { id: true },
+    });
+    return match?.id ?? null;
   }
 
   private async ensureExecutionWorkspace(reservation: {

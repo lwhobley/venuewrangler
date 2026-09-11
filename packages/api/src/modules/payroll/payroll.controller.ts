@@ -43,6 +43,16 @@ class RecordPayrollExportDto {
 }
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+const MAX_PAYROLL_DAYS = 366;
+const MAX_PAYROLL_ROWS = 20_000;
+
+function payrollDate(value: string): number {
+  const time = Date.parse(`${value}T00:00:00Z`);
+  if (!ISO_DATE.test(value) || !Number.isFinite(time) || new Date(time).toISOString().slice(0, 10) !== value) {
+    throw new BadRequestException('Payroll dates must be valid YYYY-MM-DD calendar dates.');
+  }
+  return time;
+}
 
 /**
  * Resolve the [periodStart, periodEnd) instant range for a payroll period in
@@ -64,8 +74,12 @@ async function resolvePayrollPeriod(
   const now = Date.now();
   const defaultStartIso = zonedIsoDate(tz, now - 14 * 24 * 60 * 60 * 1000);
   const defaultEndIso = zonedIsoDate(tz, now);
-  const startIso = startDate && ISO_DATE.test(startDate) ? startDate : defaultStartIso;
-  const endIso = endDate && ISO_DATE.test(endDate) ? endDate : defaultEndIso;
+  const startIso = startDate ?? defaultStartIso;
+  const endIso = endDate ?? defaultEndIso;
+  const days = (payrollDate(endIso) - payrollDate(startIso)) / 86_400_000 + 1;
+  if (days < 1 || days > MAX_PAYROLL_DAYS) {
+    throw new BadRequestException(`Payroll periods must be ordered and span at most ${MAX_PAYROLL_DAYS} days.`);
+  }
   const periodStart = new Date(zonedDateBounds(tz, startIso).start);
   const periodEnd = new Date(zonedDateBounds(tz, endIso).end);
   return { periodStart, periodEnd, startIso, endIso };
@@ -81,6 +95,7 @@ async function buildPayrollRows(
     prisma.profile.findMany({
       where: { venueId },
       orderBy: { fullName: 'asc' },
+      take: MAX_PAYROLL_ROWS + 1,
     }),
     prisma.timeEntry.findMany({
       where: {
@@ -89,8 +104,12 @@ async function buildPayrollRows(
         clockOutAt: { not: null, gte: periodStart },
       },
       orderBy: { clockInAt: 'asc' },
+      take: MAX_PAYROLL_ROWS + 1,
     }),
   ]);
+  if (staff.length > MAX_PAYROLL_ROWS || entries.length > MAX_PAYROLL_ROWS) {
+    throw new BadRequestException('Payroll export is too large. Choose a smaller period; no partial export was generated.');
+  }
 
   const inPeriod = (e: (typeof entries)[number]) => {
     if (!e.clockOutAt) return false;
@@ -174,7 +193,7 @@ export class PayrollController {
     @Query('endDate') endDate?: string,
   ) {
     this.requireManager(scope);
-    const { periodStart, periodEnd } = await resolvePayrollPeriod(this.prisma, scope.venueId, startDate, endDate);
+    const { periodStart, periodEnd, startIso, endIso } = await resolvePayrollPeriod(this.prisma, scope.venueId, startDate, endDate);
 
     const rows = await buildPayrollRows(this.prisma, scope.venueId, periodStart, periodEnd);
     const totalHours = Math.round(rows.reduce((sum, r) => sum + r.totalHours, 0) * 100) / 100;
@@ -186,6 +205,8 @@ export class PayrollController {
         employeeCount: rows.filter((r) => r.totalHours > 0).length,
         periodStart: periodStart.getTime(),
         periodEnd: periodEnd.getTime(),
+        startDate: startIso,
+        endDate: endIso,
       },
     };
   }
