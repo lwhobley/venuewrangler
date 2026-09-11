@@ -4,7 +4,7 @@ import { Button } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { CommandText } from './FutureUI';
-import { spacing, useDesignTheme } from '../lib/theme';
+import { radius, spacing, useDesignTheme } from '../lib/theme';
 import {
   useAskWrangler,
   useWrangler,
@@ -52,7 +52,7 @@ export function HomeWranglerSurface({ enabled }: Props) {
   // progress. Say it failed and offer the retry.
   if (!snapshot && wrangler.error) {
     return (
-      <View style={{ marginHorizontal: spacing.lg, marginTop: -1, borderWidth: StyleSheet.hairlineWidth, borderColor: palette.border, backgroundColor: palette.surface, padding: spacing.md, gap: spacing.sm }}>
+      <View style={{ marginHorizontal: spacing.lg, marginTop: -1, borderWidth: StyleSheet.hairlineWidth, borderColor: palette.border, backgroundColor: palette.surface, padding: spacing.md, gap: spacing.sm, borderRadius: radius.soft }}>
         <CommandText palette={palette} variant="label">THE WRANGLER</CommandText>
         <CommandText palette={palette} variant="caption">The live service picture could not be loaded.</CommandText>
         <Button compact mode="outlined" textColor={palette.primary} onPress={() => void wrangler.refetch()}>Try again</Button>
@@ -62,7 +62,7 @@ export function HomeWranglerSurface({ enabled }: Props) {
 
   if (wrangler.isLoading || !snapshot) {
     return (
-      <View style={{ marginHorizontal: spacing.lg, marginTop: -1, borderWidth: StyleSheet.hairlineWidth, borderColor: palette.border, backgroundColor: palette.surface, padding: spacing.md }}>
+      <View style={{ marginHorizontal: spacing.lg, marginTop: -1, borderWidth: StyleSheet.hairlineWidth, borderColor: palette.border, backgroundColor: palette.surface, padding: spacing.md, borderRadius: radius.soft }}>
         <CommandText palette={palette} variant="label">THE WRANGLER</CommandText>
         <CommandText palette={palette} variant="caption" style={{ marginTop: 4 }}>Building the live service picture…</CommandText>
       </View>
@@ -72,7 +72,7 @@ export function HomeWranglerSurface({ enabled }: Props) {
   const priority = snapshot.priorities[0];
   const nextAction = priority?.actions[0];
   const urgent = priority?.severity === 'critical' || priority?.severity === 'warning';
-  const accent = urgent ? palette.warning : priority?.severity === 'watch' ? '#8A6B2D' : palette.success;
+  const accent = urgent ? palette.warning : priority?.severity === 'watch' ? palette.warning : palette.success;
 
   const handleAsk = async (text?: string) => {
     const query = (text ?? prompt).trim();
@@ -160,7 +160,8 @@ export function HomeWranglerSurface({ enabled }: Props) {
       style={{
         marginHorizontal: spacing.lg,
         marginTop: -1,
-        backgroundColor: '#F8F3EA',
+        backgroundColor: palette.cream,
+        borderRadius: radius.soft,
         borderWidth: StyleSheet.hairlineWidth,
         borderColor: palette.border,
         borderLeftWidth: 4,
@@ -177,9 +178,9 @@ export function HomeWranglerSurface({ enabled }: Props) {
       >
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flex: 1 }}>
-            <MaterialCommunityIcons name="target" size={22} color="#7A5A35" />
+            <MaterialCommunityIcons name="target" size={22} color={palette.secondary} />
             <View style={{ flex: 1 }}>
-              <CommandText palette={palette} variant="label" style={{ color: '#7A5A35' }}>
+              <CommandText palette={palette} variant="label" style={{ color: palette.secondary }}>
                 THE WRANGLER · {snapshot.servicePhaseLabel.toUpperCase()}
               </CommandText>
               <CommandText palette={palette} variant="caption" style={{ marginTop: 2, color: accent }}>
@@ -214,9 +215,10 @@ export function HomeWranglerSurface({ enabled }: Props) {
             marginTop: spacing.xs,
             paddingVertical: spacing.sm,
             paddingHorizontal: spacing.md,
-            backgroundColor: urgent ? '#7A5A35' : palette.surface,
+            backgroundColor: urgent ? palette.secondary : palette.surface,
+            borderRadius: radius.sharp,
             borderWidth: 1,
-            borderColor: urgent ? '#7A5A35' : palette.border,
+            borderColor: urgent ? palette.secondary : palette.border,
             flexDirection: 'row',
             alignItems: 'center',
             justifyContent: 'space-between',
@@ -237,7 +239,7 @@ export function HomeWranglerSurface({ enabled }: Props) {
 
       <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderColor: palette.divider, paddingTop: spacing.sm, gap: spacing.xs }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-          <CommandText palette={palette} variant="label" style={{ color: '#7A5A35' }}>
+          <CommandText palette={palette} variant="label" style={{ color: palette.secondary }}>
             OPERATIONS COMMAND
           </CommandText>
           <View style={{ flexDirection: 'row', gap: spacing.xs }}>
@@ -247,8 +249,8 @@ export function HomeWranglerSurface({ enabled }: Props) {
               style={{
                 paddingHorizontal: 8,
                 paddingVertical: 3,
-                borderRadius: 4,
-                backgroundColor: mode === 'ask' ? '#7A5A35' : palette.surface,
+                borderRadius: radius.sharp,
+                backgroundColor: mode === 'ask' ? palette.secondary : palette.surface,
               }}
             >
               <CommandText palette={palette} variant="caption" style={{ color: mode === 'ask' ? '#FFFFFF' : palette.muted }}>
@@ -261,8 +263,8 @@ export function HomeWranglerSurface({ enabled }: Props) {
               style={{
                 paddingHorizontal: 8,
                 paddingVertical: 3,
-                borderRadius: 4,
-                backgroundColor: mode === 'command' ? '#7A5A35' : palette.surface,
+                borderRadius: radius.sharp,
+                backgroundColor: mode === 'command' ? palette.secondary : palette.surface,
               }}
             >
               <CommandText palette={palette} variant="caption" style={{ color: mode === 'command' ? '#FFFFFF' : palette.muted }}>
@@ -290,7 +292,7 @@ export function HomeWranglerSurface({ enabled }: Props) {
                 backgroundColor: palette.surface,
                 paddingHorizontal: spacing.sm,
                 paddingVertical: 4,
-                borderRadius: 4,
+                borderRadius: radius.sharp,
               }}
             >
               <CommandText palette={palette} variant="caption">

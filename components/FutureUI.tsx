@@ -33,6 +33,15 @@ export function CommandSurface({
           borderRadius: strong ? radius.soft : radius.sharp,
           padding: inset ? spacing.md : spacing.lg,
           overflow: 'hidden',
+          ...(strong
+            ? {
+                shadowColor: palette.shadow,
+                shadowOpacity: 0.04,
+                shadowRadius: 12,
+                shadowOffset: { width: 0, height: 3 },
+                elevation: 2,
+              }
+            : {}),
         },
         style,
       ]}
@@ -144,6 +153,7 @@ export function StatusPill({
       style={{
         borderLeftWidth: 2,
         borderLeftColor: toneColor,
+        borderRadius: radius.sharp,
         backgroundColor: palette.surfaceSoft,
         paddingHorizontal: 8,
         paddingVertical: 4,

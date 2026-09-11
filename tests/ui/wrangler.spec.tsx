@@ -39,6 +39,7 @@ vi.mock('../../components/WranglerIntelligencePanel', () => ({ WranglerIntellige
 vi.mock('../../components/WranglerShiftStory', () => ({ WranglerShiftStory: () => null }));
 vi.mock('../../lib/theme', () => ({
   spacing: { lg: 24, md: 16, sm: 8, xl: 32, xxl: 48 },
+  radius: { sharp: 6, soft: 12, sm: 4, md: 8, lg: 12, xl: 16, pill: 9999 },
   useDesignTheme: () => ({ background: '#000', divider: '#333', warning: '#fa0', success: '#0a0', muted: '#777', surface: '#111', border: '#333' }),
 }));
 vi.mock('../../lib/useWrangler', () => ({

@@ -42,25 +42,25 @@ export const designPalettes = {
   },
   light: {
     mode: 'light' as const,
-    background: '#F7F7F4',
+    background: '#F8F8F5',
     backgroundAlt: '#FFFFFF',
     surface: '#FFFFFF',
     surfaceStrong: '#FFFFFF',
-    surfaceSoft: '#F1F2EE',
-    glass: '#FFFFFF',
+    surfaceSoft: '#F2F3EF',
+    glass: 'rgba(255, 255, 255, 0.92)',
     primary: '#17643B',
-    secondary: '#A86514',
-    charcoal: '#1D2420',
-    muted: '#68706A',
-    border: '#DDE1DA',
-    divider: '#E5E8E2',
+    secondary: '#C59B27',
+    charcoal: '#1A201C',
+    muted: '#667068',
+    border: '#E1E4DE',
+    divider: '#ECEFEA',
     success: '#17643B',
-    danger: '#B4483F',
-    warning: '#A86514',
-    info: '#4A6678',
-    cream: '#EEF5F0',
-    glow: '#EEF5F0',
-    shadow: '#69736B',
+    danger: '#BA4439',
+    warning: '#C59B27',
+    info: '#3B6B82',
+    cream: '#F3F6F1',
+    glow: '#E8EFEA',
+    shadow: '#3C443E',
     // Text/icons drawn on top of `primary` fills (dark-green in light mode).
     buttonText: '#FFFFFF',
   },
@@ -79,9 +79,9 @@ export const authColors = {
   background: colors.background,
   surface: colors.surface,
   primary: colors.primary,
-  text: '#1F241E',
-  muted: '#6F766B',
-  border: '#E8E2D8',
+  text: colors.charcoal,
+  muted: colors.muted,
+  border: colors.border,
   danger: colors.danger,
   success: colors.success,
   buttonText: '#FFFFFF',
@@ -97,12 +97,12 @@ export const authInputProps = {
 };
 
 export const accents = [
-  { bg: '#EEF5F0', fg: '#1D2420', icon: '#17643B' },
-  { bg: '#FFF4DE', fg: '#1D2420', icon: '#A86514' },
-  { bg: '#EEF3F7', fg: '#1D2420', icon: '#4A6678' },
-  { bg: '#F8EEE8', fg: '#1D2420', icon: '#A35E35' },
-  { bg: '#F0F1E9', fg: '#1D2420', icon: '#63705A' },
-  { bg: '#FBEDEC', fg: '#1D2420', icon: '#B4483F' },
+  { bg: '#EEF5F0', fg: '#1A201C', icon: '#17643B' },
+  { bg: '#FFF7E6', fg: '#1A201C', icon: '#C59B27' },
+  { bg: '#EEF3F7', fg: '#1A201C', icon: '#3B6B82' },
+  { bg: '#F8EEE8', fg: '#1A201C', icon: '#A35E35' },
+  { bg: '#F0F1E9', fg: '#1A201C', icon: '#63705A' },
+  { bg: '#FBEDEC', fg: '#1A201C', icon: '#BA4439' },
 ] as const;
 
 export const spacing = {
@@ -117,19 +117,17 @@ export const spacing = {
 };
 
 // Editorial system rule: at most two radii anywhere in the UI. `sharp` is for
-// nearly everything (inputs, tags, buttons, most panels); `soft` is reserved
-// for the handful of surfaces that read as genuine "cards" (modals, sheets,
-// the rare stat tile). The old sm/md/lg/xl/pill keys are kept so the ~50
-// existing call sites don't need touching, but they now all resolve to one
-// of the two allowed values.
+// Contemporary system rule: subtle architectural radius for panels, cards, and controls.
+// `sharp` gives controls a subtle refined contour; `soft` provides elegant
+// contemporary card curvature as shown in the architectural renderings.
 export const radius = {
-  sharp: 0,
-  soft: 8,
-  sm: 0,
-  md: 0,
-  lg: 8,
-  xl: 8,
-  pill: 8,
+  sharp: 6,
+  soft: 12,
+  sm: 4,
+  md: 8,
+  lg: 12,
+  xl: 16,
+  pill: 9999,
 };
 
 // The command system uses native-feeling sans typography throughout. It keeps
@@ -152,15 +150,13 @@ export const type = {
   display: { fontSize: 40, lineHeight: 44, letterSpacing: -0.6, fontWeight: '700' },
 } as const;
 
-// No default drop shadow — surfaces are separated by hairline rules and
-// whitespace, not elevation. Kept only for the rare truly-floating surface
-// (a modal/sheet over content), used explicitly, never as a card default.
+// Contemporary ambient diffusion shadow for elevated cards and floating sheets.
 export const shadow = {
   shadowColor: designPalettes.light.shadow,
-  shadowOpacity: 0.05,
-  shadowRadius: 12,
+  shadowOpacity: 0.04,
+  shadowRadius: 16,
   shadowOffset: { width: 0, height: 4 },
-  elevation: 1,
+  elevation: 2,
 } as const;
 
 export const authCardStyle = {
