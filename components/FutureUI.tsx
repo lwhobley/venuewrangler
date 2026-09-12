@@ -1,15 +1,12 @@
 import { ReactNode } from 'react';
-import { Pressable, StyleProp, StyleSheet, Text, TextStyle, View, ViewStyle } from 'react-native';
+import { Pressable, StyleProp, Text, TextStyle, View, ViewStyle } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { DesignPalette, radius, spacing } from '../lib/theme';
 
 type IconName = keyof typeof MaterialCommunityIcons.glyphMap;
 type CommandTextVariant = 'hero' | 'title' | 'label' | 'body' | 'caption' | 'metric';
 
-// Editorial surface: hairline border, sharp corners, no shadow, no glass
-// blur. `strong` is the one place allowed the soft radius (it reads as a
-// distinct panel, e.g. a manager brief); `inset` drops the border entirely
-// for content nested inside another surface.
+// Filled surfaces provide separation without a thin outline around each block.
 export function CommandSurface({
   palette,
   children,
@@ -28,7 +25,7 @@ export function CommandSurface({
       style={[
         {
           backgroundColor: strong ? palette.surfaceStrong : inset ? palette.surfaceSoft : palette.surface,
-          borderWidth: inset ? 0 : StyleSheet.hairlineWidth,
+          borderWidth: 0,
           borderColor: palette.border,
           borderRadius: strong ? radius.soft : radius.sharp,
           padding: inset ? spacing.md : spacing.lg,
@@ -74,9 +71,7 @@ export function CommandText({
   return <Text style={[styles[variant], style]}>{children}</Text>;
 }
 
-// Sharp-cornered, mostly-borderless action — never a pill. `selected` fills
-// with the accent; the resting state is a quiet outline so a row of these
-// doesn't read as a chip tray.
+// Compact, raised controls share the Olive Ledger selection color.
 export function CommandButton({
   palette,
   children,
@@ -105,13 +100,18 @@ export function CommandButton({
       onPress={onPress}
       style={({ pressed }) => [
         {
-          minHeight: 34,
+          minHeight: 44,
           paddingHorizontal: 12,
           paddingVertical: 7,
           borderRadius: radius.sharp,
-          borderWidth: selected ? 0 : StyleSheet.hairlineWidth,
+          borderWidth: 0,
           borderColor: palette.border,
-          backgroundColor: selected ? palette.primary : 'transparent',
+          backgroundColor: selected ? palette.primary : palette.surfaceSoft,
+          shadowColor: palette.shadow,
+          shadowOpacity: pressed || disabled ? 0 : 0.1,
+          shadowRadius: 4,
+          shadowOffset: { width: 0, height: 2 },
+          elevation: pressed || disabled ? 0 : 2,
           flexDirection: 'row',
           alignItems: 'center',
           justifyContent: 'center',
@@ -121,11 +121,11 @@ export function CommandButton({
         style,
       ]}
     >
-      {icon ? <MaterialCommunityIcons name={icon} size={15} color={selected ? palette.backgroundAlt : palette.muted} /> : null}
+      {icon ? <MaterialCommunityIcons name={icon} size={15} color={selected ? palette.buttonText : palette.muted} /> : null}
       <Text
         numberOfLines={1}
         style={{
-          color: selected ? palette.backgroundAlt : palette.charcoal,
+          color: selected ? palette.buttonText : palette.charcoal,
           fontSize: 12,
           fontWeight: '600',
         }}

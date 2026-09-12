@@ -852,7 +852,7 @@ function LeadDetailPanel({
 
 function StatTile({ label, value, accent }: { label: string; value: string; accent: (typeof accents)[number] }) {
   return (
-    <View style={{ minWidth: 145, flexGrow: 1, padding: spacing.md, borderRadius: 8, backgroundColor: accent.bg }}>
+    <View style={{ minWidth: 145, flexGrow: 1, padding: spacing.md, borderRadius: 7, backgroundColor: colors.cream, borderLeftWidth: 5, borderLeftColor: accent.icon }}>
       <Text style={{ color: accent.fg, fontWeight: '800', fontSize: 22 }}>{value}</Text>
       <Text style={{ color: colors.charcoal }}>{label}</Text>
     </View>

@@ -93,7 +93,7 @@ const ALERT_ICONS: Record<string, keyof typeof MaterialCommunityIcons.glyphMap> 
 
 function StatTile({ label, value, accent }: { label: string; value: string | number; accent?: { bg: string; fg: string } }) {
   return (
-    <View style={{ flex: 1, minWidth: 80, backgroundColor: accent?.bg ?? colors.surface, borderRadius: 12, padding: spacing.sm, gap: 2 }}>
+    <View style={{ flex: 1, minWidth: 80, backgroundColor: accent?.bg ?? colors.cream, borderLeftWidth: 5, borderLeftColor: colors.primary, borderRadius: 7, padding: spacing.sm, gap: 2 }}>
       <Text style={{ color: accent?.fg ?? colors.primary, fontSize: 22, fontWeight: '800' }}>{value}</Text>
       <Text style={{ color: accent ? colors.charcoal : colors.muted, fontSize: 11 }}>{label}</Text>
     </View>

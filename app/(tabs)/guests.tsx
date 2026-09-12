@@ -1064,7 +1064,7 @@ function GuestProfilePanel({ guest, profile, onEdit, onDelete }: { guest: GuestR
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <View style={{ minWidth: 135, flexGrow: 1, padding: spacing.sm, borderRadius: radius.sharp, backgroundColor: accents[0].bg }}>
+    <View style={{ minWidth: 135, flexGrow: 1, padding: spacing.sm, borderRadius: radius.sharp, backgroundColor: colors.cream, borderLeftWidth: 5, borderLeftColor: colors.primary }}>
       <Text style={{ color: accents[0].fg, fontSize: 18, fontWeight: '800' }}>{value}</Text>
       <Text style={{ color: colors.charcoal, fontSize: 12 }}>{label}</Text>
     </View>

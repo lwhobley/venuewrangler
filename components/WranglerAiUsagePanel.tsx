@@ -35,7 +35,7 @@ export function WranglerAiUsagePanel() {
       ) : (
         <>
           {usage.data.budget.status !== 'unlimited' ? (
-            <View style={{ gap: spacing.sm, backgroundColor: usage.data.budget.status === 'over_budget' ? '#FFF0ED' : usage.data.budget.status === 'warning' ? '#FFF8E8' : '#F5F7F2', padding: spacing.md }}>
+            <View style={{ gap: spacing.sm, backgroundColor: usage.data.budget.status === 'over_budget' ? '#FFF0ED' : usage.data.budget.status === 'warning' ? '#FFF8E8' : palette.surfaceSoft, padding: spacing.md }}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: spacing.md }}>
                 <View style={{ flex: 1, gap: 2 }}>
                   <CommandText palette={palette} variant="label">
@@ -48,7 +48,7 @@ export function WranglerAiUsagePanel() {
                 <CommandText palette={palette} variant="title">{usage.data.budget.percentUsed.toFixed(1)}%</CommandText>
               </View>
               <View style={{ height: 8, backgroundColor: palette.divider, overflow: 'hidden' }}>
-                <View style={{ height: 8, width: `${Math.min(100, usage.data.budget.percentUsed)}%`, backgroundColor: usage.data.budget.status === 'over_budget' ? palette.warning : '#7A5A35' }} />
+                <View style={{ height: 8, width: `${Math.min(100, usage.data.budget.percentUsed)}%`, backgroundColor: usage.data.budget.status === 'over_budget' ? palette.warning : palette.primary }} />
               </View>
               <CommandText palette={palette} variant="caption">
                 {usage.data.budget.status === 'over_budget'
@@ -67,7 +67,7 @@ export function WranglerAiUsagePanel() {
               ['Input tokens', tokens(usage.data.promptTokens)],
               ['Output tokens', tokens(usage.data.completionTokens)],
             ].map(([label, value]) => (
-              <View key={label} style={{ minWidth: 135, flexGrow: 1, flexBasis: '45%', backgroundColor: '#F8F3EA', padding: spacing.md, gap: 3 }}>
+              <View key={label} style={{ minWidth: 135, flexGrow: 1, flexBasis: '45%', backgroundColor: palette.surfaceSoft, padding: spacing.md, gap: 3 }}>
                 <CommandText palette={palette} variant="caption">{label}</CommandText>
                 <CommandText palette={palette} variant="title">{value}</CommandText>
               </View>

@@ -100,12 +100,12 @@ function HomeScreen() {
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: palette.background }} contentContainerStyle={{ paddingBottom: spacing.xxl }} showsVerticalScrollIndicator={false}>
-      <View style={{ backgroundColor: '#074426', paddingHorizontal: spacing.lg, paddingTop: spacing.xl, paddingBottom: spacing.lg, gap: spacing.md }}>
+      <View style={{ backgroundColor: '#3F4B34', paddingHorizontal: spacing.lg, paddingTop: spacing.xl, paddingBottom: spacing.lg, gap: spacing.md }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md }}>
           <View style={{ flex: 1 }}>
             <Pressable
               accessibilityRole="button" onPress={() => router.push('/venue/settings')} style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1, flexDirection: 'row', alignItems: 'center', gap: 4 })}>
-              <CommandText palette={palette} variant="label" style={{ color: '#B6D6BE' }}>{venueName}</CommandText>
+              <CommandText palette={palette} variant="label" style={{ color: '#DCE3C7' }}>{venueName}</CommandText>
               {venues.length > 1 ? <MaterialCommunityIcons name="swap-horizontal" size={16} color="#B6D6BE" /> : null}
             </Pressable>
             <CommandText palette={palette} variant="hero" style={{ color: '#FFFFFF' }}>Operations command</CommandText>
@@ -120,10 +120,10 @@ function HomeScreen() {
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
             <MaterialCommunityIcons name="calendar-blank-outline" size={16} color="#D9EBDD" />
-            <CommandText palette={palette} variant="body" style={{ color: '#D9EBDD' }}>{currentDate}</CommandText>
+            <CommandText palette={palette} variant="body" style={{ color: '#FFF8EC' }}>{currentDate}</CommandText>
           </View>
-          <View style={{ width: StyleSheet.hairlineWidth, height: 20, backgroundColor: '#70A381' }} />
-          <CommandText palette={palette} variant="body" style={{ color: '#D9EBDD' }}>
+          <View style={{ width: StyleSheet.hairlineWidth, height: 20, backgroundColor: '#CAB06F' }} />
+          <CommandText palette={palette} variant="body" style={{ color: '#FFF8EC' }}>
             {readiness?.status === 'blocked' ? 'Needs attention' : readiness?.status === 'at-risk' ? 'Watch service' : 'Service command ready'}
           </CommandText>
         </View>

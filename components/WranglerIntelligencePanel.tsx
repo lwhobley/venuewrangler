@@ -136,11 +136,11 @@ export function WranglerIntelligencePanel({
             onSubmitEditing={() => void runOperator()}
           />
           <Pressable
-            accessibilityRole="button" onPress={() => void runOperator()} style={{ backgroundColor: '#7A5A35', justifyContent: 'center', paddingHorizontal: spacing.md }}>
-            <CommandText palette={palette} variant="label" style={{ color: '#FFFFFF' }}>{operatorPlan.isPending ? 'THINKING…' : 'RUN'}</CommandText>
+            accessibilityRole="button" onPress={() => void runOperator()} style={{ backgroundColor: palette.primary, justifyContent: 'center', paddingHorizontal: spacing.md }}>
+            <CommandText palette={palette} variant="label" style={{ color: palette.buttonText }}>{operatorPlan.isPending ? 'THINKING…' : 'RUN'}</CommandText>
           </Pressable>
         </View>
-        {operatorAnswer ? <View style={{ backgroundColor: '#F8F3EA', padding: spacing.md, gap: spacing.sm }}><CommandText palette={palette} variant="body">{operatorAnswer}</CommandText>{pendingPreview.map((line) => <CommandText key={line} palette={palette} variant="caption">• {line}</CommandText>)}{pendingPlan ? <Pressable accessibilityRole="button" onPress={confirmOperator} style={{ backgroundColor: pendingPlan.risk === 'sensitive_write' ? palette.warning : '#7A5A35', paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignSelf: 'flex-start' }}><CommandText palette={palette} variant="label" style={{ color: '#FFFFFF' }}>{operatorExecute.isPending ? 'WORKING…' : pendingPlan.risk === 'sensitive_write' ? 'REVIEW & CONFIRM' : 'CONFIRM ACTION'}</CommandText></Pressable> : null}</View> : null}
+        {operatorAnswer ? <View style={{ backgroundColor: palette.surfaceSoft, padding: spacing.md, gap: spacing.sm }}><CommandText palette={palette} variant="body">{operatorAnswer}</CommandText>{pendingPreview.map((line) => <CommandText key={line} palette={palette} variant="caption">• {line}</CommandText>)}{pendingPlan ? <Pressable accessibilityRole="button" onPress={confirmOperator} style={{ backgroundColor: pendingPlan.risk === 'sensitive_write' ? palette.warning : palette.primary, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignSelf: 'flex-start' }}><CommandText palette={palette} variant="label" style={{ color: palette.buttonText }}>{operatorExecute.isPending ? 'WORKING…' : pendingPlan.risk === 'sensitive_write' ? 'REVIEW & CONFIRM' : 'CONFIRM ACTION'}</CommandText></Pressable> : null}</View> : null}
       </View>
 
       <View style={{ gap: spacing.sm }}>
@@ -157,11 +157,11 @@ export function WranglerIntelligencePanel({
         <View style={{ flexDirection: 'row', gap: spacing.sm }}>
           <TextInput value={question} onChangeText={setQuestion} placeholder="Ask about tonight's service…" placeholderTextColor={palette.muted} style={{ flex: 1, borderWidth: 1, borderColor: palette.border, backgroundColor: palette.surface, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, color: palette.muted }} onSubmitEditing={() => void submit()} />
           <Pressable
-            accessibilityRole="button" onPress={() => void submit()} style={{ backgroundColor: '#7A5A35', justifyContent: 'center', paddingHorizontal: spacing.md }}>
-            <CommandText palette={palette} variant="label" style={{ color: '#FFFFFF' }}>{ask.isPending ? 'ASKING…' : 'ASK'}</CommandText>
+            accessibilityRole="button" onPress={() => void submit()} style={{ backgroundColor: palette.primary, justifyContent: 'center', paddingHorizontal: spacing.md }}>
+            <CommandText palette={palette} variant="label" style={{ color: palette.buttonText }}>{ask.isPending ? 'ASKING…' : 'ASK'}</CommandText>
           </Pressable>
         </View>
-        {answer ? <View style={{ backgroundColor: '#F8F3EA', padding: spacing.md }}><CommandText palette={palette} variant="body">{answer}</CommandText></View> : null}
+        {answer ? <View style={{ backgroundColor: palette.surfaceSoft, padding: spacing.md }}><CommandText palette={palette} variant="body">{answer}</CommandText></View> : null}
       </View>
     </View>
   );

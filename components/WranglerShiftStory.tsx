@@ -52,7 +52,7 @@ export function WranglerShiftStory({ snapshot }: Props) {
           const accent = urgent ? palette.warning : priority.severity === 'watch' ? '#8A6B2D' : palette.success;
           return (
             <View key={priority.id} style={{ marginLeft: -11, paddingBottom: index === story.length - 1 ? 0 : spacing.lg, flexDirection: 'row', gap: spacing.md }}>
-              <View style={{ width: 23, height: 23, borderRadius: 12, backgroundColor: '#F8F3EA', borderWidth: 1, borderColor: accent, alignItems: 'center', justifyContent: 'center' }}>
+              <View style={{ width: 23, height: 23, borderRadius: 12, backgroundColor: palette.surfaceSoft, borderWidth: 1, borderColor: accent, alignItems: 'center', justifyContent: 'center' }}>
                 <MaterialCommunityIcons name={storyIcon(priority)} size={13} color={accent} />
               </View>
               <View style={{ flex: 1, gap: 3, paddingTop: 1 }}>

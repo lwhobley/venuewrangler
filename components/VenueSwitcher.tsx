@@ -243,7 +243,7 @@ const styles = StyleSheet.create({
   },
   venueCard: {
     backgroundColor: colors.surface,
-    borderColor: '#E4E7EC',
+    borderColor: colors.border,
     borderWidth: 1,
     borderRadius: 8,
   },
@@ -272,7 +272,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   roleChip: {
-    backgroundColor: '#F2F4F7',
+    backgroundColor: colors.surfaceSoft,
   },
   chipText: {
     fontSize: 10,

@@ -253,7 +253,7 @@ export function HomeWranglerSurface({ enabled }: Props) {
                 backgroundColor: mode === 'ask' ? palette.secondary : palette.surface,
               }}
             >
-              <CommandText palette={palette} variant="caption" style={{ color: mode === 'ask' ? '#FFFFFF' : palette.muted }}>
+              <CommandText palette={palette} variant="caption" style={{ color: mode === 'ask' ? palette.buttonText : palette.muted }}>
                 Ask
               </CommandText>
             </Pressable>
@@ -267,7 +267,7 @@ export function HomeWranglerSurface({ enabled }: Props) {
                 backgroundColor: mode === 'command' ? palette.secondary : palette.surface,
               }}
             >
-              <CommandText palette={palette} variant="caption" style={{ color: mode === 'command' ? '#FFFFFF' : palette.muted }}>
+              <CommandText palette={palette} variant="caption" style={{ color: mode === 'command' ? palette.buttonText : palette.muted }}>
                 Command
               </CommandText>
             </Pressable>
@@ -324,14 +324,14 @@ export function HomeWranglerSurface({ enabled }: Props) {
             accessibilityRole="button"
             onPress={() => handleSubmit()}
             style={{
-              backgroundColor: '#7A5A35',
+              backgroundColor: palette.primary,
               justifyContent: 'center',
               alignItems: 'center',
               paddingHorizontal: spacing.md,
               borderRadius: 4,
             }}
           >
-            <CommandText palette={palette} variant="label" style={{ color: '#FFFFFF' }}>
+            <CommandText palette={palette} variant="label" style={{ color: palette.buttonText }}>
               {ask.isPending || operatorPlan.isPending ? '...' : mode === 'ask' ? 'SUBMIT' : 'RUN'}
             </CommandText>
           </Pressable>
@@ -368,7 +368,7 @@ export function HomeWranglerSurface({ enabled }: Props) {
                 accessibilityRole="button"
                 onPress={confirmPendingPlan}
                 style={{
-                  backgroundColor: pendingPlan.risk === 'sensitive_write' ? palette.warning : '#7A5A35',
+                  backgroundColor: pendingPlan.risk === 'sensitive_write' ? palette.warning : palette.primary,
                   paddingVertical: 6,
                   paddingHorizontal: spacing.md,
                   alignSelf: 'flex-start',
@@ -376,7 +376,7 @@ export function HomeWranglerSurface({ enabled }: Props) {
                   marginTop: 4,
                 }}
               >
-                <CommandText palette={palette} variant="label" style={{ color: '#FFFFFF' }}>
+                <CommandText palette={palette} variant="label" style={{ color: palette.buttonText }}>
                   {operatorExecute.isPending ? 'WORKING…' : pendingPlan.risk === 'sensitive_write' ? 'REVIEW & CONFIRM' : 'CONFIRM ACTION'}
                 </CommandText>
               </Pressable>
