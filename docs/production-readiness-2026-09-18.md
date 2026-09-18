@@ -95,12 +95,14 @@ Windows local runs, with tests prevented from loading the production snapshot:
 - EAS is authenticated as `venuewrangler` but returned an authorization error
   reading the existing project. Project identifiers were preserved; native build
   verification requires account access.
+- After explicit user approval, production retention execution
+  `venue-wrangler-api-retention-jw7gw` completed successfully on 2026-09-18
+  at 18:00 UTC (one task succeeded; audit logs, wage records, and challenges
+  deleted: zero each). The repaired database reference is now
+  verified by execution, rather than configuration alone.
 
 ## Remaining release sign-off
 
-- Approve the concrete production retention execution. Automatic approval review
-  rejected it because normal cleanup can permanently delete expired audit and
-  wage records. No alternate execution path was used.
 - Obtain green serving-image drift evidence after deploying the verified candidate.
 - Build and deploy the immutable release image through the normal migration and
   candidate-health gates. Production migrations and traffic promotion have not
