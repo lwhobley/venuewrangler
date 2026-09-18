@@ -6,6 +6,7 @@ import { Text } from 'react-native-paper';
 import { ManagerGate } from './ManagerGate';
 
 vi.mock('react-native', () => ({
+  Platform: { OS: 'ios' },
   ScrollView: 'ScrollView',
 }));
 vi.mock('react-native-paper', () => ({

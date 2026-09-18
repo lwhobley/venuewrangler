@@ -34,6 +34,8 @@ vi.mock('../lib/auth-readiness', () => ({
 vi.mock('../lib/config', () => ({ config: { billingEnabled: true } }));
 vi.mock('../lib/permissions', () => ({ hasAllAccess: (value: unknown) => value === true }));
 vi.mock('../lib/theme', () => ({
+  radius: { pill: 9999 },
+  useDesignTheme: () => ({ primary: '#195C43', shadow: '#173E2B' }),
   colors: { background: '#000', muted: '#777', primary: '#fff', surface: '#111' },
   spacing: { lg: 24, sm: 8 },
 }));

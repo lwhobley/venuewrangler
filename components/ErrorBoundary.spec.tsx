@@ -10,6 +10,7 @@ vi.mock('../lib/auth-store', () => ({
   useAuthStore: { getState: () => ({ clearSession: vi.fn() }) },
 }));
 vi.mock('react-native', () => ({
+  Platform: { OS: 'ios' },
   ScrollView: 'ScrollView',
   View: 'View',
 }));
