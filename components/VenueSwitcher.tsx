@@ -1,6 +1,7 @@
+import { Button } from './AppButton';
 import { useRef, useState } from 'react';
 import { View, StyleSheet } from 'react-native';
-import { Button, Card, Chip, Dialog, Portal, Text, TextInput } from 'react-native-paper';
+import { Card, Chip, Dialog, Portal, Text, TextInput } from 'react-native-paper';
 import { router } from 'expo-router';
 import { useAuthStore, type AuthState } from '../lib/auth-store';
 import { ApiError } from '../lib/api-client';

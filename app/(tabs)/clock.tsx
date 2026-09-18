@@ -312,13 +312,15 @@ function ClockScreen() {
               disabled={busy}
               accessibilityRole="button"
               accessibilityState={{ disabled: busy, busy }}
-              style={{
+              style={({ pressed }) => ({
                 backgroundColor: accents[1].fg,
-                borderRadius: radius.sharp,
+                borderRadius: radius.pill,
                 paddingVertical: 20,
                 alignItems: 'center',
                 opacity: busy ? 0.7 : 1,
-              }}
+
+                shadowColor: colors.primary, shadowOpacity: busy ? 0 : pressed ? 0.5 : 0.18, shadowRadius: pressed ? 18 : 8, shadowOffset: { width: 0, height: pressed ? 2 : 5 }, elevation: busy ? 0 : pressed ? 8 : 4,
+              })}
             >
               <Text style={{ color: '#fff', fontSize: 18, fontWeight: '800' }}>
                 {busy ? t('clock.working') : t('clock.endBreak', { type: breakType === 'paid' ? t('clock.paid') : t('clock.unpaid') })}
@@ -335,13 +337,15 @@ function ClockScreen() {
                   ? undefined
                   : t('clock.a11y.outsideGeofenceHint')
               }
-              style={{
+              style={({ pressed }) => ({
                 backgroundColor: canClock ? (isClockedIn ? colors.danger : colors.secondary) : colors.border,
-                borderRadius: radius.sharp,
+                borderRadius: radius.pill,
                 paddingVertical: 20,
                 alignItems: 'center',
                 opacity: busy ? 0.7 : 1,
-              }}
+
+                shadowColor: isClockedIn ? colors.danger : colors.secondary, shadowOpacity: busy || !canClock ? 0 : pressed ? 0.5 : 0.18, shadowRadius: pressed ? 18 : 8, shadowOffset: { width: 0, height: pressed ? 2 : 5 }, elevation: busy || !canClock ? 0 : pressed ? 8 : 4,
+              })}
             >
               <Text style={{ color: '#fff', fontSize: 18, fontWeight: '800' }}>
                 {busy ? t('clock.working') : isClockedIn ? t('clock.punchOut') : t('clock.punchNow')}
@@ -365,14 +369,16 @@ function ClockScreen() {
                 );
               }}
               disabled={busy}
-              style={{
+              style={({ pressed }) => ({
                 backgroundColor: colors.primary,
-                borderRadius: radius.sharp,
+                borderRadius: radius.pill,
                 paddingVertical: 12,
                 alignItems: 'center',
                 marginTop: 4,
                 opacity: busy ? 0.7 : 1,
-              }}
+
+                shadowColor: colors.primary, shadowOpacity: busy ? 0 : pressed ? 0.5 : 0.18, shadowRadius: pressed ? 18 : 8, shadowOffset: { width: 0, height: pressed ? 2 : 5 }, elevation: busy ? 0 : pressed ? 8 : 4,
+              })}
             >
               <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700' }}>{t('clock.takeBreak')}</Text>
             </Pressable>

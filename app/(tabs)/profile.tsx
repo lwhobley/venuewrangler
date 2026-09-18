@@ -1,7 +1,8 @@
+import { Button } from '../../components/AppButton';
 import { Alert, Platform, ScrollView, View } from 'react-native';
 import { useRef, useState } from 'react';
 import { router } from 'expo-router';
-import { Button, Card, Text } from 'react-native-paper';
+import { Card, Text } from 'react-native-paper';
 import { ScreenErrorBoundary } from '../../components/ErrorBoundary';
 import { useMutation, useQuery } from '../../lib/railway-hooks';
 import { useAuthActions } from '../../lib/railway-hooks';

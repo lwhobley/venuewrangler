@@ -1,7 +1,8 @@
+import { Button } from '../../components/AppButton';
 import { useRef, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Button, Card, Text, TextInput } from 'react-native-paper';
+import { Card, Text, TextInput } from 'react-native-paper';
 import { appApi } from '../../lib/api-client';
 import { userFromProfile, venueFromAuth } from '../../lib/session-from-auth';
 import { useAuthStore, type AuthState } from '../../lib/auth-store';

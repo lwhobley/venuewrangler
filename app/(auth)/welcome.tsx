@@ -1,3 +1,4 @@
+import { Button } from '../../components/AppButton';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Animated,
@@ -10,7 +11,7 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Button, Text } from 'react-native-paper';
+import { Text } from 'react-native-paper';
 import { authColors as colors, spacing, type } from '../../lib/theme';
 import { useI18n } from '../../lib/i18n';
 

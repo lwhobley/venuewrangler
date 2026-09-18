@@ -1,6 +1,7 @@
+import { Button } from '../../components/AppButton';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Animated, Dimensions, PanResponder, Pressable, ScrollView, View } from 'react-native';
-import { Button, Chip, IconButton, Text, TextInput } from 'react-native-paper';
+import { Chip, IconButton, Text, TextInput } from 'react-native-paper';
 import { router } from 'expo-router';
 import { useMutation, useQuery } from '../../lib/railway-hooks';
 import { api } from '../../lib/railway-api';

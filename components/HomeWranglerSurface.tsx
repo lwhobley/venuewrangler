@@ -1,6 +1,7 @@
+import { Button } from './AppButton';
 import { useState } from 'react';
 import { Alert, Pressable, StyleSheet, TextInput, View } from 'react-native';
-import { Button } from 'react-native-paper';
+
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { CommandText } from './FutureUI';

@@ -1,7 +1,8 @@
+import { Button } from '../../components/AppButton';
 import { memo, type ComponentProps, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Pressable, ScrollView, View } from 'react-native';
 import { router } from 'expo-router';
-import { Button, HelperText, IconButton, Text, TextInput } from 'react-native-paper';
+import { HelperText, IconButton, Text, TextInput } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { ScreenErrorBoundary } from '../../components/ErrorBoundary';
 import { useMutation, useQuery } from '../../lib/railway-hooks';

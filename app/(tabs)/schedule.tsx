@@ -1,6 +1,7 @@
+import { Button } from '../../components/AppButton';
 import { useMemo, useRef, useState } from 'react';
 import { ScrollView, View } from 'react-native';
-import { Button, Card, SegmentedButtons, Snackbar, Text } from 'react-native-paper';
+import { Card, SegmentedButtons, Snackbar, Text } from 'react-native-paper';
 import { ScreenErrorBoundary } from '../../components/ErrorBoundary';
 import { AnimatedTab, SectionHeader } from '../../components/AppCard';
 import { useI18n } from '../../lib/i18n';

@@ -1,7 +1,8 @@
+import { Button } from '../../components/AppButton';
 import { useMemo, useRef, useState } from 'react';
 import { Alert, Linking, ScrollView, View } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
-import { ActivityIndicator, Button, Card, Chip, Searchbar, Text, TextInput } from 'react-native-paper';
+import { ActivityIndicator, Card, Chip, Searchbar, Text, TextInput } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { ScreenErrorBoundary } from '../../components/ErrorBoundary';
 import { InlineMessage } from '../../components/InlineMessage';

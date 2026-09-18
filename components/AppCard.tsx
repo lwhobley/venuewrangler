@@ -21,11 +21,7 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 
 type CardTone = 'default' | 'soft' | 'inset';
 
-// Editorial rule: no elevation shadows. `default` is a hairline-bordered
-// panel with sharp corners (the common case — a data table row group, a
-// form section); `soft` is the one genuine "card" surface, used sparingly,
-// with the soft radius and no border; `inset` is a flush, borderless
-// recessed panel for nesting content inside another surface.
+// Soft elevation separates panels while leaving room for glowing controls.
 export function AppCard({
   children,
   tone = 'default',
@@ -46,11 +42,15 @@ export function AppCard({
         {
           backgroundColor: background,
           borderRadius: tone === 'soft' ? radius.soft : radius.sharp,
-          borderTopWidth: tone === 'default' ? StyleSheet.hairlineWidth : 0,
-          borderBottomWidth: tone === 'default' ? StyleSheet.hairlineWidth : 0,
+          borderWidth: tone === 'default' ? StyleSheet.hairlineWidth : 0,
+          shadowColor: palette.shadow,
+          shadowOpacity: tone === 'inset' ? 0 : 0.07,
+          shadowRadius: 14,
+          shadowOffset: { width: 0, height: 5 },
+          elevation: tone === 'inset' ? 0 : 2,
           borderColor: palette.border,
           padding: padded ? spacing.lg : 0,
-          overflow: 'hidden',
+          overflow: 'visible',
         },
         style,
       ]}

@@ -1,6 +1,7 @@
+import { Button } from '../../components/AppButton';
 import { Linking, ScrollView, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Button, Text } from 'react-native-paper';
+import { Text } from 'react-native-paper';
 import { colors, spacing, type, authCardStyle } from '../../lib/theme';
 import { Kicker } from '../../components/AppCard';
 import { config } from '../../lib/config';

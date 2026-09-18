@@ -1,3 +1,4 @@
+import { Button } from '../AppButton';
 // Memoized presentational cards extracted from app/(tabs)/bar-stock.tsx.
 // These render heavy query-driven data (velocity, shrinkage, purchase order,
 // aging, movement history). Wrapping them in React.memo means they no longer
@@ -5,7 +6,7 @@
 // add-item form), which was the main render-cost issue on this screen.
 import { memo } from 'react';
 import { View } from 'react-native';
-import { Button, Card, Chip, Text } from 'react-native-paper';
+import { Card, Chip, Text } from 'react-native-paper';
 import { useQuery } from '../../lib/railway-hooks';
 import { api } from '../../lib/railway-api';
 import { accents, colors, spacing } from '../../lib/theme';

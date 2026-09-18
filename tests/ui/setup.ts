@@ -16,6 +16,11 @@ nodeRequire.extensions['.png'] = (module, filename) => {
 (globalThis as any).expo = (globalThis as any).expo || { EventEmitter: class {} };
 
 import { vi } from 'vitest';
+// Screen tests keep their Paper Button mocks; press feedback has dedicated
+// coverage in components/AppButton.spec.tsx.
+vi.mock('../../components/AppButton', async () => ({
+  Button: (await import('react-native-paper')).Button,
+}));
 vi.mock('expo-file-system/legacy', () => ({
   documentDirectory: '/mock/documents/',
   getInfoAsync: vi.fn().mockResolvedValue({ exists: false }),

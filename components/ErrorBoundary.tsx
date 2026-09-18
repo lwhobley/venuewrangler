@@ -1,6 +1,7 @@
+import { Button } from './AppButton';
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { View, ScrollView } from 'react-native';
-import { Button, Text } from 'react-native-paper';
+import { Text } from 'react-native-paper';
 import { router } from 'expo-router';
 import { colors, spacing, radius } from '../lib/theme';
 import { queryClient } from '../lib/query-client';

@@ -22,6 +22,7 @@ const dummyPalette: DesignPalette = {
 vi.mock('react-native', () => {
   const R = require('react');
   return {
+    Platform: { OS: 'ios' },
     Pressable: ({ children, onPress, disabled, style, accessibilityRole, ...props }: any) => {
       const computedStyle = typeof style === 'function' ? style({ pressed: false }) : style;
       return R.createElement('Pressable', { onPress, disabled, style: computedStyle, accessibilityRole, ...props }, children);

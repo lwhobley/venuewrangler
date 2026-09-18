@@ -1,6 +1,7 @@
+import { Button } from '../components/AppButton';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, View } from 'react-native';
-import { Button, Card, Chip, IconButton, Menu, Text, TextInput } from 'react-native-paper';
+import { Card, Chip, IconButton, Menu, Text, TextInput } from 'react-native-paper';
 import { ScreenErrorBoundary } from '../components/ErrorBoundary';
 import { router } from 'expo-router';
 import { useI18n } from '../lib/i18n';

@@ -1,7 +1,8 @@
+import { Button } from '../../components/AppButton';
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Button, Dialog, HelperText, IconButton, Portal, Text, TextInput } from 'react-native-paper';
+import { Dialog, HelperText, IconButton, Portal, Text, TextInput } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { ScreenErrorBoundary } from '../../components/ErrorBoundary';

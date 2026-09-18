@@ -1,6 +1,7 @@
+import { Button } from '../../components/AppButton';
 import { ScrollView, View } from 'react-native';
 import { router } from 'expo-router';
-import { Button, Card, Text } from 'react-native-paper';
+import { Card, Text } from 'react-native-paper';
 import { authCardStyle, authColors as colors, spacing, type } from '../../lib/theme';
 import { Kicker } from '../../components/AppCard';
 

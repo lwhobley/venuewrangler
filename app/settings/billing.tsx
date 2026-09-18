@@ -1,6 +1,7 @@
+import { Button } from '../../components/AppButton';
 import { useRef, useState } from 'react';
 import { Linking, View } from 'react-native';
-import { Button, Text } from 'react-native-paper';
+import { Text } from 'react-native-paper';
 import { router } from 'expo-router';
 import { useQuery } from '../../lib/railway-hooks';
 import { api } from '../../lib/railway-api';

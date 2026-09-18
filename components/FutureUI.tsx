@@ -1,5 +1,5 @@
 import { ReactNode } from 'react';
-import { Pressable, StyleProp, Text, TextStyle, View, ViewStyle } from 'react-native';
+import { Platform, Pressable, StyleProp, Text, TextStyle, View, ViewStyle } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { DesignPalette, radius, spacing } from '../lib/theme';
 
@@ -71,7 +71,7 @@ export function CommandText({
   return <Text style={[styles[variant], style]}>{children}</Text>;
 }
 
-// Compact, raised controls share the Olive Ledger selection color.
+// Raised pill controls carry the same press glow as the primary actions.
 export function CommandButton({
   palette,
   children,
@@ -103,20 +103,21 @@ export function CommandButton({
           minHeight: 44,
           paddingHorizontal: 12,
           paddingVertical: 7,
-          borderRadius: radius.sharp,
+          borderRadius: radius.pill,
           borderWidth: 0,
           borderColor: palette.border,
           backgroundColor: selected ? palette.primary : palette.surfaceSoft,
-          shadowColor: palette.shadow,
-          shadowOpacity: pressed || disabled ? 0 : 0.1,
-          shadowRadius: 4,
-          shadowOffset: { width: 0, height: 2 },
-          elevation: pressed || disabled ? 0 : 2,
+          shadowColor: pressed ? palette.primary : palette.shadow,
+          shadowOpacity: disabled ? 0 : pressed ? 0.45 : 0.16,
+          shadowRadius: pressed ? 16 : 6,
+          shadowOffset: { width: 0, height: pressed ? 2 : 4 },
+          elevation: disabled ? 0 : pressed ? 8 : 3,
+          ...(Platform.OS === 'web' ? { boxShadow: disabled ? 'none' : pressed ? `0 0 18px ${palette.primary}` : `0 4px 10px ${palette.shadow}25` } : {}),
           flexDirection: 'row',
           alignItems: 'center',
           justifyContent: 'center',
           gap: 8,
-          opacity: disabled ? 0.5 : pressed ? 0.7 : 1,
+          opacity: disabled ? 0.5 : 1,
         },
         style,
       ]}

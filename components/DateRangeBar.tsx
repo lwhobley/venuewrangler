@@ -1,6 +1,7 @@
+import { Button } from './AppButton';
 import { useMemo, useState } from 'react';
 import { View } from 'react-native';
-import { Button, Menu, Text } from 'react-native-paper';
+import { Menu, Text } from 'react-native-paper';
 import { zonedDayIndex, zonedIsoDate, zonedDateTimeMs } from '../lib/zoned-datetime';
 import { colors, spacing } from '../lib/theme';
 
