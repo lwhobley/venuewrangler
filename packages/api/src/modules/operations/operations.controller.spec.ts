@@ -339,7 +339,7 @@ describe('OperationsController', () => {
         { id: 'r2', partySize: 2, guestName: 'B', reservationTime: new Date('2026-07-15T20:00:00Z'), tags: [], notes: null, specialRequests: null },
       ]);
       prisma.scheduleShift.findMany.mockResolvedValue([
-        { status: 'scheduled' },
+        { id: 'shift-1', status: 'scheduled', profile: { fullName: 'Alex' }, jobTitle: 'Server', station: 'Dining', startMinutes: 1020, endMinutes: 1440, hourlyRateCents: 2200 },
         { status: 'scheduled' },
         { status: 'open' },
       ]);
@@ -393,6 +393,11 @@ describe('OperationsController', () => {
       expect(result.posCovers).toBe(5);
       expect(result.salesCents).toBe(3000);
       expect(result.scheduledCount).toBe(2);
+      expect(result.shifts[0]).toEqual({ id: 'shift-1', status: 'scheduled', staffName: 'Alex', jobTitle: 'Server', station: 'Dining', startMinutes: 1020, endMinutes: 1440 });
+      expect(prisma.scheduleShift.findMany).toHaveBeenCalledWith(expect.objectContaining({
+        where: expect.objectContaining({ venueId: 'venue-1' }),
+        include: { profile: { select: { fullName: true } } },
+      }));
       expect(result.openShiftCount).toBe(1);
       expect(result.clockedInCount).toBe(4);
       expect(result.pendingRequestCount).toBe(2);

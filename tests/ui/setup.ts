@@ -12,6 +12,7 @@ nodeRequire.extensions['.png'] = (module, filename) => {
 };
 
 (globalThis as any).__DEV__ = true;
+(globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 (globalThis as any).expo = (globalThis as any).expo || { EventEmitter: class {} };
 
 import { vi } from 'vitest';

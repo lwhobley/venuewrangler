@@ -321,6 +321,30 @@ export class SchedulingAssignmentService {
     return { added };
   }
 
+  async copyPreviousWeek(args: { venueId: string; weekStart: string }) {
+    const date = new Date(`${args.weekStart}T00:00:00Z`);
+    date.setUTCDate(date.getUTCDate() - 7);
+    const previousWeek = date.toISOString().slice(0, 10);
+    const result = await withSerializableRetry(this.prisma, async (tx) => {
+      await this.lockBulkSchedule(tx, args.venueId, args.weekStart);
+      const [source, existing] = await Promise.all([
+        tx.scheduleShift.findMany({ where: { venueId: args.venueId, weekStart: previousWeek } }),
+        tx.scheduleShift.findMany({ where: { venueId: args.venueId, weekStart: args.weekStart } }),
+      ]);
+      const conflicts: Array<{ jobTitle: string; dayIndex: number; reason: string }> = [];
+      let added = 0;
+      for (const shift of source) {
+        const overlap = existing.some((row) => row.profileId && shift.profileId && row.profileId === shift.profileId && row.dayIndex === shift.dayIndex && row.startMinutes < shift.endMinutes && shift.startMinutes < row.endMinutes);
+        if (overlap) { conflicts.push({ jobTitle: shift.jobTitle, dayIndex: shift.dayIndex, reason: 'overlapping shift already exists' }); continue; }
+        await tx.scheduleShift.create({ data: { venueId: args.venueId, weekStart: args.weekStart, dayIndex: shift.dayIndex, startMinutes: shift.startMinutes, endMinutes: shift.endMinutes, jobTitle: shift.jobTitle, station: shift.station, profileId: shift.profileId, status: shift.profileId ? 'scheduled' : 'open', notes: shift.notes } });
+        added += 1;
+      }
+      return { added, conflicts, sourceWeek: previousWeek };
+    });
+    await this.markScheduleEdited(args.venueId);
+    return result;
+  }
+
   async clearWeek(args: {
     venueId: string;
     weekStart: string;

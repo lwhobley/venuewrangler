@@ -28,6 +28,10 @@ export function venueFromApi(venue: {
   geofenceRadiusM?: number;
   geofence_radius_m?: number;
   timezone?: string | null;
+  earlyClockInWindowMin?: number;
+  early_clock_in_window_min?: number;
+  clockTabletModeEnabled?: boolean;
+  clock_tablet_mode_enabled?: boolean;
 }): Venue {
   return {
     id: venue._id ?? venue.id ?? '',
@@ -37,6 +41,10 @@ export function venueFromApi(venue: {
     geofenceRadiusM: venue.geofenceRadiusM ?? venue.geofence_radius_m ?? 0,
     geofence_radius_m: venue.geofenceRadiusM ?? venue.geofence_radius_m ?? 0,
     timezone: venue.timezone ?? null,
+    earlyClockInWindowMin: venue.earlyClockInWindowMin ?? venue.early_clock_in_window_min ?? 10,
+    early_clock_in_window_min: venue.earlyClockInWindowMin ?? venue.early_clock_in_window_min ?? 10,
+    clockTabletModeEnabled: venue.clockTabletModeEnabled ?? venue.clock_tablet_mode_enabled ?? false,
+    clock_tablet_mode_enabled: venue.clockTabletModeEnabled ?? venue.clock_tablet_mode_enabled ?? false,
   };
 }
 

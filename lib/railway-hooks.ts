@@ -123,7 +123,7 @@ const mutationRoutes: Record<string, Route> = {
   'app.updateVenue': {
     path: '/v1/app/venue',
     method: 'PATCH',
-    body: ({ name, latitude, longitude, geofenceRadiusM, timezone }) => ({ name, latitude, longitude, geofenceRadiusM, timezone }),
+    body: ({ name, latitude, longitude, geofenceRadiusM, timezone, earlyClockInWindowMin, clockTabletModeEnabled }) => ({ name, latitude, longitude, geofenceRadiusM, timezone, earlyClockInWindowMin, clockTabletModeEnabled }),
     invalidate: [['app', 'getMe'], ['app', 'getDashboard']],
   },
   'app.rotateVenueJoinCode': {
@@ -360,6 +360,7 @@ const mutationRoutes: Record<string, Route> = {
     invalidate: [['scheduling', 'listScheduleTemplates']],
   },
   'scheduling.copyDayShifts': { path: '/v1/scheduling/copy-day', method: 'POST', body: stripVenue, invalidate: scheduleInvalidations() },
+  'scheduling.copyPreviousWeek': { path: '/v1/scheduling/copy-previous-week', method: 'POST', body: ({ weekStart }) => ({ weekStart }), invalidate: scheduleInvalidations() },
   'scheduling.clearWeek': { path: '/v1/scheduling/clear-week', method: 'POST', body: ({ weekStart }) => ({ weekStart }), invalidate: scheduleInvalidations() },
   'scheduling.restoreShifts': { path: '/v1/scheduling/restore-shifts', method: 'POST', body: ({ shifts, weekStart }) => ({ shifts, weekStart }), invalidate: scheduleInvalidations() },
   'scheduling.addScheduleMemoryNote': {

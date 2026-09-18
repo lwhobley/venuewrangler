@@ -17,6 +17,8 @@ const state = vi.hoisted(() => ({
   push: vi.fn(),
 }));
 
+vi.mock('../../lib/config', () => ({ config: { restaurantCoreOnly: false } }));
+
 vi.mock('react-native', () => ({
   Pressable: 'Pressable', ScrollView: 'ScrollView', View: 'View',
   StyleSheet: { create: (s: unknown) => s, hairlineWidth: 1 },
@@ -42,6 +44,7 @@ vi.mock('../../lib/auth-store', () => ({ useAuthStore: (select: (s: any) => unkn
 vi.mock('../../lib/usePushNotifications', () => ({ usePushNotifications: () => undefined }));
 vi.mock('../../lib/auth-readiness', () => ({ useAuthenticatedSession: () => ({ isReady: true }) }));
 vi.mock('../../lib/theme', () => ({
+  colors: { background: '#000', border: '#333', primary: '#0f0', muted: '#777', charcoal: '#222', surface: '#111' },
   spacing: { lg: 24, md: 16, sm: 8, xl: 32, xs: 4, xxl: 48 },
   useDesignTheme: () => ({ background: '#000', divider: '#333', primary: '#0f0', warning: '#fa0', success: '#0a0', muted: '#777', border: '#333', charcoal: '#222', surface: '#111' }),
 }));
@@ -60,6 +63,7 @@ vi.mock('../../lib/railway-hooks', () => ({
     if (ref === 'getManagerDashboard') return state.managerDashboard;
     if (ref === 'getDailyBrief') return state.dailyBrief;
     if (ref === 'getCommandCenter') return state.commandCenter;
+    if (ref === 'getNotifications') return { data: state.notifications, error: null, isLoading: false, refetch: vi.fn() };
     return { data: undefined, error: null, isLoading: false, refetch: vi.fn() };
   },
   useQuery: (ref: string) => (ref === 'getNotifications' ? state.notifications : undefined),

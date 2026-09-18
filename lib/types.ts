@@ -10,6 +10,10 @@ export type Venue = {
   geofenceRadiusM?: number;
   geofence_radius_m?: number;
   timezone?: string | null;
+  earlyClockInWindowMin?: number;
+  early_clock_in_window_min?: number;
+  clockTabletModeEnabled?: boolean;
+  clock_tablet_mode_enabled?: boolean;
 };
 
 export type VenueSummary = {

@@ -38,6 +38,30 @@ Serving revisions must not contain `DATABASE_DIRECT_URL`; that owner/direct
 credential belongs only on the single-run migration job. Production startup
 also requires TLS (`sslmode=require`) on `DATABASE_URL`.
 
+Pin serving and release-job credentials to numbered Secret Manager versions.
+The deployment workflow copies the traffic-serving revision's database version
+to both jobs; migration's direct credential must also be pinned and address the
+same Supabase project, database, and schema. Never use `latest` for these
+credentials: a secret rotation previously redirected retention to a database
+without `RetainedTimeEntry` while the serving API remained on version `1`.
+Retention now checks the migration history before it can delete any records.
+
+## Client edition and clock behavior
+
+EAS preview/production and the hosted web build explicitly select the restaurant
+edition with `EXPO_PUBLIC_RESTAURANT_CORE_ONLY=true`. Select
+`restaurant_core_only=true` in API deployment to match. Full venue builds set
+both client/API edition flags to false and retain the original dashboard.
+Unconfigured local flags default to the full venue edition on both sides.
+
+Clock punches require an online response. Failed requests display an error and
+are never automatically replayed under another identity or at a later punch
+time. Staff should check their current status before retrying after an ambiguous
+network failure and request a time correction for a missed punch. Shared tablet
+clock mode is not exposed until its identity and punch workflow is implemented.
+The supported native production platform remains iOS; Android is not signed off
+until Play Integrity verification is implemented.
+
 ## Document malware scanning
 
 Production document uploads stream every validated file through a private

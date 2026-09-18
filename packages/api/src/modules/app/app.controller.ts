@@ -165,6 +165,16 @@ class UpdateVenueDto {
   @IsOptional()
   @MaxLength(100)
   timezone?: string;
+
+  @IsNumber()
+  @Min(0)
+  @Max(120)
+  @IsOptional()
+  earlyClockInWindowMin?: number;
+
+  @IsBoolean()
+  @IsOptional()
+  clockTabletModeEnabled?: boolean;
 }
 
 class BreakStartDto {
@@ -576,6 +586,8 @@ export class AppController {
         ...(body.longitude !== undefined ? { longitude: body.longitude } : {}),
         ...(body.geofenceRadiusM !== undefined ? { geofenceRadiusM: Math.max(25, Math.min(2000, body.geofenceRadiusM)) } : {}),
         ...(nextTimezone ? { timezone: nextTimezone } : {}),
+        ...(body.earlyClockInWindowMin !== undefined ? { earlyClockInWindowMin: Math.max(0, Math.min(120, body.earlyClockInWindowMin)) } : {}),
+        ...(body.clockTabletModeEnabled !== undefined ? { clockTabletModeEnabled: body.clockTabletModeEnabled } : {}),
       },
     });
     return mapVenue(venue);
@@ -747,7 +759,8 @@ export class AppController {
         ...(range ? { clockInAt: { gte: range.start, lt: range.end } } : {}),
       },
       include: { profile: true },
-      orderBy: { clockInAt: 'desc' },
+      // Process oldest first so weekly regular/overtime allocation is stable.
+      orderBy: { clockInAt: 'asc' },
       take: MAX_TIME_ENTRIES_CSV_ROWS + 1,
     });
     // This used to silently cap at 5000 and return whatever fit — ordered
@@ -758,7 +771,8 @@ export class AppController {
     if (entries.length > MAX_TIME_ENTRIES_CSV_ROWS) {
       throw new BadRequestException('This export is too large. Choose a smaller date range; no partial export was generated.');
     }
-    const header = 'id,memberId,memberName,clockInAt,clockOutAt,unpaidBreakHours,hoursWorked\n';
+    const weeklyTotals = new Map<string, number>();
+    const header = 'id,memberId,memberName,role,date,clockInAt,clockOutAt,unpaidBreakHours,hoursWorked,regularHours,overtimeHours\n';
     const rows = entries
       .map((e) => {
         // Unpaid breaks were never deducted here, so this export disagreed with
@@ -770,14 +784,24 @@ export class AppController {
         const hours = e.clockOutAt
           ? Math.round((Math.max(0, e.clockOutAt.getTime() - e.clockInAt.getTime() - unpaidMs) / 3600000) * 100) / 100
           : '';
+        const worked = typeof hours === 'number' ? hours : 0;
+        const weekKey = `${e.profileId ?? 'former'}:${weekStartFor(e.clockInAt.toISOString().slice(0, 10))}`;
+        const prior = weeklyTotals.get(weekKey) ?? 0;
+        const regular = Math.min(worked, Math.max(0, 40 - prior));
+        const overtime = Math.max(0, worked - regular);
+        weeklyTotals.set(weekKey, prior + worked);
         return [
           csvCell(e.id),
           csvCell(e.profileId ?? ''),
           csvCell(e.profile?.fullName ?? e.profileFullName ?? 'Former staff'),
+          csvCell(e.profile?.role ?? ''),
+          csvCell(e.clockInAt.toISOString().slice(0, 10)),
           csvCell(e.clockInAt.toISOString()),
           csvCell(e.clockOutAt?.toISOString() ?? ''),
           csvCell(unpaidHours),
           csvCell(hours),
+          csvCell(Math.round(regular * 100) / 100),
+          csvCell(Math.round(overtime * 100) / 100),
         ].join(',');
       })
       .join('\r\n');

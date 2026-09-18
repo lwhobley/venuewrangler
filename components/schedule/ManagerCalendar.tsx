@@ -163,6 +163,7 @@ export function ManagerCalendar({ venueId, timeZone }: { venueId: Id<'venues'>; 
   const applyTemplate = useMutation(api.scheduling.applyScheduleTemplate);
   const deleteTemplate = useMutation(api.scheduling.deleteScheduleTemplate);
   const copyDayShifts = useMutation(api.scheduling.copyDayShifts);
+  const copyPreviousWeek = useMutation(api.scheduling.copyPreviousWeek);
   const clearWeek = useMutation(api.scheduling.clearWeek);
   const setLaborBudget = useMutation(api.scheduling.setLaborBudget);
   const restoreShifts = useMutation(api.scheduling.restoreShifts);
@@ -518,8 +519,10 @@ export function ManagerCalendar({ venueId, timeZone }: { venueId: Id<'venues'>; 
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
         {[
           { label: 'Scheduled Hours', value: `${totalHours}h`, tone: overBudget ? colors.danger : colors.primary },
+          { label: 'Estimated Labor', value: data?.estimatedLaborCents == null ? '—' : `$${(data.estimatedLaborCents / 100).toFixed(2)}`, tone: colors.secondary },
           { label: 'Open Shifts', value: String(openShifts.length), tone: openShifts.length ? colors.warning : colors.success },
           { label: 'Conflicts', value: String(conflicts.length), tone: conflicts.length ? colors.danger : colors.success },
+          { label: 'Break / OT flags', value: String((data?.warnings?.break?.length ?? 0) + (data?.warnings?.overtime?.length ?? 0)), tone: (data?.warnings?.break?.length || data?.warnings?.overtime?.length) ? colors.warning : colors.success },
           { label: 'Pending Approvals', value: String(requests.length), tone: requests.length ? colors.warning : colors.primary },
         ].map((metric) => (
           <View key={metric.label} style={{ minWidth: 145, flex: 1, padding: spacing.sm, borderRadius: 8, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -810,6 +813,10 @@ export function ManagerCalendar({ venueId, timeZone }: { venueId: Id<'venues'>; 
                   onDismiss={() => setMenuOpen(false)}
                   anchor={<Button mode="outlined" compact textColor={colors.primary} icon="menu" onPress={() => setMenuOpen(true)}>Tools</Button>}
                 >
+                  <Menu.Item
+                    title="Copy last week"
+                    onPress={() => { setMenuOpen(false); void safe(async () => { const r = await copyPreviousWeek({ venueId, weekStart: selectedWeekStart }); markEdited(); flash(r.conflicts?.length ? `Copied ${r.added} shifts with ${r.conflicts.length} conflicts.` : `Copied ${r.added} shifts from last week.`); }); }}
+                  />
                   <Menu.Item
                     title="Duplicate Monday to week"
                     onPress={async () => {

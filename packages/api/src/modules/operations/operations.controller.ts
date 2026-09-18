@@ -411,6 +411,7 @@ export class OperationsController {
           ],
         },
         orderBy: [{ startMinutes: 'asc' }, { jobTitle: 'asc' }],
+        include: { profile: { select: { fullName: true } } },
         take: 100,
       }),
       this.prisma.timeEntry.findMany({
@@ -531,6 +532,15 @@ export class OperationsController {
       posCovers,
       salesCents,
       scheduledCount,
+      shifts: shifts.map((shift) => ({
+        id: shift.id,
+        staffName: shift.profile?.fullName ?? null,
+        jobTitle: shift.jobTitle,
+        station: shift.station,
+        startMinutes: shift.startMinutes,
+        endMinutes: shift.endMinutes,
+        status: shift.status,
+      })),
       openShiftCount,
       clockedInCount: openTimeEntries.length,
       pendingRequestCount: pendingRequests.length,

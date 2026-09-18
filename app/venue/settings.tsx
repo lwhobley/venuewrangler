@@ -33,6 +33,7 @@ function VenueSettingsScreen() {
   const [lng, setLng] = useState(venue ? String(venue.longitude) : '');
   const [radius, setRadius] = useState(venue?.geofence_radius_m ?? 120);
   const [timezone, setTimezone] = useState(venue?.timezone ?? '');
+  const [earlyClockInWindowMin, setEarlyClockInWindowMin] = useState(venue?.earlyClockInWindowMin ?? 10);
   const [locating, setLocating] = useState(false);
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
@@ -47,6 +48,7 @@ function VenueSettingsScreen() {
     setLng(String(venue.longitude));
     setRadius(venue.geofence_radius_m ?? 120);
     setTimezone(venue.timezone ?? '');
+    setEarlyClockInWindowMin(venue.earlyClockInWindowMin ?? 10);
   }, [venue]);
 
   const useMyLocation = async () => {
@@ -85,7 +87,7 @@ function VenueSettingsScreen() {
     savingRef.current = true;
     setSaving(true);
     try {
-      const updated = await updateVenue({ venueId: venue.id, name: name.trim() || undefined, latitude, longitude, geofenceRadiusM: radius, timezone: timezone.trim() || undefined });
+      const updated = await updateVenue({ venueId: venue.id, name: name.trim() || undefined, latitude, longitude, geofenceRadiusM: radius, timezone: timezone.trim() || undefined, earlyClockInWindowMin });
       setVenue(venueFromApi(updated));
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
@@ -163,6 +165,18 @@ function VenueSettingsScreen() {
           <SectionHeader title={t('venueSettings.detailsSection')} />
           <TextInput label={t('venueSettings.venueNameLabel')} value={name} onChangeText={setName} mode="outlined" style={{ backgroundColor: colors.surface }} />
           <TextInput label="Timezone (IANA)" value={timezone} onChangeText={setTimezone} mode="outlined" autoCapitalize="none" placeholder="America/New_York" style={{ backgroundColor: colors.surface }} />
+      </AppCard>
+
+      <AppCard>
+        <SectionHeader title="Sales sync" />
+        <Text style={{ color: colors.muted }}>Not connected. Connect a supported POS later to compare last-night sales with labor.</Text>
+      </AppCard>
+
+      <AppCard>
+        <SectionHeader title="Time clock" />
+        <Text style={{ color: colors.muted }}>Allow staff to clock in before their scheduled shift.</Text>
+        <TextInput label="Early clock-in window (minutes)" value={String(earlyClockInWindowMin)} onChangeText={(value) => setEarlyClockInWindowMin(Math.max(0, Math.min(120, Number(value) || 0)))} mode="outlined" keyboardType="number-pad" style={{ backgroundColor: colors.surface }} />
+        <Text style={{ color: colors.muted, fontSize: 12 }}>Enables the shared-device flow when staff PIN authentication is configured.</Text>
       </AppCard>
 
       <AppCard>
