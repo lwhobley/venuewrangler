@@ -1,7 +1,8 @@
+import { Button } from '../../components/AppButton';
 import { useEffect, useRef, useState } from 'react';
 import { Linking, ScrollView, StyleSheet, View } from 'react-native';
 import { router } from 'expo-router';
-import { Button, Card, Text } from 'react-native-paper';
+import { Card, Text } from 'react-native-paper';
 import { appApi } from '../../lib/api-client';
 import { useAuthenticatedSession } from '../../lib/auth-readiness';
 import { colors, spacing, radius, type } from '../../lib/theme';

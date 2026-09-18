@@ -28,8 +28,10 @@ function TonightScreen() {
   if (!isReady) return <View style={styles.center}><ActivityIndicator color={colors.primary} /></View>;
   return <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
     <QueryBoundary state={dashboard}>{() => <>
+    <View style={styles.hero}>
     <Text variant="headlineMedium" style={styles.title}>{canManage ? 'Tonight' : 'My schedule'}</Text>
-    <Text style={styles.subtitle}>{venue?.name ?? 'Your restaurant'}</Text>
+    <Text style={styles.heroSubtitle}>{venue?.name ?? 'Your restaurant'}</Text>
+    </View>
     {canManage ? <>
       <QueryBoundary state={manager} feature="Tonight’s team">{(data) => <>
         <Text style={styles.subtitle}>{data.date}</Text>
@@ -44,4 +46,4 @@ function TonightScreen() {
 function Metric({ label, value }: { label: string; value: string }) { return <View style={styles.metric}><Text variant="headlineSmall" style={styles.metricValue}>{value}</Text><Text style={styles.muted}>{label}</Text></View>; }
 function formatMinutes(value?: number) { if (value == null) return '—'; const h = Math.floor(value / 60) % 24; const m = value % 60; return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`; }
 export default function HomeScreen() { return config.restaurantCoreOnly ? <ScreenErrorBoundary><TonightScreen /></ScreenErrorBoundary> : <FullVenueHome />; }
-const styles = StyleSheet.create({ screen: { flex: 1, backgroundColor: colors.background }, content: { padding: spacing.lg, gap: spacing.md, paddingBottom: spacing.xxl }, title: { color: colors.charcoal, fontWeight: '700' }, subtitle: { color: colors.muted }, metrics: { flexDirection: 'row', gap: spacing.sm }, metric: { flex: 1, backgroundColor: colors.surface, padding: spacing.md, borderRadius: 12 }, metricValue: { color: colors.primary, fontWeight: '700' }, muted: { color: colors.muted, marginTop: 4 }, card: { backgroundColor: colors.surface }, row: { paddingVertical: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border }, name: { fontWeight: '700' }, center: { flex: 1, alignItems: 'center', justifyContent: 'center' } });
+const styles = StyleSheet.create({ screen: { flex: 1, backgroundColor: colors.background }, content: { padding: spacing.lg, gap: spacing.md, paddingBottom: spacing.xxl }, hero: { backgroundColor: colors.primary, borderRadius: 28, padding: 28, gap: 8, shadowColor: colors.shadow, shadowOpacity: 0.16, shadowRadius: 18, shadowOffset: { width: 0, height: 8 }, elevation: 4 }, title: { color: colors.buttonText, fontSize: 40, lineHeight: 46, letterSpacing: -1.2, fontWeight: '800' }, heroSubtitle: { color: '#D3F6B0', fontSize: 16, fontWeight: '600' }, subtitle: { color: colors.muted }, metrics: { flexDirection: 'row', gap: spacing.sm }, metric: { flex: 1, backgroundColor: colors.surface, padding: spacing.lg, borderRadius: 20, borderWidth: 1, borderColor: colors.border }, metricValue: { color: colors.primary, fontWeight: '700' }, muted: { color: colors.muted, marginTop: 4 }, card: { backgroundColor: colors.surface, borderRadius: 24, paddingVertical: 8 }, row: { paddingVertical: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border }, name: { fontWeight: '700' }, center: { flex: 1, alignItems: 'center', justifyContent: 'center' } });

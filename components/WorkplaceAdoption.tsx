@@ -1,5 +1,6 @@
+import { Button } from './AppButton';
 import { useEffect, useRef, useState } from 'react';
-import { Button, Card, Text } from 'react-native-paper';
+import { Card, Text } from 'react-native-paper';
 import { apiRequest, type ApiProfile, type ApiVenue } from '../lib/api-client';
 import { useAuthStore } from '../lib/auth-store';
 import { userFromProfile, venueFromAuth } from '../lib/session-from-auth';

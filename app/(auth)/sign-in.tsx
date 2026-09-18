@@ -1,8 +1,9 @@
+import { Button } from '../../components/AppButton';
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Image, KeyboardAvoidingView, Linking, Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { notifySuccess } from '../../lib/feedback';
-import { Button, Card, Checkbox, Chip, SegmentedButtons, Text, TextInput } from 'react-native-paper';
+import { Card, Checkbox, Chip, SegmentedButtons, Text, TextInput } from 'react-native-paper';
 import { appApi } from '../../lib/api-client';
 import { userFromProfile, venueFromAuth } from '../../lib/session-from-auth';
 import { authCardStyle, authColors, spacing, type } from '../../lib/theme';
@@ -162,11 +163,13 @@ export default function SignInScreen() {
 
   return (
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: authColors.background }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.ambientHalo} />
       <ScrollView contentContainerStyle={{ flexGrow: 1, padding: spacing.lg, justifyContent: 'center', gap: spacing.md }}>
+        <View style={styles.authShell}>
         <View style={{ marginBottom: spacing.sm, alignItems: 'center', gap: 10 }}>
           <Image source={logoSource} style={styles.logo} />
           <Kicker>{flow === 'signUp' ? t('signIn.kickerSignUp') : t('signIn.kickerSignIn')}</Kicker>
-          <Text style={{ ...type.title, color: authColors.text }}>{t('signIn.brand')}</Text>
+          <Text style={{ ...type.title, fontSize: 40, lineHeight: 44, fontWeight: '800', letterSpacing: -1, textAlign: 'center', color: authColors.text }}>{t('signIn.brand')}</Text>
           {!inviteToken ? (
             <Text variant="bodyMedium" style={{ color: authColors.muted, marginTop: 6, textAlign: 'center' }}>
               {t('signIn.subtitle')}
@@ -246,19 +249,28 @@ export default function SignInScreen() {
           <Text style={{ color: authColors.muted, fontSize: 12, fontWeight: '700' }}>{t('common.venueWrangler')}</Text>
           <Text style={{ color: authColors.muted, fontSize: 11 }}>{t('common.loungeability')}</Text>
         </View>
+      </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
+  ambientHalo: { position: 'absolute', width: 360, height: 360, borderRadius: 180, top: -160, right: -140, backgroundColor: authColors.highlight, opacity: 0.8 },
+  authShell: { width: '100%', maxWidth: 480, alignSelf: 'center', gap: spacing.md, paddingVertical: spacing.xl },
   logo: {
-    width: '100%',
-    maxWidth: 340,
-    aspectRatio: 1024 / 559,
+    width: 180,
+    height: 98,
+    borderRadius: 20,
     resizeMode: 'contain',
   },
   authCard: {
     ...authCardStyle,
+    paddingVertical: 12,
+    shadowColor: '#173E2B',
+    shadowOpacity: 0.1,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 4,
   },
 });

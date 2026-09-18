@@ -12,11 +12,8 @@ const mocks = vi.hoisted(() => ({
   logoutPurchases: vi.fn().mockResolvedValue(undefined),
 }));
 
-// Enumerating exports here means any new import into the layout tree breaks
-// collection rather than an assertion — SportsBrandIntro calling
-// StyleSheet.create at module scope took this whole suite to zero tests, and a
-// suite contributing nothing looks the same as a suite passing. Spread the real
-// module and override only what the test actually pins.
+// Preserve native exports used by the layout tree; override only the behavior
+// pinned by these bootstrap tests.
 vi.mock('react-native', async (importOriginal) => ({
   ...(await importOriginal<typeof import('react-native')>()),
   Platform: mocks.platform,

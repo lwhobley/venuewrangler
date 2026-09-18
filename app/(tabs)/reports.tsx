@@ -1,6 +1,7 @@
+import { Button } from '../../components/AppButton';
 import { useState } from 'react';
 import { ScrollView, View } from 'react-native';
-import { Button, Card, Text } from 'react-native-paper';
+import { Card, Text } from 'react-native-paper';
 import { router } from 'expo-router';
 import { useMutation, useQuery, useQueryState } from '../../lib/railway-hooks';
 import { api } from '../../lib/railway-api';

@@ -1,7 +1,8 @@
+import { Button } from '../../components/AppButton';
 import { useCallback, useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Button, Card, Text } from 'react-native-paper';
+import { Card, Text } from 'react-native-paper';
 import { useQueryClient } from '@tanstack/react-query';
 import { appApi } from '../../lib/api-client';
 import { venueFromApi } from '../../lib/session-from-auth';

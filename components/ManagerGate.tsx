@@ -1,3 +1,4 @@
+import { Button } from './AppButton';
 /**
  * Shared component for screens that require manager/admin access.
  * Renders a permission message when the user lacks access, or the
@@ -7,7 +8,7 @@
  */
 import type { ReactNode } from 'react';
 import { ScrollView } from 'react-native';
-import { Button, Text } from 'react-native-paper';
+import { Text } from 'react-native-paper';
 import { colors, spacing } from '../lib/theme';
 
 type ManagerGateProps = {

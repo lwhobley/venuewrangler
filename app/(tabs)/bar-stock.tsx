@@ -1,7 +1,8 @@
+import { Button } from '../../components/AppButton';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { Modal, Platform, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { useFocusEffect } from 'expo-router';
-import { Button, Card, Chip, Text, TextInput } from 'react-native-paper';
+import { Card, Chip, Text, TextInput } from 'react-native-paper';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';

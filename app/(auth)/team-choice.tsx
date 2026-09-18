@@ -1,6 +1,7 @@
+import { Button } from '../../components/AppButton';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { Redirect, router } from 'expo-router';
-import { Button, Card, Text } from 'react-native-paper';
+import { Card, Text } from 'react-native-paper';
 import { authCardStyle, authColors as colors, spacing, type } from '../../lib/theme';
 import { Kicker } from '../../components/AppCard';
 import { useAuthStore, type AuthState } from '../../lib/auth-store';

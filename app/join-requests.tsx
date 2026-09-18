@@ -1,7 +1,8 @@
+import { Button } from '../components/AppButton';
 import { useCallback, useRef, useState } from 'react';
 import { Alert, FlatList, SafeAreaView, StyleSheet, View } from 'react-native';
 import { router } from 'expo-router';
-import { ActivityIndicator, Button, Text } from 'react-native-paper';
+import { ActivityIndicator, Text } from 'react-native-paper';
 import { useQuery as useRQQuery, useMutation as useRQMutation, useQueryClient } from '@tanstack/react-query';
 import { appApi } from '../lib/api-client';
 import { spacing, type, useDesignTheme } from '../lib/theme';

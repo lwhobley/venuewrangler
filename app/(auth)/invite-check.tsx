@@ -1,3 +1,4 @@
+import { Button } from '../../components/AppButton';
 import { useState } from 'react';
 import {
   Alert,
@@ -9,7 +10,7 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { notifySuccess } from '../../lib/feedback';
-import { Button, Card, Text, TextInput } from 'react-native-paper';
+import { Card, Text, TextInput } from 'react-native-paper';
 import { appApi } from '../../lib/api-client';
 import { authCardStyle, authColors as colors, authInputProps as inputProps, spacing, type } from '../../lib/theme';
 import { Kicker } from '../../components/AppCard';

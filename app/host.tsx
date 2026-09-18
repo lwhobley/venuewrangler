@@ -1,5 +1,6 @@
+import { Button } from '../components/AppButton';
 import { ScrollView, View } from 'react-native';
-import { Button, Chip, Text } from 'react-native-paper';
+import { Chip, Text } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { useQuery } from '../lib/railway-hooks';
 import { api } from '../lib/railway-api';

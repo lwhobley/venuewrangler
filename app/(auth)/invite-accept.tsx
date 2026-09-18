@@ -1,3 +1,4 @@
+import { Button } from '../../components/AppButton';
 import { useRef, useState } from 'react';
 import {
   Alert,
@@ -10,7 +11,7 @@ import {
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { notifySuccess } from '../../lib/feedback';
-import { Button, Card, Checkbox, Text, TextInput } from 'react-native-paper';
+import { Card, Checkbox, Text, TextInput } from 'react-native-paper';
 import { appApi } from '../../lib/api-client';
 import { userFromProfile, venueFromAuth } from '../../lib/session-from-auth';
 import { authCardStyle, authColors as colors, authInputProps as inputProps, spacing, type } from '../../lib/theme';
