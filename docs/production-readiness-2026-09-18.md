@@ -62,21 +62,53 @@ Windows local runs, with tests prevented from loading the production snapshot:
   runs were red when inspected. A repaired configuration is not proof of a green
   execution. Deployment drift's prior logs did not identify the failing command.
 
+## Post-merge verification
+
+- Main release PR #118 is merged at `5a43bee`; post-merge API/Mobile CI,
+  CodeQL, and dependency gates passed.
+- [Desktop reconciliation PR #119](https://github.com/lwhobley/venuewrangler/pull/119)
+  is merged at `1bdf0a5`, including the marketing site. Its post-merge desktop
+  CI and [Cloudflare deployment](https://github.com/lwhobley/venuewrangler/actions/runs/35373709628)
+  passed. [API parity](https://github.com/lwhobley/venuewrangler/actions/runs/35373713756)
+  and [site parity](https://github.com/lwhobley/venuewrangler/actions/runs/35373716326)
+  now pass.
+- The drift check had used direct federated credentials because the deployment
+  service-account setting existed only in the protected production environment.
+  The same deployment identity is now configured for the repository's read-only
+  drift job. [Verification](https://github.com/lwhobley/venuewrangler/actions/runs/35373415659)
+  reaches the serving image and fails closed because that image predates manifests.
+- Cloud Build `9db4755c-d6d2-42d5-bf4a-96a8f1e5758b` successfully built main
+  `5a43bee` from a tracked-file-only API context. The immutable candidate is
+  `us-east1-docker.pkg.dev/venuewrangler/stadium-wrangler/venue-wrangler-api@sha256:0eebc7adbbc88694afaa794abd3a9101a6e1631989726153c0cc408dd5e15e30`.
+  It has not been promoted or used to migrate production.
+- Live API health returned `200`; unauthenticated documents returned `401`.
+  The 5xx alert policy and both email channels are enabled. Delivery is unverified.
+- Read-only Stripe inventory returned 21 live products and 10 live webhook
+  endpoints, including an enabled production billing webhook. Purchases, restore,
+  entitlements, and RevenueCat's no-transfer setting remain unverified. The
+  RevenueCat v2 project-inventory request returned `401`; this does not establish
+  whether the configured key supports the API's v1 subscriber calls.
+- Scanner execution `venue-wrangler-scanner-preflight-snhw8` succeeded over the
+  production private network using the release image: clean content was accepted
+  and the harmless EICAR test signature was rejected. It had no database secrets
+  and did not upload documents or alter API traffic.
+- EAS is authenticated as `venuewrangler` but returned an authorization error
+  reading the existing project. Project identifiers were preserved; native build
+  verification requires account access.
+
 ## Remaining release sign-off
 
 - Approve the concrete production retention execution. Automatic approval review
   rejected it because normal cleanup can permanently delete expired audit and
   wage records. No alternate execution path was used.
-- Merge the prepared [main release fixes](https://github.com/lwhobley/venuewrangler/pull/118)
-  and [desktop API reconciliation](https://github.com/lwhobley/venuewrangler/pull/119),
-  then obtain green current-commit
-  API/Mobile CI, API branch parity, and serving-image drift evidence.
+- Obtain green serving-image drift evidence after deploying the verified candidate.
 - Build and deploy the immutable release image through the normal migration and
   candidate-health gates. Production migrations and traffic promotion have not
   been performed as part of this repo fix.
 - Verify native iOS onboarding/email, clock/break/correction, purchase/restore,
   offline recovery, accessibility, and representative operator journeys on the
-  release build. Capture current platform-native store screenshots.
+  release build. First restore EAS project access. Capture current platform-native
+  store screenshots.
 - Test alert delivery, live billing, scanner connectivity, error capture, and the
   previous-version rollback path. Existing configuration and passing unit tests
   do not provide this evidence.
