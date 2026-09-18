@@ -7,6 +7,7 @@ import type { VenueScopedRequest } from '../../../venue/venue-scope.interceptor'
 import { PrismaService } from '../../../prisma/prisma.service';
 import { assertWithinSharedRateLimit } from '../../../common/rate-limit';
 import { WranglerOperatorService } from './wrangler-operator.service';
+import { assertFullVenueEdition } from '../../../common/feature-flags';
 
 type Scope = VenueScopedRequest['venueScope'];
 const OPERATOR_RATE_LIMIT_MAX = 20;
@@ -43,6 +44,7 @@ export class WranglerOperatorController {
   @RequireSubscription('active')
   @Post('plan')
   async plan(@VenueScope() scope: Scope, @Body() body: WranglerOperatorPlanDto) {
+    assertFullVenueEdition('Wrangler operator');
     if (!scope) throw new ForbiddenException('No active venue profile found');
     if (!canManageVenue(scope.role, scope.allAccess)) {
       throw new ForbiddenException('Manager access required for Wrangler operator actions');
@@ -66,6 +68,7 @@ export class WranglerOperatorController {
   @RequireSubscription('active')
   @Post('execute')
   async execute(@VenueScope() scope: Scope, @Body() body: WranglerOperatorExecuteDto) {
+    assertFullVenueEdition('Wrangler operator');
     if (!scope) throw new ForbiddenException('No active venue profile found');
     if (!canManageVenue(scope.role, scope.allAccess)) {
       throw new ForbiddenException('Manager access required for Wrangler operator actions');

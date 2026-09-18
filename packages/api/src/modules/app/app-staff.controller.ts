@@ -1,5 +1,5 @@
 import { BadRequestException, Body, Controller, Delete, ForbiddenException, Get, NotFoundException, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
-import { ArrayMaxSize, IsArray, IsDateString, IsEmail, IsIn, IsOptional, IsString, MaxLength, ValidateNested } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsDateString, IsEmail, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import { Prisma, Role } from '@prisma/client';
 import { AuthGuard } from '../../auth/auth.guard';
@@ -71,6 +71,12 @@ class StaffDto {
   @IsString({ each: true })
   @MaxLength(100, { each: true })
   certifications?: string[];
+
+  @IsInt()
+  @Min(0)
+  @Max(1000000)
+  @IsOptional()
+  hourlyRateCents?: number;
 }
 
 class ParseStaffImportDto {
@@ -99,6 +105,12 @@ class StaffImportRowDto {
   @IsOptional()
   @MaxLength(50)
   phone?: string;
+
+  @IsInt()
+  @Min(0)
+  @Max(1000000)
+  @IsOptional()
+  hourlyRateCents?: number;
 }
 
 class CommitStaffImportDto {
@@ -291,6 +303,7 @@ export class AppStaffController {
           role: item.role,
           jobTitle: item.jobTitle,
           phone: item.phone,
+          hourlyRateCents: item.hourlyRateCents,
         });
         (existingBefore ? updated : created).push(row.email);
       } catch (error) {
@@ -303,7 +316,7 @@ export class AppStaffController {
   /** Core create-or-update logic for a single roster row, shared by the single-staff endpoint and bulk import. */
   private async upsertOneStaffMember(
     viewer: { id: string; role: Role; allAccess: boolean; venueId: string | null; fullName: string; venue?: { name: string } | null },
-    body: Pick<StaffDto, 'venueId' | 'staffId' | 'email' | 'fullName' | 'role' | 'jobTitle' | 'phone' | 'altPhone' | 'address' | 'dateOfBirth' | 'certifications'>,
+    body: Pick<StaffDto, 'venueId' | 'staffId' | 'email' | 'fullName' | 'role' | 'jobTitle' | 'phone' | 'altPhone' | 'address' | 'dateOfBirth' | 'certifications' | 'hourlyRateCents'>,
   ) {
     let existing;
     if (body.staffId) {
@@ -335,14 +348,14 @@ export class AppStaffController {
         await this.assertCanManageLegacyStaffTarget(viewer, existing, isDemoting, tx);
         created = await tx.profile.update({
           where: { id: existing.id },
-          data: { email: body.email.toLowerCase(), fullName: body.fullName, role: body.role, jobTitle: body.jobTitle, venueId: body.venueId, ...employeeFields },
+          data: { email: body.email.toLowerCase(), fullName: body.fullName, role: body.role, jobTitle: body.jobTitle, venueId: body.venueId, hourlyRateCents: body.hourlyRateCents ?? existing.hourlyRateCents, ...employeeFields },
         });
         if (roleChanged && existing.userId) {
           await tx.session.deleteMany({ where: { userId: existing.userId } });
         }
       } else {
         created = await tx.profile.create({
-          data: { email: body.email.toLowerCase(), fullName: body.fullName, role: body.role, jobTitle: body.jobTitle, venueId: body.venueId, ...employeeFields },
+          data: { email: body.email.toLowerCase(), fullName: body.fullName, role: body.role, jobTitle: body.jobTitle, venueId: body.venueId, hourlyRateCents: body.hourlyRateCents ?? null, ...employeeFields },
         });
         await this.ensureOnboardingTasks(body.venueId, created.id, tx);
       }

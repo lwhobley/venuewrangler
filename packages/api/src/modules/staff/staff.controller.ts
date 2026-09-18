@@ -8,7 +8,7 @@ import {
   Param,
   Post,
 } from '@nestjs/common';
-import { ArrayMaxSize, IsArray, IsDateString, IsEmail, IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsDateString, IsEmail, IsIn, IsInt, IsOptional, IsString, Max, Min, MaxLength } from 'class-validator';
 import { Prisma, Role } from '@prisma/client';
 import { canManageRole, canManageVenue, isOwnerOrAdminRole } from '../../auth/roles';
 import { RequireSubscription } from '../../billing/require-subscription.decorator';
@@ -43,6 +43,12 @@ class UpsertStaffDto {
   @IsString()
   @MaxLength(100)
   jobTitle!: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(1000000)
+  hourlyRateCents?: number;
 
   @IsOptional()
   @IsString()
@@ -122,6 +128,7 @@ export class StaffController {
             fullName: body.fullName,
             role: body.role as Role,
             jobTitle: body.jobTitle,
+            hourlyRateCents: body.hourlyRateCents ?? member.hourlyRateCents,
             venueId: scope.venueId,
             phone: body.phone ?? member.phone,
             altPhone: body.altPhone ?? member.altPhone,
@@ -172,6 +179,7 @@ export class StaffController {
           fullName: body.fullName,
           role: body.role as Role,
           jobTitle: body.jobTitle,
+          hourlyRateCents: body.hourlyRateCents ?? null,
           venueId: scope.venueId,
           phone: body.phone?.trim() || null,
           altPhone: body.altPhone?.trim() || null,

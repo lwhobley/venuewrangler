@@ -560,9 +560,14 @@ export class SchedulingController {
       selectedAvailabilityWeekByProfile.set(profileId, selectedWeekStart);
     }
     const weeklyMinutes = new Map<string, number>();
+    const weeklyLaborCents = new Map<string, number>();
+    const breakWarnings: Array<{ shiftId: string; dayIndex: number; jobTitle: string; message: string }> = [];
     for (const shift of shifts) {
       if (!shift.profileId) continue;
-      weeklyMinutes.set(shift.profileId, (weeklyMinutes.get(shift.profileId) ?? 0) + Math.max(0, shift.endMinutes - shift.startMinutes));
+      const minutes = Math.max(0, shift.endMinutes - shift.startMinutes);
+      if (minutes >= 360 && (!shift.notes || !/break/i.test(shift.notes))) breakWarnings.push({ shiftId: shift.id, dayIndex: shift.dayIndex, jobTitle: shift.jobTitle, message: 'Shift is 6+ hours without a break window noted.' });
+      weeklyMinutes.set(shift.profileId, (weeklyMinutes.get(shift.profileId) ?? 0) + minutes);
+      if (shift.profile?.hourlyRateCents != null) weeklyLaborCents.set(shift.profileId, (weeklyLaborCents.get(shift.profileId) ?? 0) + (minutes / 60) * shift.profile.hourlyRateCents);
     }
     const totalScheduledMinutes = shifts.reduce((sum, shift) => sum + Math.max(0, shift.endMinutes - shift.startMinutes), 0);
     return {
@@ -580,6 +585,7 @@ export class SchedulingController {
           jobTitle: member.jobTitle,
           weeklyHours: Math.round((mins / 60) * 10) / 10,
           overtime: mins > 40 * 60,
+          estimatedLaborCents: member.hourlyRateCents == null ? null : Math.round(weeklyLaborCents.get(member.id) ?? 0),
           availabilityWeekStart: selectedAvailabilityWeekByProfile.get(member.id) ?? null,
           availability: (availabilityByProfile.get(member.id) ?? []).map((row) => ({
             dayIndex: row.dayIndex,
@@ -591,6 +597,11 @@ export class SchedulingController {
       }),
       laborBudgetHours: venue.weeklyLaborBudgetHours ?? null,
       totalScheduledHours: Math.round((totalScheduledMinutes / 60) * 10) / 10,
+      estimatedLaborCents: Math.round([...weeklyLaborCents.values()].reduce((sum, value) => sum + value, 0)),
+      warnings: {
+        break: breakWarnings,
+        overtime: staff.filter((member) => (weeklyMinutes.get(member.id) ?? 0) > 40 * 60).map((member) => ({ profileId: member.id, fullName: member.fullName, hours: Math.round(((weeklyMinutes.get(member.id) ?? 0) / 60) * 10) / 10 })),
+      },
       weekStart: selectedWeekStart,
       publishState: schedulePublishState(
         publication,
@@ -1137,6 +1148,13 @@ export class SchedulingController {
       fromDay: body.fromDay,
       toDays: [...new Set(body.toDays)],
     });
+  }
+
+  @RequireSubscription()
+  @Post('copy-previous-week')
+  async copyPreviousWeek(@VenueScope() scope: Scope, @Body() body: WeekDto) {
+    this.requireManager(scope);
+    return this.assignments.copyPreviousWeek({ venueId: scope!.venueId, weekStart: await this.resolveAvailabilityWeekStart(scope!.venueId, body.weekStart) });
   }
 
   @RequireSubscription()

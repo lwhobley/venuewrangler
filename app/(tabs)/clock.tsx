@@ -98,6 +98,7 @@ function ClockScreen() {
   const isOnBreak = Boolean(activeBreak);
   const breakType = activeBreak?.type;
 
+
   // Live ticking clock.
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 1000);
@@ -163,9 +164,12 @@ function ClockScreen() {
       } catch (error) {
         // A shared-device account switch can invalidate a previously cached
         // App Attest key. Re-enrol and retry exactly once on that server signal.
-        if (!(error instanceof ApiError) || !/not registered for attestation/i.test(error.message)) throw error;
-        await resetAttestationKey();
-        await submit();
+        if (error instanceof ApiError && /not registered for attestation/i.test(error.message)) {
+          await resetAttestationKey();
+          await submit();
+        } else {
+          throw error;
+        }
       }
       notifySuccess();
     } catch (error) {
@@ -300,6 +304,7 @@ function ClockScreen() {
 
       {!salaried ? (
         <>
+          <Text style={{ color: colors.muted }}>Punches require a connection. If a punch fails, check your current status before retrying. Use a correction request for a missed punch.</Text>
           {/* Punch Now button */}
           {isClockedIn && isOnBreak ? (
             <Pressable

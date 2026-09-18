@@ -67,6 +67,7 @@ type ProfileRow = {
   fullName: string;
   role: string;
   jobTitle: string;
+  hourlyRateCents?: number | null;
   phone: string | null;
   altPhone: string | null;
   address: string | null;

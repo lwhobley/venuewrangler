@@ -60,6 +60,8 @@ jobs:
 
       - name: Build current Expo client and marketing site
         run: npm run build:site
+        env:
+          EXPO_PUBLIC_RESTAURANT_CORE_ONLY: 'true'
 
       # dist-site/ combines the marketing pages with a fresh /app web bundle.
       # The Cloudflare Pages project's Production Branch is set to

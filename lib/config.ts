@@ -10,4 +10,7 @@ function readEnvFlag(value: string | undefined, fallback: boolean): boolean {
 
 export const config = {
   billingEnabled: readEnvFlag(process.env.EXPO_PUBLIC_BILLING_ENABLED, false),
+  // Restaurant builds present a focused labor workflow. The full venue edition
+  // remains available behind an explicit flag for existing customers.
+  restaurantCoreOnly: readEnvFlag(process.env.EXPO_PUBLIC_RESTAURANT_CORE_ONLY, false),
 };

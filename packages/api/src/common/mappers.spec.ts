@@ -237,3 +237,14 @@ describe('mapStaffRequest', () => {
     expect(result.responseNotes).toBeNull();
   });
 });
+
+describe('profile response safety', () => {
+  it('never returns hourly rates to staff clients', () => {
+    const mapped = mapProfile({
+      id: 'profile-1', email: 'staff@example.com', fullName: 'Staff', role: 'staff' as any,
+      jobTitle: 'Server', venueId: 'venue-1', allAccess: false, hourlyRateCents: 2200,
+    });
+    expect(mapped).not.toHaveProperty('hourlyRateCents');
+    expect(mapped).not.toHaveProperty('wage');
+  });
+});

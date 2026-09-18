@@ -9,6 +9,7 @@ import { CarouselTabBar } from '../../components/CarouselTabBar';
 import { useI18n } from '../../lib/i18n';
 import { canManageVenue } from '../../lib/permissions';
 import { useAuthenticatedSession } from '../../lib/auth-readiness';
+import { config } from '../../lib/config';
 
 const icon = (name: keyof typeof MaterialCommunityIcons.glyphMap) =>
   ({ color, size }: { color: ColorValue; size: number }) => <MaterialCommunityIcons name={name} size={size} color={String(color)} />;
@@ -17,7 +18,6 @@ export default function TabsLayout() {
   const localUser = useAuthStore((state: AuthState) => state.user);
   const venue = useAuthStore((state: AuthState) => state.venue);
   const hydrated = useAuthStore((state: AuthState) => state.hydrated);
-  const fullName = localUser?.full_name ?? 'Profile';
   const { t } = useI18n();
   const palette = useDesignTheme();
   // Server-authoritative role so a stale/incorrect persisted role can never
@@ -53,9 +53,12 @@ export default function TabsLayout() {
         tabBarInactiveTintColor: String(palette.muted),
       }}
     >
-      <Tabs.Screen name="home" options={{ title: t('nav.home'), tabBarIcon: icon('view-dashboard') }} />
+      <Tabs.Screen name="home" options={{ title: canManage && config.restaurantCoreOnly ? 'Tonight' : t('nav.home'), tabBarIcon: icon('view-dashboard') }} />
       <Tabs.Screen name="clock" options={{ title: t('nav.clock'), tabBarIcon: icon('clock-outline') }} />
       <Tabs.Screen name="schedule" options={{ title: t('nav.schedule'), tabBarIcon: icon('calendar-week') }} />
+      <Tabs.Screen name="staff" options={{ title: 'Team', href: canManage ? '/staff' : null, tabBarIcon: icon('account-group') }} />
+      <Tabs.Screen name="chat" options={{ title: 'Announcements', tabBarIcon: icon('bullhorn-outline') }} />
+      <Tabs.Screen name="profile" options={{ title: 'Settings', tabBarIcon: icon('cog-outline') }} />
       <Tabs.Screen name="floor" options={{ title: t('nav.floor'), tabBarIcon: icon('floor-plan') }} />
       <Tabs.Screen name="reservations" options={{ title: t('nav.reservations'), tabBarIcon: icon('book-clock-outline') }} />
       <Tabs.Screen
@@ -64,33 +67,24 @@ export default function TabsLayout() {
       />
       <Tabs.Screen
         name="integrations"
-        options={{ title: t('nav.integrations'), href: canManage ? '/integrations' : null, tabBarIcon: icon('connection') }}
+        options={{ title: t('nav.integrations'), href: canManage && !config.restaurantCoreOnly ? '/integrations' : null, tabBarIcon: icon('connection') }}
       />
       <Tabs.Screen
         name="sales"
-        options={{ title: t('nav.sales'), href: canManage ? '/sales' : null, tabBarIcon: icon('chart-line') }}
-      />
-      <Tabs.Screen
-        name="chat"
-        options={{ title: t('nav.chat'), tabBarIcon: icon('chat-outline') }}
+        options={{ title: t('nav.sales'), href: canManage && !config.restaurantCoreOnly ? '/sales' : null, tabBarIcon: icon('chart-line') }}
       />
       <Tabs.Screen
         name="bar-stock"
-        options={{ title: t('nav.inventory'), href: '/bar-stock', tabBarIcon: icon('clipboard-text-outline') }}
+        options={{ title: t('nav.inventory'), href: config.restaurantCoreOnly ? null : '/bar-stock', tabBarIcon: icon('clipboard-text-outline') }}
       />
       <Tabs.Screen
         name="documents"
-        options={{ title: t('nav.documents'), href: '/documents', tabBarIcon: icon('file-document-multiple-outline') }}
+        options={{ title: t('nav.documents'), href: config.restaurantCoreOnly ? null : '/documents', tabBarIcon: icon('file-document-multiple-outline') }}
       />
       <Tabs.Screen
         name="reports"
-        options={{ title: t('nav.reports'), href: canManage ? '/reports' : null, tabBarIcon: icon('chart-box-outline') }}
+        options={{ title: t('nav.reports'), href: canManage && !config.restaurantCoreOnly ? '/reports' : null, tabBarIcon: icon('chart-box-outline') }}
       />
-      <Tabs.Screen
-        name="staff"
-        options={{ title: t('nav.staff'), href: canManage ? '/staff' : null, tabBarIcon: icon('account-group') }}
-      />
-      <Tabs.Screen name="profile" options={{ title: fullName || t('nav.profileFallback'), tabBarIcon: icon('account-circle') }} />
     </Tabs>
   );
 }

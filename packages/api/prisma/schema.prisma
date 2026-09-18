@@ -354,6 +354,7 @@ model Venue {
   payPeriodLengthDays           Int                       @default(14)
   availabilityUnlocked          Boolean                   @default(false)
   earlyClockInWindowMin         Int                       @default(10)
+  clockTabletModeEnabled        Boolean                   @default(false)
   subscriptionStatus            SubscriptionStatus?
   subscriptionPlatform          SubscriptionPlatform?
   leadsWebhookSecret            String?
@@ -435,6 +436,7 @@ model Profile {
   fullName                   String
   role                       Role
   jobTitle                   String
+  hourlyRateCents            Int?
   phone                      String?
   altPhone                   String?
   address                    String?

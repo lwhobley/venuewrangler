@@ -44,6 +44,11 @@ on:
         description: Private hostname or IP of the production ClamAV daemon
         required: true
         type: string
+      restaurant_core_only:
+        description: Use the focused restaurant edition (must match the client build)
+        required: true
+        default: true
+        type: boolean
 
 permissions:
   contents: read
@@ -143,6 +148,24 @@ jobs:
             echo "::error::The migration job must supply DATABASE_DIRECT_URL through a Secret Manager reference."
             exit 1
           fi
+          direct_url_secret_version="$(jq -r '[.. | objects | select(.name? == "DATABASE_DIRECT_URL") | (.valueFrom.secretKeyRef.key // .valueSource.secretKeyRef.version // "")] | first // ""' <<<"$migration_job_json")"
+          [[ "$direct_url_secret_ref" =~ ^[A-Za-z0-9_-]+$ ]] || { echo "::error::Migration direct database secret name is invalid"; exit 1; }
+          [[ "$direct_url_secret_version" =~ ^[1-9][0-9]*$ ]] || { echo "::error::Migration credentials must reference a numbered secret version"; exit 1; }
+          echo "DIRECT_DATABASE_SECRET_NAME=$direct_url_secret_ref" >> "$GITHUB_ENV"
+          echo "DIRECT_DATABASE_SECRET_VERSION=$direct_url_secret_version" >> "$GITHUB_ENV"
+          # Freeze the serving database version for retention. Using `latest`
+          # let a secret rotation send the job to a different database while
+          # serving revisions continued using their pinned version.
+          service_json="$(gcloud run services describe "$CLOUD_RUN_SERVICE" --project "$GCP_PROJECT_ID" --region "$GCP_REGION" --format=json)"
+          serving_revision="$(jq -r '.status.traffic | map(select((.percent // 0) > 0)) | max_by(.percent) | .revisionName // empty' <<<"$service_json")"
+          [[ -n "$serving_revision" ]] || { echo "::error::No traffic-serving revision found"; exit 1; }
+          serving_json="$(gcloud run revisions describe "$serving_revision" --project "$GCP_PROJECT_ID" --region "$GCP_REGION" --format=json)"
+          database_secret_name="$(jq -r '.spec.containers[0].env[] | select(.name == "DATABASE_URL") | .valueFrom.secretKeyRef.name' <<<"$serving_json")"
+          database_secret_version="$(jq -r '.spec.containers[0].env[] | select(.name == "DATABASE_URL") | .valueFrom.secretKeyRef.key' <<<"$serving_json")"
+          [[ "$database_secret_name" =~ ^[A-Za-z0-9_-]+$ ]] || { echo "::error::Serving database secret name is invalid"; exit 1; }
+          [[ "$database_secret_version" =~ ^[1-9][0-9]*$ ]] || { echo "::error::Serving DATABASE_URL must reference a numbered secret version"; exit 1; }
+          echo "DATABASE_SECRET_NAME=$database_secret_name" >> "$GITHUB_ENV"
+          echo "DATABASE_SECRET_VERSION=$database_secret_version" >> "$GITHUB_ENV"
           gcloud run jobs describe "$CLOUD_RUN_RETENTION_JOB" --project "$GCP_PROJECT_ID" --region "$GCP_REGION" >/dev/null
 
       - name: Apply migrations in the single-run release job
@@ -156,6 +179,7 @@ jobs:
             --image "$IMAGE_URI" \
             --command npm \
             --args run,release,-w,@venue-wrangler/api \
+            --update-secrets "DATABASE_URL=${DATABASE_SECRET_NAME}:${DATABASE_SECRET_VERSION},DATABASE_DIRECT_URL=${DIRECT_DATABASE_SECRET_NAME}:${DIRECT_DATABASE_SECRET_VERSION}" \
             --quiet
           gcloud run jobs execute "$CLOUD_RUN_MIGRATION_JOB" \
             --project "$GCP_PROJECT_ID" \
@@ -173,6 +197,9 @@ jobs:
             --image "$IMAGE_URI" \
             --command npm \
             --args run,retention,-w,@venue-wrangler/api \
+            --update-secrets "DATABASE_URL=${DATABASE_SECRET_NAME}:${DATABASE_SECRET_VERSION}" \
+            --update-env-vars "DATABASE_POOL_SIZE=5" \
+            --remove-secrets DATABASE_DIRECT_URL \
             --quiet
 
       - name: Deploy a no-traffic candidate revision
@@ -181,6 +208,7 @@ jobs:
           ATTESTATION_MODE: ${{ inputs.attestation_mode }}
           APP_ATTEST_TEAM_ID: ${{ inputs.app_attest_team_id }}
           CLAMAV_HOST: ${{ inputs.clamav_host }}
+          RESTAURANT_CORE_ONLY: ${{ inputs.restaurant_core_only }}
         run: |
           set -Eeuo pipefail
           release_tag="candidate-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
@@ -189,7 +217,7 @@ jobs:
             --project "$GCP_PROJECT_ID" \
             --region "$GCP_REGION" \
             --image "$IMAGE_URI" \
-            --update-env-vars "TRUST_PROXY_HOPS=1,DEVICE_ATTESTATION_MODE=${ATTESTATION_MODE},APP_ATTEST_TEAM_ID=${APP_ATTEST_TEAM_ID},SUPPORTED_PRODUCTION_PLATFORMS=ios,CLAMAV_HOST=${CLAMAV_HOST},CLAMAV_PORT=3310,DATABASE_POOL_SIZE=5" \
+            --update-env-vars "TRUST_PROXY_HOPS=1,DEVICE_ATTESTATION_MODE=${ATTESTATION_MODE},APP_ATTEST_TEAM_ID=${APP_ATTEST_TEAM_ID},SUPPORTED_PRODUCTION_PLATFORMS=ios,CLAMAV_HOST=${CLAMAV_HOST},CLAMAV_PORT=3310,DATABASE_POOL_SIZE=5,RESTAURANT_CORE_ONLY=${RESTAURANT_CORE_ONLY}" \
             --max-instances 8 \
             --vpc-connector "projects/${GCP_PROJECT_ID}/locations/${GCP_REGION}/connectors/stadium-cloud-run" \
             --vpc-egress private-ranges-only \
@@ -203,6 +231,7 @@ jobs:
           EXPECTED_ATTESTATION_MODE: ${{ inputs.attestation_mode }}
           EXPECTED_APP_ATTEST_TEAM_ID: ${{ inputs.app_attest_team_id }}
           EXPECTED_CLAMAV_HOST: ${{ inputs.clamav_host }}
+          EXPECTED_RESTAURANT_CORE_ONLY: ${{ inputs.restaurant_core_only }}
         run: |
           set -Eeuo pipefail
           service_json="$(gcloud run services describe "$CLOUD_RUN_SERVICE" --project "$GCP_PROJECT_ID" --region "$GCP_REGION" --format=json)"
@@ -214,6 +243,8 @@ jobs:
           [[ "$actual_team_id" == "$EXPECTED_APP_ATTEST_TEAM_ID" ]] || { echo "::error::Live APP_ATTEST_TEAM_ID does not match the approved Team ID"; exit 1; }
           [[ "$actual_platforms" == "ios" ]] || { echo "::error::Live platform declaration is not iOS-only"; exit 1; }
           [[ "$actual_clamav_host" == "$EXPECTED_CLAMAV_HOST" ]] || { echo "::error::Live CLAMAV_HOST does not match the approved scanner"; exit 1; }
+          actual_edition="$(jq -r '.spec.template.spec.containers[0].env[] | select(.name == "RESTAURANT_CORE_ONLY") | .value' <<<"$service_json")"
+          [[ "$actual_edition" == "$EXPECTED_RESTAURANT_CORE_ONLY" ]] || { echo "::error::Live edition does not match the approved client edition"; exit 1; }
           actual_direct_url="$(jq -r '[.spec.template.spec.containers[0].env[]? | select(.name == "DATABASE_DIRECT_URL")] | length' <<<"$service_json")"
           [[ "$actual_direct_url" == "0" ]] || { echo "::error::Live service template must not contain DATABASE_DIRECT_URL"; exit 1; }
 
