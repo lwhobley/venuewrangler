@@ -130,17 +130,21 @@ describe('FloorService regressions', () => {
   });
 
   it('requires an existing merge to be split before those tables are merged again', async () => {
-    const prisma = {
-      floorPlan: { findFirst: vi.fn().mockResolvedValue({ tables: [{ id: 't1' }, { id: 't2' }] }) },
+    const transaction = {
+      $executeRaw: vi.fn().mockResolvedValue(undefined),
       tableState: { findMany: vi.fn().mockResolvedValue([
         { id: 's1', tableId: 't1', status: 'seated', mergeGroupId: 'group-1' },
         { id: 's2', tableId: 't2', status: 'seated', mergeGroupId: 'group-1' },
       ]), updateMany: vi.fn() },
     };
+    const prisma = {
+      floorPlan: { findFirst: vi.fn().mockResolvedValue({ tables: [{ id: 't1' }, { id: 't2' }] }) },
+      $transaction: vi.fn((callback: (tx: typeof transaction) => unknown) => callback(transaction)),
+    };
     const service = new FloorService(prisma as any, {} as any);
 
     await expect(service.mergeTablesForParty('venue-1', ['t1', 't2'], 6)).rejects.toThrow(ConflictException);
-    expect(prisma.tableState.updateMany).not.toHaveBeenCalled();
+    expect(transaction.tableState.updateMany).not.toHaveBeenCalled();
   });
 
   it('rejects a table-status write that loses an optimistic concurrency race', async () => {
@@ -222,19 +226,24 @@ describe('FloorService regressions', () => {
   });
 
   describe('refreshTableStates via releaseAssignment', () => {
-    const makePrisma = (currentStatus: string) => ({
-      tableAssignment: {
-        findFirst: vi.fn().mockResolvedValue({ id: 'assign-1', tableId: 'table-1', reservationId: null, waitlistId: null }),
-        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
-        findMany: vi.fn().mockResolvedValue([]),
-        count: vi.fn().mockResolvedValue(0),
-      },
-      tableState: {
-        findMany: vi.fn().mockResolvedValue([{ tableId: 'table-1', status: currentStatus }]),
-        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
-      },
-      floorTable: { findFirst: vi.fn().mockResolvedValue({ seats: 0 }) },
-    });
+    const makePrisma = (currentStatus: string) => {
+      const prisma: any = {
+        $executeRaw: vi.fn().mockResolvedValue(undefined),
+        tableAssignment: {
+          findFirst: vi.fn().mockResolvedValue({ id: 'assign-1', tableId: 'table-1', reservationId: null, waitlistId: null }),
+          updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+          findMany: vi.fn().mockResolvedValue([]),
+          count: vi.fn().mockResolvedValue(0),
+        },
+        tableState: {
+          findMany: vi.fn().mockResolvedValue([{ tableId: 'table-1', status: currentStatus }]),
+          updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+        },
+        floorTable: { findFirst: vi.fn().mockResolvedValue({ seats: 0 }) },
+      };
+      prisma.$transaction = vi.fn((callback: (t: typeof prisma) => unknown) => callback(prisma));
+      return prisma;
+    };
 
     it.each(['dirty', 'out_of_service'])(
       'leaves a %s table in that state when no seating is active on it',
@@ -312,6 +321,22 @@ describe('FloorService regressions', () => {
       };
       return { prisma, tx };
     };
+
+    it('rejects assigning a table to a cancelled reservation that was never soft-deleted', async () => {
+      // Cancelling a reservation (reservation-mutation.service.ts's
+      // saveReservation cancel path) sets status: 'cancelled' without ever
+      // setting deletedAt — the two are independent. A closed reservation
+      // must not be seatable just because it still passes deletedAt: null.
+      const { prisma } = makeAssignPrisma();
+      prisma.reservation.findFirst.mockResolvedValue({
+        id: 'res-1', partySize: 4, durationMinutes: 120, reservationTime: new Date(), status: 'cancelled',
+      });
+
+      await expect(
+        new FloorService(prisma, {} as any).assignReservationToTables('venue-1', 'res-1', ['table-1'], {}),
+      ).rejects.toThrow('cancelled reservation cannot be assigned');
+      expect(prisma.floorPlan.findFirst).not.toHaveBeenCalled();
+    });
 
     it('seats a party who arrived before their booking time', async () => {
       // The host screen sends the reservation's scheduled startsAt, so an early

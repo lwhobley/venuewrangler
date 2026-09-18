@@ -42,7 +42,7 @@ function makeDbGuard(tier: string | undefined, profile: any) {
       findFirst: vi.fn().mockResolvedValue(profile),
     },
     subscription: {
-      findFirst: vi.fn().mockResolvedValue(null),
+      findFirst: vi.fn().mockResolvedValue(profile?.venue ? { status: profile.venue.subscriptionStatus, trialEndsAt: profile.trialEndsAt } : null),
     },
   } as any;
   return { guard: new SubscriptionGuard(reflector, prisma), prisma };
@@ -126,6 +126,7 @@ describe('SubscriptionGuard', () => {
 
   it('reuses AuthGuard verified membership without querying Profile again', async () => {
     const { guard, prisma } = makeDbGuard('active', null);
+    prisma.subscription.findFirst.mockResolvedValue({ status: 'active', platform: 'stripe' });
     const context = makeVerifiedContext({
       id: 'verified-profile',
       fullName: 'Verified User',

@@ -14,13 +14,13 @@ export const VENUE_SCOPED_MODELS: ReadonlySet<string> = new Set([
   'AiBudgetReservation', 'AiUsageEvent', 'AuditLog', 'Availability', 'BarInventoryItem', 'BarInventoryMovement', 'BlackoutDate',
   'ChatImage', 'ChecklistCompletion', 'ChecklistTemplateItem', 'Conversation', 'ConversationRead',
   'CrmActivityLog', 'CrmBeo', 'CrmContract', 'CrmLead', 'CrmNote', 'EmailTemplate', 'FloorChair',
-  'FloorPlan', 'FloorTable', 'Guest', 'Invite', 'Invoice', 'LogbookEntry', 'ManagerGoal', 'Message', 'NotificationEvent',
+  'FloorPlan', 'FloorTable', 'Guest', 'GuestCrmNote', 'GuestHouseholdLink', 'Invite', 'Invoice', 'LogbookEntry', 'ManagerGoal', 'Message', 'NotificationEvent',
   'NotificationRead', 'PaymentMethod', 'PayrollExport', 'PosCheck', 'PosConnection',
   'PosLaborPunch', 'PrepBoardItem', 'Profile', 'PushToken', 'Reservation', 'ReservationConnection',
   'ReservationHold', 'ReservationSetting', 'ReservationSyncEvent', 'ScheduleEmailEvent',
   'ScheduleMemoryNote', 'SchedulePublication', 'ScheduleShift', 'ScheduleTemplate', 'ShiftSwap', 'StaffOnboardingTask', 'StaffRequest', 'Subscription',
   'SubscriptionEvent', 'TableAssignment', 'TableState', 'TableStateHistory', 'Team',
-  'TimeEntry', 'VenueDocument', 'VenueEvent', 'VenueRole', 'Waitlist', 'WorkplaceJoinRequest',
+  'TimeEntry', 'VenueDocument', 'VenueEvent', 'VenueRole', 'Waitlist', 'WorkplaceJoinRequest', 'WorkplaceJoinRequestEvent',
   'EventExecutionWorkspace', 'EventExecutionTask', 'EventExecutionTimelineItem', 'EventExecutionVendor', 'EventExecutionIncident',
 ]);
 

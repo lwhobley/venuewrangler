@@ -10,10 +10,10 @@ const PROMPT =
   '7shifts, Deputy, Sling, a spreadsheet, or a plain pasted list — the exact source is ' +
   'unknown, so infer columns from context rather than expecting fixed headers. For each ' +
   'person return their full name, email if present, phone if present, and their job ' +
-  'title/position as given. Guess an access role: "manager" for anyone titled manager, ' +
+  'title/position and hourly wage if present. Guess an access role: "manager" for anyone titled manager, ' +
   'supervisor, GM, or owner; "staff" for everyone else. Skip rows that are clearly not ' +
   'people (headers, totals, blank rows). Return STRICT JSON matching schema: ' +
-  '{"items": [{"fullName": "string", "email": "string", "phone": "string", "jobTitle": "string", "role": "manager"|"staff"}]}';
+  '{"items": [{"fullName": "string", "email": "string", "phone": "string", "jobTitle": "string", "hourlyRateCents": 0, "role": "manager"|"staff"}]}';
 
 export type ParsedStaffRow = {
   fullName: string;
@@ -21,6 +21,7 @@ export type ParsedStaffRow = {
   phone?: string;
   jobTitle: string;
   role: 'manager' | 'staff';
+  hourlyRateCents?: number;
 };
 
 export type ParsedStaffResult = {
@@ -69,6 +70,7 @@ export class StaffImportParserService {
           phone: cleanText(row.phone),
           jobTitle: cleanText(row.jobTitle) ?? 'Team Member',
           role: row.role === 'manager' ? 'manager' : 'staff',
+          hourlyRateCents: typeof row.hourlyRateCents === 'number' && Number.isFinite(row.hourlyRateCents) ? Math.round(row.hourlyRateCents * 100) : undefined,
         };
       })
       .filter((row): row is ParsedStaffRow => row !== null);

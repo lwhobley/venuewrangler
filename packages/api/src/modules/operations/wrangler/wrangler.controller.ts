@@ -11,6 +11,7 @@ import type { VenueScopedRequest } from '../../../venue/venue-scope.interceptor'
 import { PrismaService } from '../../../prisma/prisma.service';
 import { WranglerHistoryService } from './wrangler-history.service';
 import { WranglerService } from './wrangler.service';
+import { assertFullVenueEdition } from '../../../common/feature-flags';
 
 type Scope = VenueScopedRequest['venueScope'];
 class ExecuteWranglerActionDto { @IsString() @IsIn(['REASSIGN_RESERVATION', 'NOTIFY_STAFF', 'CREATE_FOLLOW_UP']) type!: 'REASSIGN_RESERVATION' | 'NOTIFY_STAFF' | 'CREATE_FOLLOW_UP'; @IsOptional() @IsString() reservationId?: string; @IsOptional() @IsString() tableId?: string; @IsOptional() @IsString() priorityId?: string; }
@@ -22,6 +23,7 @@ export class WranglerController {
 
   @RequireSubscription('active') @Get()
   async getWrangler(@VenueScope() scope: Scope) {
+    assertFullVenueEdition('Wrangler');
     if (!scope) return null;
     if (!canManageVenue(scope.role, scope.allAccess)) throw new ForbiddenException('Manager access required to view Wrangler');
     const venue = await this.prisma.venue.findUnique({ where: { id: scope.venueId }, select: { id: true, name: true, timezone: true } });
@@ -33,6 +35,7 @@ export class WranglerController {
 
   @RequireSubscription('active') @Get('ai-usage')
   async getAiUsage(@VenueScope() scope: Scope) {
+    assertFullVenueEdition('AI usage');
     if (!scope) return null;
     if (!canManageVenue(scope.role, scope.allAccess)) throw new ForbiddenException('Manager access required to view AI usage');
     const rows = await this.prisma.$queryRaw<Array<{ feature: string; model: string; requests: bigint; promptTokens: bigint; completionTokens: bigint; cachedTokens: bigint; totalTokens: bigint; estimatedCostMicros: bigint }>>(
@@ -67,6 +70,7 @@ export class WranglerController {
 
   @RequireSubscription('active') @Post('actions')
   async executeAction(@VenueScope() scope: Scope, @Body() body: ExecuteWranglerActionDto) {
+    assertFullVenueEdition('Wrangler actions');
     if (!scope) return null;
     if (!canManageVenue(scope.role, scope.allAccess)) throw new ForbiddenException('Manager access required to execute Wrangler actions');
     const venue = await this.prisma.venue.findUnique({ where: { id: scope.venueId }, select: { timezone: true } });

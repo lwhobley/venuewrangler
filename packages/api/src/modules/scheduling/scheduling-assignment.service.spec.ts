@@ -751,6 +751,44 @@ describe('SchedulingAssignmentService', () => {
     expect(prisma.venue.update).toHaveBeenCalled();
   });
 
+  it('declines a swap instead of applying it when a party no longer has an account', async () => {
+    const swap = {
+      id: 'swap-orphaned',
+      venueId: 'venue-1',
+      status: 'accepted',
+      requesterProfileId: 'profile-a',
+      // The target's profile was deleted (account deletion) after this swap
+      // was accepted — ShiftSwap.targetProfileId is now null via SetNull.
+      targetProfileId: null,
+      requesterShiftId: 'shift-a',
+      targetShiftId: 'shift-b',
+    };
+    const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+    const prisma = {
+      shiftSwap: {
+        findFirst: vi.fn().mockResolvedValue(swap),
+        updateMany,
+      },
+      scheduleShift: { update: vi.fn() },
+      venue: { update: vi.fn() },
+      $executeRaw: vi.fn().mockResolvedValue(1),
+      $transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn(prisma as unknown)),
+    };
+    const service = new SchedulingAssignmentService(prisma as any);
+
+    await expect(service.reviewSwap({
+      venueId: 'venue-1',
+      swapId: 'swap-orphaned',
+      approve: true,
+    })).rejects.toThrow('no longer has an account');
+
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { id: 'swap-orphaned', status: { in: ['accepted', 'proposed'] } },
+      data: { status: 'declined' },
+    });
+    expect(prisma.scheduleShift.update).not.toHaveBeenCalled();
+  });
+
   it('denies a swap without touching schedule shifts', async () => {
     const swap = {
       id: 'swap-2',

@@ -37,6 +37,7 @@ import { NotificationsService } from '../../notifications/notifications.service'
 import { PrismaService } from '../../prisma/prisma.service';
 import { VenueScope } from '../../venue/venue-scope.decorator';
 import type { VenueScopedRequest } from '../../venue/venue-scope.interceptor';
+import { staffRequestDecidedTemplate, staffRequestSubmittedTemplate } from '../../email/templates/staff-requests';
 
 type Scope = VenueScopedRequest['venueScope'];
 
@@ -279,27 +280,10 @@ export class StaffRequestsController {
     const reqEnd = body.requestedRangeEnd || body.requestedForDate || reqStart;
     const dateRangeStr = reqStart && reqEnd ? (reqStart === reqEnd ? reqStart : `${reqStart} – ${reqEnd}`) : null;
 
-    void this.email.sendToVenueManagers(scope.venueId, {
-      subject: `Staff Request — ${kindLabel}: Action Required`,
-      text:
-        `Hi Manager,\n\n` +
-        `${profile.fullName} has submitted a new ${kindLabel.toLowerCase()} request. Please review and take action in the Venue Wrangler app.\n\n` +
-        `Request Details\n` +
-        `Detail\tInfo\n` +
-        `Employee\t${profile.fullName}\n` +
-        `Request Type\t${kindLabel}\n` +
-        `Title\t${body.title}\n` +
-        `Details\t${body.details}\n` +
-        (dateRangeStr ? `Date/Range\t${dateRangeStr}\n` : '') + '\n' +
-        `How to Respond\n` +
-        `1. Open the Venue Wrangler app\n` +
-        `2. Go to Requests & Approvals\n` +
-        `3. Select the request\n` +
-        `4. Tap Approve or Deny — the employee will be notified instantly\n\n` +
-        `Pending requests can also be managed from your Operations Dashboard.\n\n` +
-        `Questions? support@venuewrangler.com\n\n` +
-        `— The Venue Wrangler Team`,
-    });
+    void this.email.sendToVenueManagers(
+      scope.venueId,
+      staffRequestSubmittedTemplate({ employeeName: profile.fullName, kindLabel, title: body.title, details: body.details, dateRange: dateRangeStr }),
+    );
 
     return mapStaffRequest(request);
   }
@@ -566,12 +550,20 @@ export class StaffRequestsController {
         // the floor plan for a shift they had been told they were off. Apply
         // the approval to the shift the request names.
         if ((request.kind === 'drop_shift' || request.kind === 'open_shift') && request.requestedShiftId) {
-          await tx.scheduleShift.updateMany({
+          const dropped = await tx.scheduleShift.updateMany({
             // venueId as well as id: the shift id arrived on the request and a
             // tenant predicate belongs on every write.
             where: { id: request.requestedShiftId, venueId: request.venueId, profileId: request.profileId },
             data: { profileId: null, status: 'open' },
           });
+          // The where-clause's profileId match means 0 rows updated is not
+          // "already applied" — it means the shift no longer matches what this
+          // request expects (reassigned, deleted, or already dropped by
+          // another action). Approving would otherwise report success while
+          // silently leaving the schedule untouched.
+          if (dropped.count === 0) {
+            throw new BadRequestException('This shift no longer matches the request and cannot be approved as-is.');
+          }
         }
 
         // A swap needs two shifts and two people; a staff request carries one
@@ -585,10 +577,16 @@ export class StaffRequestsController {
         }
 
         if (request.kind === 'add_shift' && request.requestedShiftId) {
-          await tx.scheduleShift.updateMany({
+          const claimed = await tx.scheduleShift.updateMany({
             where: { id: request.requestedShiftId, venueId: request.venueId, profileId: null },
             data: { profileId: request.profileId, status: 'scheduled' },
           });
+          // profileId: null in the where-clause means 0 rows updated is a real
+          // conflict — the open shift this request wanted was already claimed
+          // by someone else between the request and this approval.
+          if (claimed.count === 0) {
+            throw new BadRequestException('This shift is no longer open and cannot be assigned by this approval.');
+          }
         }
       }
 
@@ -618,21 +616,16 @@ export class StaffRequestsController {
     const statusText = body.status.charAt(0).toUpperCase() + body.status.slice(1);
     const noteText = body.responseNotes?.trim();
 
-    void this.email.sendToProfile(request.profileId, {
-      subject: `Your ${kindLabel} Request Has Been ${statusText}`,
-      text:
-        `Hi there,\n\n` +
-        `Your ${kindLabel.toLowerCase()} request has been ${body.status} by your manager. Here are the details:\n\n` +
-        `Request Review Details\n` +
-        `Detail\tInfo\n` +
-        `Request Type\t${kindLabel}\n` +
-        `Title\t${request.title}\n` +
-        `Status\t${statusText}\n` +
-        `Reviewed By\t${reviewer.fullName}\n` +
-        (noteText ? `Manager's Note\t${noteText}\n` : '') + '\n' +
-        `Questions? support@venuewrangler.com\n\n` +
-        `— The Venue Wrangler Team`,
-    });
+    void this.email.sendToProfile(
+      request.profileId,
+      staffRequestDecidedTemplate({
+        kindLabel,
+        approved: body.status === 'approved',
+        title: request.title,
+        reviewerName: reviewer.fullName,
+        note: noteText,
+      }),
+    );
 
     return mapStaffRequest(updated);
   }

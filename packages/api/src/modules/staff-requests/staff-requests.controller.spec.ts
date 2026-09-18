@@ -326,4 +326,68 @@ describe('StaffRequestsController', () => {
     )).rejects.toThrow('several punches on that day');
     expect(create).not.toHaveBeenCalled();
   });
+
+  it('rejects approving a drop-shift request when the shift no longer matches (already reassigned)', async () => {
+    const now = new Date('2026-08-24T12:00:00.000Z');
+    const request = {
+      id: 'request-drop', venueId: 'venue-1', profileId: 'profile-1',
+      kind: 'drop_shift', status: 'pending', title: 'Drop shift', details: '',
+      requestedForDate: null, requestedShiftId: 'shift-1', requestedRangeStart: null,
+      requestedRangeEnd: null, availability: null,
+      reviewerId: null, reviewedAt: null, responseNotes: null,
+      createdAt: now, updatedAt: now,
+    };
+    // The shift no longer has profile-1 assigned (reassigned or dropped
+    // already), so the guarded updateMany's where-clause matches 0 rows.
+    const updateMany = vi.fn().mockResolvedValue({ count: 0 });
+    const tx = {
+      $executeRaw: vi.fn().mockResolvedValue(1),
+      staffRequest: { findUnique: vi.fn().mockResolvedValue(request) },
+      profile: { findUniqueOrThrow: vi.fn().mockResolvedValue({ id: 'manager-1', fullName: 'Manager' }) },
+      scheduleShift: { updateMany },
+    };
+    const controller = new StaffRequestsController(
+      { $transaction: vi.fn((callback: any) => callback(tx)) } as any,
+      { notifyProfile: vi.fn().mockResolvedValue(undefined) } as any,
+      { sendToProfile: vi.fn().mockResolvedValue(undefined) } as any,
+    );
+
+    await expect(controller.reviewStaffRequest(
+      { venueId: 'venue-1', profileId: 'manager-1', role: 'manager' } as any,
+      request.id,
+      { status: 'approved' } as any,
+    )).rejects.toThrow('no longer matches the request');
+  });
+
+  it('rejects approving an add-shift request when the open shift was already claimed', async () => {
+    const now = new Date('2026-08-24T12:00:00.000Z');
+    const request = {
+      id: 'request-add', venueId: 'venue-1', profileId: 'profile-1',
+      kind: 'add_shift', status: 'pending', title: 'Add shift', details: '',
+      requestedForDate: null, requestedShiftId: 'shift-2', requestedRangeStart: null,
+      requestedRangeEnd: null, availability: null,
+      reviewerId: null, reviewedAt: null, responseNotes: null,
+      createdAt: now, updatedAt: now,
+    };
+    // The shift is no longer open (profileId: null no longer matches), so
+    // the guarded updateMany's where-clause matches 0 rows.
+    const updateMany = vi.fn().mockResolvedValue({ count: 0 });
+    const tx = {
+      $executeRaw: vi.fn().mockResolvedValue(1),
+      staffRequest: { findUnique: vi.fn().mockResolvedValue(request) },
+      profile: { findUniqueOrThrow: vi.fn().mockResolvedValue({ id: 'manager-1', fullName: 'Manager' }) },
+      scheduleShift: { updateMany },
+    };
+    const controller = new StaffRequestsController(
+      { $transaction: vi.fn((callback: any) => callback(tx)) } as any,
+      { notifyProfile: vi.fn().mockResolvedValue(undefined) } as any,
+      { sendToProfile: vi.fn().mockResolvedValue(undefined) } as any,
+    );
+
+    await expect(controller.reviewStaffRequest(
+      { venueId: 'venue-1', profileId: 'manager-1', role: 'manager' } as any,
+      request.id,
+      { status: 'approved' } as any,
+    )).rejects.toThrow('no longer open');
+  });
 });

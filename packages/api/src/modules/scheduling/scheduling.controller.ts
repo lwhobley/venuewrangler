@@ -51,6 +51,16 @@ import { VenueScope } from '../../venue/venue-scope.decorator';
 import type { VenueScopedRequest } from '../../venue/venue-scope.interceptor';
 import { SchedulingAssignmentService } from './scheduling-assignment.service';
 import { AiSchedulerService } from './ai-scheduler.service';
+import {
+  newShiftsAssignedTemplate,
+  openShiftCoveredTemplate,
+  schedulePublishedManagerTemplate,
+  schedulePublishedStaffTemplate,
+  shiftChangedTemplate,
+  shiftSwapActionRequiredTemplate,
+  shiftSwapDecidedTemplate,
+  shiftSwapProposedTemplate,
+} from '../../email/templates/scheduling';
 
 type Scope = VenueScopedRequest['venueScope'];
 
@@ -550,9 +560,14 @@ export class SchedulingController {
       selectedAvailabilityWeekByProfile.set(profileId, selectedWeekStart);
     }
     const weeklyMinutes = new Map<string, number>();
+    const weeklyLaborCents = new Map<string, number>();
+    const breakWarnings: Array<{ shiftId: string; dayIndex: number; jobTitle: string; message: string }> = [];
     for (const shift of shifts) {
       if (!shift.profileId) continue;
-      weeklyMinutes.set(shift.profileId, (weeklyMinutes.get(shift.profileId) ?? 0) + Math.max(0, shift.endMinutes - shift.startMinutes));
+      const minutes = Math.max(0, shift.endMinutes - shift.startMinutes);
+      if (minutes >= 360 && (!shift.notes || !/break/i.test(shift.notes))) breakWarnings.push({ shiftId: shift.id, dayIndex: shift.dayIndex, jobTitle: shift.jobTitle, message: 'Shift is 6+ hours without a break window noted.' });
+      weeklyMinutes.set(shift.profileId, (weeklyMinutes.get(shift.profileId) ?? 0) + minutes);
+      if (shift.profile?.hourlyRateCents != null) weeklyLaborCents.set(shift.profileId, (weeklyLaborCents.get(shift.profileId) ?? 0) + (minutes / 60) * shift.profile.hourlyRateCents);
     }
     const totalScheduledMinutes = shifts.reduce((sum, shift) => sum + Math.max(0, shift.endMinutes - shift.startMinutes), 0);
     return {
@@ -570,6 +585,7 @@ export class SchedulingController {
           jobTitle: member.jobTitle,
           weeklyHours: Math.round((mins / 60) * 10) / 10,
           overtime: mins > 40 * 60,
+          estimatedLaborCents: member.hourlyRateCents == null ? null : Math.round(weeklyLaborCents.get(member.id) ?? 0),
           availabilityWeekStart: selectedAvailabilityWeekByProfile.get(member.id) ?? null,
           availability: (availabilityByProfile.get(member.id) ?? []).map((row) => ({
             dayIndex: row.dayIndex,
@@ -581,6 +597,11 @@ export class SchedulingController {
       }),
       laborBudgetHours: venue.weeklyLaborBudgetHours ?? null,
       totalScheduledHours: Math.round((totalScheduledMinutes / 60) * 10) / 10,
+      estimatedLaborCents: Math.round([...weeklyLaborCents.values()].reduce((sum, value) => sum + value, 0)),
+      warnings: {
+        break: breakWarnings,
+        overtime: staff.filter((member) => (weeklyMinutes.get(member.id) ?? 0) > 40 * 60).map((member) => ({ profileId: member.id, fullName: member.fullName, hours: Math.round(((weeklyMinutes.get(member.id) ?? 0) / 60) * 10) / 10 })),
+      },
       weekStart: selectedWeekStart,
       publishState: schedulePublishState(
         publication,
@@ -924,10 +945,10 @@ export class SchedulingController {
       title: 'Open shift covered',
       body: `${scope.fullName} picked up ${dayLabel(shift.dayIndex)} ${minutesToTime(shift.startMinutes)}-${minutesToTime(shift.endMinutes)}.`,
     });
-    void this.email.sendToVenueManagers(scope.venueId, {
-      subject: 'Open shift covered',
-      text: `${scope.fullName} picked up ${this.shiftLabel(shift)}.\n\n${shift.jobTitle} at ${shift.station}`,
-    });
+    void this.email.sendToVenueManagers(
+      scope.venueId,
+      openShiftCoveredTemplate({ pickedUpBy: scope.fullName, shiftLabel: this.shiftLabel(shift), jobTitle: shift.jobTitle, station: shift.station }),
+    );
     return { ok: true };
   }
 
@@ -994,35 +1015,10 @@ export class SchedulingController {
     });
 
     // Email 1: Send to the publishing manager
-    void this.email.sendToProfile(scope!.profileId, {
-      subject: `Schedule Published - Your Team's Shifts Are Live`,
-      text:
-        `Hi ${scope!.fullName},\n\n` +
-        `Your schedule for Week of ${weekLabel} has been successfully published. Your team has been notified and can view their shifts immediately in the Venue Wrangler app.\n\n` +
-        `What Happens Next\n` +
-        `Staff are notified via push notification the moment a schedule is published\n` +
-        `Shifts are visible to each employee as soon as they open the app\n` +
-        `Approved unavailable-day conflicts, if any, are flagged in your dashboard for review\n\n` +
-        `Schedule Summary\n` +
-        `Detail\tInfo\n` +
-        `Schedule Period\t${periodLabel}\n` +
-        `Total Shifts\t${totalShifts}\n` +
-        `Staff Scheduled\t${staffScheduled}\n` +
-        `Open Shifts\t${openShifts}\n` +
-        `Pending Approvals\t${pendingApprovals}\n\n` +
-        `Making Updates After Publishing\n` +
-        `Edit a shift - Select the shift and tap Edit. Changes push to the employee instantly.\n` +
-        `Add a shift - Tap an open slot and assign a team member or post as an open shift.\n` +
-        `Remove a shift - Select the shift and tap Delete. The employee is notified automatically.\n` +
-        `Handle swap requests - Swap requests appear in your Requests & Approvals queue.\n\n` +
-        `Pro Tips\n` +
-        `Publish schedules at least 72 hours in advance\n` +
-        `Use open shifts to fill gaps without manual assignment\n` +
-        `Check the Operations Dashboard for a real-time view of who's clocked in\n\n` +
-        `Questions? support@venuewrangler.com\n\n` +
-        `Let's wrangle.\n\n` +
-        `- The Venue Wrangler Team`,
-    });
+    void this.email.sendToProfile(
+      scope!.profileId,
+      schedulePublishedManagerTemplate({ fullName: scope!.fullName, periodLabel, totalShifts, staffScheduled, openShifts, pendingApprovals }),
+    );
 
     // Email 2: Send to all assigned staff members
     const assignedProfiles = await this.prisma.profile.findMany({
@@ -1034,38 +1030,18 @@ export class SchedulingController {
 
     for (const staff of assignedProfiles) {
       const staffShifts = shifts.filter((s) => s.profileId === staff.id);
-      const shiftRows = staffShifts
-        .map((s) => {
-          const dayName = dayLabel(s.dayIndex);
-          const dateMD = formatDateMD(addDays(sunday, s.dayIndex));
-          const startTime = minutesToTime(s.startMinutes);
-          const endTime = minutesToTime(s.endMinutes);
-          const area = s.station || 'Floor';
-          return `${dayName}\t${dateMD}\t${startTime}\t${endTime}\t${area}`;
-        })
-        .join('\n');
+      const staffShiftRows = staffShifts.map((s) => ({
+        day: dayLabel(s.dayIndex),
+        date: formatDateMD(addDays(sunday, s.dayIndex)),
+        start: minutesToTime(s.startMinutes),
+        end: minutesToTime(s.endMinutes),
+        area: s.station || 'Floor',
+      }));
 
-      void this.email.sendToProfile(staff.id, {
-        subject: `Your Schedule Is Live for Week of ${weekLabel}`,
-        text:
-          `Hi ${staff.fullName},\n\n` +
-          `Your manager just published the schedule for Week of ${weekLabel}. Your shifts are ready to view now in the Venue Wrangler app.\n\n` +
-          `Your Upcoming Shifts\n` +
-          `Day\tDate\tStart\tEnd\tLocation/Section\n` +
-          `${shiftRows}\n\n` +
-          `Log in to the app to see your full schedule.\n\n` +
-          `Need to Make a Change?\n` +
-          `Request time off - Submit a request and your manager is notified right away\n` +
-          `Swap a shift - Request a swap and it goes to your manager for approval\n` +
-          `Pick up an open shift - Check the Open Shifts board for extra hours\n\n` +
-          `Reminders\n` +
-          `Clock in using the app when your shift starts\n` +
-          `You'll always be notified if your schedule changes\n` +
-          `Reach out to your manager through the app for any conflicts\n\n` +
-          `Questions? support@venuewrangler.com\n\n` +
-          `See you on the floor.\n\n` +
-          `- The Venue Wrangler Team`,
-      });
+      void this.email.sendToProfile(
+        staff.id,
+        schedulePublishedStaffTemplate({ fullName: staff.fullName, periodLabel: `Week of ${weekLabel}`, shifts: staffShiftRows }),
+      );
     }
     return { notified: assigned };
   }
@@ -1172,6 +1148,13 @@ export class SchedulingController {
       fromDay: body.fromDay,
       toDays: [...new Set(body.toDays)],
     });
+  }
+
+  @RequireSubscription()
+  @Post('copy-previous-week')
+  async copyPreviousWeek(@VenueScope() scope: Scope, @Body() body: WeekDto) {
+    this.requireManager(scope);
+    return this.assignments.copyPreviousWeek({ venueId: scope!.venueId, weekStart: await this.resolveAvailabilityWeekStart(scope!.venueId, body.weekStart) });
   }
 
   @RequireSubscription()
@@ -1383,10 +1366,9 @@ export class SchedulingController {
       const profileAssignments = assignedByProfile.get(profile.id) ?? [];
       void this.email.send({
         to: profile.email,
-        subject: profileAssignments.length === 1 ? 'New shift assigned' : 'New shifts assigned',
-        text: `You were assigned ${profileAssignments.length === 1 ? 'a new shift' : 'new shifts'}:\n\n${profileAssignments
-          .map((shift) => `${this.shiftLabel(shift)}\n${shift.jobTitle} at ${shift.station}`)
-          .join('\n\n')}`,
+        ...newShiftsAssignedTemplate({
+          shifts: profileAssignments.map((shift) => ({ label: this.shiftLabel(shift), jobTitle: shift.jobTitle, station: shift.station })),
+        }),
       });
     }
     return { assigned, skipped };
@@ -1551,10 +1533,10 @@ export class SchedulingController {
       title: 'Shift swap proposed',
       body: `${scope.fullName} wants to swap ${this.shiftLabel(requesterShift)}.`,
     });
-    void this.email.sendToProfile(target.id, {
-      subject: 'Shift swap proposed',
-      text: `${scope.fullName} wants to swap ${this.shiftLabel(requesterShift)}.${body.note?.trim() ? `\n\nNote: ${body.note.trim()}` : ''}`,
-    });
+    void this.email.sendToProfile(
+      target.id,
+      shiftSwapProposedTemplate({ proposerName: scope.fullName, shiftLabel: this.shiftLabel(requesterShift), note: body.note }),
+    );
     return swap.id;
   }
 
@@ -1589,21 +1571,28 @@ export class SchedulingController {
       swapId: id,
       approve: body.approve,
     });
-    await this.notifications.notifyProfile({
-      venueId: scope!.venueId,
-      profileId: swap.requesterProfileId,
-      kind: 'swap_reviewed',
-      title: `Swap ${body.approve ? 'approved' : 'denied'}`,
-      body: `Your shift swap was ${body.approve ? 'approved' : 'denied'}.`,
-    });
+    // Either party's profile can be null if that account was deleted after
+    // this swap was proposed/accepted (see the schema comment on
+    // ShiftSwap.requesterProfileId/targetProfileId) — nothing to notify then.
+    if (swap.requesterProfileId) {
+      await this.notifications.notifyProfile({
+        venueId: scope!.venueId,
+        profileId: swap.requesterProfileId,
+        kind: 'swap_reviewed',
+        title: `Swap ${body.approve ? 'approved' : 'denied'}`,
+        body: `Your shift swap was ${body.approve ? 'approved' : 'denied'}.`,
+      });
+    }
     void this.sendStaffSwapReviewedEmail(scope!.venueId, swap.id, body.approve);
-    await this.notifications.notifyProfile({
-      venueId: scope!.venueId,
-      profileId: swap.targetProfileId,
-      kind: 'swap_reviewed',
-      title: `Swap ${body.approve ? 'approved' : 'denied'}`,
-      body: `A shift swap was ${body.approve ? 'approved' : 'denied'}.`,
-    });
+    if (swap.targetProfileId) {
+      await this.notifications.notifyProfile({
+        venueId: scope!.venueId,
+        profileId: swap.targetProfileId,
+        kind: 'swap_reviewed',
+        title: `Swap ${body.approve ? 'approved' : 'denied'}`,
+        body: `A shift swap was ${body.approve ? 'approved' : 'denied'}.`,
+      });
+    }
     return { ok: true };
   }
 
@@ -1740,7 +1729,7 @@ export class SchedulingController {
     return `${dayLabel(shift.dayIndex)} ${minutesToTime(shift.startMinutes)}-${minutesToTime(shift.endMinutes)}`;
   }
 
-  private async mapSwaps(venueId: string, swaps: Array<{ id: string; status: string; note: string | null; requesterProfileId: string; targetProfileId: string; requesterShiftId: string; targetShiftId: string | null; createdAt: Date }>, meId: string | null) {
+  private async mapSwaps(venueId: string, swaps: Array<{ id: string; status: string; note: string | null; requesterProfileId: string | null; targetProfileId: string | null; requesterShiftId: string; targetShiftId: string | null; createdAt: Date }>, meId: string | null) {
     // Labels only ever need the shifts these swaps reference — loading the
     // venue's entire shift history here grew unbounded with venue age.
     const staff = await this.prisma.profile.findMany({ where: { venueId, OR: ACTIVE_MEMBERSHIP } });
@@ -1759,8 +1748,8 @@ export class SchedulingController {
         _id: swap.id,
         status: swap.status,
         note: swap.note,
-        requesterName: nameById.get(swap.requesterProfileId) ?? 'Teammate',
-        targetName: nameById.get(swap.targetProfileId) ?? 'Teammate',
+        requesterName: (swap.requesterProfileId && nameById.get(swap.requesterProfileId)) ?? (swap.requesterProfileId ? 'Teammate' : 'Former teammate'),
+        targetName: (swap.targetProfileId && nameById.get(swap.targetProfileId)) ?? (swap.targetProfileId ? 'Teammate' : 'Former teammate'),
         requesterShift: this.shiftLabel(shiftById.get(swap.requesterShiftId) ?? { dayIndex: 0, startMinutes: 0, endMinutes: 0 }),
         targetShift: swap.targetShiftId && shiftById.get(swap.targetShiftId) ? this.shiftLabel(shiftById.get(swap.targetShiftId)!) : null,
         direction: meId === swap.targetProfileId ? 'incoming' : meId === swap.requesterProfileId ? 'outgoing' : 'other',
@@ -1812,24 +1801,15 @@ export class SchedulingController {
     const afterTime = after ? `${formatTime(after.startMinutes)} - ${formatTime(after.endMinutes)}` : '-';
     const afterArea = after ? (after.station || 'Floor') : '-';
 
-    void this.email.sendToProfile(profileId, {
-      subject: 'Schedule Update - A Change Has Been Made to Your Shift',
-      text:
-        `Hi ${profile.fullName},\n\n` +
-        `Your manager has made an update to your schedule. Please review the change below.\n\n` +
-        `What Changed\n` +
-        `Detail\tBefore\tAfter\n` +
-        `Date\t${beforeDate}\t${afterDate}\n` +
-        `Shift Time\t${beforeTime}\t${afterTime}\n` +
-        `Location/Section\t${beforeArea}\t${afterArea}\n` +
-        `Change Type\t-\t${changeType}\n\n` +
-        `What to Do\n` +
-        `No action required unless you have a conflict\n` +
-        `Reach out to your manager through the app to discuss the change\n` +
-        `Submit a swap or time-off request if needed\n\n` +
-        `Questions? support@venuewrangler.com\n\n` +
-        `- The Venue Wrangler Team`,
-    });
+    void this.email.sendToProfile(
+      profileId,
+      shiftChangedTemplate({
+        fullName: profile.fullName,
+        changeType,
+        before: { date: beforeDate, time: beforeTime, area: beforeArea },
+        after: { date: afterDate, time: afterTime, area: afterArea },
+      }),
+    );
   }
 
   private sendManagerSwapApprovalEmail(venueId: string, swapId: string) {
@@ -1840,7 +1820,9 @@ export class SchedulingController {
 
   private async sendManagerSwapApprovalEmailInBackground(venueId: string, swapId: string) {
     const swap = await this.prisma.shiftSwap.findUnique({ where: { id: swapId } });
-    if (!swap) return;
+    // A party's profile can be null if that account was deleted after this
+    // swap was proposed/accepted — nothing useful to email in that case.
+    if (!swap || !swap.requesterProfileId || !swap.targetProfileId) return;
 
     const [requester, target, reqShift, tarShift] = await Promise.all([
       this.prisma.profile.findUnique({ where: { id: swap.requesterProfileId } }),
@@ -1894,24 +1876,16 @@ export class SchedulingController {
     for (const manager of managers) {
       void this.email.send({
         to: manager.email,
-        subject: 'Shift Swap Request - Action Required',
-        text:
-          `Hi ${manager.fullName},\n\n` +
-          `${requester.fullName} has submitted a shift swap request. Please review and take action in the Venue Wrangler app.\n\n` +
-          `Swap Request Details\n` +
-          `Detail\tRequestor\tSwap Partner\n` +
-          `Employee\t${requester.fullName}\t${target.fullName}\n` +
-          `Date\t${reqDate}\t${tarDate}\n` +
-          `Shift Time\t${reqTime}\t${tarTime}\n` +
-          `Submitted\t${submittedStr}\t-\n\n` +
-          `How to Respond\n` +
-          `1. Open the Venue Wrangler app\n` +
-          `2. Go to Requests & Approvals\n` +
-          `3. Select the swap request\n` +
-          `4. Tap Approve or Deny - both employees are notified instantly\n\n` +
-          `Pending requests can also be managed from your Operations Dashboard.\n\n` +
-          `Questions? support@venuewrangler.com\n\n` +
-          `- The Venue Wrangler Team`,
+        ...shiftSwapActionRequiredTemplate({
+          managerName: manager.fullName,
+          requesterName: requester.fullName,
+          targetName: target.fullName,
+          requesterDate: reqDate,
+          requesterTime: reqTime,
+          targetDate: tarDate,
+          targetTime: tarTime,
+          submittedAt: submittedStr,
+        }),
       });
     }
   }
@@ -1924,7 +1898,9 @@ export class SchedulingController {
 
   private async sendStaffSwapReviewedEmailInBackground(venueId: string, swapId: string, approve: boolean) {
     const swap = await this.prisma.shiftSwap.findUnique({ where: { id: swapId } });
-    if (!swap) return;
+    // A party's profile can be null if that account was deleted after this
+    // swap was proposed/accepted — nothing useful to email in that case.
+    if (!swap || !swap.requesterProfileId || !swap.targetProfileId) return;
 
     const [requester, target, reqShift, tarShift] = await Promise.all([
       this.prisma.profile.findUnique({ where: { id: swap.requesterProfileId } }),
@@ -1961,26 +1937,13 @@ export class SchedulingController {
     const sendEmail = (recipient: typeof requester, coworker: typeof target, isRequester: boolean) => {
       void this.email.send({
         to: recipient.email,
-        subject: `Your Shift Swap Request Has Been ${statusText}`,
-        text:
-          `Hi ${recipient.fullName},\n\n` +
-          `Your shift swap request has been ${statusText} by your manager. Here are the details:\n\n` +
-          `Swap Details\n` +
-          `Detail\tYour Shift\tCoworker's Shift\n` +
-          `Employee\t${recipient.fullName}\t${coworker.fullName}\n` +
-          `Date\t${isRequester ? reqDate : tarDate}\t${isRequester ? tarDate : reqDate}\n` +
-          `Shift Time\t${isRequester ? reqTime : tarTime}\t${isRequester ? tarTime : reqTime}\n` +
-          `Status\t${statusText}\t${statusText}\n\n` +
-          (approve
-            ? `If Approved\n` +
-              `Your schedule has been updated automatically\n` +
-              `Both you and your coworker will see the updated shifts in the app\n` +
-              `Make sure to clock in for your new shift on time\n\n`
-            : `If Denied\n` +
-              `Your original shift remains on your schedule\n` +
-              `Reach out to your manager through the app if you have questions or need further assistance\n\n`) +
-          `Questions? support@venuewrangler.com\n\n` +
-          `- The Venue Wrangler Team`,
+        ...shiftSwapDecidedTemplate({
+          fullName: recipient.fullName,
+          coworkerName: coworker.fullName,
+          approved: approve,
+          yourShift: { date: isRequester ? reqDate : tarDate, time: isRequester ? reqTime : tarTime },
+          coworkerShift: { date: isRequester ? tarDate : reqDate, time: isRequester ? tarTime : reqTime },
+        }),
       });
     };
 

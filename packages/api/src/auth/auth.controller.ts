@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Logger, Optional, Post, Req, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Logger, Optional, Post, Req, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Throttle } from '@nestjs/throttler';
 import { Role } from '@prisma/client';
@@ -20,6 +20,7 @@ import { runWithoutTenant } from '../prisma/tenant-context';
 import { isActiveMembership } from '../common/membership';
 import { AuthService } from './auth.service';
 import { AuditService } from '../modules/audit/audit.service';
+import { passwordChangedTemplate, resetPasswordTemplate, verifyEmailTemplate } from '../email/templates/auth';
 
 const TRIAL_DURATION_MS = 14 * 24 * 60 * 60 * 1000;
 const EMAIL_CODE_TTL_MS = 24 * 60 * 60 * 1000;
@@ -98,6 +99,12 @@ class VerifyEmailDto {
   @IsString()
   @Matches(/^\d{10}$/)
   code!: string;
+}
+
+class ConfirmAdoptionDto {
+  @IsString()
+  @MaxLength(64)
+  profileId!: string;
 }
 
 class ForgotPasswordDto {
@@ -364,16 +371,7 @@ export class AuthController {
       select: { email: true },
     });
     if (account?.email) {
-      void this.email.send({
-        to: account.email,
-        subject: 'Security Alert: Your Venue Wrangler Password Has Been Changed',
-        text:
-          `Hi there,\n\n` +
-          `Your Venue Wrangler account password was successfully changed.\n\n` +
-          `If you did not make this change, please reset your password immediately in the app and contact our support team at support@venuewrangler.com to secure your account.\n\n` +
-          `Questions? support@venuewrangler.com\n\n` +
-          `— The Venue Wrangler Team`,
-      });
+      void this.email.send({ to: account.email, ...passwordChangedTemplate() });
     }
     void this.audit?.record({
       venueId: user.venueId,
@@ -496,15 +494,7 @@ export class AuthController {
       queueMicrotask(() => {
         void this.email.send({
           to: accountEmail,
-          subject: 'Reset Your Venue Wrangler Password',
-          text:
-            `Hi ${account.profiles?.[0]?.fullName ?? 'there'},\n\n` +
-            `We received a request to reset the password for your Venue Wrangler account.\n\n` +
-            `To complete your password reset, enter the following code when prompted in the app:\n\n` +
-            `   ${code}\n\n` +
-            `Note: This code is valid for 60 minutes. If you did not request a password reset, you can safely ignore this email — your account remains secure.\n\n` +
-            `Questions? support@venuewrangler.com\n\n` +
-            `— The Venue Wrangler Team`,
+          ...resetPasswordTemplate({ fullName: account.profiles?.[0]?.fullName, code }),
         }).catch((error: any) => {
           this.logger.error(`Password reset email failed for user ${account.id}: ${error?.message ?? String(error)}`);
         });
@@ -627,6 +617,23 @@ export class AuthController {
     return { ok: true };
   }
 
+  // Explicit, user-initiated confirmation of a pendingAdoption candidate
+  // returned by a login/signup response. Nothing changes until the person
+  // actually confirms — see AuthService.confirmProfileAdoption for why this
+  // can no longer happen automatically.
+  @Post('confirm-adoption')
+  async confirmAdoption(@Req() request: Request, @CurrentUser() user: AuthUser, @Body() body: ConfirmAdoptionDto) {
+    await assertWithinSharedRateLimit(this.prisma, `confirm-adoption:${user.sub}`, 10, AUTH_RATE_LIMIT_WINDOW_MS);
+    await assertWithinSharedRateLimit(this.prisma, `confirm-adoption:ip:${getClientIp(request)}`, 10, AUTH_RATE_LIMIT_WINDOW_MS);
+    const profile = await this.authService.confirmProfileAdoption(user.sub, body.profileId);
+    return { profile: mapProfile(profile, true), venue: profile.venue ? mapVenue(profile.venue) : null };
+  }
+
+  @Get('pending-adoption')
+  async pendingAdoption(@CurrentUser() user: AuthUser) {
+    return { pendingAdoption: await this.authService.pendingProfileAdoption(user.sub) };
+  }
+
   // Revoke every session for the account (all devices).
   @AllowUnverifiedEmail()
   @Post('logout-all')
@@ -641,7 +648,7 @@ export class AuthController {
   }
 
   private async issueSession(userId: string, email: string, fullName?: string, inviteToken?: string, rawPhone?: string) {
-    const { session, profile } = await this.authService.issueSession(userId, email, fullName, inviteToken, rawPhone);
+    const { session, profile, pendingAdoption } = await this.authService.issueSession(userId, email, fullName, inviteToken, rawPhone);
     const account = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { emailVerifiedAt: true },
@@ -685,6 +692,11 @@ export class AuthController {
       profile: mapProfile(profile, emailVerified),
       venue: emailVerified && isActiveMembership(profile.membershipStatus) && profile.venue ? mapVenue(profile.venue) : null,
       venues,
+      // A roster row elsewhere matched this account's verified email. Not
+      // applied automatically — the client should prompt ("You appear to be
+      // on the roster at {venueName} as {role} — join?") and call
+      // POST /v1/auth/confirm-adoption only if the person confirms.
+      pendingAdoption: pendingAdoption ?? null,
     };
   }
 
@@ -721,15 +733,7 @@ export class AuthController {
     });
     await this.email.sendOrThrow({
       to: email,
-      subject: 'Verify Your Venue Wrangler Email Address',
-      text:
-        `Hi ${fullName?.trim() || 'there'},\n\n` +
-        `Thank you for signing up for Venue Wrangler!\n\n` +
-        `To complete your registration and verify your email address, please enter the following verification code in the app:\n\n` +
-        `   ${code}\n\n` +
-        `Note: This verification code is valid for 24 hours.\n\n` +
-        `Questions? support@venuewrangler.com\n\n` +
-        `— The Venue Wrangler Team`,
+      ...verifyEmailTemplate({ fullName, code }),
     });
   }
 }

@@ -4,9 +4,15 @@ dist
 **/dist
 .git
 .expo
-.env
-.env.*
-!.env.example
+# Docker matches these against the context-relative path, so a bare `.env`
+# covers ONLY the repo root — unlike .gitignore, where it is recursive.
+# packages/api/.env exists on disk and `COPY packages/api packages/api` was
+# pulling it into the build stage, where prisma.config.ts's `dotenv/config`
+# then loaded it and overrode the placeholder DATABASE_URL during
+# `prisma generate`.
+**/.env
+**/.env.*
+!**/.env.example
 .vs
 .claude
 .codex

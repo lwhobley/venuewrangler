@@ -298,7 +298,7 @@ describe('AppStaffController', () => {
       }));
       expect(email.send).toHaveBeenCalledWith(expect.objectContaining({
         to: 'new@example.com',
-        subject: expect.stringContaining('Invitation'),
+        subject: expect.stringContaining('added to the team'),
       }));
       expect(result.email).toBe('new@example.com');
     });
@@ -390,7 +390,7 @@ describe('AppStaffController', () => {
       } as any);
 
       expect(email.send).toHaveBeenCalledWith(expect.objectContaining({
-        subject: expect.stringContaining('Profile Has Been Updated'),
+        subject: expect.stringContaining('profile was updated'),
       }));
     });
 

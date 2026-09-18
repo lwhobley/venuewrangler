@@ -60,8 +60,17 @@ import { MediaCleanupModule } from './modules/media-cleanup/media-cleanup.module
     }),
     // default: higher ceiling for authenticated dashboard polling
     // auth: tighter named bucket applied via @Throttle({ auth: ... }) on auth routes
+    //
+    // TEMPORARY INCIDENT STOPGAP (2026-09-10): raised 300 -> 900 while a client
+    // bug (setVenue bumping the cache-scope epoch on every getMe response, see
+    // lib/auth-store.ts) drove an infinite refetch loop on affected devices and
+    // tripped this limit, taking reservations/CRM/integrations/reports/sales
+    // down for those accounts. The real fix already shipped in commit 170589f
+    // and is in App Store review (build 34). This does not fix the loop, it
+    // only buys headroom until that review clears. Revert to 300 once build 34
+    // is live and the affected devices have updated.
     ThrottlerModule.forRoot([
-      { name: 'default', ttl: 60_000, limit: 300 },
+      { name: 'default', ttl: 60_000, limit: 900 },
       { name: 'auth', ttl: 60_000, limit: 20 },
     ]),
     ScheduleModule.forRoot(),

@@ -17,6 +17,12 @@ function makeController() {
     timeEntry: {
       updateMany: vi.fn().mockResolvedValue({ count: 1 }),
     },
+    scheduleShift: {
+      updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+    },
+    venue: {
+      findUnique: vi.fn().mockResolvedValue({ timezone: 'UTC' }),
+    },
     team: {
       upsert: vi.fn().mockResolvedValue({ id: 'team-1' }),
     },
@@ -327,7 +333,7 @@ describe('StaffController', () => {
       } as any);
 
       expect(email.send).toHaveBeenCalledWith(
-        expect.objectContaining({ to: 'staffer@x.com', subject: expect.stringContaining('Profile Has Been Updated') }),
+        expect.objectContaining({ to: 'staffer@x.com', subject: expect.stringContaining('profile was updated') }),
       );
     });
   });
@@ -355,7 +361,7 @@ describe('StaffController', () => {
       });
       expect(result).toEqual(expect.objectContaining({ fullName: 'New Hire' }));
       expect(email.send).toHaveBeenCalledWith(
-        expect.objectContaining({ to: 'new.hire@x.com', subject: expect.stringContaining('Invitation') }),
+        expect.objectContaining({ to: 'new.hire@x.com', subject: expect.stringContaining('added to the team') }),
       );
     });
 
@@ -455,6 +461,20 @@ describe('StaffController', () => {
         update: { memberCount: expect.any(Number) },
       });
       expect(result).toEqual(expect.objectContaining({ _id: 'staff-2' }));
+    });
+
+    it('unassigns this-week-onward shifts so a revoked employee is not left on the published schedule', async () => {
+      const { controller, prisma } = makeController();
+      prisma.profile.findUnique.mockResolvedValue({ id: 'staff-2', venueId: 'venue-1', role: 'staff', userId: 'user-2' });
+      prisma.profile.count.mockResolvedValue(0);
+      prisma.venue.findUnique.mockResolvedValue({ timezone: 'America/New_York' });
+
+      await controller.deactivateVenueStaff(managerScope, 'staff-2');
+
+      expect(prisma.scheduleShift.updateMany).toHaveBeenCalledWith({
+        where: { venueId: 'venue-1', profileId: 'staff-2', weekStart: { gte: expect.any(String) } },
+        data: { profileId: null, status: 'open' },
+      });
     });
 
     it('keeps sessions alive when the staff member is still active at another venue', async () => {
