@@ -16,6 +16,8 @@ working-tree changes. It is not a production or real-device sign-off.
 - Fixed the home migration guard and UI tests; restored existing mapper tests
   alongside the new hourly-rate privacy regression.
 - Installed compatible Expo SDK 57 patch versions and refreshed the lockfile.
+- Declared Vite explicitly for the test runtime on both release branches and
+  completed the mapper regression fixture so API TypeScript checks include it.
 - Release jobs use numbered database secret versions. Migration refuses a
   different project/database/schema; retention checks migrations before deletion.
 - Deployment drift checks now report the failing line instead of failing silently.
@@ -65,7 +67,9 @@ Windows local runs, with tests prevented from loading the production snapshot:
 - Approve the concrete production retention execution. Automatic approval review
   rejected it because normal cleanup can permanently delete expired audit and
   wage records. No alternate execution path was used.
-- Publish and reconcile the release branches, then obtain green current-commit
+- Merge the prepared [main release fixes](https://github.com/lwhobley/venuewrangler/pull/118)
+  and [desktop API reconciliation](https://github.com/lwhobley/venuewrangler/pull/119),
+  then obtain green current-commit
   API/Mobile CI, API branch parity, and serving-image drift evidence.
 - Build and deploy the immutable release image through the normal migration and
   candidate-health gates. Production migrations and traffic promotion have not
