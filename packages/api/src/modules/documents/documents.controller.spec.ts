@@ -36,8 +36,18 @@ describe('DocumentsController', () => {
       sizeBytes: 120, uploadedBy: { fullName: 'Morgan' }, createdAt: new Date(1000), updatedAt: new Date(2000),
     }]);
     const result = await controller.list(staffScope);
-    expect(prisma.venueDocument.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { venueId: 'venue-1' } }));
+    expect(prisma.venueDocument.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { venueId: 'venue-1', category: { notIn: ['form', 'other'] } },
+    }));
     expect(result[0]).toMatchObject({ id: 'doc-1', uploadedBy: 'Morgan', createdAt: 1000 });
+  });
+
+  it('does not hide form/other documents from managers', async () => {
+    prisma.venueDocument.findMany.mockResolvedValue([]);
+    await controller.list(managerScope);
+    expect(prisma.venueDocument.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { venueId: 'venue-1' },
+    }));
   });
 
   it('allows managers to upload validated documents', async () => {
@@ -75,6 +85,23 @@ describe('DocumentsController', () => {
     const result = await controller.access(staffScope, 'doc-1');
     expect(storage.getPresignedUrl).toHaveBeenCalledWith('documents/venue-1/key', 'sop.pdf', 'application/pdf');
     expect(result).toEqual({ url: 'https://s3.example.com/presigned-sop.pdf', expiresInSeconds: 120 });
+  });
+
+  it('404s staff out of a manager-only category document, same as a missing one', async () => {
+    prisma.venueDocument.findFirst.mockResolvedValue({
+      id: 'doc-1', venueId: 'venue-1', category: 'form', s3Key: 'documents/venue-1/key', fileName: 'w4.pdf', mimeType: 'application/pdf',
+    });
+    await expect(controller.access(staffScope, 'doc-1')).rejects.toThrow(NotFoundException);
+    expect(storage.getPresignedUrl).not.toHaveBeenCalled();
+  });
+
+  it('lets managers access a manager-only category document', async () => {
+    prisma.venueDocument.findFirst.mockResolvedValue({
+      id: 'doc-1', venueId: 'venue-1', category: 'form', s3Key: 'documents/venue-1/key', fileName: 'w4.pdf', mimeType: 'application/pdf',
+    });
+    storage.getPresignedUrl.mockResolvedValue('https://s3.example.com/presigned-w4.pdf');
+    const result = await controller.access(managerScope, 'doc-1');
+    expect(result).toEqual({ url: 'https://s3.example.com/presigned-w4.pdf', expiresInSeconds: 120 });
   });
 
   it('lets managers delete a venue document through the durable cleanup outbox', async () => {

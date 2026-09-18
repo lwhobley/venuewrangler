@@ -22,7 +22,7 @@ export function dayLabel(dayIndex: number) {
   return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][dayIndex] ?? 'Day';
 }
 
-export function mapVenue(venue: { id: string; name: string; latitude: number; longitude: number; geofenceRadiusM: number; timezone?: string | null }) {
+export function mapVenue(venue: { id: string; name: string; latitude: number; longitude: number; geofenceRadiusM: number; earlyClockInWindowMin?: number; clockTabletModeEnabled?: boolean; timezone?: string | null }) {
   return {
     _id: venue.id,
     id: venue.id,
@@ -32,6 +32,10 @@ export function mapVenue(venue: { id: string; name: string; latitude: number; lo
     geofenceRadiusM: venue.geofenceRadiusM,
     geofence_radius_m: venue.geofenceRadiusM,
     timezone: venue.timezone ?? null,
+    earlyClockInWindowMin: venue.earlyClockInWindowMin ?? 10,
+    early_clock_in_window_min: venue.earlyClockInWindowMin ?? 10,
+    clockTabletModeEnabled: venue.clockTabletModeEnabled ?? false,
+    clock_tablet_mode_enabled: venue.clockTabletModeEnabled ?? false,
   };
 }
 

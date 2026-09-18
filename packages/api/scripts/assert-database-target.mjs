@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { assertAllowedHost, assertNotProduction } from './database-target.mjs';
+import { assertAllowedHost, assertNotProduction, assertSameDatabaseTarget } from './database-target.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const API_DIR = resolve(HERE, '..');
@@ -70,6 +70,9 @@ if (MIGRATE_COMMANDS.has(process.env.npm_lifecycle_event ?? '') && !directUrl) {
     'DATABASE_DIRECT_URL is required for migration commands. Prisma Migrate uses the direct ' +
       '(non-pooled) connection declared as `directUrl` in prisma/schema.prisma.',
   );
+}
+if (MIGRATE_COMMANDS.has(process.env.npm_lifecycle_event ?? '') && directUrl) {
+  assertSameDatabaseTarget(databaseUrl, directUrl);
 }
 
 // Shell environment wins, so Cloud Run's configuration always overrides a file.

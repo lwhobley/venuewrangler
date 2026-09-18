@@ -8,6 +8,7 @@ import { adjacentWeekStarts, previousOvernightFilter, shiftsOverlap } from '../.
 import { syncTeamMemberCount } from '../../../common/team-sync';
 import { normalizedShiftEnd, zonedDateBounds, zonedIsoDate } from '../../../common/venue-time';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { InventoryMovementService } from '../../bar-inventory/inventory-movement.service';
 import { runWithoutTenant } from '../../../prisma/tenant-context';
 
 const DEFAULT_MODEL = 'gemini-flash-latest';
@@ -115,7 +116,7 @@ Rules:
 export class WranglerOperatorService {
   private readonly logger = new Logger(WranglerOperatorService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly inventory?: InventoryMovementService) {}
 
   async plan(input: { venueId: string; timezone?: string | null; command: string; actor: Actor }) {
     const command = input.command.trim();
@@ -148,7 +149,7 @@ export class WranglerOperatorService {
     };
   }
 
-  async execute(input: { venueId: string; timezone?: string | null; actor: Actor; plan: OperatorPlan }): Promise<OperatorExecutionResponse> {
+  async execute(input: { venueId: string; timezone?: string | null; actor: Actor; plan: OperatorPlan; requestId?: string }): Promise<OperatorExecutionResponse> {
     if (!this.canManage(input.actor)) throw new ForbiddenException('Manager access required for Wrangler operator actions');
     if (!ALLOWED_TOOLS.includes(input.plan.tool)) throw new BadRequestException('Unsupported Wrangler operator tool');
     const risk = this.riskFor(input.plan.tool);
@@ -158,7 +159,7 @@ export class WranglerOperatorService {
     }
 
     const normalized = await this.resolveWritePlan(input.venueId, input.timezone, { ...input.plan, risk });
-    const result = await this.executeWrite(input.venueId, input.timezone, input.actor, normalized);
+    const result = await this.executeWrite(input.venueId, input.timezone, input.actor, normalized, input.requestId);
     await this.writeAudit(input.venueId, input.actor, normalized, result);
     return { ok: true, tool: normalized.tool, risk, result };
   }
@@ -576,7 +577,7 @@ export class WranglerOperatorService {
     return { ...plan, args, preview } as ResolvedOperatorPlan;
   }
 
-  private async executeWrite(venueId: string, timezone: string | null | undefined, actor: Actor, plan: ResolvedOperatorPlan) {
+  private async executeWrite(venueId: string, timezone: string | null | undefined, actor: Actor, plan: ResolvedOperatorPlan, requestId?: string) {
     const args = plan.args;
 
     if (plan.tool === 'CLEAR_TABLE' || plan.tool === 'UPDATE_TABLE_STATUS') {
@@ -693,15 +694,22 @@ export class WranglerOperatorService {
     if (plan.tool === 'UPDATE_BAR_STOCK') {
       const itemName = String(args.itemName);
       const onHand = Number(args.onHand);
-      const item = await this.prisma.barInventoryItem.findFirst({
-        where: { venueId, name: { contains: itemName, mode: 'insensitive' } },
+      const items = await this.prisma.barInventoryItem.findMany({
+        where: { venueId, name: { equals: itemName, mode: 'insensitive' } },
+        take: 2,
       });
+      if (items.length > 1) throw new BadRequestException('Inventory name is ambiguous. Use the stock screen to select the item.');
+      const item = items[0];
       if (!item) throw new NotFoundException(`Inventory item "${itemName}" not found`);
-      const row = await this.prisma.barInventoryItem.update({
-        where: { id: item.id },
-        data: { onHand, lastCountedAt: new Date() },
-      });
-      return { id: row.id, name: row.name, onHand: row.onHand, parLevel: row.parLevel };
+      if (!this.inventory) throw new BadRequestException('Inventory service is unavailable');
+      // requestId is optional (older clients don't send one yet) — when
+      // present it lets a retried execute() call replay instead of creating
+      // a second movement row and re-firing manager alerts; when absent this
+      // behaves exactly as before (no idempotency protection, no regression).
+      const operationId = requestId ? `wrangler-${requestId}` : undefined;
+      const { movement } = await this.inventory.record({ venueId, itemId: item.id, createdBy: actor.profileId,
+        movementType: 'count', quantity: onHand, notes: 'Wrangler operator count', operationId });
+      return { id: item.id, name: item.name, onHand: movement.nextOnHand, parLevel: item.parLevel };
     }
 
     if (plan.tool === 'CREATE_SHIFT') {

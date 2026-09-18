@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { Readable, Writable } from 'node:stream';
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 
 vi.mock('./daily-brief-alerts', () => ({
@@ -79,10 +80,12 @@ function makeController() {
     upload: vi.fn().mockResolvedValue('s3-key-1'),
     delete: vi.fn().mockResolvedValue(undefined),
     getPresignedUrl: vi.fn().mockResolvedValue('https://signed.example/img.jpg'),
+    getObject: vi.fn().mockImplementation(async () => ({ Body: Readable.from(['photo']), ContentType: 'image/jpeg' })),
   } as any;
   const executionAutopilot = { ensureWorkspace: vi.fn().mockResolvedValue({ id: 'workspace-1' }) } as any;
-  const controller = new OperationsController(prisma, mediaAccess, s3ImageService, executionAutopilot);
-  return { controller, prisma, mediaAccess, s3ImageService, executionAutopilot };
+  const malwareScanner = { assertClean: vi.fn().mockResolvedValue(undefined) } as any;
+  const controller = new OperationsController(prisma, mediaAccess, s3ImageService, malwareScanner, executionAutopilot);
+  return { controller, prisma, mediaAccess, s3ImageService, executionAutopilot, malwareScanner };
 }
 
 function makeProfile(overrides: Partial<Record<string, any>> = {}) {
@@ -336,7 +339,7 @@ describe('OperationsController', () => {
         { id: 'r2', partySize: 2, guestName: 'B', reservationTime: new Date('2026-07-15T20:00:00Z'), tags: [], notes: null, specialRequests: null },
       ]);
       prisma.scheduleShift.findMany.mockResolvedValue([
-        { status: 'scheduled' },
+        { id: 'shift-1', status: 'scheduled', profile: { fullName: 'Alex' }, jobTitle: 'Server', station: 'Dining', startMinutes: 1020, endMinutes: 1440, hourlyRateCents: 2200 },
         { status: 'scheduled' },
         { status: 'open' },
       ]);
@@ -390,6 +393,11 @@ describe('OperationsController', () => {
       expect(result.posCovers).toBe(5);
       expect(result.salesCents).toBe(3000);
       expect(result.scheduledCount).toBe(2);
+      expect(result.shifts[0]).toEqual({ id: 'shift-1', status: 'scheduled', staffName: 'Alex', jobTitle: 'Server', station: 'Dining', startMinutes: 1020, endMinutes: 1440 });
+      expect(prisma.scheduleShift.findMany).toHaveBeenCalledWith(expect.objectContaining({
+        where: expect.objectContaining({ venueId: 'venue-1' }),
+        include: { profile: { select: { fullName: true } } },
+      }));
       expect(result.openShiftCount).toBe(1);
       expect(result.clockedInCount).toBe(4);
       expect(result.pendingRequestCount).toBe(2);
@@ -1026,27 +1034,34 @@ describe('OperationsController', () => {
       await expect(controller.getChecklistPhoto('comp-1', 'tok', res)).rejects.toThrow(NotFoundException);
     });
 
-    it('validates the media token before redirecting to a presigned URL', async () => {
+    it('validates the media token and streams photos through the API origin', async () => {
       const { controller, prisma, mediaAccess, s3ImageService } = makeController();
       prisma.checklistCompletion.findUnique.mockResolvedValue({ id: 'comp-1', photoKey: 'photos/comp-1.jpg', venueId: 'venue-1' });
-      const res = { setHeader: vi.fn(), redirect: vi.fn() } as any;
+      const chunks: Buffer[] = [];
+      const res = Object.assign(new Writable({ write(chunk, _encoding, next) { chunks.push(Buffer.from(chunk)); next(); } }), { setHeader: vi.fn() });
 
-      await controller.getChecklistPhoto('comp-1', 'tok', res);
+      await controller.getChecklistPhoto('comp-1', 'tok', res as any);
 
       expect(mediaAccess.assertToken).toHaveBeenCalledWith('tok', 'checklist-photo', 'comp-1', 'venue-1');
-      expect(s3ImageService.getPresignedUrl).toHaveBeenCalledWith('photos/comp-1.jpg');
+      expect(s3ImageService.getObject).toHaveBeenCalledWith('photos/comp-1.jpg');
+      expect(mediaAccess.assertToken.mock.invocationCallOrder[0]).toBeLessThan(s3ImageService.getObject.mock.invocationCallOrder[0]);
       expect(res.setHeader).toHaveBeenCalledWith('Cache-Control', 'no-store');
       expect(res.setHeader).toHaveBeenCalledWith('Referrer-Policy', 'no-referrer');
-      expect(res.redirect).toHaveBeenCalledWith(302, 'https://signed.example/img.jpg');
+      expect(res.setHeader).toHaveBeenCalledWith('Cross-Origin-Resource-Policy', 'cross-origin');
+      expect(Buffer.concat(chunks).toString()).toBe('photo');
     });
 
-    it('propagates a rejected/invalid token instead of redirecting', async () => {
+    it('rejects a rejected/invalid token instead of redirecting, with the same message a missing photo gets', async () => {
+      // Same response either way: a caller with a bad/expired token cannot
+      // distinguish "this completion id doesn't exist" from "it exists but
+      // your token is wrong" by comparing error messages/status codes.
       const { controller, prisma, mediaAccess } = makeController();
       prisma.checklistCompletion.findUnique.mockResolvedValue({ id: 'comp-1', photoKey: 'photos/comp-1.jpg', venueId: 'venue-1' });
       mediaAccess.assertToken.mockRejectedValue(new Error('Media access token is invalid or expired'));
       const res = { setHeader: vi.fn(), redirect: vi.fn() } as any;
 
-      await expect(controller.getChecklistPhoto('comp-1', 'bad-tok', res)).rejects.toThrow('Media access token is invalid or expired');
+      await expect(controller.getChecklistPhoto('comp-1', 'bad-tok', res)).rejects.toThrow(NotFoundException);
+      await expect(controller.getChecklistPhoto('comp-1', 'bad-tok', res)).rejects.toThrow('Photo not found');
       expect(res.redirect).not.toHaveBeenCalled();
     });
   });

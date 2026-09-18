@@ -22,12 +22,12 @@ describe('PushController', () => {
     )).resolves.toEqual({ id: 'push-1', ok: true });
 
     expect(upsert).toHaveBeenCalledWith(expect.objectContaining({
-      where: { token: 'ExponentPushToken[test]' },
+      where: { venueId_token: { venueId: 'venue-1', token: 'ExponentPushToken[test]' } },
       update: expect.objectContaining({ profileId: 'profile-1', venueId: 'venue-1', enabled: true }),
     }));
   });
 
-  it('rejects rebinding a token owned by another profile', async () => {
+  it('rejects rebinding a token owned by another profile at the same venue', async () => {
     const controller = new PushController({
       $transaction: (callback: any) => callback({
         $executeRaw: vi.fn(),
@@ -38,5 +38,22 @@ describe('PushController', () => {
       { profileId: 'profile-1', venueId: 'venue-1' } as any,
       { token: 'ExponentPushToken[test]', platform: 'android' },
     )).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('allows the same token to be registered at a different venue', async () => {
+    const upsert = vi.fn().mockResolvedValue({ id: 'push-2' });
+    // No existing row for (venue-2, token) even though the token is bound
+    // elsewhere for venue-1 — that other venue's row is a separate key now.
+    const findUnique = vi.fn().mockResolvedValue(null);
+    const controller = new PushController({
+      $transaction: (callback: any) => callback({ $executeRaw: vi.fn(), pushToken: { findUnique, upsert } }),
+    } as any);
+
+    await expect(controller.registerPushToken(
+      { profileId: 'profile-1', venueId: 'venue-2' } as any,
+      { token: 'ExponentPushToken[test]', platform: 'android' },
+    )).resolves.toEqual({ id: 'push-2', ok: true });
+
+    expect(findUnique).toHaveBeenCalledWith({ where: { venueId_token: { venueId: 'venue-2', token: 'ExponentPushToken[test]' } } });
   });
 });

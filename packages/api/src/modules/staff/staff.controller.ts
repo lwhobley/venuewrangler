@@ -8,7 +8,7 @@ import {
   Param,
   Post,
 } from '@nestjs/common';
-import { ArrayMaxSize, IsArray, IsDateString, IsEmail, IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsDateString, IsEmail, IsIn, IsInt, IsOptional, IsString, Max, Min, MaxLength } from 'class-validator';
 import { Prisma, Role } from '@prisma/client';
 import { canManageRole, canManageVenue, isOwnerOrAdminRole } from '../../auth/roles';
 import { RequireSubscription } from '../../billing/require-subscription.decorator';
@@ -18,7 +18,9 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { VenueScope } from '../../venue/venue-scope.decorator';
 import type { VenueScopedRequest } from '../../venue/venue-scope.interceptor';
 import { syncTeamMemberCount } from '../../common/team-sync';
+import { todayInZone, weekStartFor } from '../../common/pay-period';
 import { AuditService } from '../audit/audit.service';
+import { rosterInvitedTemplate, rosterProfileUpdatedTemplate } from '../../email/templates/roster';
 
 type Scope = VenueScopedRequest['venueScope'];
 
@@ -41,6 +43,12 @@ class UpsertStaffDto {
   @IsString()
   @MaxLength(100)
   jobTitle!: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(1000000)
+  hourlyRateCents?: number;
 
   @IsOptional()
   @IsString()
@@ -120,6 +128,7 @@ export class StaffController {
             fullName: body.fullName,
             role: body.role as Role,
             jobTitle: body.jobTitle,
+            hourlyRateCents: body.hourlyRateCents ?? member.hourlyRateCents,
             venueId: scope.venueId,
             phone: body.phone ?? member.phone,
             altPhone: body.altPhone ?? member.altPhone,
@@ -157,18 +166,7 @@ export class StaffController {
       });
       void this.email.send({
         to: updated.email,
-        subject: 'Your Venue Wrangler Profile Has Been Updated',
-        text:
-          `Hi ${updated.fullName},\n\n` +
-          `Your team profile at ${scope.venueName} has been updated. Here are your current profile details:\n\n` +
-          `Updated Profile Details\n` +
-          `Detail\tInfo\n` +
-          `Name\t${updated.fullName}\n` +
-          `Role\t${updated.role}\n` +
-          `Job Title\t${updated.jobTitle}\n\n` +
-          `If you did not request these changes or have any questions, please contact your venue administrator.\n\n` +
-          `Questions? support@venuewrangler.com\n\n` +
-          `— The Venue Wrangler Team`,
+        ...rosterProfileUpdatedTemplate({ fullName: updated.fullName, venueName: scope.venueName, role: updated.role, jobTitle: updated.jobTitle }),
       });
       return mapProfile(updated);
     }
@@ -181,6 +179,7 @@ export class StaffController {
           fullName: body.fullName,
           role: body.role as Role,
           jobTitle: body.jobTitle,
+          hourlyRateCents: body.hourlyRateCents ?? null,
           venueId: scope.venueId,
           phone: body.phone?.trim() || null,
           altPhone: body.altPhone?.trim() || null,
@@ -211,16 +210,7 @@ export class StaffController {
     });
     void this.email.send({
       to: created.email,
-      subject: `Invitation: Join the Team at ${scope.venueName} on Venue Wrangler`,
-      text:
-        `Hi ${created.fullName},\n\n` +
-        `Welcome! You have been added to the team at ${scope.venueName} as a ${created.jobTitle}.\n\n` +
-        `To view your schedule, request unavailable days, and request shift swaps, please join the venue using the steps below:\n\n` +
-        `1. Create a Venue Wrangler account or sign in using your email: ${created.email}\n` +
-        `2. You will be automatically linked to the venue and can access your dashboard right away.\n\n` +
-        `We're excited to have you on board!\n\n` +
-        `Questions? support@venuewrangler.com\n\n` +
-        `— The Venue Wrangler Team`,
+      ...rosterInvitedTemplate({ fullName: created.fullName, venueName: scope.venueName, jobTitle: created.jobTitle, email: created.email }),
     });
     return mapProfile(created);
   }
@@ -238,6 +228,9 @@ export class StaffController {
       throw new ForbiddenException('Staff member does not belong to this venue');
     }
 
+    const venue = await this.prisma.venue.findUnique({ where: { id: scope.venueId }, select: { timezone: true } });
+    const currentWeekStart = weekStartFor(todayInZone(venue?.timezone ?? null));
+
     const updated = await this.prisma.$transaction(async (tx) => {
       await this.assertCanManageTarget(scope, staff, true, tx);
       const u = await tx.profile.update({
@@ -250,6 +243,16 @@ export class StaffController {
           isOpen: false,
           clockOutAt: new Date(),
         },
+      });
+      // A revoked employee is no longer expected to show up. Past/current-week
+      // shifts stay assigned (they're worked or in-progress, and payroll comes
+      // from TimeEntry/PosLaborPunch, not this row), but anything from the
+      // current week onward is opened back up so a manager sees the real gap
+      // instead of a published schedule that quietly assumes someone who no
+      // longer works here.
+      await tx.scheduleShift.updateMany({
+        where: { venueId: scope.venueId, profileId: staff.id, weekStart: { gte: currentWeekStart } },
+        data: { profileId: null, status: 'open' },
       });
       if (staff.userId) {
         const activeElsewhere = await tx.profile.count({

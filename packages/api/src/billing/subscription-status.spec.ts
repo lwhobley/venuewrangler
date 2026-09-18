@@ -16,20 +16,20 @@ function fakePrisma(subscriptionStatus: string | null, trialEndsAt?: Date | null
 }
 
 describe('resolveVenueSubscriptionStatus', () => {
-  it('returns the venue status directly when it is non-terminal', async () => {
+  it('does not trust a cached active venue without a subscription', async () => {
     const result = await resolveVenueSubscriptionStatus(fakePrisma(null), {
       venueId: 'v1',
       venueStatus: 'active',
     });
-    expect(result).toBe('active');
+    expect(result).toBe('expired');
   });
 
-  it('takes the fast path for active venues without querying the subscription row', async () => {
-    const findFirst = vi.fn();
+  it('checks the authoritative subscription even when the cached venue is active', async () => {
+    const findFirst = vi.fn().mockResolvedValue({ status: 'cancelled' });
     const prisma = { subscription: { findFirst } } as unknown as PrismaService;
     const result = await resolveVenueSubscriptionStatus(prisma, { venueId: 'v1', venueStatus: 'active' });
-    expect(result).toBe('active');
-    expect(findFirst).not.toHaveBeenCalled();
+    expect(result).toBe('cancelled');
+    expect(findFirst).toHaveBeenCalledOnce();
   });
 
   it('falls back to the latest subscription record when the venue status is terminal', async () => {
@@ -67,11 +67,11 @@ describe('resolveVenueSubscriptionStatus', () => {
   });
 });
 
-describe('app-native trial fast path', () => {
+describe('app-native trial resolution', () => {
   const future = () => new Date(Date.now() + 5 * 24 * 60 * 60 * 1000);
   const past = () => new Date(Date.now() - 1000);
 
-  it('skips the subscription read for a live trial with no billing platform', async () => {
+  it('checks for payer coverage before using a live app-native trial', async () => {
     // 'trialing' is where every new customer spends their first 14 days, so
     // this read sat in front of every gated request during that window.
     const findFirst = vi.fn();
@@ -85,7 +85,7 @@ describe('app-native trial fast path', () => {
     });
 
     expect(result).toBe('trialing');
-    expect(findFirst).not.toHaveBeenCalled();
+    expect(findFirst).toHaveBeenCalledOnce();
   });
 
   it('still reads the subscription once an external provider owns the venue', async () => {

@@ -5,6 +5,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { withSerializableRetry } from '../../common/tx-retry';
 import { ReservationNotifierService } from '../reservations/reservation-notifier.service';
+import { TERMINAL_RESERVATION_STATUSES } from '../reservations/reservation-mutation.service';
 import { refreshTableStates } from './table-state';
 
 /**
@@ -520,6 +521,16 @@ export class FloorService {
     return { ok: true };
   }
 
+  /** Advisory-lock every table involved, sorted so concurrent callers touching
+   * an overlapping set always acquire locks in the same order (no deadlock).
+   * Shared by merge/split so they can never interleave with each other or
+   * with an in-flight assign/release on the same table's TableState row. */
+  private async lockFloorTables(tx: Prisma.TransactionClient, venueId: string, tableIds: string[]) {
+    for (const tableId of Array.from(new Set(tableIds)).sort()) {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`floor-table:${venueId}:${tableId}`}))`;
+    }
+  }
+
   async mergeTablesForParty(venueId: string, tableIdsInput: string[], partySize?: number) {
     const tableIds = Array.from(new Set(tableIdsInput));
     if (tableIds.length < 2) throw new BadRequestException('Select at least two tables to merge');
@@ -528,78 +539,97 @@ export class FloorService {
     const unknown = tableIds.filter((id) => !validTableIds.has(id));
     if (unknown.length) throw new BadRequestException('One or more tables are not on this venue\'s floor plan');
 
-    const states = await this.prisma.tableState.findMany({
-      where: { venueId, tableId: { in: tableIds } },
-    });
-    if (states.length !== tableIds.length) throw new BadRequestException('One or more tables are missing live state');
-    if (states.some((state) => state.mergeGroupId)) {
-      throw new ConflictException('Split already-merged tables before creating a new merge');
-    }
-    const seatedStates = states.filter((state) => state.status === 'seated');
-    if (seatedStates.length > 0) {
-      const now = new Date();
-      const assignments = this.prisma.tableAssignment?.findMany
-        ? await this.prisma.tableAssignment.findMany({
-            where: { venueId, tableId: { in: tableIds }, releasedAt: null, startsAt: { lte: now }, endsAt: { gt: now } },
-            select: { tableId: true, reservationId: true, waitlistId: true },
-          })
-        : [];
-      const identityByTable = new Map(assignments.map((assignment) => [
-        assignment.tableId,
-        assignment.reservationId ? `reservation:${assignment.reservationId}` : assignment.waitlistId ? `waitlist:${assignment.waitlistId}` : null,
-      ]));
-      const identities = seatedStates.map((state) => identityByTable.get(state.tableId));
-      if (identities.some((identity) => !identity) || new Set(identities).size !== 1) {
-        throw new ConflictException('Seated tables can only be merged when they belong to the same reservation or waitlist party');
-      }
-    }
-    const canMerge = states.every((state) => ['available', 'dirty', 'seated'].includes(state.status))
-      && (seatedStates.length === 0 || new Set(seatedStates.map((state) => state.partySize)).size === 1);
-    const blocked = canMerge ? undefined : states.find((state) => !['available', 'dirty', 'seated'].includes(state.status)) ?? seatedStates[0];
-    if (blocked) throw new ConflictException(`Table ${blocked.tableId} is not available to merge`);
-
     const mergeGroupId = randomUUID();
-    const seatedPartySize = seatedStates[0]?.partySize ?? partySize ?? null;
-    await this.prisma.tableState.updateMany({
-      where: { venueId, tableId: { in: tableIds } },
-      data: {
-        mergeGroupId,
-        ...(seatedStates.length ? { status: 'seated' as const, partySize: seatedPartySize, seatedAt: seatedStates[0]?.seatedAt ?? new Date() } : { partySize: partySize ?? null }),
-        lastActivityAt: new Date(),
-      },
+    await withSerializableRetry(this.prisma, async (tx) => {
+      await this.lockFloorTables(tx, venueId, tableIds);
+
+      const states = await tx.tableState.findMany({
+        where: { venueId, tableId: { in: tableIds } },
+      });
+      if (states.length !== tableIds.length) throw new BadRequestException('One or more tables are missing live state');
+      if (states.some((state) => state.mergeGroupId)) {
+        throw new ConflictException('Split already-merged tables before creating a new merge');
+      }
+      const seatedStates = states.filter((state) => state.status === 'seated');
+      if (seatedStates.length > 0) {
+        const now = new Date();
+        const assignments = tx.tableAssignment?.findMany
+          ? await tx.tableAssignment.findMany({
+              where: { venueId, tableId: { in: tableIds }, releasedAt: null, startsAt: { lte: now }, endsAt: { gt: now } },
+              select: { tableId: true, reservationId: true, waitlistId: true },
+            })
+          : [];
+        const identityByTable = new Map(assignments.map((assignment) => [
+          assignment.tableId,
+          assignment.reservationId ? `reservation:${assignment.reservationId}` : assignment.waitlistId ? `waitlist:${assignment.waitlistId}` : null,
+        ]));
+        const identities = seatedStates.map((state) => identityByTable.get(state.tableId));
+        if (identities.some((identity) => !identity) || new Set(identities).size !== 1) {
+          throw new ConflictException('Seated tables can only be merged when they belong to the same reservation or waitlist party');
+        }
+      }
+      const canMerge = states.every((state) => ['available', 'dirty', 'seated'].includes(state.status))
+        && (seatedStates.length === 0 || new Set(seatedStates.map((state) => state.partySize)).size === 1);
+      const blocked = canMerge ? undefined : states.find((state) => !['available', 'dirty', 'seated'].includes(state.status)) ?? seatedStates[0];
+      if (blocked) throw new ConflictException(`Table ${blocked.tableId} is not available to merge`);
+
+      const seatedPartySize = seatedStates[0]?.partySize ?? partySize ?? null;
+      await tx.tableState.updateMany({
+        where: { venueId, tableId: { in: tableIds } },
+        data: {
+          mergeGroupId,
+          ...(seatedStates.length ? { status: 'seated' as const, partySize: seatedPartySize, seatedAt: seatedStates[0]?.seatedAt ?? new Date() } : { partySize: partySize ?? null }),
+          lastActivityAt: new Date(),
+        },
+      });
     });
     return { ok: true, mergeGroupId };
   }
 
   async splitMergedTables(venueId: string, mergeGroupId: string) {
-    const states = await this.prisma.tableState.findMany({ where: { venueId, mergeGroupId } });
-    if (states.length === 0) throw new NotFoundException('Merged table group not found');
-    const now = new Date();
-    const assignments = this.prisma.tableAssignment?.findMany
-      ? await this.prisma.tableAssignment.findMany({
-          where: { venueId, tableId: { in: states.map((state) => state.tableId) }, releasedAt: null, startsAt: { lte: now }, endsAt: { gt: now } },
-          include: { reservation: { select: { partySize: true } }, waitlist: { select: { partySize: true } } },
-        })
-      : [];
-    const partySizeByTable = new Map(assignments.map((assignment) => [assignment.tableId, assignment.reservation?.partySize ?? assignment.waitlist?.partySize ?? null]));
-    await Promise.all(states.map((state) => this.prisma.tableState.update({
-      where: { id: state.id },
-      data: {
-        mergeGroupId: null,
-        partySize: state.status === 'seated' ? (partySizeByTable.get(state.tableId) ?? state.partySize) : null,
-        lastActivityAt: now,
-      },
-    })));
-    return { ok: true, splitTables: states.length };
+    let splitCount = 0;
+    await withSerializableRetry(this.prisma, async (tx) => {
+      const states = await tx.tableState.findMany({ where: { venueId, mergeGroupId } });
+      if (states.length === 0) throw new NotFoundException('Merged table group not found');
+      await this.lockFloorTables(tx, venueId, states.map((state) => state.tableId));
+
+      const now = new Date();
+      const assignments = tx.tableAssignment?.findMany
+        ? await tx.tableAssignment.findMany({
+            where: { venueId, tableId: { in: states.map((state) => state.tableId) }, releasedAt: null, startsAt: { lte: now }, endsAt: { gt: now } },
+            include: { reservation: { select: { partySize: true } }, waitlist: { select: { partySize: true } } },
+          })
+        : [];
+      const partySizeByTable = new Map(assignments.map((assignment) => [assignment.tableId, assignment.reservation?.partySize ?? assignment.waitlist?.partySize ?? null]));
+      for (const state of states) {
+        await tx.tableState.update({
+          where: { id: state.id },
+          data: {
+            mergeGroupId: null,
+            partySize: state.status === 'seated' ? (partySizeByTable.get(state.tableId) ?? state.partySize) : null,
+            lastActivityAt: now,
+          },
+        });
+      }
+      splitCount = states.length;
+    });
+    return { ok: true, splitTables: splitCount };
   }
 
   async assignReservationToTables(venueId: string, reservationId: string, tableIds: string[], options: { holdType?: string; startsAt?: number; endsAt?: number } = {}) {
     if (!tableIds.length) throw new BadRequestException('No tables specified');
 
     const reservation = await this.prisma.reservation.findFirst({
-      where: { id: reservationId, venueId },
+      where: { id: reservationId, venueId, deletedAt: null },
     });
     if (!reservation) throw new NotFoundException('Reservation not found');
+    // deletedAt and status are independent: cancelling a reservation (e.g.
+    // reservation-mutation.service.ts's saveReservation cancel path) sets
+    // status: 'cancelled' without ever touching deletedAt, so the filter
+    // above does not catch it. A closed reservation cannot be seated.
+    if (TERMINAL_RESERVATION_STATUSES.has(reservation.status)) {
+      throw new BadRequestException(`A ${reservation.status} reservation cannot be assigned to a table.`);
+    }
 
     // Validate every table belongs to this venue's active floor plan so a
     // caller can't attach a reservation to another venue's (or a stale) table.
@@ -796,67 +826,79 @@ export class FloorService {
   }
 
   async releaseAssignment(venueId: string, id: string) {
-    const assignment = await this.prisma.tableAssignment.findFirst({
-      where: { venueId, id, releasedAt: null },
-      select: { id: true, tableId: true, reservationId: true, waitlistId: true },
-    });
-    const tableIds = assignment ? [assignment.tableId] : [id];
-    const released = assignment
-      ? await this.prisma.tableAssignment.updateMany({
-          where: { venueId, id: assignment.id, releasedAt: null },
-          data: { releasedAt: new Date(), releasedReason: 'manual' },
-        })
-      : await this.prisma.tableAssignment.updateMany({
-          where: { venueId, tableId: id, releasedAt: null },
-          data: { releasedAt: new Date(), releasedReason: 'manual' },
-        });
-    if (released.count === 0) throw new NotFoundException('Assignment not found');
-    await this.refreshTableStates(venueId, tableIds);
+    // This used to be a sequence of independent, unlocked statements — no
+    // $transaction, no advisory lock — unlike assign (Serializable +
+    // overlap check) and merge/split (Serializable + lockFloorTables). A
+    // concurrent merge/split on the same table, or a concurrent
+    // seat/release, could interleave with this one and leave TableState
+    // disagreeing with what was actually released. Now runs under the same
+    // lockFloorTables protocol merge/split use.
+    let tableIds: string[] = [];
+    await withSerializableRetry(this.prisma, async (tx) => {
+      const assignment = await tx.tableAssignment.findFirst({
+        where: { venueId, id, releasedAt: null },
+        select: { id: true, tableId: true, reservationId: true, waitlistId: true },
+      });
+      tableIds = assignment ? [assignment.tableId] : [id];
+      await this.lockFloorTables(tx, venueId, tableIds);
 
-    if (assignment?.reservationId) {
-      const activeLeft = await this.prisma.tableAssignment.count({
-        where: { venueId, reservationId: assignment.reservationId, releasedAt: null },
-      });
-      if (activeLeft === 0) {
-        const r = await this.prisma.reservation.findFirst({
-          where: { id: assignment.reservationId, venueId },
-          select: { status: true },
-        });
-        if (r && r.status === 'seated') {
-          await this.prisma.reservation.update({
-            where: { id: assignment.reservationId },
-            data: { status: 'completed' },
+      const released = assignment
+        ? await tx.tableAssignment.updateMany({
+            where: { venueId, id: assignment.id, releasedAt: null },
+            data: { releasedAt: new Date(), releasedReason: 'manual' },
+          })
+        : await tx.tableAssignment.updateMany({
+            where: { venueId, tableId: id, releasedAt: null },
+            data: { releasedAt: new Date(), releasedReason: 'manual' },
           });
+      if (released.count === 0) throw new NotFoundException('Assignment not found');
+      await refreshTableStates(tx, venueId, tableIds);
+
+      if (assignment?.reservationId) {
+        const activeLeft = await tx.tableAssignment.count({
+          where: { venueId, reservationId: assignment.reservationId, releasedAt: null },
+        });
+        if (activeLeft === 0) {
+          const r = await tx.reservation.findFirst({
+            where: { id: assignment.reservationId, venueId },
+            select: { status: true },
+          });
+          if (r && r.status === 'seated') {
+            await tx.reservation.update({
+              where: { id: assignment.reservationId },
+              data: { status: 'completed' },
+            });
+          }
         }
       }
-    }
-    if (assignment?.waitlistId) {
-      const activeLeft = await this.prisma.tableAssignment.count({
-        where: { venueId, waitlistId: assignment.waitlistId, releasedAt: null },
-      });
-      if (activeLeft === 0) {
-        const w = await this.prisma.waitlist.findFirst({
-          where: { id: assignment.waitlistId, venueId },
-          select: { status: true },
+      if (assignment?.waitlistId) {
+        const activeLeft = await tx.tableAssignment.count({
+          where: { venueId, waitlistId: assignment.waitlistId, releasedAt: null },
         });
-        // A seated party leaving is done. An 'assigned' party was only held or
-        // called — releasing that table cancels the hold, it does not seat and
-        // finish them, so they go back in the queue. Completing them here made
-        // them vanish from getOpenWaitlist, the only list with a Seat action,
-        // and left re-seating throwing NotFound.
-        if (w?.status === 'seated') {
-          await this.prisma.waitlist.update({
-            where: { id: assignment.waitlistId },
-            data: { status: 'completed' },
+        if (activeLeft === 0) {
+          const w = await tx.waitlist.findFirst({
+            where: { id: assignment.waitlistId, venueId },
+            select: { status: true },
           });
-        } else if (w?.status === 'assigned') {
-          await this.prisma.waitlist.update({
-            where: { id: assignment.waitlistId },
-            data: { status: 'waiting', readyAt: null },
-          });
+          // A seated party leaving is done. An 'assigned' party was only held or
+          // called — releasing that table cancels the hold, it does not seat and
+          // finish them, so they go back in the queue. Completing them here made
+          // them vanish from getOpenWaitlist, the only list with a Seat action,
+          // and left re-seating throwing NotFound.
+          if (w?.status === 'seated') {
+            await tx.waitlist.update({
+              where: { id: assignment.waitlistId },
+              data: { status: 'completed' },
+            });
+          } else if (w?.status === 'assigned') {
+            await tx.waitlist.update({
+              where: { id: assignment.waitlistId },
+              data: { status: 'waiting', readyAt: null },
+            });
+          }
         }
       }
-    }
+    });
     // Find seats freed up by the released table so we can match a waitlist
     // entry whose party fits. Best-effort; fire-and-forget so the manager
     // action returns immediately.

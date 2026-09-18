@@ -117,6 +117,23 @@ describe('AttestationService', () => {
         where: { id: { in: Array.from({ length: 12 }, (_, index) => `challenge-${index}`) } },
       });
     });
+
+    it('stops instead of looping forever when a selected page deletes nothing', async () => {
+      // findMany keeps returning the same non-empty page every call (as it
+      // would if deleteMany never actually removes the rows it selected);
+      // without the count===0 progress guard this loop never terminates.
+      const findMany = vi.fn().mockResolvedValue([{ id: 'stuck-1' }, { id: 'stuck-2' }]);
+      const deleteMany = vi.fn().mockResolvedValue({ count: 0 });
+      const prisma = {
+        attestationChallenge: { findMany, deleteMany },
+      } as any;
+
+      const count = await new AttestationService(prisma).cleanupExpiredChallenges();
+
+      expect(count).toBe(0);
+      expect(findMany).toHaveBeenCalledTimes(1);
+      expect(deleteMany).toHaveBeenCalledTimes(1);
+    });
   });
 });
 
