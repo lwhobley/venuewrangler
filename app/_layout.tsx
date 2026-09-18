@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { Platform, View } from 'react-native';
 import { Stack } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -22,7 +22,6 @@ import { configurePurchases, logoutPurchases } from '../lib/purchases';
 import { queryClient } from '../lib/query-client';
 import { setFatalErrorReporter } from '../lib/report-error';
 import { fontsReadyForPlatform } from '../lib/app-bootstrap';
-import { SportsBrandIntro } from '../components/SportsBrandIntro';
 
 const sentryDsn = process.env.EXPO_PUBLIC_SENTRY_DSN?.trim();
 
@@ -57,7 +56,6 @@ const shouldIgnoreWebError = (message: string) =>
   message.includes('ts.worker');
 
 export function RootLayout() {
-  const [showSportsIntro, setShowSportsIntro] = useState(Platform.OS === 'web');
   const themeMode = useAppearanceStore((state) => state.mode);
   const palette = designPalettes[themeMode];
   // Preload the MaterialCommunityIcons glyph font so icons render on web (Paper
@@ -154,7 +152,6 @@ export function RootLayout() {
           </PaperProvider>
         </QueryClientProvider>
       </SafeAreaProvider>
-      {showSportsIntro ? <SportsBrandIntro onComplete={() => setShowSportsIntro(false)} /> : null}
     </GestureHandlerRootView>
   );
 }
