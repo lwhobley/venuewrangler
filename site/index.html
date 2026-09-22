@@ -1,4 +1,245 @@
 <!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <meta name="theme-color" content="#08080A" />
+  <title>Venue Wrangler — Run Friday Night Like It’s Scripted.</title>
+  <meta name="description" content="One $99.99/month workspace for the floor, the bar, and the back office. Scheduling, live floor plans, event execution, inventory, and iOS — up to 50 people, no per-seat fees." />
+  <link rel="canonical" href="https://venuewrangler.com/" />
+  <meta property="og:title" content="Venue Wrangler — $99.99/mo for the whole room." />
+  <meta property="og:description" content="The operations layer for people running service. Web + iOS. Up to 50 on one plan." />
+  <meta property="og:url" content="https://venuewrangler.com/" />
+  <meta property="og:image" content="https://venuewrangler.com/assets/screen-command.png" />
+  <style>
+    :root { --green:#43dca5; --line:rgba(255,255,255,.09); --muted:#9aa19c; }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; scroll-padding-top: 92px; }
+    body { margin: 0; font-family: Arial, Helvetica, sans-serif; background: #08080a; color: #f3f4f3; }
+    a { color: inherit; text-decoration: none; }
+    button, input { font: inherit; }
+    button { cursor: pointer; }
+    .wrap { width: min(1120px, calc(100% - 40px)); margin: 0 auto; }
+    header { position: sticky; top: 0; z-index: 20; height: 74px; display: flex; align-items: center; backdrop-filter: blur(16px); background: #08080add; border-bottom: 1px solid var(--line); }
+    .nav { display: flex; align-items: center; justify-content: space-between; gap: 16px; width: min(1440px, calc(100% - 40px)); margin: 0 auto; }
+    .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; letter-spacing: -.4px; font-size: 13px; }
+    .mark { width: 30px; height: 30px; border-radius: 8px; border: 1px solid #3e5b4f; background: #163226; color: #b3f1ce; display: grid; place-items: center; font-size: 11px; }
+    nav { display: flex; gap: 22px; font-size: 12px; color: #b0b3ba; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border-radius: 7px; padding: 12px 16px; font-size: 13px; font-weight: 700; border: 1px solid transparent; }
+    .btn.primary { background: #f2f4f2; color: #111713; }
+    .btn.ghost { background: #ffffff0d; color: #e8ece9; border-color: #ffffff22; }
+    .hero { padding: 88px 0 36px; text-align: center; background: radial-gradient(ellipse at 50% 0%, #12312966, transparent 55%); }
+    .eyebrow { display: inline-block; border: 1px solid #64cda02b; background: #10b98108; color: #c2d2c9; font-size: 11px; letter-spacing: 1.6px; padding: 7px 10px; border-radius: 4px; }
+    h1 { font-size: clamp(40px, 7vw, 76px); line-height: 1.02; letter-spacing: -3px; margin: 22px 0 16px; }
+    h1 span { color: #9a9ba3; }
+    .lede { color: #b0b3bb; font-size: 16px; line-height: 1.7; max-width: 640px; margin: 0 auto 26px; }
+    .actions { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; }
+    .notes { display: flex; justify-content: center; gap: 18px; flex-wrap: wrap; margin-top: 18px; color: #8b908c; font-size: 12px; }
+    .shot { width: min(980px, 100%); margin: 36px auto 0; border: 1px solid #ffffff22; border-radius: 12px; overflow: hidden; background: #111; }
+    .shot img { width: 100%; display: block; }
+    .grid4, .grid2 { display: grid; gap: 14px; }
+    .grid4 { grid-template-columns: repeat(4, 1fr); padding: 10px 0 48px; }
+    .card { border: 1px solid var(--line); border-radius: 12px; padding: 18px; background: #101412; }
+    .card small { color: var(--green); letter-spacing: 1px; font-size: 10px; }
+    .card strong { display: block; font-size: 20px; margin: 8px 0; }
+    .card p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.6; }
+    h2 { font-size: clamp(28px, 4vw, 44px); letter-spacing: -1.4px; line-height: 1.15; }
+    h2 span { color: #7e8189; }
+    section { padding: 56px 0; }
+    .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .bad { background: #121214; }
+    .good { background: radial-gradient(ellipse at top right, #12382a70, transparent 90%), #101613; border-color: #27634766; }
+    .compare li { margin: 10px 0; color: #c5c8cc; font-size: 14px; }
+    .price-wrap { display: grid; grid-template-columns: 1.15fr .85fr; gap: 16px; }
+    .price { font-size: 52px; letter-spacing: -2px; margin: 8px 0; }
+    .price span { font-size: 16px; color: #8aa392; }
+    .inc { list-style: none; padding: 0; }
+    .inc li { margin: 8px 0; font-size: 14px; color: #c5d4cb; }
+    .faq details { border-bottom: 1px solid var(--line); padding: 14px 0; }
+    .faq summary { cursor: pointer; font-size: 16px; }
+    .faq p { color: var(--muted); line-height: 1.7; }
+    form { display: grid; gap: 12px; }
+    label { font-size: 12px; color: #a4aaa6; display: grid; gap: 6px; }
+    input { background: #111815; border: 1px solid #ffffff19; color: #edf5f0; border-radius: 6px; padding: 12px; }
+    footer { border-top: 1px solid var(--line); padding: 24px 0 40px; color: #6e7872; font-size: 12px; display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+    dialog { border: 1px solid #314b3e; border-radius: 14px; background: #111715; color: #e9f2ed; width: min(830px, calc(100% - 24px)); padding: 0; }
+    dialog::backdrop { background: #000c; }
+    .tour { padding: 24px; }
+    .tour video { width: 100%; border-radius: 8px; background: #000; }
+    .close { float: right; background: #25372c; border: 0; color: #fff; border-radius: 999px; padding: 6px 10px; }
+    .quotes { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 8px auto 56px; }
+    .quote { margin: 0; text-align: left; border: 1px solid var(--line); border-radius: 12px; padding: 22px; background: #101412; }
+    .quote p { font-size: 18px; line-height: 1.5; letter-spacing: -.3px; margin: 0 0 16px; color: #e4e7e5; }
+    .quote cite { font-style: normal; font-size: 11px; letter-spacing: 1px; color: #8aa392; }
+    @media (max-width: 860px) {
+      nav { display: none; }
+      .grid4, .compare, .price-wrap, .quotes { grid-template-columns: 1fr; }
+      h1 { letter-spacing: -1.6px; }
+      .quote p { font-size: 17px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="nav">
+      <a class="brand" href="/"><span class="mark">VW</span> VENUE WRANGLER</a>
+      <nav>
+        <a href="#standard">The Standard</a>
+        <a href="#pricing">Pricing</a>
+        <a href="#faq">FAQ</a>
+        <a href="/app/sign-in">Operator Sign In</a>
+      </nav>
+      <a class="btn primary" href="#launch">Start workspace</a>
+    </div>
+  </header>
+  <main>
+    <section class="hero wrap">
+      <div class="eyebrow">THE OPERATIONAL OPERATING SYSTEM</div>
+      <h1>Run Friday Night<br /><span>Like It’s Scripted.</span></h1>
+      <p class="lede">Close the gap between the floor, the bar, and the back office. One command center for the people who run the room — $99.99 a month, no per-seat fees.</p>
+      <div class="actions">
+        <a class="btn primary" href="#launch">Start your workspace</a>
+        <button class="btn ghost" type="button" id="openTour">Watch the 90-second tour</button>
+      </div>
+      <div class="notes">
+        <span>✓ $99.99/mo flat</span>
+        <span>✓ Up to 50 people</span>
+        <span>✓ Web + iOS, one account</span>
+      </div>
+      <figure class="shot">
+        <img src="/assets/screen-command.png" alt="Venue Wrangler command workspace" width="1600" height="900" />
+      </figure>
+    </section>
+    <div class="wrap grid4">
+      <article class="card"><small>ONE PLAN</small><strong>$99.99 / month</strong><p>The whole workspace. Not a seat tax that grows with Saturday night.</p></article>
+      <article class="card"><small>ONE ROSTER</small><strong>Up to 50</strong><p>Managers and floor staff on the same account.</p></article>
+      <article class="card"><small>ONE NIGHT VIEW</small><strong>Floor + bar + BEO</strong><p>The room, the stock, and the event plan in one place.</p></article>
+      <article class="card"><small>TWO SURFACES</small><strong>Web + iOS</strong><p>Back office and pocket stay in sync.</p></article>
+    </div>
+    <div class="wrap quotes">
+      <blockquote class="quote">
+        <p>“Running one busy restaurant is already a lot. Running fourteen only works when the night has a consistent workflow. Venue Wrangler is how we keep every room on the same page.”</p>
+        <cite>GENERAL MANAGER · ENISH HOUSTON</cite>
+      </blockquote>
+      <blockquote class="quote">
+        <p>“Venue Wrangler organized our inventory, cut waste 10% in the first quarter, and turned ordering into an automated task.”</p>
+        <cite>FOOD AND BEVERAGE DIRECTOR · CROWNE PLAZA KENNER</cite>
+      </blockquote>
+    </div>
+    <section class="wrap" id="standard">
+      <h2>Service is complex.<br /><span>Your systems shouldn’t be.</span></h2>
+      <div class="compare">
+        <article class="card bad">
+          <small>THE WAY IT’S ALWAYS BEEN</small>
+          <h3>The fragmented floor</h3>
+          <ul>
+            <li>Paper BEOs. Last-minute changes. Missed handoffs.</li>
+            <li>Five disconnected systems and a dozen open tabs.</li>
+            <li>Finding out you’re out of a key SKU at 11:30 PM.</li>
+          </ul>
+        </article>
+        <article class="card good">
+          <small>THE VENUE WRANGLER STANDARD</small>
+          <h3>The unified engine</h3>
+          <ul>
+            <li>Confirmed BEOs become an actionable event plan.</li>
+            <li>Floor plans, your team, and service in one workspace.</li>
+            <li>Camera and barcode counts before doors open.</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+    <section class="wrap" id="pricing">
+      <h2>One venue plan.<br /><span>No seat tax.</span></h2>
+      <p class="lede" style="margin:0 0 24px;text-align:left">The same number already in the product and FAQ. Not a surprise at checkout.</p>
+      <div class="price-wrap">
+        <article class="card good">
+          <small>TEAM WORKSPACE</small>
+          <div class="price">$99.99 <span>/ month</span></div>
+          <p>Flat rate for the venue. Up to 50 people. Every feature in the workspace.</p>
+          <ul class="inc">
+            <li>✓ Scheduling and availability</li>
+            <li>✓ Geofenced time clock</li>
+            <li>✓ Live floor plans</li>
+            <li>✓ Event execution / BEOs</li>
+            <li>✓ Bar inventory counts</li>
+            <li>✓ Reservations workspace</li>
+            <li>✓ Team chat and roster tools</li>
+            <li>✓ Web + iOS, one login</li>
+          </ul>
+          <a class="btn primary" href="#launch">Start this plan</a>
+        </article>
+        <article class="card">
+          <h3>Running more than one room?</h3>
+          <p>Portfolio and multi-venue setups are a conversation, not a pricing-page guess.</p>
+          <p><a class="btn ghost" href="/support/?topic=walkthrough">Book a 20-min walkthrough</a></p>
+          <p style="margin-top:18px">POS connectors: Toast, Square, Clover. Reservation sources: OpenTable, Resy, SevenRooms. Connection scope is confirmed during setup.</p>
+        </article>
+      </div>
+    </section>
+    <section class="wrap faq" id="faq">
+      <h2>Before you give us the floor</h2>
+      <details open>
+        <summary>What does $99.99 / month include?</summary>
+        <p>One venue workspace for up to 50 team members: scheduling, geofenced time clock, reservations, floor plans, event execution, bar inventory, reports, and team chat. No per-seat fees.</p>
+      </details>
+      <details>
+        <summary>Do I pay on this page?</summary>
+        <p>No. This form only starts the workspace. You verify email next. Subscription terms and payment are shown during setup.</p>
+      </details>
+      <details>
+        <summary>Does this replace Toast or OpenTable?</summary>
+        <p>No. Venue Wrangler is the operations layer around service. We confirm what is live for your stack during setup.</p>
+      </details>
+      <details>
+        <summary>How do staff get on iOS?</summary>
+        <p>Managers add people to the roster or send an invite. Staff use the same account on iOS for clock-in, schedule, and floor work.</p>
+      </details>
+    </section>
+    <section class="wrap" id="launch">
+      <h2>Doors open soon.<br /><span>Be ready for anything.</span></h2>
+      <form id="startForm">
+        <div class="grid2" style="grid-template-columns:1fr 1fr;gap:12px">
+          <label>Venue name <input name="venue" required maxlength="120" placeholder="The name above your door" autocomplete="organization" /></label>
+          <label>Work email <input name="email" type="email" required placeholder="you@yourvenue.com" autocomplete="email" /></label>
+        </div>
+        <button class="btn primary" type="submit">Create workspace — $99.99/mo</button>
+        <p style="color:#7b8a80;font-size:12px">Next: verify your email. Payment is collected at setup, not on this form.</p>
+      </form>
+      <p><a href="https://apps.apple.com/app/id6772533789">Get Venue Wrangler on the App Store →</a></p>
+    </section>
+  </main>
+  <footer class="wrap">
+    <span>© 2026 Loungeability LLC</span>
+    <span><a href="/faq/">FAQ</a> · <a href="/privacy/">Privacy</a> · <a href="/terms/">Terms</a> · <a href="/support/">Contact</a></span>
+  </footer>
+  <dialog id="tour">
+    <div class="tour">
+      <button class="close" type="button" id="closeTour">Close</button>
+      <p class="eyebrow">COMMAND TOUR</p>
+      <h2>See the bigger picture.</h2>
+      <video src="/assets/venue-wrangler-ad.mp4" poster="/assets/screen-command.png" controls playsinline preload="metadata"></video>
+      <p><a class="btn primary" href="#launch">Start your workspace</a> <a class="btn ghost" href="/support/?topic=walkthrough">Book a walkthrough</a></p>
+    </div>
+  </dialog>
+  <script>
+    const tour = document.getElementById('tour');
+    document.getElementById('openTour').addEventListener('click', () => tour.showModal());
+    document.getElementById('closeTour').addEventListener('click', () => tour.close());
+    document.getElementById('startForm').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const data = new FormData(e.currentTarget);
+      try {
+        sessionStorage.setItem('vw-workspace-draft', JSON.stringify({
+          venue: String(data.get('venue') || '').trim(),
+          email: String(data.get('email') || '').trim()
+        }));
+      } catch (err) {}
+      window.location.assign('/start/');
+    });
+  </script>
+</body>
+</html>
 <html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/><meta name="theme-color" content="#08080A"/><title>Venue Wrangler — Run Friday Night Like It’s Scripted.</title><meta name="description" content="Bring the floor, the bar, and the back office into one workspace. Event execution, live floor plans, bar inventory, and your team — in command."/><link rel="canonical" href="https://venuewrangler.com/"/><meta property="og:title" content="Venue Wrangler — Run Friday Night Like It’s Scripted."/><meta property="og:description" content="One operation. One source of truth. Built for the people running the room."/><meta property="og:url" content="https://venuewrangler.com/"/>  <script type="module" crossorigin src="./marketing-assets/index-CT2XBtsO.js"></script>
   <link rel="stylesheet" crossorigin href="./marketing-assets/index-D4wbbrvQ.css">
 </head><body><div id="root"></div><noscript>Venue Wrangler brings your floor, bar, and back office together. <a href="start/">Create your workspace</a> or <a href="app/sign-in">sign in</a>.</noscript></body></html>
