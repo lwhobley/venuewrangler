@@ -11,6 +11,8 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { publicWebOrigin } from '../../common/public-web-url';
 import { toMs } from './app-mappers';
 import { ProfileService } from './profile.service';
+import { runWithoutTenant } from '../../prisma/tenant-context';
+import { assertCoverageCapacity, COVERED_SUBSCRIPTION_DATA, effectiveSubscriptionStatus, isMultiVenuePlan } from '../../billing/billing-coverage';
 
 // Idempotency key for the auto-created subscription price, so repeated lookups
 // reuse one price instead of creating duplicates.
@@ -57,11 +59,15 @@ export class AppBillingController {
   async getMyVenueBilling(@CurrentUser() user: AuthUser) {
     const profile = await this.profiles.getProfile(user);
     if (!profile?.venueId) return null;
-    const subscription = await this.prisma.subscription.findFirst({ where: { venueId: profile.venueId } });
-    if (!subscription) return null;
+    const allocation = await this.prisma.subscription.findFirst({ where: { venueId: profile.venueId }, include: { billingSubscription: true } });
+    if (!allocation) return null;
+    const subscription = allocation.billingSubscription ?? allocation;
+    const status = allocation.billingSubscriptionId && (!allocation.billingSubscription || !isMultiVenuePlan(subscription))
+      ? 'expired' : effectiveSubscriptionStatus(subscription);
     return {
-      venueId: subscription.venueId,
-      status: subscription.status,
+      venueId: profile.venueId,
+      billingVenueId: subscription.venueId,
+      status,
       platform: subscription.platform,
       trialStartedAt: toMs(subscription.trialStartedAt),
       trialEndsAt: toMs(subscription.trialEndsAt),
@@ -87,8 +93,11 @@ export class AppBillingController {
     const secret = this.requireStripeSecret();
     const existing = await this.prisma.subscription.findFirst({
       where: { venueId: profile.venueId! },
-      select: { status: true, platform: true, externalCustomerId: true },
+      select: { status: true, platform: true, externalCustomerId: true, billingSubscriptionId: true },
     });
+    if (existing?.billingSubscriptionId || existing?.platform === 'apple') {
+      throw new BadRequestException('This venue already has a billing allocation. Manage its existing subscription first.');
+    }
     if (existing?.platform === 'stripe' && (existing.status === 'active' || existing.status === 'trialing')) {
       throw new BadRequestException('This venue already has an active Stripe subscription.');
     }
@@ -235,56 +244,69 @@ export class AppBillingController {
     const priceCents = isMulti ? 39900 : 9999;
     const planId = isMulti ? 'venueflow_multi_venue_5' : verified.productId;
 
-    await this.prisma.$transaction(async (tx) => {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`billing:${profile.venueId!}`}))`;
-      const existing = await tx.subscription.findFirst({ where: { venueId: profile.venueId! } });
-      await tx.venue.update({
-        where: { id: profile.venueId! },
-        data: {
-          subscriptionStatus: status,
-          subscriptionPlatform: 'apple',
-        },
-      });
-      if (existing) {
-        await tx.subscription.update({
-          where: { id: existing.id },
-          data: {
-            status,
-            platform: 'apple',
-            planId,
-            priceCents,
-            currentPeriodStart: verified.currentPeriodStart ?? existing.currentPeriodStart ?? now,
-            currentPeriodEnd: verified.currentPeriodEnd ?? existing.currentPeriodEnd,
-            cancelAtPeriodEnd: false,
-            cancelledAt: null,
-            externalCustomerId: profile.venueId!,
-            lastRevenueCatEventAt: now,
-          },
-        });
-        return;
+    await runWithoutTenant(() => this.prisma.$transaction(async (tx) => {
+      // Serialize all allocations for this verified RevenueCat identity, not
+      // only the selected venue. SDK aliases share original_app_user_id.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`rc:${verified.subscriberId}`}))`;
+      const bound = await tx.subscription.findUnique({ where: { revenueCatSubscriberId: verified.subscriberId } });
+      const current = await tx.subscription.findFirst({ where: { venueId: profile.venueId! } });
+      if (bound && bound.venueId !== profile.venueId && !isMulti) {
+        throw new BadRequestException('This Apple subscription is already bound to another venue.');
       }
-      await tx.subscription.create({
-        data: {
-          venueId: profile.venueId!,
-          status,
-          platform: 'apple',
-          planId,
-          priceCents,
-          currency: 'USD',
-          // status is always 'active' here (verified real-money entitlement),
-          // never a trial — leave trial dates unset rather than stamping
-          // "now" for both, which would misrepresent this as an instantly
-          // expired trial.
-          trialStartedAt: null,
-          trialEndsAt: null,
-          currentPeriodStart: verified.currentPeriodStart ?? now,
-          currentPeriodEnd: verified.currentPeriodEnd,
-          cancelAtPeriodEnd: false,
-          externalCustomerId: profile.venueId!,
-          lastRevenueCatEventAt: now,
-        },
-      });
-    });
+      const payerVenueId = bound?.venueId ?? profile.venueId!;
+      if (payerVenueId !== profile.venueId) {
+        const membership = await tx.profile.findFirst({ where: {
+          userId: user.sub, venueId: payerVenueId, role: { in: ['owner', 'admin'] },
+          OR: [{ membershipStatus: null }, { membershipStatus: 'active' }],
+        } });
+        if (!membership) throw new BadRequestException('You cannot manage the venue linked to this purchase.');
+        if (!current || current.platform || current.externalSubscriptionId || current.revenueCatSubscriberId
+            || (current.billingSubscriptionId && current.billingSubscriptionId !== bound!.id)) {
+          throw new BadRequestException('This venue already has another billing allocation.');
+        }
+      }
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`billing:${payerVenueId}`}))`;
+      const existing = await tx.subscription.findFirst({ where: { venueId: payerVenueId } });
+      if (existing?.billingSubscriptionId || (existing?.platform && existing.platform !== 'apple')
+          || (existing?.revenueCatSubscriberId && existing.revenueCatSubscriberId !== verified.subscriberId)) {
+        throw new BadRequestException('This venue already has another billing allocation.');
+      }
+      // Legacy Apple rows without a canonical binding need an unambiguous
+      // allocation. Do not let a fresh sync bypass a previous venue purchase.
+      if (!bound) {
+        const legacy = await tx.subscription.findMany({ where: {
+          platform: 'apple', revenueCatSubscriberId: null, venueId: { not: payerVenueId },
+          OR: [
+            { externalCustomerId: { in: [user.sub, verified.subscriberId] } },
+            { venue: { profiles: { some: { userId: user.sub, role: { in: ['owner', 'admin'] },
+              OR: [{ membershipStatus: null }, { membershipStatus: 'active' }] } } } },
+          ],
+        }, take: 1, select: { id: true } });
+        if (legacy.length) throw new BadRequestException('An existing Apple purchase needs to be linked from its original venue first.');
+      }
+      // A webhook received after the lookup started is newer than this snapshot.
+      if (existing?.lastRevenueCatEventAt && existing.lastRevenueCatEventAt > verified.verifiedAt) return;
+      const data = {
+        status, platform: 'apple' as const, planId, priceCents,
+        currentPeriodStart: verified.currentPeriodStart ?? existing?.currentPeriodStart ?? now,
+        currentPeriodEnd: verified.currentPeriodEnd,
+        cancelAtPeriodEnd: verified.cancelAtPeriodEnd, cancelledAt: null,
+        externalCustomerId: user.sub, revenueCatSubscriberId: verified.subscriberId,
+        lastRevenueCatEventAt: verified.verifiedAt,
+      };
+      const payer = existing
+        ? await tx.subscription.update({ where: { id: existing.id }, data })
+        : await tx.subscription.create({ data: {
+            ...data, venueId: payerVenueId, currency: 'USD', trialStartedAt: null, trialEndsAt: null,
+          } });
+      await tx.venue.update({ where: { id: payerVenueId }, data: { subscriptionStatus: status, subscriptionPlatform: 'apple' } });
+      if (payerVenueId !== profile.venueId) {
+        await assertCoverageCapacity(tx, payer.id, current!.id);
+        await tx.subscription.update({ where: { id: current!.id }, data: {
+          ...COVERED_SUBSCRIPTION_DATA, billingSubscriptionId: payer.id,
+        } });
+      }
+    }));
 
     return this.getMyVenueBilling(user);
   }
@@ -301,6 +323,7 @@ export class AppBillingController {
   }
 
   private async verifyRevenueCatEntitlement(userId: string, venueId: string, productId: string, entitlementId?: string) {
+    const verifiedAt = new Date();
     const apiKey = this.config.get<string>('REVENUECAT_API_KEY') ?? this.config.get<string>('REVENUECAT_SECRET_API_KEY');
     if (!apiKey) {
       throw new ServiceUnavailableException('Apple subscription verification is not configured. Please contact support.');
@@ -328,13 +351,6 @@ export class AppBillingController {
         await new Promise((resolve) => setTimeout(resolve, 300));
       }
     }
-    if (response && response.status === 404 && userId !== venueId) {
-      response = await fetch(`https://api.revenuecat.com/v1/subscribers/${encodeURIComponent(venueId)}`, {
-        headers: { Authorization: `Bearer ${apiKey}`, Accept: 'application/json' },
-        signal: AbortSignal.timeout(10000),
-      });
-      json = await response.json().catch(() => null);
-    }
     if (!response || !response.ok) {
       this.logger.warn(`RevenueCat verification failed for venue ${venueId}: ${json?.message ?? response?.statusText ?? 'Unknown error'}`);
       throw new BadRequestException('Could not verify RevenueCat subscription.');
@@ -356,12 +372,16 @@ export class AppBillingController {
     const matchingSubscription = subscriptions[productId];
     const expiresAt = parseRevenueCatDate(matchingEntitlement?.expires_date ?? matchingSubscription?.expires_date);
     const purchasedAt = parseRevenueCatDate(matchingEntitlement?.purchase_date ?? matchingSubscription?.purchase_date);
-    const isActive = Boolean(matchingEntitlement || matchingSubscription) && (!expiresAt || expiresAt.getTime() > Date.now());
+    const isActive = Boolean(matchingEntitlement) && expiresAt && expiresAt.getTime() > Date.now();
     if (!isActive) {
       throw new BadRequestException('No active RevenueCat entitlement found for this Apple subscription.');
     }
 
-    return { productId, currentPeriodStart: purchasedAt, currentPeriodEnd: expiresAt };
+    return {
+      productId, currentPeriodStart: purchasedAt, currentPeriodEnd: expiresAt!, verifiedAt,
+      subscriberId: typeof subscriber.original_app_user_id === 'string' && subscriber.original_app_user_id ? subscriber.original_app_user_id : userId,
+      cancelAtPeriodEnd: Boolean(matchingSubscription?.unsubscribe_detected_at),
+    };
   }
 
   private csvEnv(key: string, fallback: string): string[] {

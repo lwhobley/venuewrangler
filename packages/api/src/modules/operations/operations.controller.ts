@@ -1,3 +1,4 @@
+import { streamPrivateImage } from '../../common/stream-private-image';
 import {
   BadRequestException,
   Body,
@@ -260,8 +261,8 @@ export class OperationsController {
     private readonly prisma: PrismaService,
     private readonly mediaAccess: MediaAccessService,
     private readonly s3ImageService: S3ImageService,
+    private readonly malwareScanner: DocumentMalwareScannerService,
     @Optional() private readonly executionAutopilot?: ExecutionAutopilotService,
-    @Optional() private readonly malwareScanner?: DocumentMalwareScannerService,
   ) {}
 
   @RequireSubscription('active')
@@ -410,6 +411,7 @@ export class OperationsController {
           ],
         },
         orderBy: [{ startMinutes: 'asc' }, { jobTitle: 'asc' }],
+        include: { profile: { select: { fullName: true } } },
         take: 100,
       }),
       this.prisma.timeEntry.findMany({
@@ -530,6 +532,15 @@ export class OperationsController {
       posCovers,
       salesCents,
       scheduledCount,
+      shifts: shifts.map((shift) => ({
+        id: shift.id,
+        staffName: shift.profile?.fullName ?? null,
+        jobTitle: shift.jobTitle,
+        station: shift.station,
+        startMinutes: shift.startMinutes,
+        endMinutes: shift.endMinutes,
+        status: shift.status,
+      })),
       openShiftCount,
       clockedInCount: openTimeEntries.length,
       pendingRequestCount: pendingRequests.length,
@@ -1029,9 +1040,7 @@ export class OperationsController {
       if (data.length === 0) throw new BadRequestException('Photo is empty');
       if (data.length > MAX_PHOTO_BYTES) throw new BadRequestException('Photo is too large (max 5MB)');
       const mime = assertAllowedImageBytes(data, body.photoMimeType);
-      if (this.malwareScanner) {
-        await this.malwareScanner.assertClean(data);
-      }
+      await this.malwareScanner.assertClean(data);
       photoKey = await this.s3ImageService.upload(data, mime, venueId);
     }
     const completedAt = new Date();
@@ -1074,11 +1083,14 @@ export class OperationsController {
   ) {
     const completion = await this.prisma.checklistCompletion.findUnique({ where: { id: completionId } });
     if (!completion?.photoKey) throw new NotFoundException('Photo not found');
-    await this.mediaAccess.assertToken(token, 'checklist-photo', completionId, completion.venueId);
-    const url = await this.s3ImageService.getPresignedUrl(completion.photoKey);
-    res.setHeader('Cache-Control', 'no-store');
-    res.setHeader('Referrer-Policy', 'no-referrer');
-    return res.redirect(302, url);
+    try {
+      await this.mediaAccess.assertToken(token, 'checklist-photo', completionId, completion.venueId);
+    } catch {
+      // Same response either way an unauthenticated caller can't tell a
+      // real-but-wrong-token completion id from one that doesn't exist at all.
+      throw new NotFoundException('Photo not found');
+    }
+    return streamPrivateImage(await this.s3ImageService.getObject(completion.photoKey), res);
   }
 
   private async ensureChecklistCompletions(venueId: string, templateItemIds: string[], date: string) {

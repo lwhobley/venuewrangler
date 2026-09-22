@@ -41,3 +41,25 @@ export function assertAllowedHost(key, value) {
     throw new Error(`Refusing database command: ${key} targets ${hostname}; expected Supabase or local Postgres.`);
   }
 }
+
+/** Pooler and direct credentials must address the same project/database/schema. */
+export function databaseIdentity(value) {
+  const url = new URL(value);
+  const hostname = url.hostname.toLowerCase();
+  const directProject = /^db\.([^.]+)\.supabase\.co$/.exec(hostname)?.[1];
+  let project = directProject ?? hostname;
+  if (hostname.endsWith('.pooler.supabase.com')) {
+    const username = decodeURIComponent(url.username);
+    if (!username.includes('.')) throw new Error('Supabase pooler credentials must identify their project in the username.');
+    project = username.slice(username.lastIndexOf('.') + 1);
+  } else if (hostname === 'localhost' || hostname === '127.0.0.1') {
+    project = `loopback:${url.port || '5432'}`;
+  }
+  return JSON.stringify([project, decodeURIComponent(url.pathname), url.searchParams.get('schema') ?? 'public']);
+}
+
+export function assertSameDatabaseTarget(databaseUrl, directUrl) {
+  if (databaseIdentity(databaseUrl) !== databaseIdentity(directUrl)) {
+    throw new Error('DATABASE_URL and DATABASE_DIRECT_URL target different projects, databases, or schemas. Refusing migrations.');
+  }
+}

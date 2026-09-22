@@ -17,6 +17,13 @@ describe('csvCell', () => {
     expect(csvCell('@SUM(A1)')).toBe(`"'@SUM(A1)"`);
   });
 
+  it('neutralizes a formula prefix hidden behind leading whitespace', () => {
+    // Several spreadsheet apps trim leading whitespace before deciding
+    // whether a cell is a formula, so " =1+1" is still dangerous.
+    expect(csvCell(' =1+1')).toBe(`"' =1+1"`);
+    expect(csvCell('\t@SUM(A1)')).toBe(`"'\t@SUM(A1)"`);
+  });
+
   it('does not prefix numbers', () => {
     expect(csvCell(-2)).toBe('"-2"');
     expect(csvCell(0)).toBe('"0"');

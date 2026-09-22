@@ -4,6 +4,8 @@ import type { PrismaClient } from '@prisma/client';
 import { setupTestDb } from '../test/setup-test-db';
 import { BillingController } from './billing.controller';
 import type { PrismaService } from '../prisma/prisma.service';
+import { COVERED_SUBSCRIPTION_DATA } from './billing-coverage';
+import { resolveVenueSubscriptionStatus } from './subscription-status';
 
 /**
  * Idempotency proof for the shared Stripe/RevenueCat subscription-apply path.
@@ -92,6 +94,58 @@ describe('billing webhook idempotency (integration)', () => {
     const afterSecond = await prisma.subscription.findFirst({ where: { venueId } });
     expect(afterSecond?.status).toBe('active');
     expect(afterSecond?.updatedAt.getTime()).toBe(afterFirst?.updatedAt.getTime());
+  });
+
+  it('processes one Apple event for a payer and resolves cancellation for every covered venue', async () => {
+    const payer = await prisma.subscription.create({ data: {
+      venueId, status: 'active', platform: 'apple', planId: 'com.venuewrangler.multivenue.399',
+      priceCents: 39900, currency: 'USD', cancelAtPeriodEnd: false,
+      revenueCatSubscriberId: 'rc-covered-customer', externalSubscriptionId: 'apple-covered-transaction',
+      currentPeriodEnd: new Date('2030-01-01'),
+    } });
+    const coveredVenueIds: string[] = [];
+    for (let i = 0; i < 4; i++) {
+      const venue = await prisma.venue.create({ data: {
+        name: `Covered ${i}`, code: `VW-${randomUUID()}`, latitude: 1, longitude: 1, geofenceRadiusM: 100, timezone: 'UTC',
+      } });
+      coveredVenueIds.push(venue.id);
+      await prisma.subscription.create({ data: {
+        ...COVERED_SUBSCRIPTION_DATA, venueId: venue.id, billingSubscriptionId: payer.id,
+        planId: 'venueflow_multi_venue_5', priceCents: 39900, currency: 'USD',
+      } });
+    }
+    for (const id of coveredVenueIds) {
+      expect(await resolveVenueSubscriptionStatus(prisma as any, { venueId: id, venueStatus: 'expired' })).toBe('active');
+    }
+    const extra = await prisma.venue.create({ data: {
+      name: 'Sixth venue', code: `VW-${randomUUID()}`, latitude: 1, longitude: 1, geofenceRadiusM: 100, timezone: 'UTC',
+    } });
+    await expect(prisma.subscription.create({ data: {
+      ...COVERED_SUBSCRIPTION_DATA, venueId: extra.id, billingSubscriptionId: payer.id,
+      planId: 'venueflow_multi_venue_5', priceCents: 39900, currency: 'USD',
+    } })).rejects.toThrow(/five venues/);
+    await expect(prisma.subscription.create({ data: {
+      venueId: extra.id, status: 'active', planId: 'single', priceCents: 9999, currency: 'USD', cancelAtPeriodEnd: false,
+      revenueCatSubscriberId: 'rc-covered-customer',
+    } })).rejects.toMatchObject({ code: 'P2002' });
+
+    const webhook = new BillingController(prisma as any, {
+      get: (key: string) => key === 'REVENUECAT_WEBHOOK_SECRET' ? 'integration-secret' : undefined,
+    } as any);
+    const body = { event: {
+      id: 'evt-covered-cancellation', type: 'CANCELLATION', app_user_id: 'rc-covered-customer',
+      original_transaction_id: 'apple-covered-transaction', product_id: 'com.venuewrangler.multivenue.399',
+      entitlement_ids: ['multi_venue'], expiration_at_ms: Date.now() - 1000, event_timestamp_ms: Date.now(),
+    } };
+    await webhook.revenueCatWebhook({ ip: '127.0.0.1' } as any, 'Bearer integration-secret', body);
+    await webhook.revenueCatWebhook({ ip: '127.0.0.1' } as any, 'Bearer integration-secret', body);
+    expect(await prisma.subscriptionEvent.count({ where: { externalEventId: body.event.id } })).toBe(1);
+    for (const id of coveredVenueIds) {
+      expect(await resolveVenueSubscriptionStatus(prisma as any, { venueId: id, venueStatus: 'active' })).toBe('cancelled');
+    }
+    // Deleting the payer must fail closed, never revive the child trial.
+    await prisma.subscription.delete({ where: { id: payer.id } });
+    expect(await resolveVenueSubscriptionStatus(prisma as any, { venueId: coveredVenueIds[0], venueStatus: 'active' })).toBe('expired');
   });
 
   it('a replayed RevenueCat event is also a no-op', async () => {

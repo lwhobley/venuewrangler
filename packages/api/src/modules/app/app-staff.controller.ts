@@ -1,5 +1,5 @@
 import { BadRequestException, Body, Controller, Delete, ForbiddenException, Get, NotFoundException, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
-import { ArrayMaxSize, IsArray, IsDateString, IsEmail, IsIn, IsOptional, IsString, MaxLength, ValidateNested } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsDateString, IsEmail, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import { Prisma, Role } from '@prisma/client';
 import { AuthGuard } from '../../auth/auth.guard';
@@ -15,6 +15,7 @@ import { runWithoutTenant } from '../../prisma/tenant-context';
 import { mapProfile } from './app-mappers';
 import { ProfileService } from './profile.service';
 import { StaffImportParserService } from './staff-import-parser.service';
+import { rosterInvitedTemplate, rosterProfileUpdatedTemplate } from '../../email/templates/roster';
 
 const MAX_STAFF_IMPORT_ROWS = 100;
 const AI_PARSE_RATE_LIMIT_MAX = 20;
@@ -70,6 +71,12 @@ class StaffDto {
   @IsString({ each: true })
   @MaxLength(100, { each: true })
   certifications?: string[];
+
+  @IsInt()
+  @Min(0)
+  @Max(1000000)
+  @IsOptional()
+  hourlyRateCents?: number;
 }
 
 class ParseStaffImportDto {
@@ -98,6 +105,12 @@ class StaffImportRowDto {
   @IsOptional()
   @MaxLength(50)
   phone?: string;
+
+  @IsInt()
+  @Min(0)
+  @Max(1000000)
+  @IsOptional()
+  hourlyRateCents?: number;
 }
 
 class CommitStaffImportDto {
@@ -290,6 +303,7 @@ export class AppStaffController {
           role: item.role,
           jobTitle: item.jobTitle,
           phone: item.phone,
+          hourlyRateCents: item.hourlyRateCents,
         });
         (existingBefore ? updated : created).push(row.email);
       } catch (error) {
@@ -302,7 +316,7 @@ export class AppStaffController {
   /** Core create-or-update logic for a single roster row, shared by the single-staff endpoint and bulk import. */
   private async upsertOneStaffMember(
     viewer: { id: string; role: Role; allAccess: boolean; venueId: string | null; fullName: string; venue?: { name: string } | null },
-    body: Pick<StaffDto, 'venueId' | 'staffId' | 'email' | 'fullName' | 'role' | 'jobTitle' | 'phone' | 'altPhone' | 'address' | 'dateOfBirth' | 'certifications'>,
+    body: Pick<StaffDto, 'venueId' | 'staffId' | 'email' | 'fullName' | 'role' | 'jobTitle' | 'phone' | 'altPhone' | 'address' | 'dateOfBirth' | 'certifications' | 'hourlyRateCents'>,
   ) {
     let existing;
     if (body.staffId) {
@@ -334,14 +348,14 @@ export class AppStaffController {
         await this.assertCanManageLegacyStaffTarget(viewer, existing, isDemoting, tx);
         created = await tx.profile.update({
           where: { id: existing.id },
-          data: { email: body.email.toLowerCase(), fullName: body.fullName, role: body.role, jobTitle: body.jobTitle, venueId: body.venueId, ...employeeFields },
+          data: { email: body.email.toLowerCase(), fullName: body.fullName, role: body.role, jobTitle: body.jobTitle, venueId: body.venueId, hourlyRateCents: body.hourlyRateCents ?? existing.hourlyRateCents, ...employeeFields },
         });
         if (roleChanged && existing.userId) {
           await tx.session.deleteMany({ where: { userId: existing.userId } });
         }
       } else {
         created = await tx.profile.create({
-          data: { email: body.email.toLowerCase(), fullName: body.fullName, role: body.role, jobTitle: body.jobTitle, venueId: body.venueId, ...employeeFields },
+          data: { email: body.email.toLowerCase(), fullName: body.fullName, role: body.role, jobTitle: body.jobTitle, venueId: body.venueId, hourlyRateCents: body.hourlyRateCents ?? null, ...employeeFields },
         });
         await this.ensureOnboardingTasks(body.venueId, created.id, tx);
       }
@@ -367,26 +381,9 @@ export class AppStaffController {
     const venueName = viewer.venue?.name ?? 'your venue';
     void this.email.send({
       to: row.email,
-      subject: existing ? 'Your Venue Wrangler Profile Has Been Updated' : `Invitation: Join the Team at ${venueName} on Venue Wrangler`,
-      text: existing
-        ? `Hi ${row.fullName},\n\n` +
-          `Your team profile for ${venueName} was updated. Here are your current profile details:\n\n` +
-          `Updated Profile Details\n` +
-          `Detail\tInfo\n` +
-          `Name\t${row.fullName}\n` +
-          `Role\t${row.role}\n` +
-          `Job Title\t${row.jobTitle}\n\n` +
-          `If you did not request these changes or have any questions, please contact your venue administrator.\n\n` +
-          `Questions? support@venuewrangler.com\n\n` +
-          `— The Venue Wrangler Team`
-        : `Hi ${row.fullName},\n\n` +
-          `Welcome! You have been added to the team at ${venueName} as a ${row.jobTitle}.\n\n` +
-          `To view your schedule, request unavailable days, and request shift swaps, please join the venue using the steps below:\n\n` +
-          `1. Create a Venue Wrangler account or sign in using your email: ${row.email}\n` +
-          `2. You will be automatically linked to the venue and can access your dashboard right away.\n\n` +
-          `We're excited to have you on board!\n\n` +
-          `Questions? support@venuewrangler.com\n\n` +
-          `— The Venue Wrangler Team`,
+      ...(existing
+        ? rosterProfileUpdatedTemplate({ fullName: row.fullName, venueName, role: row.role, jobTitle: row.jobTitle })
+        : rosterInvitedTemplate({ fullName: row.fullName, venueName, jobTitle: row.jobTitle, email: row.email })),
     });
     return row;
   }

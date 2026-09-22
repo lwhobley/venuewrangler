@@ -152,11 +152,29 @@ export class SchedulingAssignmentService {
     const shift = await this.getVenueShift(args.venueId, args.shiftId);
 
     if (!args.profileId) {
-      await this.prisma.scheduleShift.update({
-        where: { id: shift.id },
-        data: { profileId: null, status: 'open' },
+      // This bare update used to run with no lock and no re-check, so a
+      // concurrent claim/assign for this exact shift (both of which DO run
+      // under withSerializableRetry + an advisory lock below) could commit
+      // a new profileId a moment before this unassign silently overwrote it
+      // back to open — the claiming staff member would vanish from the
+      // shift with no error surfaced to either caller.
+      await withSerializableRetry(this.prisma, async (tx) => {
+        const current = await tx.scheduleShift.findFirst({
+          where: { id: shift.id, venueId: args.venueId },
+        });
+        if (!current) throw new NotFoundException('Shift not found');
+        if (current.profileId) {
+          await this.lockAssignmentKeys(tx, this.profileLockKeys(args.venueId, current.profileId, current));
+        }
+        await tx.scheduleShift.update({
+          where: { id: current.id },
+          data: { profileId: null, status: 'open' },
+        });
+        await tx.venue.update({
+          where: { id: args.venueId },
+          data: { scheduleUpdatedAfterPublishAt: new Date() },
+        });
       });
-      await this.markScheduleEdited(args.venueId);
       return { shift, nextProfileId: null };
     }
 
@@ -301,6 +319,30 @@ export class SchedulingAssignmentService {
     });
     await this.markScheduleEdited(args.venueId);
     return { added };
+  }
+
+  async copyPreviousWeek(args: { venueId: string; weekStart: string }) {
+    const date = new Date(`${args.weekStart}T00:00:00Z`);
+    date.setUTCDate(date.getUTCDate() - 7);
+    const previousWeek = date.toISOString().slice(0, 10);
+    const result = await withSerializableRetry(this.prisma, async (tx) => {
+      await this.lockBulkSchedule(tx, args.venueId, args.weekStart);
+      const [source, existing] = await Promise.all([
+        tx.scheduleShift.findMany({ where: { venueId: args.venueId, weekStart: previousWeek } }),
+        tx.scheduleShift.findMany({ where: { venueId: args.venueId, weekStart: args.weekStart } }),
+      ]);
+      const conflicts: Array<{ jobTitle: string; dayIndex: number; reason: string }> = [];
+      let added = 0;
+      for (const shift of source) {
+        const overlap = existing.some((row) => row.profileId && shift.profileId && row.profileId === shift.profileId && row.dayIndex === shift.dayIndex && row.startMinutes < shift.endMinutes && shift.startMinutes < row.endMinutes);
+        if (overlap) { conflicts.push({ jobTitle: shift.jobTitle, dayIndex: shift.dayIndex, reason: 'overlapping shift already exists' }); continue; }
+        await tx.scheduleShift.create({ data: { venueId: args.venueId, weekStart: args.weekStart, dayIndex: shift.dayIndex, startMinutes: shift.startMinutes, endMinutes: shift.endMinutes, jobTitle: shift.jobTitle, station: shift.station, profileId: shift.profileId, status: shift.profileId ? 'scheduled' : 'open', notes: shift.notes } });
+        added += 1;
+      }
+      return { added, conflicts, sourceWeek: previousWeek };
+    });
+    await this.markScheduleEdited(args.venueId);
+    return result;
   }
 
   async clearWeek(args: {
@@ -457,6 +499,20 @@ export class SchedulingAssignmentService {
         if (!currentSwap || !['accepted', 'proposed'].includes(currentSwap.status)) {
           throw new BadRequestException('Swap is not pending');
         }
+        // A party's profile can be gone (see the schema comment on
+        // ShiftSwap.requesterProfileId/targetProfileId) if that account was
+        // deleted after this swap was proposed/accepted. There is no one to
+        // assign the shift to on that side, so the swap cannot be completed —
+        // decline it instead of leaving it stuck as pending forever.
+        if (!currentSwap.requesterProfileId || !currentSwap.targetProfileId) {
+          await tx.shiftSwap.updateMany({
+            where: { id: currentSwap.id, status: { in: ['accepted', 'proposed'] } },
+            data: { status: 'declined' },
+          });
+          throw new BadRequestException('One of the parties in this swap no longer has an account. The swap has been declined.');
+        }
+        const requesterProfileId = currentSwap.requesterProfileId;
+        const targetProfileId = currentSwap.targetProfileId;
 
         const requesterShift = await tx.scheduleShift.findFirst({
           where: { id: currentSwap.requesterShiftId, venueId: args.venueId },
@@ -470,19 +526,19 @@ export class SchedulingAssignmentService {
           throw new NotFoundException('Shift not found');
         }
 
-        await this.assertNotUnavailable(tx, args.venueId, currentSwap.targetProfileId, requesterShift);
+        await this.assertNotUnavailable(tx, args.venueId, targetProfileId, requesterShift);
         if (targetShift) {
-          await this.assertNotUnavailable(tx, args.venueId, currentSwap.requesterProfileId, targetShift);
+          await this.assertNotUnavailable(tx, args.venueId, requesterProfileId, targetShift);
         }
 
         await this.lockAssignmentKeys(tx, [
-          ...this.profileLockKeys(args.venueId, currentSwap.targetProfileId, requesterShift),
-          ...(targetShift ? this.profileLockKeys(args.venueId, currentSwap.requesterProfileId, targetShift) : []),
+          ...this.profileLockKeys(args.venueId, targetProfileId, requesterShift),
+          ...(targetShift ? this.profileLockKeys(args.venueId, requesterProfileId, targetShift) : []),
         ]);
         await this.assertNoDoubleBookInWeekTx(
           tx,
           args.venueId,
-          currentSwap.targetProfileId,
+          targetProfileId,
           requesterShift.weekStart,
           requesterShift.dayIndex,
           requesterShift.startMinutes,
@@ -494,7 +550,7 @@ export class SchedulingAssignmentService {
           await this.assertNoDoubleBookInWeekTx(
             tx,
             args.venueId,
-            currentSwap.requesterProfileId,
+            requesterProfileId,
             targetShift.weekStart,
             targetShift.dayIndex,
             targetShift.startMinutes,
@@ -505,12 +561,12 @@ export class SchedulingAssignmentService {
         }
         await tx.scheduleShift.update({
           where: { id: requesterShift.id },
-          data: { profileId: currentSwap.targetProfileId, status: 'scheduled' },
+          data: { profileId: targetProfileId, status: 'scheduled' },
         });
         if (targetShift) {
           await tx.scheduleShift.update({
             where: { id: targetShift.id },
-            data: { profileId: currentSwap.requesterProfileId, status: 'scheduled' },
+            data: { profileId: requesterProfileId, status: 'scheduled' },
           });
         }
         const reviewed = await tx.shiftSwap.updateMany({

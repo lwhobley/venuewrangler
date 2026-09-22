@@ -26,6 +26,10 @@ vi.mock('@nestjs/core', async (importOriginal) => {
 });
 
 vi.mock('./observability/sentry', () => ({ initSentry, captureException, flushSentry }));
+// This unit test exercises orchestration, not the full module dependency graph.
+// Loading production providers inside a timed test made cold CI imports race
+// the following test's shared mocks after a timeout.
+vi.mock('./retention.module', () => ({ RetentionModule: class RetentionModule {} }));
 
 // Real classes, used only as map keys above — retention.ts imports the actual
 // exports, so `app.get(AuditService)` in production resolves against these

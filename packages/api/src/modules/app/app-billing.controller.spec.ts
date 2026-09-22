@@ -16,6 +16,9 @@ function makeController(configValues: Record<string, string | undefined> = {}) {
   const prisma: any = {
     subscription: {
       findFirst: vi.fn().mockResolvedValue(null),
+      findUnique: vi.fn().mockResolvedValue(null),
+      findMany: vi.fn().mockResolvedValue([]),
+      count: vi.fn().mockResolvedValue(0),
       update: vi.fn().mockResolvedValue({}),
       create: vi.fn().mockResolvedValue({}),
     },
@@ -110,15 +113,14 @@ describe('AppBillingController', () => {
       await expect(controller.createStripeCheckout(user)).rejects.toThrow(BadRequestException);
     });
 
-    it('allows checkout when the existing subscription is on a different platform', async () => {
+    it('rejects a second provider checkout when Apple already owns the allocation', async () => {
       const { controller, prisma, profiles } = makeController();
       profiles.requireBillingProfile.mockResolvedValue(billingViewer);
       prisma.subscription.findFirst.mockResolvedValue({ status: 'active', platform: 'apple', externalCustomerId: 'venue-1' });
       vi.mocked(stripeRequest).mockResolvedValue({ url: 'https://checkout.stripe.com/session' });
 
-      const result = await controller.createStripeCheckout(user);
-
-      expect(result.url).toBe('https://checkout.stripe.com/session');
+      await expect(controller.createStripeCheckout(user)).rejects.toThrow('already has a billing allocation');
+      expect(stripeRequest).not.toHaveBeenCalled();
     });
 
     it('uses the configured STRIPE_PRICE_ID without any Stripe price lookup', async () => {
@@ -484,7 +486,7 @@ describe('AppBillingController', () => {
       expect(prisma.subscription.create).toHaveBeenCalledWith(expect.objectContaining({
         data: expect.objectContaining({
           venueId: 'venue-1', status: 'active', platform: 'apple', planId: 'com.venuewrangler.monthly',
-          externalCustomerId: 'venue-1', trialStartedAt: null, trialEndsAt: null,
+          externalCustomerId: 'user-1', revenueCatSubscriberId: 'user-1', trialStartedAt: null, trialEndsAt: null,
         }),
       }));
       expect(prisma.subscription.update).not.toHaveBeenCalled();
@@ -494,7 +496,7 @@ describe('AppBillingController', () => {
       const { controller, prisma, profiles } = makeController({ REVENUECAT_API_KEY: 'rc_key' });
       profiles.requireBillingProfile.mockResolvedValue(billingViewer);
       profiles.getProfile.mockResolvedValue({ venueId: 'venue-1' });
-      prisma.subscription.findFirst.mockResolvedValueOnce({ id: 'sub-1', currentPeriodStart: null, currentPeriodEnd: null });
+      prisma.subscription.findFirst.mockResolvedValue({ id: 'sub-1', currentPeriodStart: null, currentPeriodEnd: null });
       vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
         ok: true,
         json: async () => ({
