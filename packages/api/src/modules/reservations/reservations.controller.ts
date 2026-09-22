@@ -19,8 +19,11 @@ import { Type } from 'class-transformer';
 import { Prisma, ReservationSource, ReservationStatus } from '@prisma/client';
 import type { Request } from 'express';
 import { canManageVenue } from '../../auth/roles';
+import { ConfigService } from '@nestjs/config';
 import { Public } from '../../auth/public.decorator';
 import { RequireSubscription } from '../../billing/require-subscription.decorator';
+import { stripeRequest } from '../../billing/stripe-api';
+import { publicWebOrigin } from '../../common/public-web-url';
 import { csvCell, csvDocument } from '../../common/csv';
 import { getClientIp } from '../../common/http';
 import { assertWithinSharedRateLimit } from '../../common/rate-limit';
@@ -275,6 +278,7 @@ export class ReservationsController {
     private readonly prisma: PrismaService,
     private readonly notifier: ReservationNotifierService,
     private readonly mutations: ReservationMutationService,
+    private readonly config: ConfigService,
   ) {}
 
   private requireManager(scope: Scope): asserts scope is NonNullable<Scope> {
@@ -499,6 +503,7 @@ export class ReservationsController {
         beoStatus: r.beoStatus ?? null,
         estimatedValueCents: r.estimatedValueCents ?? null,
         depositDueCents: r.depositDueCents ?? null,
+        depositStatus: r.depositStatus ?? null,
         phone: r.guestPhone ?? null,
         email: r.guestEmail ?? null,
         createdAt: r.createdAt.getTime(),
@@ -710,6 +715,70 @@ export class ReservationsController {
     this.requireManager(scope);
     await this.mutations.deleteHold({ venueId: scope.venueId, holdId: id });
     return { ok: true };
+  }
+
+  @RequireSubscription('paid')
+  @Audited('reservations.deposit_checkout', { entityType: 'reservation', summary: 'Started a reservation deposit checkout' })
+  @Post(':id/deposit')
+  async createDepositCheckout(@VenueScope() scope: Scope, @Param('id') id: string) {
+    this.requireManager(scope);
+    const reservation = await this.prisma.reservation.findFirst({
+      where: { id, venueId: scope.venueId, deletedAt: null },
+    });
+    if (!reservation) throw new BadRequestException('Reservation not found');
+    if (!reservation.depositDueCents || reservation.depositDueCents <= 0) {
+      throw new BadRequestException('This reservation has no deposit due');
+    }
+    if (reservation.depositStatus === 'paid' || reservation.depositStatus === 'waived') {
+      throw new BadRequestException('This deposit is already settled');
+    }
+    const secret = this.config.get<string>('STRIPE_SECRET_KEY');
+    if (!secret) throw new ServiceUnavailableException('Stripe is not configured');
+    const base = publicWebOrigin(this.config);
+    const session = await stripeRequest<{ id?: string; url?: string }>(secret, 'POST', '/checkout/sessions', {
+      mode: 'payment',
+      line_items: [{
+        quantity: 1,
+        price_data: {
+          currency: 'usd',
+          unit_amount: reservation.depositDueCents,
+          product_data: { name: `Reservation deposit · ${reservation.guestName}` },
+        },
+      }],
+      success_url: `${base}/reservations?deposit=paid`,
+      cancel_url: `${base}/reservations?deposit=cancelled`,
+      ...(reservation.guestEmail ? { customer_email: reservation.guestEmail } : {}),
+      metadata: {
+        kind: 'reservation_deposit',
+        venueId: scope.venueId,
+        reservationId: reservation.id,
+        amountCents: String(reservation.depositDueCents),
+      },
+    }, `deposit:${reservation.id}:${reservation.depositDueCents}`);
+    if (!session.url || !session.id) throw new ServiceUnavailableException('Stripe did not return a checkout URL');
+    await this.prisma.reservation.updateMany({
+      where: { id: reservation.id, venueId: scope.venueId, depositStatus: { notIn: ['paid', 'waived'] } },
+      data: { depositStatus: 'due', depositCheckoutSessionId: session.id },
+    });
+    return { url: session.url };
+  }
+
+  @RequireSubscription('paid')
+  @Audited('reservations.deposit_waived', { entityType: 'reservation', summary: 'Waived a reservation deposit' })
+  @Post(':id/deposit/waive')
+  async waiveDeposit(@VenueScope() scope: Scope, @Param('id') id: string) {
+    this.requireManager(scope);
+    const reservation = await this.prisma.reservation.findFirst({
+      where: { id, venueId: scope.venueId, deletedAt: null },
+    });
+    if (!reservation) throw new BadRequestException('Reservation not found');
+    if (reservation.depositStatus === 'paid') throw new BadRequestException('A paid deposit cannot be waived');
+    if (!reservation.depositDueCents) throw new BadRequestException('This reservation has no deposit due');
+    await this.prisma.reservation.updateMany({
+      where: { id: reservation.id, venueId: scope.venueId, depositStatus: { not: 'paid' } },
+      data: { depositStatus: 'waived' },
+    });
+    return { depositStatus: 'waived' };
   }
 
   @RequireSubscription('active')

@@ -4,6 +4,7 @@ import { Prisma, TableShape, TableSection, TableStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { withSerializableRetry } from '../../common/tx-retry';
+import { unpaidDepositBlocksSeating } from '../reservations/deposit';
 import { ReservationNotifierService } from '../reservations/reservation-notifier.service';
 import { TERMINAL_RESERVATION_STATUSES } from '../reservations/reservation-mutation.service';
 import { refreshTableStates } from './table-state';
@@ -629,6 +630,9 @@ export class FloorService {
     // above does not catch it. A closed reservation cannot be seated.
     if (TERMINAL_RESERVATION_STATUSES.has(reservation.status)) {
       throw new BadRequestException(`A ${reservation.status} reservation cannot be assigned to a table.`);
+    }
+    if ((options.holdType ?? 'reserved') === 'seated' && unpaidDepositBlocksSeating(reservation)) {
+      throw new BadRequestException('This reservation has an unpaid deposit. Collect or waive it before seating.');
     }
 
     // Validate every table belongs to this venue's active floor plan so a

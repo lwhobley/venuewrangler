@@ -23,6 +23,7 @@ import { StaffImportParserService } from './modules/app/staff-import-parser.serv
 import { StaffController } from './modules/staff/staff.controller';
 import { StaffRequestsController } from './modules/staff-requests/staff-requests.controller';
 import { TimeClockController } from './modules/time-clock/time-clock.controller';
+import { ClockAlertNotifierService } from './modules/time-clock/clock-alert-notifier.service';
 import { AttestationController } from './modules/attestation/attestation.controller';
 import { AttestationService } from './modules/attestation/attestation.service';
 import { SchedulingController } from './modules/scheduling/scheduling.controller';
@@ -128,6 +129,7 @@ import { MediaCleanupModule } from './modules/media-cleanup/media-cleanup.module
     AiSchedulerService,
     // Consumed by TimeClockController as well as its own enrolment routes.
     AttestationService,
+    ClockAlertNotifierService,
     { provide: WranglerOperatorService, useClass: SafeWranglerOperatorService },
   ],
 })

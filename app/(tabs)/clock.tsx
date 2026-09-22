@@ -31,7 +31,7 @@ type ActiveClockEntry = {
 };
 
 type ManagerAlert = {
-  kind: 'late_clock_in' | 'missed_clock_out';
+  kind: 'late_clock_in' | 'missed_clock_out' | 'location_anomaly';
   severity: 'warning' | 'danger';
   profileId: string;
   memberName: string;

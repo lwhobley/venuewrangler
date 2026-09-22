@@ -12,10 +12,10 @@
  */
 export const VENUE_SCOPED_MODELS: ReadonlySet<string> = new Set([
   'AiBudgetReservation', 'AiUsageEvent', 'AuditLog', 'Availability', 'BarInventoryItem', 'BarInventoryMovement', 'BlackoutDate',
-  'ChatImage', 'ChecklistCompletion', 'ChecklistTemplateItem', 'Conversation', 'ConversationRead',
+  'ChatImage', 'ChecklistCompletion', 'ChecklistTemplateItem', 'ClockAlertDelivery', 'Conversation', 'ConversationRead',
   'CrmActivityLog', 'CrmBeo', 'CrmContract', 'CrmLead', 'CrmNote', 'EmailTemplate', 'FloorChair',
   'FloorPlan', 'FloorTable', 'Guest', 'GuestCrmNote', 'GuestHouseholdLink', 'Invite', 'Invoice', 'LogbookEntry', 'ManagerGoal', 'Message', 'NotificationEvent',
-  'NotificationRead', 'PaymentMethod', 'PayrollExport', 'PosCheck', 'PosConnection',
+  'NotificationRead', 'PaymentMethod', 'PayrollConnection', 'PayrollEmployeeMap', 'PayrollExport', 'PayrollTimeSheetPush', 'PosAggregatorChannel', 'PosCheck', 'PosConnection',
   'PosLaborPunch', 'PrepBoardItem', 'Profile', 'PushToken', 'Reservation', 'ReservationConnection',
   'ReservationHold', 'ReservationSetting', 'ReservationSyncEvent', 'ScheduleEmailEvent',
   'ScheduleMemoryNote', 'SchedulePublication', 'ScheduleShift', 'ScheduleTemplate', 'ShiftSwap', 'StaffOnboardingTask', 'StaffRequest', 'Subscription',

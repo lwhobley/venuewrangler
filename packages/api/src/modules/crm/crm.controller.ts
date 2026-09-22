@@ -11,7 +11,9 @@ import {
   Param,
   Post,
   Query,
+  ServiceUnavailableException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { ArrayMaxSize, IsArray, IsBoolean, IsEmail, IsIn, IsInt, IsNumber, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 import { Prisma, CrmLeadStatus, BeoStatus, ContractStatus, ReservationSource, ReservationStatus } from '@prisma/client';
@@ -20,6 +22,9 @@ import { ACTIVE_MEMBERSHIP } from '../../common/membership';
 import { assertWithinSharedRateLimit } from '../../common/rate-limit';
 import { htmlEscape } from '../../common/html-escape';
 import { RequireSubscription } from '../../billing/require-subscription.decorator';
+import { stripeRequest } from '../../billing/stripe-api';
+import { publicWebOrigin } from '../../common/public-web-url';
+import { unpaidBeoDepositBlocksContract } from '../reservations/deposit';
 import { EmailService } from '../../email/email.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { VenueScope } from '../../venue/venue-scope.decorator';
@@ -456,6 +461,7 @@ export class CrmController {
     private readonly templates: CrmTemplateService,
     @Optional() private readonly executionAutopilot?: ExecutionAutopilotService,
     @Optional() private readonly audit?: AuditService,
+    @Optional() private readonly config?: ConfigService,
   ) {}
 
   @RequireSubscription('active')
@@ -867,6 +873,9 @@ export class CrmController {
       where: { id, venueId: scope.venueId },
     });
     if (!beo) throw new NotFoundException('BEO not found');
+    if (unpaidBeoDepositBlocksContract(beo)) {
+      throw new BadRequestException('Collect or waive the BEO deposit before issuing a contract.');
+    }
 
     // Conversion is idempotent. Pressing Convert twice (or a retried request)
     // used to mint a second contract for the same event, leaving sales and
@@ -1181,6 +1190,81 @@ export class CrmController {
   // ============================================================
   // Email BEO to a recipient with the rendered event details.
   // ============================================================
+  @RequireSubscription('paid')
+  @Post('beos/:id/deposit')
+  async createBeoDeposit(@VenueScope() scope: Scope, @Param('id') id: string) {
+    requireManager(scope);
+    const beo = await this.prisma.crmBeo.findFirst({
+      where: { id, venueId: scope.venueId },
+      include: { lead: { select: { email: true, fullName: true } } },
+    });
+    if (!beo) throw new NotFoundException('BEO not found');
+    if (!beo.depositCents || beo.depositCents <= 0) throw new BadRequestException('This BEO has no deposit due');
+    if (beo.depositStatus === 'paid' || beo.depositStatus === 'waived') throw new BadRequestException('This deposit is already settled');
+    const url = await this.beoDepositUrl(scope.venueId, beo);
+    if (!url) throw new ServiceUnavailableException('Stripe is not configured');
+    const guestEmail = beo.lead?.email?.trim();
+    if (guestEmail) {
+      await this.email.send({
+        from: 'Venue Wrangler Events <no-reply@events.venuewrangler.com>',
+        to: guestEmail,
+        subject: `Deposit due for ${beo.eventName}`,
+        text: `A deposit of ${formatMoneyCents(beo.depositCents)} is due for ${beo.eventName}. Pay here: ${url}`,
+        html: `<p>A deposit of ${htmlEscape(formatMoneyCents(beo.depositCents))} is due for ${htmlEscape(beo.eventName)}. <a href="${htmlEscape(url)}">Pay the deposit</a>.</p>`,
+      });
+    }
+    return { url, emailed: Boolean(guestEmail) };
+  }
+
+  @RequireSubscription('paid')
+  @Post('beos/:id/deposit/waive')
+  async waiveBeoDeposit(@VenueScope() scope: Scope, @Param('id') id: string) {
+    requireManager(scope);
+    const beo = await this.prisma.crmBeo.findFirst({ where: { id, venueId: scope.venueId } });
+    if (!beo) throw new NotFoundException('BEO not found');
+    if (beo.depositStatus === 'paid') throw new BadRequestException('A paid deposit cannot be waived');
+    if (!beo.depositCents) throw new BadRequestException('This BEO has no deposit due');
+    await this.prisma.crmBeo.updateMany({
+      where: { id: beo.id, venueId: scope.venueId, depositStatus: { not: 'paid' } },
+      data: { depositStatus: 'waived' },
+    });
+    return { depositStatus: 'waived' };
+  }
+
+  private async beoDepositUrl(venueId: string, beo: { id: string; eventName: string; depositCents: number | null; depositStatus: string | null }): Promise<string | null> {
+    if (!beo.depositCents || beo.depositCents <= 0 || beo.depositStatus === 'paid' || beo.depositStatus === 'waived') return null;
+    const config = this.config;
+    if (!config) return null;
+    const secret = config.get<string>('STRIPE_SECRET_KEY');
+    if (!secret) return null;
+    const base = publicWebOrigin(config);
+    const session = await stripeRequest<{ id?: string; url?: string }>(secret, 'POST', '/checkout/sessions', {
+      mode: 'payment',
+      line_items: [{
+        quantity: 1,
+        price_data: {
+          currency: 'usd',
+          unit_amount: beo.depositCents,
+          product_data: { name: `Event deposit · ${beo.eventName}` },
+        },
+      }],
+      success_url: `${base}/reservations?deposit=paid`,
+      cancel_url: `${base}/reservations?deposit=cancelled`,
+      metadata: {
+        kind: 'beo_deposit',
+        venueId,
+        beoId: beo.id,
+        amountCents: String(beo.depositCents),
+      },
+    }, `beo-deposit:${beo.id}:${beo.depositCents}`);
+    if (!session.url || !session.id) return null;
+    await this.prisma.crmBeo.updateMany({
+      where: { id: beo.id, venueId, depositStatus: { notIn: ['paid', 'waived'] } },
+      data: { depositStatus: 'due', depositCheckoutSessionId: session.id },
+    });
+    return session.url;
+  }
+
   @RequireSubscription('active')
   @Post('beos/:id/email')
   async emailBeo(@VenueScope() scope: Scope, @Param('id') id: string, @Body() body: EmailBeoDto) {
@@ -1246,9 +1330,20 @@ export class CrmController {
     }
 
     const venueName = venue?.name ?? 'Venue';
+    const paymentUrl = unpaidBeoDepositBlocksContract(beo) ? await this.beoDepositUrl(scope.venueId, beo) : null;
+    const paymentText = paymentUrl
+      ? `\n\nA deposit of ${formatMoneyCents(beo.depositCents)} is due before the contract. Pay here: ${paymentUrl}`
+      : beo.depositStatus === 'paid'
+        ? '\n\nDeposit received.'
+        : '';
+    const paymentHtml = paymentUrl
+      ? `<p>A deposit of ${htmlEscape(formatMoneyCents(beo.depositCents))} is due before the contract. <a href="${htmlEscape(paymentUrl)}">Pay the deposit</a>.</p>`
+      : beo.depositStatus === 'paid'
+        ? '<p>Deposit received.</p>'
+        : '';
     const subject = `${venueName} - Banquet Event Order: ${beo.eventName}`;
-    const text = renderBeoText(beo, venueName, body.message);
-    const html = renderBeoHtml(beo, venueName, body.message);
+    const text = `${renderBeoText(beo, venueName, body.message)}${paymentText}`;
+    const html = `${renderBeoHtml(beo, venueName, body.message)}${paymentHtml}`;
     await this.email.sendOrThrow({
       from: 'Venue Wrangler Events <no-reply@events.venuewrangler.com>',
       to: body.toEmail,

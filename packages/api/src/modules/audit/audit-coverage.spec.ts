@@ -27,6 +27,24 @@ describe('Audit Coverage & Interceptor (VW-A03)', () => {
       expectedEntityType: 'payroll',
     },
     {
+      controller: PayrollController,
+      method: 'pushGusto',
+      expectedAction: 'payroll.gusto_push',
+      expectedEntityType: 'payroll',
+    },
+    {
+      controller: PayrollController,
+      method: 'mapPayrollEmployee',
+      expectedAction: 'payroll.employee_mapped',
+      expectedEntityType: 'profile',
+    },
+    {
+      controller: PayrollController,
+      method: 'pushProvider',
+      expectedAction: 'payroll.provider_push',
+      expectedEntityType: 'payroll',
+    },
+    {
       controller: AppController,
       method: 'exportTimeEntriesCsv',
       expectedAction: 'time_entries.export',

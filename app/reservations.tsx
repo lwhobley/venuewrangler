@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FlatList, View } from 'react-native';
+import { FlatList, Linking, View } from 'react-native';
 import { Button, Card, Chip, IconButton, Menu, Text, TextInput } from 'react-native-paper';
 import { ScreenErrorBoundary } from '../components/ErrorBoundary';
 import { router } from 'expo-router';
@@ -74,6 +74,7 @@ type ReservationRow = {
   billingNotes?: string | null;
   estimatedValueCents?: number | null;
   depositDueCents?: number | null;
+  depositStatus?: string | null;
 };
 
 type FloorTable = {
@@ -117,6 +118,8 @@ function ReservationsScreen() {
   const removeFromWaitlist = useMutation(api.floorBinding.removeFromWaitlist);
   const assignWaitlist = useMutation(api.floorBinding.assignWaitlistToTables);
   const createHold = useMutation(api.reservations.createHold);
+  const createDepositCheckout = useMutation(api.reservations.createDepositCheckout);
+  const waiveDeposit = useMutation(api.reservations.waiveDeposit);
   const deleteHold = useMutation(api.reservations.deleteHold);
 
   // Waitlist form/state
@@ -822,6 +825,25 @@ function ReservationsScreen() {
               </View>
               <Text>{t('reservations.item.partyOf', { name: res.guestName, size: res.partySize })}</Text>
               <Text style={{ color: colors.muted }}>{res.source.replace('_', ' ')}</Text>
+              {(res.depositDueCents ?? 0) > 0 ? (
+                <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+                  <Text style={{ color: colors.charcoal, fontSize: 12 }}>
+                    {res.depositStatus === 'paid' ? t('reservations.item.depositPaid') : res.depositStatus === 'waived' ? t('reservations.item.depositWaived') : `$${(res.depositDueCents! / 100).toFixed(2)} due`}
+                  </Text>
+                  {res.depositStatus !== 'paid' && res.depositStatus !== 'waived' ? (
+                    <>
+                      <Button compact mode="outlined" onPress={() => {
+                        createDepositCheckout({ reservationId: res.id })
+                          .then((result) => Linking.openURL(result.url))
+                          .catch((error: unknown) => setError(errorMessage(error, 'Could not start the deposit checkout')));
+                      }}>{t('reservations.item.collectDeposit')}</Button>
+                      <Button compact mode="text" textColor={colors.danger} onPress={() => {
+                        waiveDeposit({ reservationId: res.id }).catch((error: unknown) => setError(errorMessage(error, 'Could not waive the deposit')));
+                      }}>{t('reservations.item.waiveDeposit')}</Button>
+                    </>
+                  ) : null}
+                </View>
+              ) : null}
               <Button compact mode="text" textColor={colors.primary} onPress={() => setGuestContextId(guestContextId === res.id ? null : res.id)}>
                 {guestContextId === res.id ? 'Hide guest context' : 'Guest context'}
               </Button>

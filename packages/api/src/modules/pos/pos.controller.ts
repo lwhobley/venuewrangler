@@ -1,5 +1,5 @@
-import { BadRequestException, Body, Controller, ForbiddenException, Get, Headers, NotFoundException, Param, Post, Query, Req, UnauthorizedException } from '@nestjs/common';
-import { ArrayMaxSize, IsArray, IsIn, IsInt, IsNumber, IsOptional, IsString, MaxLength, Min, ValidateNested } from 'class-validator';
+import { BadRequestException, Body, Controller, ForbiddenException, Get, Headers, NotFoundException, Param, Patch, Post, Query, Req, UnauthorizedException } from '@nestjs/common';
+import { ArrayMaxSize, IsArray, IsBoolean, IsIn, IsInt, IsNumber, IsOptional, IsString, MaxLength, Min, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import { Prisma, PosProvider, PosCheckStatus } from '@prisma/client';
 import type { Request } from 'express';
@@ -14,6 +14,7 @@ import { RequireSubscription } from '../../billing/require-subscription.decorato
 import { VenueScope } from '../../venue/venue-scope.decorator';
 import type { VenueScopedRequest } from '../../venue/venue-scope.interceptor';
 import { Audited } from '../audit/audited.decorator';
+import { capabilitiesFor, POS_CAPABILITY_LEGEND, POS_PROVIDER_CAPABILITIES, POS_PROVIDERS } from './pos-provider-capabilities';
 
 type Scope = VenueScopedRequest['venueScope'];
 
@@ -22,18 +23,51 @@ const MAX_INGEST_ROWS = 1000;
 const INGEST_CHUNK_SIZE = 100;
 const INGEST_RATE_LIMIT_MAX = 120;
 const INGEST_RATE_LIMIT_WINDOW_MS = 60_000;
-// Source of truth for which POS providers can register a webhook connection.
-// Must stay in sync with the PosProvider enum in prisma/schema.prisma.
-const POS_PROVIDERS = [
-  'toast',
-  'square',
-  'clover',
-  'shopify_pos',
-  'lightspeed_restaurant',
-  'spoton',
-  'generic',
-] as const;
 const POS_CHECK_STATUSES = ['open', 'paid', 'void'] as const;
+
+class CreateAggregatorChannelDto {
+  @IsString()
+  @MaxLength(80)
+  name!: string;
+
+  @IsString()
+  @MaxLength(80)
+  zoneLabel!: string;
+
+  @IsIn(POS_PROVIDERS)
+  primaryProvider!: PosProvider;
+
+  @IsIn(POS_PROVIDERS)
+  fallbackProvider!: PosProvider;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  terminalCount?: number;
+}
+
+class UpdateAggregatorChannelStatusDto {
+  @IsBoolean()
+  active!: boolean;
+}
+
+class Sync86Dto {
+  @IsArray()
+  @ArrayMaxSize(50)
+  @IsString({ each: true })
+  @MaxLength(80, { each: true })
+  itemNames!: string[];
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  category?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(240)
+  reason?: string;
+}
 
 class SalesWindowQueryDto {
   @IsOptional()
@@ -662,6 +696,203 @@ export class PosController {
       data: { webhookSecret: freshSecret.hashedSecret, updatedAt: new Date() },
     });
     return { webhookSecret: freshSecret.secret };
+  }
+
+  @RequireSubscription()
+  @Get('aggregator/status')
+  async getAggregatorStatus(@VenueScope() scope: Scope) {
+    this.requireManager(scope);
+    const [connections, checksCount, recentChecks, totals] = await Promise.all([
+      this.prisma.posConnection.findMany({ where: { venueId: scope.venueId } }),
+      this.prisma.posCheck.count({ where: { venueId: scope.venueId } }),
+      this.prisma.posCheck.findMany({ where: { venueId: scope.venueId }, orderBy: { openedAt: 'desc' }, take: 10 }),
+      this.prisma.posCheck.aggregate({
+        where: { venueId: scope.venueId, status: 'paid' },
+        _sum: { totalCents: true, tipCents: true, taxCents: true },
+      }),
+    ]);
+    const active = connections.filter((connection) => connection.status === 'connected');
+    return {
+      status: active.length > 0 ? 'online' : 'standby',
+      feedMode: 'webhook',
+      activeFeedsCount: active.length,
+      connectedProviders: POS_PROVIDERS.map((provider) => {
+        const found = connections.find((connection) => connection.provider === provider);
+        return {
+          provider,
+          status: found?.status ?? 'unconfigured',
+          lastSyncAt: found?.lastSyncAt?.getTime() ?? null,
+          capabilities: capabilitiesFor(provider) ?? null,
+        };
+      }),
+      metrics: {
+        totalChecksCount: checksCount,
+        grossSalesCents: totals._sum.totalCents ?? 0,
+        tipsCents: totals._sum.tipCents ?? 0,
+        taxCents: totals._sum.taxCents ?? 0,
+      },
+      recentTransactions: recentChecks.map((check) => ({
+        id: check.id,
+        externalCheckId: check.externalCheckId,
+        provider: check.provider,
+        totalCents: check.totalCents,
+        status: check.status,
+        openedAt: check.openedAt.getTime(),
+      })),
+    };
+  }
+
+  @RequireSubscription()
+  @Get('aggregator/capabilities')
+  getAggregatorCapabilities(@VenueScope() scope: Scope) {
+    this.requireManager(scope);
+    return { legend: POS_CAPABILITY_LEGEND, providers: POS_PROVIDER_CAPABILITIES };
+  }
+
+  @RequireSubscription()
+  @Get('aggregator/channels')
+  async getAggregatorChannels(@VenueScope() scope: Scope) {
+    this.requireManager(scope);
+    const channels = await this.prisma.posAggregatorChannel.findMany({
+      where: { venueId: scope.venueId },
+      orderBy: { createdAt: 'asc' },
+    });
+    return channels.map((channel) => this.serializeChannel(channel));
+  }
+
+  @RequireSubscription()
+  @Post('aggregator/channels')
+  async createAggregatorChannel(@VenueScope() scope: Scope, @Body() body: CreateAggregatorChannelDto) {
+    this.requireManager(scope);
+    try {
+      const channel = await this.prisma.posAggregatorChannel.create({
+        data: {
+          venueId: scope.venueId,
+          name: body.name.trim(),
+          zoneLabel: body.zoneLabel.trim(),
+          primaryProvider: body.primaryProvider,
+          fallbackProvider: body.fallbackProvider,
+          terminalCount: body.terminalCount ?? 0,
+        },
+      });
+      return this.serializeChannel(channel);
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new BadRequestException('A channel with this name already exists for this venue.');
+      }
+      throw error;
+    }
+  }
+
+  @RequireSubscription()
+  @Patch('aggregator/channels/:id/status')
+  async updateAggregatorChannelStatus(@VenueScope() scope: Scope, @Param('id') id: string, @Body() body: UpdateAggregatorChannelStatusDto) {
+    this.requireManager(scope);
+    const channel = await this.prisma.posAggregatorChannel.findFirst({ where: { id, venueId: scope.venueId } });
+    if (!channel) throw new NotFoundException('POS aggregator channel not found.');
+    const updated = await this.prisma.posAggregatorChannel.update({
+      where: { id: channel.id },
+      data: { active: body.active },
+    });
+    return this.serializeChannel(updated);
+  }
+
+  @RequireSubscription()
+  @Get('aggregator/settlement')
+  async getAggregatorSettlement(@VenueScope() scope: Scope) {
+    this.requireManager(scope);
+    const rows = await this.prisma.posCheck.groupBy({
+      by: ['provider'],
+      where: { venueId: scope.venueId, status: 'paid' },
+      _sum: { totalCents: true, tipCents: true, taxCents: true },
+      _count: { _all: true },
+    });
+    const providerBreakdown = rows.map((row) => ({
+      provider: row.provider,
+      checkCount: row._count._all,
+      grossCents: row._sum.totalCents ?? 0,
+      tipsCents: row._sum.tipCents ?? 0,
+      taxCents: row._sum.taxCents ?? 0,
+    }));
+    return {
+      feedMode: 'webhook',
+      totalGrossCents: providerBreakdown.reduce((sum, row) => sum + row.grossCents, 0),
+      providerBreakdown,
+      tenderSplits: [],
+      note: 'Tender splits are not on the ingested check. Provider totals are the paid checks already received.',
+    };
+  }
+
+  @RequireSubscription()
+  @Get('aggregator/86-items')
+  async getMaster86List(@VenueScope() scope: Scope) {
+    this.requireManager(scope);
+    const items = await this.prisma.barInventoryItem.findMany({
+      where: { venueId: scope.venueId, onHand: { lte: 0 } },
+      take: 50,
+      orderBy: { name: 'asc' },
+    });
+    return {
+      total86Count: items.length,
+      broadcastActive: false,
+      items: items.map((item) => ({
+        id: item.id,
+        name: item.name,
+        category: item.category,
+        onHand: item.onHand,
+        parLevel: item.parLevel,
+      })),
+    };
+  }
+
+  @RequireSubscription()
+  @Audited('pos.86_recorded', { entityType: 'pos_aggregator', summary: 'Recorded an internal 86 list' })
+  @Post('aggregator/sync-86')
+  async sync86Broadcast(@VenueScope() scope: Scope, @Body() body: Sync86Dto) {
+    this.requireManager(scope);
+    await this.prisma.auditLog.create({
+      data: {
+        venueId: scope.venueId,
+        actorProfileId: scope.profileId,
+        actorName: scope.fullName,
+        actorRole: scope.role,
+        entityType: 'pos_aggregator_86_sync',
+        entityId: scope.venueId,
+        action: 'pos_86_recorded',
+        summary: `Internal 86 update recorded for ${body.itemNames.length} items. No POS was called.`,
+        metadata: {
+          items: body.itemNames,
+          category: body.category ?? null,
+          reason: body.reason ?? null,
+        },
+      },
+    });
+    return {
+      success: true,
+      dispatchedCount: body.itemNames.length,
+      targetEndpoints: [],
+      deliveryMode: 'internal_audit_only',
+    };
+  }
+
+  private serializeChannel(channel: {
+    id: string;
+    name: string;
+    zoneLabel: string;
+    primaryProvider: PosProvider;
+    fallbackProvider: PosProvider;
+    terminalCount: number;
+    active: boolean;
+  }) {
+    return {
+      id: channel.id,
+      name: channel.name,
+      zone: channel.zoneLabel,
+      primaryProvider: channel.primaryProvider,
+      fallbackProvider: channel.fallbackProvider,
+      terminalCount: channel.terminalCount,
+      status: channel.active ? 'active' : 'inactive',
+    };
   }
 
   private mapConnection(conn: {

@@ -117,10 +117,18 @@ export class ReservationMutationService {
         });
         if (!existing) throw new BadRequestException('Reservation not found');
         assertReservationTransitionAllowed(existing.status, data.status);
+        const updateData = { ...data };
+        if (existing.depositStatus === 'paid' || existing.depositStatus === 'waived') {
+          updateData.depositDueCents = existing.depositDueCents;
+        } else if (args.depositDueCents === undefined) {
+          updateData.depositDueCents = existing.depositDueCents;
+        } else if ((existing.depositDueCents ?? 0) > 0 && (args.depositDueCents ?? 0) < existing.depositDueCents) {
+          throw new BadRequestException('A deposit that is due cannot be reduced. Collect it or waive it.');
+        }
 
         const updated = await transaction.reservation.update({
           where: { id: existing.id },
-          data,
+          data: updateData,
         });
         if (data.status === 'cancelled') {
           const now = new Date();
