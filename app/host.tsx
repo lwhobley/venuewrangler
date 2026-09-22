@@ -3,8 +3,9 @@ import { Button, Chip, Text } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { useQuery } from '../lib/railway-hooks';
 import { api } from '../lib/railway-api';
-import { colors, spacing, type } from '../lib/theme';
+import { colors, spacing } from '../lib/theme';
 import { AppCard, SectionHeader } from '../components/AppCard';
+import { PageHeader } from '../components/design-system';
 import { ScreenErrorBoundary } from '../components/ErrorBoundary';
 import { useAuthStore, type AuthState } from '../lib/auth-store';
 import { useI18n } from '../lib/i18n';
@@ -18,14 +19,7 @@ function HostStandScreen() {
 
   return (
     <ScrollView contentContainerStyle={{ flexGrow: 1, backgroundColor: colors.background, padding: spacing.lg, gap: spacing.md }}>
-      <View style={{ gap: 4 }}>
-        <Text style={{ ...type.title, color: colors.charcoal }}>
-          {t('host.title')}
-        </Text>
-        <Text style={{ color: colors.muted }}>
-          {t('host.subtitle')}
-        </Text>
-      </View>
+      <PageHeader title={t('host.title')} detail={t('host.subtitle')} />
 
       <AppCard>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>

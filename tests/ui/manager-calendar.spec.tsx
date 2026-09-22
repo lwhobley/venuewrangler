@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ManagerCalendar } from '../../components/schedule/ManagerCalendar';
 
 const state = vi.hoisted(() => ({
+  desktop: false,
   scheduleLoading: false,
   scheduleError: null as any,
   scheduleData: {
@@ -73,6 +74,7 @@ vi.mock('react-native', () => {
       R.createElement('Pressable', { onClick: onPress, ...props }, children),
     ScrollView: ({ children }: any) => R.createElement('ScrollView', null, children),
     View: ({ children, style }: any) => R.createElement('View', { style }, children),
+    Text: ({ children, ...props }: any) => R.createElement('Text', props, children),
     Modal: ({ visible, children }: any) => (visible ? R.createElement('div', { 'data-modal': true }, children) : null),
   };
 });
@@ -123,7 +125,7 @@ vi.mock('@expo/vector-icons', () => ({
 }));
 
 vi.mock('../../lib/responsive', () => ({
-  useIsDesktop: () => false,
+  useIsDesktop: () => state.desktop,
 }));
 
 vi.mock('../../components/schedule/AutoScheduleModal', () => ({
@@ -229,6 +231,7 @@ function output(r: ReturnType<typeof createRoot>) {
 
 describe('ManagerCalendar', () => {
   beforeEach(() => {
+    state.desktop = false;
     vi.clearAllMocks();
     state.scheduleLoading = false;
     state.scheduleError = null;
@@ -299,6 +302,10 @@ describe('ManagerCalendar', () => {
       r.render(<ManagerCalendar venueId={'v1' as any} timeZone="America/New_York" />);
     });
 
+    // The phone planner opens on the venue's current day; select Sunday,
+    // where this fixture's shift is scheduled.
+    const sunday = r.container.queryAll((n) => n.type === 'Pressable' && n.props.accessibilityRole === 'tab' && n.props.accessibilityLabel?.startsWith('Sun '))[0];
+    await act(async () => sunday.props.onClick());
     const json = output(r);
     expect(json).toContain('Alice Walker');
     expect(json).toContain('Draft');
@@ -365,5 +372,28 @@ describe('ManagerCalendar', () => {
 
     expect(output(r)).toContain('Create shift');
     expect(output(r)).toContain('Assign employee');
+  });
+
+  it('keeps the weekly grid on desktop', async () => {
+    state.desktop = true;
+    const r = createRoot();
+    await act(async () => r.render(<ManagerCalendar venueId={'v1' as any} />));
+    expect(output(r)).toContain('Week Grid');
+    expect(output(r)).toContain('Alice Walker');
+    expect(output(r)).not.toContain('Add shift for selected day');
+  });
+
+  it('opens the original shift editor from an overnight agenda continuation', async () => {
+    state.scheduleData.shifts[0].startMinutes = 1320;
+    state.scheduleData.shifts[0].endMinutes = 1560;
+    const r = createRoot();
+    await act(async () => r.render(<ManagerCalendar venueId={'v1' as any} />));
+    const monday = r.container.queryAll((n) => n.type === 'Pressable' && n.props.accessibilityLabel?.startsWith('Mon '))[0];
+    await act(async () => monday.props.onClick());
+    expect(output(r)).toContain('Continues from yesterday');
+    const shift = r.container.queryAll((n) => n.type === 'Pressable' && n.props.accessibilityLabel?.startsWith('Alice Walker,'))[0];
+    await act(async () => shift.props.onClick());
+    expect(output(r)).toContain('Shift Details');
+    expect(r.container.queryAll((n) => n.type === 'input' && n.props.value === '22:00')).toHaveLength(1);
   });
 });

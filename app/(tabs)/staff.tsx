@@ -11,7 +11,7 @@ import { accents, colors, radius, spacing } from '../../lib/theme';
 import { useVenueAuth } from '../../lib/useVenueAuth';
 import { errorMessage } from '../../lib/format';
 import type { Role } from '../../lib/types';
-import { SectionHeader } from '../../components/AppCard';
+import { PageHeader } from '../../components/design-system';
 import { useI18n } from '../../lib/i18n';
 import { readPickedFileText } from '../../lib/picked-file';
 
@@ -148,6 +148,8 @@ function StaffScreen() {
     { value: 'staff' as const, label: t('staff.roleStaff') },
   ], [canElevate, t]);
   const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null);
+  const [toolsOpen, setToolsOpen] = useState(false);
+  const rosterRef = useRef<FlatList<StaffMember>>(null);
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<Role>('staff');
@@ -312,6 +314,8 @@ function StaffScreen() {
     : 0;
 
   const fillFromStaff = (member: StaffMember) => {
+    setToolsOpen(true);
+    rosterRef.current?.scrollToOffset({ offset: 0, animated: true });
     setSelectedStaffId(member._id);
     setFullName(member.fullName);
     setEmail(member.email);
@@ -423,6 +427,7 @@ function StaffScreen() {
 
   return (
     <FlatList
+      ref={rosterRef}
       data={staff}
       keyExtractor={(item) => item._id}
       style={{ flex: 1, backgroundColor: colors.background }}
@@ -430,11 +435,11 @@ function StaffScreen() {
       removeClippedSubviews
       ListHeaderComponent={(
         <>
-      <SectionHeader
+      <PageHeader
         kicker={t('staff.kicker')}
         title={t('staff.managementTitle')}
-        subtitle={t('staff.subtitle', { venue: venue?.name ?? t('common.yourVenue') })}
-        trailing={
+        detail={t('staff.subtitle', { venue: venue?.name ?? t('common.yourVenue') })}
+        action={
           <Button
             mode="outlined"
             icon="account-check"
@@ -446,6 +451,10 @@ function StaffScreen() {
         }
       />
 
+      <Button mode="outlined" icon={toolsOpen ? 'chevron-up' : 'plus'} accessibilityState={{ expanded: toolsOpen }} onPress={() => setToolsOpen((open) => !open)} style={{ marginBottom: spacing.md }}>
+        {toolsOpen ? t('staff.toolsOpen') : t('staff.toolsClosed')}
+      </Button>
+      <View style={{ display: toolsOpen ? 'flex' : 'none', gap: spacing.md }}>
       {/* Roles / positions */}
       <Card style={{ backgroundColor: colors.surface, borderRadius: radius.sharp }}>
         <Card.Content style={{ gap: spacing.sm }}>
@@ -701,6 +710,7 @@ function StaffScreen() {
         </Card.Content>
       </Card>
 
+      </View>
       <Card style={{ backgroundColor: colors.surface }}>
         <Card.Content style={{ gap: spacing.sm }}>
           <Text variant="titleMedium">{t('staff.venueStaffTitle')}</Text>

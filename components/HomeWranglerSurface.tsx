@@ -39,6 +39,7 @@ export function HomeWranglerSurface({ enabled }: Props) {
 
   const [prompt, setPrompt] = useState('');
   const [mode, setMode] = useState<'ask' | 'command'>('ask');
+  const [showComposer, setShowComposer] = useState(false);
   const [inlineResult, setInlineResult] = useState<string | null>(null);
   const [pendingPlan, setPendingPlan] = useState<WranglerOperatorPlan | null>(null);
   const [pendingPreview, setPendingPreview] = useState<string[]>([]);
@@ -237,7 +238,29 @@ export function HomeWranglerSurface({ enabled }: Props) {
         </Pressable>
       ) : null}
 
-      <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderColor: palette.divider, paddingTop: spacing.sm, gap: spacing.xs }}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ expanded: showComposer }}
+        onPress={() => setShowComposer((value) => !value)}
+        style={({ pressed }) => ({
+          minHeight: 42,
+          borderTopWidth: StyleSheet.hairlineWidth,
+          borderColor: palette.divider,
+          paddingTop: spacing.sm,
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          opacity: pressed ? 0.68 : 1,
+        })}
+      >
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+          <MaterialCommunityIcons name="creation-outline" size={18} color={palette.secondary} />
+          <CommandText palette={palette} variant="body" style={{ fontWeight: '700' }}>Ask or command Wrangler</CommandText>
+        </View>
+        <MaterialCommunityIcons name={showComposer ? 'chevron-up' : 'chevron-down'} size={20} color={palette.muted} />
+      </Pressable>
+
+      {showComposer ? <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderColor: palette.divider, paddingTop: spacing.sm, gap: spacing.xs }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
           <CommandText palette={palette} variant="label" style={{ color: palette.secondary }}>
             OPERATIONS COMMAND
@@ -383,7 +406,7 @@ export function HomeWranglerSurface({ enabled }: Props) {
             ) : null}
           </View>
         ) : null}
-      </View>
+      </View> : null}
 
       <View style={{ flexDirection: 'row', gap: spacing.lg, paddingTop: 2 }}>
         <CommandText palette={palette} variant="caption">{snapshot.summary.covers} covers</CommandText>

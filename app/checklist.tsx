@@ -7,8 +7,9 @@ import { Button, Chip, IconButton, Text, TextInput as PaperTextInput } from 'rea
 import { useMutation, useQuery } from '../lib/railway-hooks';
 import { api } from '../lib/railway-api';
 import { resolveMediaUrl } from '../lib/api-client';
-import { colors, spacing, radius, type } from '../lib/theme';
+import { colors, spacing, radius } from '../lib/theme';
 import { AppCard, SectionHeader } from '../components/AppCard';
+import { PageHeader } from '../components/design-system';
 import { ScreenErrorBoundary } from '../components/ErrorBoundary';
 import { errorMessage } from '../lib/format';
 import { useVenueAuth } from '../lib/useVenueAuth';
@@ -120,8 +121,7 @@ function ChecklistScreen() {
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
         <IconButton icon="arrow-left" onPress={() => router.back()} />
         <View style={{ flex: 1 }}>
-          <Text style={{ ...type.title, color: colors.charcoal }}>{t('checklist.title')}</Text>
-          <Text style={{ color: colors.muted }}>{t('checklist.subtitle')}</Text>
+          <PageHeader title={t('checklist.title')} detail={t('checklist.subtitle')} />
         </View>
       </View>
 

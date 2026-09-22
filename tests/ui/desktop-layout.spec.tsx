@@ -94,6 +94,24 @@ describe('DesktopFrame', () => {
 });
 
 describe('CarouselTabBar', () => {
+  it('keeps secondary destinations reachable and excludes role-hidden routes', () => {
+    env.os = 'ios';
+    const navigate = vi.fn();
+    const routeNames = ['home', 'schedule', 'staff', 'chat', 'clock', 'profile', 'reports'];
+    const root = createRoot();
+    const descriptors = Object.fromEntries(routeNames.map((name) => [name, { options: { title: name, ...(name === 'reports' ? { href: null } : {}) } }]));
+    act(() => root.render(<CarouselTabBar {...({ state: { routes: routeNames.map((name) => ({ key: name, name })), index: 0 }, descriptors, navigation: { emit: () => ({ defaultPrevented: false }), navigate } } as any)} />));
+    const byLabel = (label: string) => root.container.queryAll((node) => node.type === 'Pressable' && node.props.accessibilityLabel === label)[0];
+    expect(byLabel('clock')).toBeUndefined();
+    act(() => byLabel('More tools').props.onPress());
+    expect(byLabel('clock')).toBeDefined();
+    expect(byLabel('profile')).toBeDefined();
+    expect(byLabel('reports')).toBeUndefined();
+    act(() => byLabel('clock').props.onPress());
+    expect(navigate).toHaveBeenCalledWith('clock');
+    expect(byLabel('More tools').props.accessibilityState.expanded).toBe(false);
+  });
+
   const routes = [
     { key: 'home', name: 'home' },
     { key: 'clock', name: 'clock' },

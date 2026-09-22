@@ -3,6 +3,7 @@ import { useRef, useState } from 'react';
 import { router } from 'expo-router';
 import { Button, Card, Text } from 'react-native-paper';
 import { ScreenErrorBoundary } from '../../components/ErrorBoundary';
+import { PageHeader } from '../../components/design-system';
 import { useMutation, useQuery } from '../../lib/railway-hooks';
 import { useAuthActions } from '../../lib/railway-hooks';
 import { ApiError } from '../../lib/api-client';
@@ -80,9 +81,9 @@ function ProfileScreen() {
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: colors.background }} contentContainerStyle={{ padding: spacing.lg, paddingBottom: spacing.xxl }}>
+      <PageHeader title={t('profile.title')} detail={venue?.name ?? t('profile.individualAccount')} />
       <Card style={{ backgroundColor: colors.surface, marginBottom: spacing.md, borderRadius: radius.soft }}>
         <Card.Content style={{ gap: 6 }}>
-          <Text variant="headlineSmall" style={{ fontWeight: '700' }}>{t('profile.title')}</Text>
           <Text>{user?.full_name}</Text>
           <Text style={{ color: colors.muted }}>{user?.email}</Text>
           <Text style={{ color: colors.muted }}>{user?.job_title}</Text>

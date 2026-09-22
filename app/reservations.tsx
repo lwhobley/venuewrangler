@@ -9,6 +9,7 @@ import { api } from '../lib/railway-api';
 import type { Id } from '../lib/ids';
 import { accents, colors, spacing, radius, type } from '../lib/theme';
 import { AppCard, SectionHeader } from '../components/AppCard';
+import { PageHeader } from '../components/design-system';
 import { useAuthStore, type AuthState } from '../lib/auth-store';
 import { useAuthenticatedSession } from '../lib/auth-readiness';
 import { canManageVenue } from '../lib/permissions';
@@ -472,18 +473,18 @@ function ReservationsScreen() {
       removeClippedSubviews
       ListHeaderComponent={(
         <>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <View style={{ gap: 4, flex: 1 }}>
-          <Text style={{ ...type.title, color: colors.charcoal }}>{t('reservations.header.title')}</Text>
-          <Text style={{ color: colors.muted }}>{t('reservations.header.subtitle', { venue: venue?.name ?? t('reservations.header.venueFallback') })}</Text>
-        </View>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 6 }}>
-          <Button compact mode="text" textColor={colors.primary} icon="floor-plan" onPress={() => router.push('/floor')}>{t('reservations.header.floorButton')}</Button>
-          {canManage ? (
-            <Button compact mode="text" textColor={colors.primary} icon="account-heart-outline" onPress={() => router.push('/guests')}>{t('reservations.header.guestsButton')}</Button>
-          ) : null}
-        </View>
-      </View>
+      <PageHeader
+        title={t('reservations.header.title')}
+        detail={t('reservations.header.subtitle', { venue: venue?.name ?? t('reservations.header.venueFallback') })}
+        action={
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 6 }}>
+            <Button compact mode="text" textColor={colors.primary} icon="floor-plan" onPress={() => router.push('/floor')}>{t('reservations.header.floorButton')}</Button>
+            {canManage ? (
+              <Button compact mode="text" textColor={colors.primary} icon="account-heart-outline" onPress={() => router.push('/guests')}>{t('reservations.header.guestsButton')}</Button>
+            ) : null}
+          </View>
+        }
+      />
 
       {/* Stats */}
       <View style={{ flexDirection: 'row', gap: spacing.sm }}>

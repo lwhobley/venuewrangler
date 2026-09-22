@@ -118,7 +118,7 @@ export const spacing = {
 
 // Olive Ledger uses compact rounded controls and gently rounded panels.
 export const radius = {
-  sharp: 7,
+  sharp: 12,
   soft: 8,
   sm: 4,
   md: 8,
@@ -127,13 +127,14 @@ export const radius = {
   pill: 9999,
 };
 
-// The command system uses native-feeling sans typography throughout. It keeps
-// dense, data-backed screens legible and avoids a different type personality
-// on every tab.
+// Editorial page titles paired with native sans for operational data.
 export const fontFamily = {
-  display: undefined,
-  displayItalic: undefined,
-  displayMedium: undefined,
+  // Loaded once in app/_layout.tsx. Fraunces is intentionally reserved for
+  // identity moments and page titles; operational data stays in the native
+  // sans so dense screens remain quick to scan.
+  display: 'Fraunces_600SemiBold',
+  displayItalic: 'Fraunces_600SemiBold_Italic',
+  displayMedium: 'Fraunces_500Medium',
 } as const;
 
 export const type = {
@@ -143,8 +144,8 @@ export const type = {
   body: { fontSize: 15, lineHeight: 22, letterSpacing: 0 },
   bodyLarge: { fontSize: 17, lineHeight: 24, letterSpacing: 0 },
   heading: { fontSize: 20, lineHeight: 26, letterSpacing: -0.2, fontWeight: '700' },
-  title: { fontSize: 28, lineHeight: 34, letterSpacing: -0.4, fontWeight: '700' },
-  display: { fontSize: 40, lineHeight: 44, letterSpacing: -0.6, fontWeight: '700' },
+  title: { fontFamily: fontFamily.display, fontSize: 30, lineHeight: 36, letterSpacing: -0.6, fontWeight: '600' },
+  display: { fontFamily: fontFamily.display, fontSize: 42, lineHeight: 46, letterSpacing: -0.9, fontWeight: '600' },
 } as const;
 
 // Contemporary ambient diffusion shadow for elevated cards and floating sheets.
@@ -178,7 +179,7 @@ export const makePaperTheme = (mode: ThemeMode) => {
   return {
     ...base,
     dark: mode === 'dark',
-    roundness: radius.sharp,
+    roundness: 12,
     colors: {
       ...base.colors,
       primary: palette.primary,

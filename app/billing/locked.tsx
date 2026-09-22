@@ -2,7 +2,7 @@ import { Linking, ScrollView, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Button, Text } from 'react-native-paper';
 import { colors, spacing, type, authCardStyle } from '../../lib/theme';
-import { Kicker } from '../../components/AppCard';
+import { PageHeader } from '../../components/design-system';
 import { config } from '../../lib/config';
 import { useAuthStore, type AuthState } from '../../lib/auth-store';
 import { canManageBilling } from '../../lib/permissions';
@@ -46,9 +46,7 @@ export default function BillingLockedScreen() {
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       <ScrollView contentContainerStyle={{ flexGrow: 1, padding: spacing.lg, justifyContent: 'center' }}>
         <View style={{ ...authCardStyle, padding: spacing.lg, gap: spacing.sm }}>
-          <Kicker>{t('billingLocked.kicker')}</Kicker>
-          <Text style={{ ...type.title, color: colors.charcoal }}>{headlineByReason[reason] ?? headlineByReason.never_subscribed}</Text>
-          <Text style={{ color: colors.muted }}>{t('billingLocked.reactivateBody')}</Text>
+          <PageHeader kicker={t('billingLocked.kicker')} title={headlineByReason[reason] ?? headlineByReason.never_subscribed} detail={t('billingLocked.reactivateBody')} />
           <Text style={{ color: colors.muted }}>{t('billingLocked.venueLabel', { venue: venue?.name ?? t('billingLocked.noVenueSelected') })}</Text>
           <Text style={{ color: colors.muted }}>{t('billingLocked.signedInAs', { email: user?.email ?? t('billingLocked.unknownEmail') })}</Text>
 

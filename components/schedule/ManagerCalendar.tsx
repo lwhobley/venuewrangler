@@ -10,6 +10,7 @@ import { accents, colors, spacing } from '../../lib/theme';
 import { useIsDesktop } from '../../lib/responsive';
 import { AutoScheduleModal } from './AutoScheduleModal';
 import { ScheduleSkeleton } from './ScheduleSkeleton';
+import { ShiftAgenda } from './ShiftAgenda';
 import { CollapsibleSection } from '../AppCard';
 import { calendarSegmentsForDay } from '../../lib/schedule-segments';
 import { zonedIsoDate, zonedWeekDates } from '../../lib/zoned-datetime';
@@ -152,6 +153,7 @@ function overlaps(aStart: number, aEnd: number, bStart: number, bEnd: number) {
 export function ManagerCalendar({ venueId, timeZone }: { venueId: Id<'venues'>; timeZone?: string | null }) {
   const isDesktop = useIsDesktop();
   const [weekOffset, setWeekOffset] = useState(0);
+  const [agendaDay, setAgendaDay] = useState(() => new Date(`${zonedIsoDate(timeZone)}T12:00:00Z`).getUTCDay());
 
   const createShift = useMutation(api.scheduling.createShift);
   const updateShift = useMutation(api.scheduling.updateShift);
@@ -454,29 +456,27 @@ export function ManagerCalendar({ venueId, timeZone }: { venueId: Id<'venues'>; 
 
   return (
     <View style={{ gap: spacing.md }}>
-      {/* Header Card */}
-      <Card style={{ backgroundColor: colors.surface, borderRadius: 10 }}>
-        <Card.Content style={{ gap: spacing.md }}>
-          <View style={{ flexDirection: isDesktop ? 'row' : 'column', gap: spacing.sm, alignItems: isDesktop ? 'center' : 'stretch', justifyContent: 'space-between' }}>
+      <View style={{ backgroundColor: colors.surface, borderRadius: 12, borderWidth: 1, borderColor: colors.border, padding: spacing.md, gap: spacing.md }}>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md, alignItems: 'center', justifyContent: 'space-between' }}>
             <View style={{ flexDirection: 'row', gap: spacing.sm, alignItems: 'center' }}>
-              <Button compact mode="outlined" textColor={colors.primary} icon="chevron-left" onPress={() => setWeekOffset((o) => o - 1)}>Prev</Button>
+              <IconButton size={20} icon="chevron-left" iconColor={colors.charcoal} style={{ margin: 0, backgroundColor: colors.surfaceSoft }} onPress={() => setWeekOffset((o) => o - 1)} accessibilityLabel="Previous week" />
               <View style={{ minWidth: isDesktop ? 180 : 0 }}>
-                <Text style={{ color: colors.primary, fontWeight: '800' }}>Weekly Schedule</Text>
-                <Text style={{ color: colors.muted, fontSize: 12 }}>{weekRangeLabel()}</Text>
+                <Text style={{ color: colors.charcoal, fontWeight: '800', fontSize: 16 }}>{weekRangeLabel()}</Text>
+                <Text style={{ color: colors.muted, fontSize: 12 }}>Weekly schedule</Text>
               </View>
-              <Button compact mode="outlined" textColor={colors.primary} icon="chevron-right" onPress={() => setWeekOffset((o) => o + 1)}>Next</Button>
+              <IconButton size={20} icon="chevron-right" iconColor={colors.charcoal} style={{ margin: 0, backgroundColor: colors.surfaceSoft }} onPress={() => setWeekOffset((o) => o + 1)} accessibilityLabel="Next week" />
             </View>
 
             <View style={{ flexDirection: 'row', gap: spacing.xs, alignItems: 'center', flexWrap: 'wrap' }}>
-              <Chip compact style={{ backgroundColor: status === 'Published' ? '#E1FBF3' : status === 'Edited after publish' ? '#FFF5DA' : colors.cream, marginRight: 4 }}>
+              <Chip compact style={{ backgroundColor: colors.cream, marginRight: 4 }}>
                 {status}
               </Chip>
-              <Button mode="contained" buttonColor={colors.primary} icon="plus" style={topButtonStyle} labelStyle={{ fontSize: 12 }} onPress={() => openCreatePanel()}>
+              <Button mode="outlined" textColor={colors.primary} icon="plus" style={topButtonStyle} labelStyle={{ fontSize: 12 }} onPress={() => openCreatePanel(isDesktop ? day : agendaDay)}>
                 Add Shift
               </Button>
               <Button
-                mode="contained"
-                buttonColor={accents[0].fg}
+                mode="outlined"
+                textColor={colors.primary}
                 icon="auto-fix"
                 style={topButtonStyle}
                 labelStyle={{ fontSize: 12 }}
@@ -502,21 +502,20 @@ export function ManagerCalendar({ venueId, timeZone }: { venueId: Id<'venues'>; 
             </View>
           </View>
 
-          {/* Sub-tab segmented button */}
+          {/* These are workspace views, subordinate to the page-level tabs. */}
           <SegmentedButtons
             value={subTab}
             onValueChange={(v) => setSubTab(v as 'planner' | 'analytics' | 'staffing')}
             buttons={[
-              { value: 'planner', label: 'Planner (Grid)' },
+              { value: 'planner', label: 'Planner' },
               { value: 'analytics', label: 'Analytics' },
               { value: 'staffing', label: 'Staffing' },
             ]}
           />
-        </Card.Content>
-      </Card>
+      </View>
 
       {/* Primary Metrics Summary Bar */}
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ borderTopWidth: 1, borderBottomWidth: 1, borderColor: colors.divider }}>
         {[
           { label: 'Scheduled Hours', value: `${totalHours}h`, tone: overBudget ? colors.danger : colors.primary },
           { label: 'Estimated Labor', value: data?.estimatedLaborCents == null ? '—' : `$${(data.estimatedLaborCents / 100).toFixed(2)}`, tone: colors.secondary },
@@ -525,10 +524,10 @@ export function ManagerCalendar({ venueId, timeZone }: { venueId: Id<'venues'>; 
           { label: 'Break / OT flags', value: String((data?.warnings?.break?.length ?? 0) + (data?.warnings?.overtime?.length ?? 0)), tone: (data?.warnings?.break?.length || data?.warnings?.overtime?.length) ? colors.warning : colors.success },
           { label: 'Pending Approvals', value: String(requests.length), tone: requests.length ? colors.warning : colors.primary },
         ].map((metric) => (
-          <View key={metric.label} style={{ minWidth: 145, flex: 1, padding: spacing.sm, borderRadius: 8, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <View key={metric.label} style={{ width: 132, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRightWidth: 1, borderColor: colors.divider, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
             <View>
               <Text style={{ color: colors.muted, fontSize: 11 }}>{metric.label}</Text>
-              <Text style={{ color: metric.tone, fontSize: 18, fontWeight: '800' }}>{metric.value}</Text>
+              <Text style={{ color: colors.charcoal, fontSize: 18, fontWeight: '800' }}>{metric.value}</Text>
             </View>
             <MaterialCommunityIcons 
               name={
@@ -541,7 +540,7 @@ export function ManagerCalendar({ venueId, timeZone }: { venueId: Id<'venues'>; 
             />
           </View>
         ))}
-      </View>
+      </ScrollView>
 
       {actionMsg ? (
         <Card style={{ backgroundColor: '#E1FBF3', padding: 4 }}>
@@ -552,7 +551,15 @@ export function ManagerCalendar({ venueId, timeZone }: { venueId: Id<'venues'>; 
       {/* ─── Planner Sub-tab ─── */}
       {subTab === 'planner' && (
         <View style={{ gap: spacing.md }}>
-          <Card style={{ backgroundColor: colors.surface, borderRadius: 10 }}>
+          {!isDesktop ? <ShiftAgenda
+            shifts={shifts}
+            carryInShifts={carryInShifts}
+            days={dayLabels.map((label, index) => ({ label, date: formatDayNum(index), today: isToday(index) }))}
+            selectedDay={agendaDay}
+            onDayChange={setAgendaDay}
+            onSelect={(shift) => setSelectedShiftId(shift._id)}
+            onCreate={(selectedDay) => openCreatePanel(selectedDay)}
+          /> : <Card style={{ backgroundColor: colors.surface, borderRadius: 10 }}>
             <Card.Content style={{ gap: spacing.sm }}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                 <Text variant="titleMedium" style={{ fontWeight: '800' }}>Week Grid</Text>
@@ -561,7 +568,7 @@ export function ManagerCalendar({ venueId, timeZone }: { venueId: Id<'venues'>; 
                 </Text>
               </View>
               
-              <ScrollView horizontal={!isDesktop} showsHorizontalScrollIndicator={false}>
+              <ScrollView horizontal showsHorizontalScrollIndicator>
                 <View style={{ minWidth: isDesktop ? 760 : 860, gap: spacing.sm, paddingVertical: spacing.xs }}>
                   <View style={{ flexDirection: 'row', paddingLeft: 64 }}>
                     {hourTicks.map((hour) => (
@@ -658,7 +665,7 @@ export function ManagerCalendar({ venueId, timeZone }: { venueId: Id<'venues'>; 
                 </View>
               </ScrollView>
             </Card.Content>
-          </Card>
+          </Card>}
 
           <CollapsibleSection
             title="Templates"

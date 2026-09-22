@@ -10,7 +10,7 @@ import type { Id } from '../../lib/ids';
 import { accents, colors, radius, spacing } from '../../lib/theme';
 import { useVenueAuth } from '../../lib/useVenueAuth';
 import { formatRelativeTime, errorMessage } from '../../lib/format';
-import { SectionHeader } from '../../components/AppCard';
+import { PageHeader } from '../../components/design-system';
 import { useI18n } from '../../lib/i18n';
 
 type MaterialIconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
@@ -249,17 +249,16 @@ function ChatScreen() {
       contentContainerStyle={{ padding: spacing.lg, gap: spacing.lg, paddingBottom: spacing.xxl }}
       showsVerticalScrollIndicator={false}
     >
-      <SectionHeader
+      <PageHeader
         kicker={t('chat.headerKicker')}
         title={t('chat.header')}
-        subtitle={
+        detail={
           unreadCount
             ? unreadCount === 1
               ? t('chat.unreadSingular', { count: unreadCount })
               : t('chat.unreadPlural', { count: unreadCount })
             : t('chat.allCaughtUp')
         }
-        rule={false}
       />
 
       <View style={{ flexDirection: 'row', backgroundColor: colors.surfaceSoft, borderRadius: radius.md, padding: 3, gap: 3 }}>

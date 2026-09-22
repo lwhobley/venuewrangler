@@ -6,6 +6,7 @@ import { useQuery as useRQQuery, useMutation as useRQMutation, useQueryClient } 
 import { appApi } from '../lib/api-client';
 import { spacing, type, useDesignTheme } from '../lib/theme';
 import { AppCard } from '../components/AppCard';
+import { PageHeader } from '../components/design-system';
 import { useAuthStore, type AuthState } from '../lib/auth-store';
 import { useVenueAuth } from '../lib/useVenueAuth';
 import { useI18n } from '../lib/i18n';
@@ -101,9 +102,9 @@ export default function JoinRequestsScreen() {
         >
           {t('joinRequests.back')}
         </Button>
-        <Text style={{ ...type.heading, color: palette.charcoal, flex: 1 }}>
-          {t('joinRequests.title')}
-        </Text>
+        <View style={{ flex: 1 }}>
+          <PageHeader title={t('joinRequests.title')} />
+        </View>
         <Button icon="refresh" textColor={palette.muted} onPress={() => void refetch()} compact>
           {''}
         </Button>

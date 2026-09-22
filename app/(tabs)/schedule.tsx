@@ -2,7 +2,8 @@ import { useMemo, useRef, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { Button, Card, SegmentedButtons, Snackbar, Text } from 'react-native-paper';
 import { ScreenErrorBoundary } from '../../components/ErrorBoundary';
-import { AnimatedTab, SectionHeader } from '../../components/AppCard';
+import { AnimatedTab } from '../../components/AppCard';
+import { PageHeader } from '../../components/design-system';
 import { useI18n } from '../../lib/i18n';
 import { useMutation, useQuery } from '../../lib/railway-hooks';
 import { api } from '../../lib/railway-api';
@@ -131,10 +132,10 @@ function ScheduleScreen() {
       contentContainerStyle={contentContainerStyle}
       showsVerticalScrollIndicator={false}
     >
-      <SectionHeader
+      <PageHeader
         kicker={t('schedule.kicker')}
         title={t('schedule.title')}
-        subtitle={canManage ? t('schedule.subtitleManager') : t('schedule.subtitleStaff')}
+        detail={canManage ? t('schedule.subtitleManager') : t('schedule.subtitleStaff')}
       />
 
       {!venue?.id ? (
@@ -148,6 +149,7 @@ function ScheduleScreen() {
           <SegmentedButtons
             value={managerTab}
             onValueChange={(v) => setManagerTab(v as 'calendar' | 'forecast' | 'requests' | 'blackouts')}
+            style={{ backgroundColor: colors.surface, borderRadius: 10 }}
             buttons={[
               { value: 'calendar', label: t('schedule.tabCalendar') },
               { value: 'forecast', label: t('schedule.tabForecast') },

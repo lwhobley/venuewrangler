@@ -9,7 +9,7 @@ import { accents, colors, radius, spacing } from '../../lib/theme';
 import { useVenueAuth } from '../../lib/useVenueAuth';
 import { formatMoney, formatShortDate, formatShortDateTime, formatFullDateTime, splitTags, errorMessage } from '../../lib/format';
 import { PremiumFeatureGate } from '../../components/PremiumFeatureGate';
-import { SectionHeader } from '../../components/AppCard';
+import { PageHeader } from '../../components/design-system';
 import { CrmSalesWorkspace } from '../../components/CrmSalesWorkspace';
 import { useI18n } from '../../lib/i18n';
 
@@ -604,10 +604,10 @@ function GuestsScreenInner() {
       removeClippedSubviews
       ListHeaderComponent={
         <View style={{ gap: spacing.md, marginBottom: spacing.sm }}>
-          <SectionHeader
+          <PageHeader
             kicker={t('guests.header.kicker')}
             title={t('guests.header.title')}
-            subtitle={t('guests.header.subtitle', { venue: venue?.name ?? t('guests.header.yourVenue') })}
+            detail={t('guests.header.subtitle', { venue: venue?.name ?? t('guests.header.yourVenue') })}
           />
 
           <CrmSalesWorkspace venueId={venue?.id} enabled={isReady && canManage} />

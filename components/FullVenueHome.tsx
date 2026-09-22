@@ -9,6 +9,7 @@ import type { Id } from '../lib/ids';
 import { ScreenErrorBoundary } from '../components/ErrorBoundary';
 import { CommandButton, CommandText } from '../components/FutureUI';
 import { HomeWranglerSurface } from '../components/HomeWranglerSurface';
+import { HomeOverview } from './HomeOverview';
 import { Skeleton } from '../components/Skeleton';
 import { useAuthStore } from '../lib/auth-store';
 import { usePushNotifications } from '../lib/usePushNotifications';
@@ -16,6 +17,7 @@ import { useAuthenticatedSession } from '../lib/auth-readiness';
 import { spacing, useDesignTheme } from '../lib/theme';
 import { formatDuration, formatMoney } from '../lib/format';
 import { canManageVenue } from '../lib/permissions';
+import { config } from '../lib/config';
 
 type NotificationItem = {
   _id: Id<'notificationEvents'>;
@@ -100,49 +102,85 @@ function HomeScreen() {
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: palette.background }} contentContainerStyle={{ paddingBottom: spacing.xxl }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
-      <View style={{ backgroundColor: '#3F4B34', paddingHorizontal: spacing.lg, paddingTop: spacing.xl, paddingBottom: spacing.lg, gap: spacing.md }}>
+      <View style={{ backgroundColor: palette.backgroundAlt, paddingHorizontal: spacing.lg, paddingTop: spacing.xl, paddingBottom: spacing.lg, gap: spacing.md, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: palette.divider }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md }}>
           <View style={{ flex: 1 }}>
             <Pressable
               accessibilityRole="button" onPress={() => router.push('/venue/settings')} style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1, flexDirection: 'row', alignItems: 'center', gap: 4 })}>
-              <CommandText palette={palette} variant="label" style={{ color: '#DCE3C7' }}>{venueName}</CommandText>
-              {venues.length > 1 ? <MaterialCommunityIcons name="swap-horizontal" size={16} color="#B6D6BE" /> : null}
+              <CommandText palette={palette} variant="label" style={{ color: palette.primary }}>{venueName}</CommandText>
+              {venues.length > 1 ? <MaterialCommunityIcons name="swap-horizontal" size={16} color={palette.primary} /> : null}
             </Pressable>
-            <CommandText palette={palette} variant="hero" style={{ color: '#FFFFFF' }}>Operations command</CommandText>
+            <CommandText palette={palette} variant="hero">Tonight</CommandText>
           </View>
-          <Pressable onPress={() => setShowNotifications((value) => !value)} accessibilityRole="button" accessibilityLabel="Open notifications" style={({ pressed }) => ({ opacity: pressed ? 0.65 : 1, padding: 8 })}>
-            <View>
-              <MaterialCommunityIcons name={unreadCount ? 'bell-ring-outline' : 'bell-outline'} size={24} color="#FFFFFF" />
-              {unreadCount ? <View style={styles.notificationBadge}><CommandText palette={palette} variant="caption" style={{ color: '#FFFFFF' }}>{unreadCount}</CommandText></View> : null}
-            </View>
-          </Pressable>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
+            <Pressable onPress={() => router.push('/profile')} accessibilityRole="button" accessibilityLabel="Open settings" style={({ pressed }) => [styles.headerIcon, { backgroundColor: palette.surfaceSoft, opacity: pressed ? 0.65 : 1 }]}>
+              <MaterialCommunityIcons name="account-outline" size={21} color={palette.charcoal} />
+            </Pressable>
+            <Pressable onPress={() => setShowNotifications((value) => !value)} accessibilityRole="button" accessibilityLabel="Open notifications" style={({ pressed }) => [styles.headerIcon, { backgroundColor: showNotifications ? palette.cream : palette.surfaceSoft, opacity: pressed ? 0.65 : 1 }]}>
+              <View>
+                <MaterialCommunityIcons name={unreadCount ? 'bell-ring-outline' : 'bell-outline'} size={21} color={palette.charcoal} />
+                {unreadCount ? <View style={[styles.notificationBadge, { backgroundColor: palette.secondary }]}><CommandText palette={palette} variant="caption" style={{ color: palette.buttonText, fontSize: 9 }}>{unreadCount}</CommandText></View> : null}
+              </View>
+            </Pressable>
+          </View>
         </View>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <MaterialCommunityIcons name="calendar-blank-outline" size={16} color="#D9EBDD" />
-            <CommandText palette={palette} variant="body" style={{ color: '#FFF8EC' }}>{currentDate}</CommandText>
+            <MaterialCommunityIcons name="calendar-blank-outline" size={15} color={palette.muted} />
+            <CommandText palette={palette} variant="caption">{currentDate}</CommandText>
           </View>
-          <View style={{ width: StyleSheet.hairlineWidth, height: 20, backgroundColor: '#CAB06F' }} />
-          <CommandText palette={palette} variant="body" style={{ color: '#FFF8EC' }}>
-            {readiness?.status === 'blocked' ? 'Needs attention' : readiness?.status === 'at-risk' ? 'Watch service' : 'Service command ready'}
-          </CommandText>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: palette.cream, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999 }}>
+            <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: !readiness || commandCenterLoadFailed ? palette.muted : readiness.status === 'blocked' ? palette.danger : readiness.status === 'at-risk' ? palette.warning : palette.success }} />
+            <CommandText palette={palette} variant="caption" style={{ color: palette.charcoal, fontWeight: '700' }}>
+              {commandCenterLoadFailed ? 'Status unavailable' : !readiness ? 'Checking service' : readiness.status === 'blocked' ? 'Needs attention' : readiness.status === 'at-risk' ? 'Watch service' : 'Service ready'}
+            </CommandText>
+          </View>
         </View>
       </View>
 
       <HomeWranglerSurface enabled={isReady && canManage && Boolean(venue?.id)} />
 
+      <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.lg }}>
+        <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+          {(config.restaurantCoreOnly
+            ? [
+                ['Clock', 'clock-outline', '/clock'],
+                ['Team', 'account-group-outline', '/staff'],
+                ['Inbox', 'bullhorn-outline', '/chat'],
+                ['Settings', 'cog-outline', '/profile'],
+              ]
+            : [
+                ['Clock', 'clock-outline', '/clock'],
+                ['Floor', 'floor-plan', '/floor'],
+                ['Guests', 'account-heart-outline', '/guests'],
+                ['Settings', 'cog-outline', '/profile'],
+              ]).filter(([, , href]) => canManage || (href !== '/guests' && href !== '/staff')).map(([label, icon, href]) => (
+            <Pressable
+              key={label}
+              accessibilityRole="button"
+              accessibilityLabel={`Open ${label}`}
+              onPress={() => router.push(href as any)}
+              style={({ pressed }) => ({ flex: 1, minHeight: 62, alignItems: 'center', justifyContent: 'center', gap: 5, borderRadius: 10, backgroundColor: palette.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: palette.border, opacity: pressed ? 0.65 : 1 })}
+            >
+              <MaterialCommunityIcons name={icon as any} size={20} color={palette.primary} />
+              <CommandText palette={palette} variant="caption" style={{ color: palette.charcoal, fontWeight: '700' }}>{label}</CommandText>
+            </Pressable>
+          ))}
+        </View>
+      </View>
+
       <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.xl, gap: spacing.xl }}>
         {dashboardError && !dashboard ? (
-          <View style={{ padding: spacing.md, borderRadius: 8, backgroundColor: '#FDE7E9', borderWidth: 1, borderColor: '#F5A9AC', gap: spacing.xs }}>
-            <CommandText palette={palette} variant="body" style={{ color: '#A81C24', fontWeight: '700' }}>Failed to load operations dashboard</CommandText>
-            <CommandText palette={palette} variant="caption" style={{ color: '#A81C24' }}>{dashboardError instanceof Error ? dashboardError.message : 'Please check your connection.'}</CommandText>
+          <View style={{ padding: spacing.md, borderRadius: 8, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.danger, gap: spacing.xs }}>
+            <CommandText palette={palette} variant="body" style={{ color: palette.danger, fontWeight: '700' }}>Failed to load operations dashboard</CommandText>
+            <CommandText palette={palette} variant="caption" style={{ color: palette.danger }}>{dashboardError instanceof Error ? dashboardError.message : 'Please check your connection.'}</CommandText>
             <CommandButton palette={palette} onPress={() => void refetchDashboard()} style={{ alignSelf: 'flex-start', marginTop: 4 }}>Retry</CommandButton>
           </View>
         ) : null}
         {commandCenterLoadFailed ? (
-          <View style={{ padding: spacing.md, borderRadius: 8, backgroundColor: '#FDE7E9', borderWidth: 1, borderColor: '#F5A9AC', gap: spacing.xs }}>
-            <CommandText palette={palette} variant="body" style={{ color: '#A81C24', fontWeight: '700' }}>Couldn't load today's readiness, flow, or pulse</CommandText>
-            <CommandText palette={palette} variant="caption" style={{ color: '#A81C24' }}>The numbers below may be stale or blank. Check your connection.</CommandText>
+          <View style={{ padding: spacing.md, borderRadius: 8, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.danger, gap: spacing.xs }}>
+            <CommandText palette={palette} variant="body" style={{ color: palette.danger, fontWeight: '700' }}>Couldn't load today's readiness, flow, or pulse</CommandText>
+            <CommandText palette={palette} variant="caption" style={{ color: palette.danger }}>The numbers below may be stale or blank. Check your connection.</CommandText>
             <CommandButton
               palette={palette}
               onPress={() => {
@@ -180,66 +218,29 @@ function HomeScreen() {
           </View>
         ) : null}
 
-        <View style={{ gap: spacing.md }}>
-          <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}>
-            <CommandText palette={palette} variant="title">Readiness snapshot</CommandText>
-            <CommandText palette={palette} variant="body" style={{ color: readiness?.status === 'at-risk' ? palette.warning : palette.primary, fontWeight: '700' }}>
-              {readiness ? `${readiness.score}% ready` : 'Loading'}
-            </CommandText>
-          </View>
-          <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderColor: palette.divider }}>
-            <View style={{ flexDirection: 'row', paddingVertical: spacing.xs, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: palette.divider }}>
-              <CommandText palette={palette} variant="label" style={{ flex: 1 }}>Area</CommandText>
-              <CommandText palette={palette} variant="label" style={{ width: 88 }}>Status</CommandText>
-              <CommandText palette={palette} variant="label" style={{ width: 80, textAlign: 'right' }}>Owner</CommandText>
-            </View>
-            {readinessRows.map(([label, value]) => {
-              const state = value >= 100 ? 'Clear' : value > 0 ? `${value}% watch` : 'Pending';
-              const color = value >= 100 ? palette.success : value > 0 ? palette.warning : palette.muted;
-              return (
-                <Pressable
-                  accessibilityRole="button" key={label} onPress={() => router.push(label === 'Staffing' ? '/staff' : label === 'Floor' ? '/floor' : '/checklist')} style={({ pressed }) => ({ opacity: pressed ? 0.65 : 1, flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.md, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: palette.divider })}>
-                  <CommandText palette={palette} variant="body" style={{ flex: 1 }}>{label}</CommandText>
-                  <View style={{ width: 88, flexDirection: 'row', alignItems: 'center', gap: 6 }}><View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: color }} /><CommandText palette={palette} variant="caption" style={{ color, fontWeight: '700' }}>{state}</CommandText></View>
-                  <CommandText palette={palette} variant="caption" style={{ width: 80, textAlign: 'right' }}>{label === 'Staffing' ? 'Manager' : 'Team'}</CommandText>
-                </Pressable>
-              );
-            })}
-          </View>
-        </View>
-
-        <View style={{ gap: spacing.md }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-            <CommandText palette={palette} variant="title">Today’s flow</CommandText>
-            <CommandText palette={palette} variant="caption">Team on-site {dashboard?.analytics.clockedInCount ?? 0}</CommandText>
-          </View>
-          <View style={{ borderLeftWidth: 1, borderColor: palette.divider, marginLeft: 10, gap: 0 }}>
-            {(events.length ? events : managerDashboard?.goals?.slice(0, 3) ?? []).map((item: any, index: number) => (
-              <Pressable
-                accessibilityRole="button" key={item._id ?? `${item.title}-${index}`} onPress={() => item._id && 'startsAt' in item ? router.push({ pathname: '/event-command-center', params: { eventId: item._id } }) : router.push('/schedule')} style={({ pressed }) => ({ opacity: pressed ? 0.65 : 1, marginLeft: -6, paddingLeft: spacing.lg, paddingBottom: spacing.lg, position: 'relative' })}>
-                <View style={{ position: 'absolute', top: 4, left: -5, width: 9, height: 9, borderRadius: 5, backgroundColor: index === 0 ? palette.primary : '#A9B0AA' }} />
-                <CommandText palette={palette} variant="caption">{'startsAt' in item ? new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit' }).format(new Date(item.startsAt)) : item.targetDate ?? 'Today'}</CommandText>
-                <CommandText palette={palette} variant="body" style={{ fontWeight: '700', marginTop: 2 }}>{item.title}</CommandText>
-                <CommandText palette={palette} variant="caption">{'expectedGuests' in item ? `${item.expectedGuests ?? '—'} guests · ${item.readiness}` : item.status ?? 'Open goal'}</CommandText>
-              </Pressable>
-            ))}
-            {!events.length && !(managerDashboard?.goals?.length) ? <CommandText palette={palette} variant="caption" style={{ paddingLeft: spacing.lg }}>No upcoming events or goals yet.</CommandText> : null}
-          </View>
-        </View>
-
-        <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: palette.divider, flexDirection: 'row', paddingVertical: spacing.md }}>
-          {[
-            ['Sales', pulse ? formatMoney(pulse.salesCents) : '$0.00'],
+        <HomeOverview
+          palette={palette}
+          readiness={readinessRows}
+          readinessScore={readiness?.score}
+          readinessUnavailable={commandCenterLoadFailed}
+          onOpenArea={(label) => router.push(label === 'Staffing' ? '/staff' : label === 'Floor' ? '/floor' : '/checklist')}
+          timelineLoading={managerDashboardQuery.isLoading || commandCenterQuery.isLoading}
+          timelineUnavailable={commandCenterLoadFailed}
+          onOpenSchedule={() => router.push('/schedule')}
+          timeline={(events.length ? events : managerDashboard?.goals?.slice(0, 3) ?? []).map((item: any, index: number) => ({
+            id: item._id ?? `${item.title}-${index}`,
+            title: item.title,
+            time: 'startsAt' in item ? new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit', timeZone: venue?.timezone || undefined }).format(new Date(item.startsAt)) : item.targetDate ?? 'Today',
+            detail: 'expectedGuests' in item ? `${item.expectedGuests ?? '—'} guests · ${item.readiness ?? 'Pending'}` : item.status ?? 'Open goal',
+            onPress: () => item._id && 'startsAt' in item ? router.push({ pathname: '/event-command-center', params: { eventId: item._id } }) : router.push('/schedule'),
+          }))}
+          metrics={[
+            ['Sales', pulse ? formatMoney(pulse.salesCents) : '—'],
             ['Labor', pulse ? formatDuration(Math.round(pulse.laborHours * 60)) : '—'],
-            ['Open checks', String(pulse?.openChecks ?? dailyBrief?.prepOpenCount ?? 0)],
-            ['Active clocks', String(pulse?.activeClocks ?? dashboard?.analytics.clockedInCount ?? 0)],
-          ].map(([label, value], index) => (
-            <View key={label} style={{ flex: 1, paddingHorizontal: spacing.sm, gap: 3, borderLeftWidth: index ? StyleSheet.hairlineWidth : 0, borderColor: palette.divider }}>
-              <CommandText palette={palette} variant="body" style={{ fontWeight: '800' }}>{value}</CommandText>
-              <CommandText palette={palette} variant="caption">{label}</CommandText>
-            </View>
-          ))}
-        </View>
+            ['Open checks', pulse?.openChecks == null ? '—' : String(pulse.openChecks)],
+            ['Active clocks', (pulse?.activeClocks ?? dashboard?.analytics.clockedInCount) == null ? '—' : String(pulse?.activeClocks ?? dashboard?.analytics.clockedInCount)],
+          ]}
+        />
 
         {canManage ? <View style={{ gap: spacing.sm, paddingBottom: spacing.md }}>
           <CommandText palette={palette} variant="title">Manager goal</CommandText>
@@ -254,6 +255,13 @@ function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
+  headerIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   notificationBadge: {
     position: 'absolute',
     right: -8,
@@ -263,7 +271,7 @@ const styles = StyleSheet.create({
     borderRadius: 9,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#B8711B',
+    backgroundColor: 'transparent',
   },
 });
 

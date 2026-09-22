@@ -11,7 +11,7 @@ import { PremiumFeatureGate } from '../../components/PremiumFeatureGate';
 import { ProviderDropdown } from '../../components/ProviderDropdown';
 import { InlineMessage } from '../../components/InlineMessage';
 import { ManagerGate } from '../../components/ManagerGate';
-import { SectionHeader } from '../../components/AppCard';
+import { PageHeader } from '../../components/design-system';
 import { useI18n } from '../../lib/i18n';
 
 // Must stay in sync with POS_PROVIDERS in packages/api/src/modules/pos/pos.controller.ts
@@ -161,10 +161,10 @@ function IntegrationsScreenInner() {
       contentContainerStyle={{ padding: spacing.lg, gap: spacing.md, paddingBottom: spacing.xxl }}
       showsVerticalScrollIndicator={false}
     >
-      <SectionHeader
+      <PageHeader
         kicker={t('integrations.header.kicker')}
         title={t('integrations.header.title')}
-        subtitle={t('integrations.header.subtitle', { venue: venue?.name ?? t('integrations.header.venueFallback') })}
+        detail={t('integrations.header.subtitle', { venue: venue?.name ?? t('integrations.header.venueFallback') })}
       />
 
       {newSecret ? (

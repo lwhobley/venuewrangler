@@ -20,7 +20,7 @@ const state = vi.hoisted(() => ({
 vi.mock('../../lib/config', () => ({ config: { restaurantCoreOnly: false } }));
 
 vi.mock('react-native', () => ({
-  Pressable: 'Pressable', ScrollView: 'ScrollView', View: 'View',
+  Pressable: 'Pressable', ScrollView: 'ScrollView', View: 'View', Text: 'Text',
   StyleSheet: { create: (s: unknown) => s, hairlineWidth: 1 },
 }));
 vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: 'MaterialCommunityIcons' }));

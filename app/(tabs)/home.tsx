@@ -1,7 +1,8 @@
-import { ScrollView, StyleSheet, View } from 'react-native';
-import { ActivityIndicator, Card, Text } from 'react-native-paper';
+import { StyleSheet, View } from 'react-native';
+import { ActivityIndicator } from 'react-native-paper';
 import { ScreenErrorBoundary } from '../../components/ErrorBoundary';
 import FullVenueHome from '../../components/FullVenueHome';
+import { EmptyState, ListRow, Metric, PageHeader, ScreenShell, Section, StatusBadge } from '../../components/design-system';
 import { QueryBoundary } from '../../components/QueryBoundary';
 import { useAuthenticatedSession } from '../../lib/auth-readiness';
 import { useAuthStore } from '../../lib/auth-store';
@@ -26,22 +27,40 @@ function TonightScreen() {
   const manager = useQueryState<ManagerDashboard>(api.operations.getDailyBrief, isReady && canManage ? {} : 'skip');
   const board = useQueryState<ClockBoard>(api.app.getClockBoard, isReady && canManage ? {} : 'skip');
   if (!isReady) return <View style={styles.center}><ActivityIndicator color={colors.primary} /></View>;
-  return <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
+  return <ScreenShell>
     <QueryBoundary state={dashboard}>{() => <>
-    <Text variant="headlineMedium" style={styles.title}>{canManage ? 'Tonight' : 'My schedule'}</Text>
-    <Text style={styles.subtitle}>{venue?.name ?? 'Your restaurant'}</Text>
+    <PageHeader kicker={venue?.name ?? 'Your restaurant'} title={canManage ? 'Tonight' : 'My schedule'} />
     {canManage ? <>
       <QueryBoundary state={manager} feature="Tonight’s team">{(data) => <>
-        <Text style={styles.subtitle}>{data.date}</Text>
-        <View style={styles.metrics}><Metric label="Scheduled" value={String(data.scheduledCount)} /><Metric label="Clocked in" value={String(data.clockedInCount)} /><Metric label="Pending requests" value={String(data.pendingRequestCount)} /></View>
-        <Card style={styles.card}><Card.Title title="Tonight’s team" subtitle="Scheduled people and live punches" /><Card.Content>{!Array.isArray(data.shifts) ? <Text>Team details are unavailable. Open Schedule to view assigned shifts.</Text> : data.shifts.length ? data.shifts.slice(0, 12).map((shift) => <View style={styles.row} key={shift.id}><Text style={styles.name}>{shift.staffName ?? 'Open shift'}</Text><Text>{shift.jobTitle || shift.station || 'Team'} · {formatMinutes(shift.startMinutes)}–{formatMinutes(shift.endMinutes)}</Text></View>) : <Text>No shifts scheduled tonight.</Text>}</Card.Content></Card>
+        <View style={styles.metrics}>
+          <Metric label="Scheduled" value={String(data.scheduledCount)} />
+          <Metric label="Clocked in" value={String(data.clockedInCount)} />
+          <Metric label="Needs action" value={String(data.pendingRequestCount)} />
+        </View>
+        <Section title="Who is on tonight" action={<StatusBadge label={data.date} />}>
+          {!Array.isArray(data.shifts) ? <EmptyState title="Team details are unavailable" detail="Open Schedule to view assigned shifts." /> : data.shifts.length ? data.shifts.slice(0, 12).map((shift) => <ListRow key={shift.id} title={shift.staffName ?? 'Open shift'} detail={`${shift.jobTitle || shift.station || 'Team'} · ${formatMinutes(shift.startMinutes)}–${formatMinutes(shift.endMinutes)}`} trailing={<StatusBadge label={shift.status === 'open' ? 'Needs assignment' : 'Scheduled'} tone={shift.status === 'open' ? 'watch' : 'ok'} />} />) : <EmptyState title="No shifts scheduled tonight." detail="Add coverage in Schedule before service." />}
+        </Section>
       </>}</QueryBoundary>
-      <Card style={styles.card}><Card.Title title="Live clock board" /><Card.Content><QueryBoundary state={board}>{(data) => <Text style={styles.muted}>{data.managerAlerts.length} late or missed punch alerts</Text>}</QueryBoundary></Card.Content></Card>
-    </> : <Card style={styles.card}><Card.Title title="Your shifts" /><Card.Content><Text>Open Schedule to see your assigned shifts, requests, and swaps.</Text></Card.Content></Card>}
+      <Section title="Needs attention">
+        <QueryBoundary state={board}>{(data) => data.managerAlerts.length ? data.managerAlerts.slice(0, 4).map((alert, index) => <ListRow key={index} title={alert.detail} />) : <EmptyState title="No late or missed punches" detail="The clock board is clear." />}</QueryBoundary>
+      </Section>
+    </> : <Section title="Your shifts"><EmptyState title="Open Schedule" detail="Assigned shifts, requests, and swaps live there." /></Section>}
     </>}</QueryBoundary>
-  </ScrollView>;
+  </ScreenShell>;
 }
-function Metric({ label, value }: { label: string; value: string }) { return <View style={styles.metric}><Text variant="headlineSmall" style={styles.metricValue}>{value}</Text><Text style={styles.muted}>{label}</Text></View>; }
 function formatMinutes(value?: number) { if (value == null) return '—'; const h = Math.floor(value / 60) % 24; const m = value % 60; return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`; }
 export default function HomeScreen() { return config.restaurantCoreOnly ? <ScreenErrorBoundary><TonightScreen /></ScreenErrorBoundary> : <FullVenueHome />; }
-const styles = StyleSheet.create({ screen: { flex: 1, backgroundColor: colors.background }, content: { padding: spacing.lg, gap: spacing.md, paddingBottom: spacing.xxl }, title: { color: colors.charcoal, fontWeight: '700' }, subtitle: { color: colors.muted }, metrics: { flexDirection: 'row', gap: spacing.sm }, metric: { flex: 1, backgroundColor: colors.surface, padding: spacing.md, borderRadius: 12 }, metricValue: { color: colors.primary, fontWeight: '700' }, muted: { color: colors.muted, marginTop: 4 }, card: { backgroundColor: colors.surface }, row: { paddingVertical: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border }, name: { fontWeight: '700' }, center: { flex: 1, alignItems: 'center', justifyContent: 'center' } });
+const styles = StyleSheet.create({
+  screen: { flex: 1, backgroundColor: colors.background },
+  content: { padding: spacing.lg, gap: spacing.md, paddingBottom: spacing.xxl },
+  title: { color: colors.charcoal, fontFamily: 'Fraunces_600SemiBold', fontSize: 34, lineHeight: 40 },
+  subtitle: { color: colors.muted, fontSize: 12, fontWeight: '600', letterSpacing: 0.6 },
+  metrics: { flexDirection: 'row', borderTopWidth: 1, borderBottomWidth: 1, borderColor: colors.border, paddingVertical: spacing.md },
+  metric: { flex: 1, paddingHorizontal: spacing.sm },
+  metricValue: { color: colors.charcoal, fontWeight: '700', fontVariant: ['tabular-nums'] },
+  muted: { color: colors.muted, marginTop: 4, fontSize: 12 },
+  card: { backgroundColor: colors.surface, borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, elevation: 0, shadowOpacity: 0 },
+  row: { paddingVertical: spacing.md, gap: 4, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+  name: { fontWeight: '700', fontSize: 15 },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+});

@@ -11,7 +11,7 @@ import { ScreenErrorBoundary } from '../../components/ErrorBoundary';
 import { DateRangeBar, useDateRange } from '../../components/DateRangeBar';
 import { ProviderDropdown } from '../../components/ProviderDropdown';
 import { ManagerGate } from '../../components/ManagerGate';
-import { SectionHeader } from '../../components/AppCard';
+import { PageHeader } from '../../components/design-system';
 import { useI18n } from '../../lib/i18n';
 
 // Record-export only stores a label. Gusto hours go through payroll.pushGusto,
@@ -198,11 +198,11 @@ function ReportsScreen() {
       contentContainerStyle={{ padding: spacing.lg, gap: spacing.md, paddingBottom: spacing.xxl }}
       showsVerticalScrollIndicator={false}
     >
-      <SectionHeader
+      <PageHeader
         kicker={t('reports.header.kicker')}
         title={t('reports.header.title')}
-        subtitle={t('reports.header.subtitle', { venue: venue?.name ?? t('reports.header.venueFallback') })}
-        trailing={<DateRangeBar selected={dateRange} presets={presets} onSelect={setDateRange} />}
+        detail={t('reports.header.subtitle', { venue: venue?.name ?? t('reports.header.venueFallback') })}
+        action={<DateRangeBar selected={dateRange} presets={presets} onSelect={setDateRange} />}
       />
 
       <Card style={{ backgroundColor: colors.surface, borderRadius: radius.sharp }}>

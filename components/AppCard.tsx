@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { radius, spacing, type, useDesignTheme } from '../lib/theme';
+import { spacing, type, useDesignTheme } from '../lib/theme';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -21,11 +21,8 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 
 type CardTone = 'default' | 'soft' | 'inset';
 
-// Editorial rule: no elevation shadows. `default` is a hairline-bordered
-// panel with sharp corners (the common case — a data table row group, a
-// form section); `soft` is the one genuine "card" surface, used sparingly,
-// with the soft radius and no border; `inset` is a flush, borderless
-// recessed panel for nesting content inside another surface.
+// Panels match the design system: 12px radius, hairline border, no shadow.
+// `inset` is a flush recessed panel for nesting inside another surface.
 export function AppCard({
   children,
   tone = 'default',
@@ -45,9 +42,8 @@ export function AppCard({
       style={[
         {
           backgroundColor: background,
-          borderRadius: tone === 'soft' ? radius.soft : radius.sharp,
-          borderTopWidth: tone === 'default' ? StyleSheet.hairlineWidth : 0,
-          borderBottomWidth: tone === 'default' ? StyleSheet.hairlineWidth : 0,
+          borderRadius: 12,
+          borderWidth: tone === 'inset' ? 0 : 1,
           borderColor: palette.border,
           padding: padded ? spacing.lg : 0,
           overflow: 'hidden',
@@ -110,7 +106,7 @@ export function SectionHeader({
     >
       <View style={{ flex: 1 }}>
         {kicker ? <Kicker style={{ marginBottom: 4 }}>{kicker}</Kicker> : null}
-        <Text style={{ ...type.title, color: palette.charcoal }}>{title}</Text>
+        <Text style={{ color: palette.charcoal, fontSize: 18, fontWeight: '700' }}>{title}</Text>
         {subtitle ? (
           <Text style={{ ...type.body, color: palette.muted, marginTop: 4 }}>{subtitle}</Text>
         ) : null}

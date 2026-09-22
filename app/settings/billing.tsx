@@ -5,7 +5,8 @@ import { router } from 'expo-router';
 import { useQuery } from '../../lib/railway-hooks';
 import { api } from '../../lib/railway-api';
 import { colors, spacing } from '../../lib/theme';
-import { AppCard, SectionHeader } from '../../components/AppCard';
+import { AppCard } from '../../components/AppCard';
+import { PageHeader } from '../../components/design-system';
 import { ScreenErrorBoundary } from '../../components/ErrorBoundary';
 import { useAuthStore, type AuthState } from '../../lib/auth-store';
 import { useAuthenticatedSession } from '../../lib/auth-readiness';
@@ -76,8 +77,8 @@ function BillingScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background, padding: spacing.lg }}>
+      <PageHeader kicker={t('settingsBilling.kicker')} title={t('settingsBilling.title')} detail={venue?.name ?? t('settingsBilling.noVenueSelected')} />
       <AppCard>
-          <SectionHeader kicker={t('settingsBilling.kicker')} title={t('settingsBilling.title')} />
           <View style={{ gap: spacing.sm }}>
           <Text style={{ color: colors.muted }}>{venue?.name ?? t('settingsBilling.noVenueSelected')}</Text>
           <Text style={{ color: colors.muted }}>{t('settingsBilling.statusLabel', { status: billing?.status ?? t('settingsBilling.notConfigured') })}</Text>

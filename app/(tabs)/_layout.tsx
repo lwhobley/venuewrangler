@@ -53,11 +53,11 @@ export default function TabsLayout() {
         tabBarInactiveTintColor: String(palette.muted),
       }}
     >
-      <Tabs.Screen name="home" options={{ title: canManage && config.restaurantCoreOnly ? 'Tonight' : t('nav.home'), tabBarIcon: icon('view-dashboard') }} />
+      <Tabs.Screen name="home" options={{ title: canManage ? 'Tonight' : t('nav.home'), tabBarIcon: icon('view-dashboard') }} />
       <Tabs.Screen name="clock" options={{ title: t('nav.clock'), tabBarIcon: icon('clock-outline') }} />
       <Tabs.Screen name="schedule" options={{ title: t('nav.schedule'), tabBarIcon: icon('calendar-week') }} />
       <Tabs.Screen name="staff" options={{ title: 'Team', href: canManage ? '/staff' : null, tabBarIcon: icon('account-group') }} />
-      <Tabs.Screen name="chat" options={{ title: 'Announcements', tabBarIcon: icon('bullhorn-outline') }} />
+      <Tabs.Screen name="chat" options={{ title: 'Inbox', tabBarIcon: icon('bullhorn-outline') }} />
       <Tabs.Screen name="profile" options={{ title: 'Settings', tabBarIcon: icon('cog-outline') }} />
       <Tabs.Screen name="floor" options={{ title: t('nav.floor'), tabBarIcon: icon('floor-plan') }} />
       <Tabs.Screen name="reservations" options={{ title: t('nav.reservations'), tabBarIcon: icon('book-clock-outline') }} />

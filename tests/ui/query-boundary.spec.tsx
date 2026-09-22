@@ -96,7 +96,7 @@ describe('QueryBoundary', () => {
       );
     });
 
-    expect(output(r)).toContain('Skeleton(72)');
+    expect(output(r)).toContain('Skeleton(14)');
   });
 
   it('renders custom skeleton when provided', async () => {

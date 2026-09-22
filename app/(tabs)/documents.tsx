@@ -5,7 +5,7 @@ import { ActivityIndicator, Button, Card, Chip, Searchbar, Text, TextInput } fro
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { ScreenErrorBoundary } from '../../components/ErrorBoundary';
 import { InlineMessage } from '../../components/InlineMessage';
-import { SectionHeader } from '../../components/AppCard';
+import { PageHeader } from '../../components/design-system';
 import { api } from '../../lib/railway-api';
 import { useMutation, useQueryState } from '../../lib/railway-hooks';
 import { errorMessage } from '../../lib/format';
@@ -209,10 +209,10 @@ function DocumentsScreenInner() {
       contentContainerStyle={{ padding: spacing.lg, paddingBottom: spacing.xxxl, gap: spacing.lg }}
       showsVerticalScrollIndicator={false}
     >
-      <SectionHeader
+      <PageHeader
         kicker={t('documents.kicker')}
         title={t('documents.title')}
-        subtitle={t('documents.subtitle', { venue: venue?.name ?? t('common.yourVenue') })}
+        detail={t('documents.subtitle', { venue: venue?.name ?? t('common.yourVenue') })}
       />
 
       {canManage ? (

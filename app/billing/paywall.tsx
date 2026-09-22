@@ -4,8 +4,8 @@ import { router } from 'expo-router';
 import { Button, Card, Text } from 'react-native-paper';
 import { appApi } from '../../lib/api-client';
 import { useAuthenticatedSession } from '../../lib/auth-readiness';
-import { colors, spacing, radius, type } from '../../lib/theme';
-import { Kicker } from '../../components/AppCard';
+import { colors, spacing, radius } from '../../lib/theme';
+import { PageHeader } from '../../components/design-system';
 import {
   PURCHASES_SUPPORTED,
   getOfferingPackages,
@@ -159,11 +159,7 @@ export default function PaywallScreen() {
 
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic" style={{ flex: 1, backgroundColor: colors.background }} contentContainerStyle={{ padding: spacing.lg, gap: spacing.md, paddingBottom: spacing.xxl }}>
-      <View style={{ gap: 4 }}>
-        <Kicker>{t('paywall.kicker')}</Kicker>
-        <Text style={{ ...type.display, color: colors.charcoal }}>{t('paywall.title')}</Text>
-        <Text style={{ color: colors.muted }}>{t('paywall.subtitle')}</Text>
-      </View>
+      <PageHeader kicker={t('paywall.kicker')} title={t('paywall.title')} detail={t('paywall.subtitle')} />
 
       {!PURCHASES_SUPPORTED ? (
         <View style={{ gap: spacing.md }}>

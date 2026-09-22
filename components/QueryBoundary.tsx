@@ -2,8 +2,8 @@ import type { ReactNode } from 'react';
 import { Pressable, View } from 'react-native';
 import { Text } from 'react-native-paper';
 import { router } from 'expo-router';
-import { Skeleton } from './Skeleton';
-import { colors, radius, spacing } from '../lib/theme';
+import { ActionButton, EmptyState, RowSkeleton } from './design-system';
+import { colors, spacing } from '../lib/theme';
 import { useI18n } from '../lib/i18n';
 
 /**
@@ -61,25 +61,13 @@ export function QueryBoundary<T>({
         <Text style={{ color: colors.muted }}>
           {t('queryBoundary.upgradeRequired', { feature: feature ?? t('queryBoundary.thisFeature') })}
         </Text>
-        <Pressable
-          onPress={() => router.push('/billing')}
-          accessibilityRole="button"
-          style={{
-            alignSelf: 'flex-start',
-            paddingHorizontal: spacing.md,
-            paddingVertical: spacing.sm,
-            borderRadius: radius.sharp,
-            backgroundColor: colors.primary,
-          }}
-        >
-          <Text style={{ color: '#fff', fontWeight: '700' }}>{t('queryBoundary.viewPlans')}</Text>
-        </Pressable>
+        <ActionButton label={t('queryBoundary.viewPlans')} onPress={() => router.push('/billing')} />
       </View>
     );
   }
 
   if (state.isLoading && state.data === undefined) {
-    return <>{skeleton ?? <Skeleton height={72} />}</>;
+    return <>{skeleton ?? <RowSkeleton />}</>;
   }
 
   if (state.error && state.data === undefined) {
@@ -88,19 +76,7 @@ export function QueryBoundary<T>({
         <Text style={{ color: colors.danger }}>
           {state.error instanceof Error ? state.error.message : t('queryBoundary.error')}
         </Text>
-        <Pressable
-          onPress={() => state.refetch()}
-          accessibilityRole="button"
-          style={{
-            alignSelf: 'flex-start',
-            paddingHorizontal: spacing.md,
-            paddingVertical: spacing.sm,
-            borderRadius: radius.sharp,
-            backgroundColor: colors.primary,
-          }}
-        >
-          <Text style={{ color: '#fff', fontWeight: '700' }}>{t('queryBoundary.retry')}</Text>
-        </Pressable>
+        <ActionButton label={t('queryBoundary.retry')} onPress={() => void state.refetch()} />
       </View>
     );
   }
@@ -109,9 +85,7 @@ export function QueryBoundary<T>({
 
   if (isEmpty?.(state.data)) {
     return (
-      <Text style={{ color: colors.muted, paddingVertical: spacing.sm }}>
-        {emptyMessage ?? t('queryBoundary.empty')}
-      </Text>
+      <EmptyState title={emptyMessage ?? t('queryBoundary.empty')} />
     );
   }
 

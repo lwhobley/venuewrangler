@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { Card, Chip, SegmentedButtons, Text } from 'react-native-paper';
 import { ScreenErrorBoundary } from '../../components/ErrorBoundary';
-import { AnimatedTab, SectionHeader } from '../../components/AppCard';
+import { AnimatedTab } from '../../components/AppCard';
+import { PageHeader } from '../../components/design-system';
 import { useI18n } from '../../lib/i18n';
 import { useQuery } from '../../lib/railway-hooks';
 import { api } from '../../lib/railway-api';
@@ -359,11 +360,11 @@ function SalesScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* Header */}
-        <SectionHeader
+        <PageHeader
           kicker={t('sales.header.kicker')}
           title={t('sales.header.title')}
-          subtitle={t('sales.header.subtitle', { venue: venue.name ?? t('sales.header.venueFallback') })}
-          trailing={<DateRangeBar selected={dateRange} presets={presets} onSelect={setDateRange} />}
+          detail={t('sales.header.subtitle', { venue: venue.name ?? t('sales.header.venueFallback') })}
+          action={<DateRangeBar selected={dateRange} presets={presets} onSelect={setDateRange} />}
         />
 
         {/* Tab switcher */}

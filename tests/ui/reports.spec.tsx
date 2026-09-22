@@ -50,7 +50,7 @@ vi.mock('react-native-paper', async () => {
   const element = (type: string) => ({ children, ...props }: any) =>
     ReactModule.createElement(type, props, children);
   const Card = Object.assign(element('Card'), { Content: element('Card.Content') });
-  return { Button: element('Button'), Card, Text: element('Text') };
+  return { Button: element('Button'), Card, Text: element('Text'), TextInput: element('TextInput') };
 });
 vi.mock('../../lib/railway-hooks', () => ({
   useMutation: () => state.recordExport,

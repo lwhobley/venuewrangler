@@ -31,7 +31,7 @@ import {
   MovementTimeline,
 } from '../../components/bar-stock/InventoryCards';
 import { InlineMessage } from '../../components/InlineMessage';
-import { SectionHeader } from '../../components/AppCard';
+import { PageHeader } from '../../components/design-system';
 import { readPickedFileText } from '../../lib/picked-file';
 import {
   INVENTORY_RENDER_BATCH_SIZE,
@@ -498,7 +498,7 @@ function BarStockScreen() {
         contentContainerStyle={{ padding: spacing.lg, gap: spacing.md, paddingBottom: spacing.xxl }}
         showsVerticalScrollIndicator={false}
       >
-        <SectionHeader kicker={t('barStock.header.kicker')} title={t('barStock.header.title')} subtitle={t('barStock.header.staffSubtitle')} />
+        <PageHeader kicker={t('barStock.header.kicker')} title={t('barStock.header.title')} detail={t('barStock.header.staffSubtitle')} />
 
         {profileLoading || stock === undefined ? (
           <Text style={{ color: colors.muted }}>{t('barStock.common.loading')}</Text>
@@ -663,7 +663,7 @@ function BarStockScreen() {
       contentContainerStyle={{ padding: spacing.lg, gap: spacing.md, paddingBottom: spacing.xxl }}
       showsVerticalScrollIndicator={false}
     >
-      <SectionHeader kicker={t('barStock.header.kicker')} title={t('barStock.header.title')} subtitle={t('barStock.header.managerSubtitle')} />
+      <PageHeader kicker={t('barStock.header.kicker')} title={t('barStock.header.title')} detail={t('barStock.header.managerSubtitle')} />
 
       {offlinePendingCount > 0 && (
         <Card style={{ backgroundColor: '#fff3cd', borderColor: '#ffeeba', borderWidth: 1, borderRadius: radius.sharp }}>

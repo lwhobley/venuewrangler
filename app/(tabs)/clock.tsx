@@ -4,6 +4,7 @@ import { Card, Text } from 'react-native-paper';
 import { notifySuccess } from '../../lib/feedback';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { ScreenErrorBoundary } from '../../components/ErrorBoundary';
+import { PageHeader } from '../../components/design-system';
 import { accents, colors, radius, spacing } from '../../lib/theme';
 import { useAuthStore, type AuthState } from '../../lib/auth-store';
 import { useAuthenticatedSession } from '../../lib/auth-readiness';
@@ -278,17 +279,13 @@ function ClockScreen() {
       contentContainerStyle={{ padding: spacing.lg, gap: spacing.md, paddingBottom: spacing.xxl }}
       showsVerticalScrollIndicator={false}
     >
-      {/* Header: live time + date + venue pill */}
-      <View style={{ backgroundColor: colors.primary, borderRadius: radius.soft, padding: spacing.xl, alignItems: 'center', gap: 6 }}>
-        <Text style={{ color: 'rgba(255,255,255,0.85)', fontWeight: '700' }}>{user?.full_name ?? t('clock.defaultUserName')}</Text>
+      <PageHeader kicker={activeVenue?.name ?? t('clock.noVenue')} title={t('nav.clock')} detail={user?.full_name ?? t('clock.defaultUserName')} />
+      <View style={{ backgroundColor: colors.surface, borderRadius: 12, borderWidth: 1, borderColor: colors.border, padding: spacing.xl, alignItems: 'center', gap: 6 }}>
         <View style={{ flexDirection: 'row', alignItems: 'flex-end' }}>
-          <Text style={{ color: '#fff', fontSize: 56, fontWeight: '800', lineHeight: 60 }}>{time}</Text>
-          <Text style={{ color: '#fff', fontSize: 20, fontWeight: '700', marginBottom: 8, marginLeft: 4 }}>{ampm}</Text>
+          <Text style={{ color: colors.charcoal, fontSize: 56, fontWeight: '800', lineHeight: 60 }}>{time}</Text>
+          <Text style={{ color: colors.muted, fontSize: 20, fontWeight: '700', marginBottom: 8, marginLeft: 4 }}>{ampm}</Text>
         </View>
-        <Text style={{ color: 'rgba(255,255,255,0.9)', fontSize: 16, fontWeight: '600' }}>{fmtDate(now)}</Text>
-        <View style={{ marginTop: 8, backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: 999, paddingVertical: 8, paddingHorizontal: 18 }}>
-          <Text style={{ color: '#fff', fontWeight: '600' }}>{activeVenue?.name ?? t('clock.noVenue')}</Text>
-        </View>
+        <Text style={{ color: colors.muted, fontSize: 16, fontWeight: '600' }}>{fmtDate(now)}</Text>
       </View>
 
       {salaried ? (

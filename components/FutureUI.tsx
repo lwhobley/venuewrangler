@@ -60,7 +60,7 @@ export function CommandText({
   style?: StyleProp<TextStyle>;
 }) {
   const styles: Record<CommandTextVariant, TextStyle> = {
-    hero: { color: palette.charcoal, fontSize: 30, lineHeight: 36, letterSpacing: -0.5, fontWeight: '800' },
+    hero: { color: palette.charcoal, fontFamily: 'Fraunces_600SemiBold', fontSize: 30, lineHeight: 36, letterSpacing: -0.7, fontWeight: '600' },
     title: { color: palette.charcoal, fontSize: 19, lineHeight: 25, letterSpacing: -0.2, fontWeight: '700' },
     label: { color: palette.muted, fontSize: 11, lineHeight: 15, fontWeight: '700', letterSpacing: 0.6, textTransform: 'uppercase' },
     body: { color: palette.charcoal, fontSize: 14, lineHeight: 20, fontWeight: '500' },

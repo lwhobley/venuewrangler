@@ -8,7 +8,7 @@ import type { Id } from '../../lib/ids';
 import { colors, radius, spacing } from '../../lib/theme';
 import { useVenueAuth } from '../../lib/useVenueAuth';
 import { formatTime, errorMessage } from '../../lib/format';
-import { SectionHeader } from '../../components/AppCard';
+import { PageHeader } from '../../components/design-system';
 import { router } from 'expo-router';
 import { useI18n } from '../../lib/i18n';
 
@@ -282,7 +282,7 @@ function FloorScreen() {
 
   return (
     <ScrollView contentContainerStyle={{ flexGrow: 1, backgroundColor: colors.background, padding: spacing.lg, gap: spacing.md }}>
-      <SectionHeader kicker={t('floor.kicker')} title={t('floor.title')} subtitle={t('floor.subtitle', { venue: venue?.name ?? t('common.yourVenue') })} />
+      <PageHeader kicker={t('floor.kicker')} title={t('floor.title')} detail={t('floor.subtitle', { venue: venue?.name ?? t('common.yourVenue') })} />
       {actionError ? <Text style={{ color: colors.danger }}>{actionError}</Text> : null}
 
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>

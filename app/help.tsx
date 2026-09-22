@@ -5,6 +5,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { IconButton, Text, TextInput } from 'react-native-paper';
 import { colors, spacing, type } from '../lib/theme';
 import { AppCard, Kicker } from '../components/AppCard';
+import { PageHeader } from '../components/design-system';
 import { useI18n } from '../lib/i18n';
 
 type GuideSection = {
@@ -82,8 +83,7 @@ export default function HelpScreen() {
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
         <IconButton icon="arrow-left" onPress={() => router.back()} />
         <View style={{ flex: 1 }}>
-          <Text style={{ ...type.title, color: colors.charcoal }}>{t('help.title')}</Text>
-          <Text style={{ color: colors.muted }}>{t('help.subtitle')}</Text>
+          <PageHeader title={t('help.title')} detail={t('help.subtitle')} />
         </View>
       </View>
 

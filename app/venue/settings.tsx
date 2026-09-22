@@ -7,6 +7,7 @@ import { useMutation, useQuery } from '../../lib/railway-hooks';
 import { api } from '../../lib/railway-api';
 import { colors, spacing, type } from '../../lib/theme';
 import { AppCard, SectionHeader } from '../../components/AppCard';
+import { PageHeader } from '../../components/design-system';
 import { ScreenErrorBoundary } from '../../components/ErrorBoundary';
 import { VenueSwitcher } from '../../components/VenueSwitcher';
 import { useAuthStore, type AuthState } from '../../lib/auth-store';
@@ -132,9 +133,8 @@ function VenueSettingsScreen() {
       >
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
           <IconButton icon="arrow-left" onPress={() => router.back()} />
-          <View>
-            <Text style={{ ...type.title, color: colors.charcoal }}>{t('venueSettings.title')}</Text>
-            <Text style={{ color: colors.muted }}>{t('venueSettings.subtitle')}</Text>
+          <View style={{ flex: 1 }}>
+            <PageHeader title={t('venueSettings.title')} detail={t('venueSettings.subtitle')} />
           </View>
         </View>
         <VenueSwitcher />
@@ -147,9 +147,8 @@ function VenueSettingsScreen() {
     <FormScreen contentContainerStyle={{ padding: spacing.lg, gap: spacing.md, paddingBottom: spacing.xxl }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
         <IconButton icon="arrow-left" onPress={() => router.back()} />
-        <View>
-          <Text style={{ ...type.title, color: colors.charcoal }}>{t('venueSettings.title')}</Text>
-          <Text style={{ color: colors.muted }}>{t('venueSettings.subtitle')}</Text>
+        <View style={{ flex: 1 }}>
+          <PageHeader title={t('venueSettings.title')} detail={t('venueSettings.subtitle')} />
         </View>
       </View>
 
