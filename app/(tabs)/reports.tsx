@@ -196,6 +196,7 @@ function ReportsScreen() {
     <ScrollView
       style={{ flex: 1, backgroundColor: colors.background }}
       contentContainerStyle={{ padding: spacing.lg, gap: spacing.md, paddingBottom: spacing.xxl }}
+      keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
     >
       <PageHeader

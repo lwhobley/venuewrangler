@@ -757,7 +757,7 @@ export class PosController {
       where: { venueId: scope.venueId },
       orderBy: { createdAt: 'asc' },
     });
-    return channels.map((channel) => this.serializeChannel(channel));
+    return { channels: channels.map((channel) => this.serializeChannel(channel)) };
   }
 
   @RequireSubscription()

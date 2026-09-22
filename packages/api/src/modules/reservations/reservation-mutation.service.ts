@@ -122,7 +122,7 @@ export class ReservationMutationService {
           updateData.depositDueCents = existing.depositDueCents;
         } else if (args.depositDueCents === undefined) {
           updateData.depositDueCents = existing.depositDueCents;
-        } else if ((existing.depositDueCents ?? 0) > 0 && (args.depositDueCents ?? 0) < existing.depositDueCents) {
+        } else if ((existing.depositDueCents ?? 0) > 0 && (args.depositDueCents ?? 0) < (existing.depositDueCents ?? 0)) {
           throw new BadRequestException('A deposit that is due cannot be reduced. Collect it or waive it.');
         }
 
