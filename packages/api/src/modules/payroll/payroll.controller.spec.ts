@@ -8,8 +8,10 @@ function makeController(timezone: string | null = null) {
     profile: { findMany: vi.fn().mockResolvedValue([]) },
     timeEntry: { findMany: vi.fn().mockResolvedValue([]) },
     payrollExport: { create: vi.fn().mockResolvedValue({ id: 'export-1' }) },
+    payrollEmployeeMap: { findMany: vi.fn().mockResolvedValue([]) },
   } as any;
-  const controller = new PayrollController(prisma);
+  const connect = { authorize: vi.fn(), completeCallback: vi.fn(), push: vi.fn(), mapEmployee: vi.fn() };
+  const controller = new PayrollController(prisma, { authorize: vi.fn(), completeCallback: vi.fn(), push: vi.fn(), mapEmployee: vi.fn() } as any, connect as any);
   return { controller, prisma };
 }
 

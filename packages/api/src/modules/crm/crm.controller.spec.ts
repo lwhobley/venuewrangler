@@ -490,7 +490,7 @@ describe('CrmController', () => {
       const { controller, prisma } = makeController();
       prisma.crmBeo.findFirst.mockResolvedValue({
         id: 'beo-1', leadId: 'lead-1', eventName: 'Gala', eventDate: new Date('2026-08-01T18:00:00.000Z'),
-        guestCount: 80, venueSpace: 'Ballroom', fbMinimumCents: 500000, depositCents: 100000, depositDueDate: null,
+        guestCount: 80, venueSpace: 'Ballroom', fbMinimumCents: 500000, depositCents: 100000, depositDueDate: null, depositStatus: 'paid',
       });
 
       const result = await controller.convertBeoToContract(managerScope, 'beo-1');
@@ -503,6 +503,15 @@ describe('CrmController', () => {
         }),
       }));
       expect(result).toEqual({ contractId: 'contract-new', contractNumber: expect.any(String), alreadyExisted: false });
+    });
+
+    it('refuses to issue a contract while the deposit is unpaid', async () => {
+      const { controller, prisma } = makeController();
+      prisma.crmBeo.findFirst.mockResolvedValue({
+        id: 'beo-1', eventName: 'Gala', depositCents: 100000, depositStatus: null,
+      });
+      await expect(controller.convertBeoToContract(managerScope, 'beo-1')).rejects.toThrow('Collect or waive the BEO deposit');
+      expect(prisma.crmContract.create).not.toHaveBeenCalled();
     });
 
     it('leaves the payment schedule empty when the BEO has no deposit', async () => {

@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { ScrollView, View } from 'react-native';
-import { Button, Card, Text } from 'react-native-paper';
+import { Linking, ScrollView, View } from 'react-native';
+import { Button, Card, Text, TextInput } from 'react-native-paper';
 import { router } from 'expo-router';
 import { useMutation, useQuery, useQueryState } from '../../lib/railway-hooks';
 import { api } from '../../lib/railway-api';
@@ -14,9 +14,8 @@ import { ManagerGate } from '../../components/ManagerGate';
 import { SectionHeader } from '../../components/AppCard';
 import { useI18n } from '../../lib/i18n';
 
-// What we record as the export destination on /v1/payroll/record-export. The
-// server stores `provider` as a free-form string today, so this list is purely
-// the dropdown's choices — adding a vendor here is sufficient.
+// Record-export only stores a label. Gusto hours go through payroll.pushGusto,
+// which recomputes punches on the server and refuses unmapped people.
 const payrollProviderOptions = [
   { value: 'gusto', label: 'Gusto' },
   { value: 'square_payroll', label: 'Square Payroll' },
@@ -55,7 +54,8 @@ type Insight = {
 
 /** Mirrors GET /v1/payroll/summary (payroll.controller.ts getPayrollSummary). */
 type PayrollSummary = {
-  byEmployee: Array<{ profileId: string | null; employeeName: string; role: string; jobTitle: string; regularHours: number; totalHours: number }>;
+  byEmployee: Array<{ profileId: string | null; employeeName: string; role: string; jobTitle: string; payrollEmployeeId?: string | null; regularHours: number; totalHours: number }>;
+  payrollLinks?: Array<{ profileId: string; provider: string; externalId: string }>;
   totals: {
     totalHours: number;
     employeeCount: number;
@@ -112,7 +112,11 @@ function ReportsScreen() {
       : 'skip',
   );
   const recordPayrollExport = useMutation(api.payroll.recordPayrollExport);
+  const pushProvider = useMutation(api.payroll.pushProvider);
+  const authorizeProvider = useMutation(api.payroll.authorizeProvider);
+  const mapProviderEmployee = useMutation(api.payroll.mapProviderEmployee);
   const [exportNotice, setExportNotice] = useState<{ tone: 'ok' | 'error'; message: string } | null>(null);
+  const [gustoIds, setGustoIds] = useState<Record<string, string>>({});
 
   const metrics = [
     { label: t('reports.metrics.scheduledShifts'), value: insights?.scheduledShifts ?? 0, accent: accents[0] },
@@ -157,6 +161,35 @@ function ReportsScreen() {
       .then(() => setExportNotice({ tone: 'ok', message: t('reports.payroll.recordExportOk') }))
       .catch((error: unknown) => setExportNotice({ tone: 'error', message: errorMessage(error, t('reports.payroll.recordExportFailed')) }));
   };
+
+  const providerName = payrollProviderOptions.find((option) => option.value === payrollProvider)?.label ?? payrollProvider;
+  const linkedIds = new Set((payroll?.payrollLinks ?? []).filter((link) => link.provider === payrollProvider).map((link) => link.profileId));
+
+  const onPushProvider = () => {
+    if (!venue?.id || !dateRange.startDate || !dateRange.endDate) return;
+    setExportNotice(null);
+    pushProvider({ venueId: venue.id, provider: payrollProvider, startDate: dateRange.startDate, endDate: dateRange.endDate })
+      .then((result) => setExportNotice({
+        tone: 'ok',
+        message: result?.remaining
+          ? t('reports.payroll.pushProviderPartial', { provider: providerName, sent: result.sent, remaining: result.remaining })
+          : t('reports.payroll.pushProviderOk', { provider: providerName, sent: result?.sent ?? 0 }),
+      }))
+      .catch((error: unknown) => setExportNotice({ tone: 'error', message: errorMessage(error, t('reports.payroll.pushProviderFailed')) }));
+  };
+
+  const onConnectProvider = () => {
+    if (!venue?.id) return;
+    authorizeProvider({ venueId: venue.id, provider: payrollProvider })
+      .then((result) => Linking.openURL(result.url))
+      .catch((error: unknown) => setExportNotice({ tone: 'error', message: errorMessage(error, t('reports.payroll.connectProviderFailed')) }));
+  };
+
+  const unmapped = (payroll?.byEmployee ?? []).filter((row) => {
+    if (!row.totalHours || !row.profileId) return false;
+    if (payrollProvider === 'gusto') return !row.payrollEmployeeId;
+    return !linkedIds.has(row.profileId);
+  });
 
   return (
     <ManagerGate canManage={canManage} profileLoading={profileLoading} profileError={profileError} onRetry={refetchProfile} feature={t('reports.header.title')}>
@@ -312,16 +345,35 @@ function ReportsScreen() {
                       : t('reports.payroll.unavailable')}
               </Text>
             </View>
-            <Button
-              compact
-              mode="outlined"
-              disabled={!totals}
-              textColor={colors.primary}
-              onPress={onRecordExport}
-            >
+            <Button compact mode="outlined" disabled={!totals || payrollLocked || payrollProvider === 'csv'} textColor={colors.primary} onPress={onConnectProvider}>
+              {t('reports.payroll.connectProvider', { provider: providerName })}
+            </Button>
+            <Button compact mode="contained" disabled={!totals || payrollLocked || payrollProvider === 'csv'} buttonColor={colors.primary} onPress={onPushProvider}>
+              {t('reports.payroll.pushProvider', { provider: providerName })}
+            </Button>
+            <Button compact mode="outlined" disabled={!totals} textColor={colors.primary} onPress={onRecordExport}>
               {t('reports.payroll.recordExport')}
             </Button>
           </View>
+          {unmapped.map((row) => (
+            <View key={row.profileId} style={{ flexDirection: 'row', gap: spacing.sm, alignItems: 'center' }}>
+              <TextInput
+                label={t('reports.payroll.providerIdLabel', { provider: providerName, name: row.employeeName })}
+                value={gustoIds[row.profileId!] ?? ''}
+                onChangeText={(value) => setGustoIds((current) => ({ ...current, [row.profileId!]: value }))}
+                mode="outlined"
+                dense
+                autoCapitalize="none"
+                style={{ flex: 1, backgroundColor: colors.surface }}
+              />
+              <Button compact mode="outlined" onPress={() => {
+                if (!venue?.id || !row.profileId) return;
+                mapProviderEmployee({ venueId: venue.id, provider: payrollProvider, profileId: row.profileId, payrollEmployeeId: gustoIds[row.profileId] ?? '' })
+                  .then(() => setExportNotice({ tone: 'ok', message: t('reports.payroll.mapProviderOk', { provider: providerName, name: row.employeeName }) }))
+                  .catch((error: unknown) => setExportNotice({ tone: 'error', message: errorMessage(error, t('reports.payroll.mapProviderFailed')) }));
+              }}>{t('reports.payroll.mapGusto')}</Button>
+            </View>
+          ))}
           {exportNotice ? (
             <Text style={{ color: exportNotice.tone === 'ok' ? colors.primary : colors.danger, fontSize: 13 }}>
               {exportNotice.message}

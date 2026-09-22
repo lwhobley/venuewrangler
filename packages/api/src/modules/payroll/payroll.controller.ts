@@ -7,6 +7,7 @@ import {
   Header,
   Post,
   Query,
+  Res,
 } from '@nestjs/common';
 import { IsInt, IsNumber, IsOptional, IsString, MaxLength } from 'class-validator';
 import { canManageVenue } from '../../auth/roles';
@@ -17,8 +18,70 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { VenueScope } from '../../venue/venue-scope.decorator';
 import type { VenueScopedRequest } from '../../venue/venue-scope.interceptor';
 import { Audited } from '../audit/audited.decorator';
+import { GustoPayrollService } from './gusto-payroll.service';
+import { PayrollConnectService } from './payroll-connect.service';
+import { hoursPushUnavailable, isHoursPushProvider } from './payroll-providers';
+import { Public } from '../../auth/public.decorator';
+import { SkipVenueScope } from '../../venue/skip-venue-scope.decorator';
+import type { Response } from 'express';
 
 type Scope = VenueScopedRequest['venueScope'];
+
+class ProviderPushDto {
+  @IsString()
+  @MaxLength(64)
+  provider!: string;
+
+  @IsString()
+  @MaxLength(32)
+  startDate!: string;
+
+  @IsString()
+  @MaxLength(32)
+  endDate!: string;
+}
+
+class ProviderMapDto {
+  @IsString()
+  @MaxLength(64)
+  provider!: string;
+
+  @IsString()
+  @MaxLength(64)
+  profileId!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  payrollEmployeeId?: string;
+}
+
+class ProviderDto {
+  @IsString()
+  @MaxLength(64)
+  provider!: string;
+}
+
+class PushPayrollDto {
+  @IsString()
+  @MaxLength(32)
+  startDate!: string;
+
+  @IsString()
+  @MaxLength(32)
+  endDate!: string;
+}
+
+class MapPayrollEmployeeDto {
+  @IsString()
+  @MaxLength(64)
+  profileId!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  payrollEmployeeId?: string;
+}
 
 class RecordPayrollExportDto {
   @IsString()
@@ -149,6 +212,7 @@ async function buildPayrollRows(
     employeeName: member.fullName,
     role: member.role as string,
     jobTitle: member.jobTitle,
+    payrollEmployeeId: member.payrollEmployeeId ?? null,
     regularHours: round2(hoursOf(entriesByProfile.get(member.id) ?? [])),
   })).map((row) => ({
     ...row,
@@ -169,6 +233,7 @@ async function buildPayrollRows(
         employeeName: name,
         role: 'staff',
         jobTitle: 'Former staff',
+        payrollEmployeeId: null,
         regularHours: round2(hoursOf(rowsForName)),
         totalHours: round2(hoursOf(rowsForName)),
       });
@@ -179,7 +244,11 @@ async function buildPayrollRows(
 
 @Controller('v1/payroll')
 export class PayrollController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly gusto: GustoPayrollService,
+    private readonly connect: PayrollConnectService,
+  ) {}
 
   private requireManager(scope: Scope): asserts scope is NonNullable<Scope> {
     if (!scope || !canManageVenue(scope.role, scope.allAccess)) throw new ForbiddenException('Not authorized');
@@ -195,11 +264,15 @@ export class PayrollController {
     this.requireManager(scope);
     const { periodStart, periodEnd, startIso, endIso } = await resolvePayrollPeriod(this.prisma, scope.venueId, startDate, endDate);
 
-    const rows = await buildPayrollRows(this.prisma, scope.venueId, periodStart, periodEnd);
+    const [rows, links] = await Promise.all([
+      buildPayrollRows(this.prisma, scope.venueId, periodStart, periodEnd),
+      this.prisma.payrollEmployeeMap.findMany({ where: { venueId: scope.venueId }, select: { profileId: true, provider: true, externalId: true } }),
+    ]);
     const totalHours = Math.round(rows.reduce((sum, r) => sum + r.totalHours, 0) * 100) / 100;
 
     return {
       byEmployee: rows,
+      payrollLinks: links,
       totals: {
         totalHours,
         employeeCount: rows.filter((r) => r.totalHours > 0).length,
@@ -262,4 +335,94 @@ export class PayrollController {
     });
     return { id: record.id };
   }
+
+  @RequireSubscription('paid')
+  @Post('gusto/authorize')
+  gustoAuthorize(@VenueScope() scope: Scope) {
+    this.requireManager(scope);
+    return this.gusto.authorize(scope);
+  }
+
+  @Public()
+  @SkipVenueScope()
+  @Get('gusto/callback')
+  async gustoCallback(@Query('code') code: string | undefined, @Query('state') state: string | undefined, @Res() res: Response) {
+    try {
+      await this.gusto.completeCallback(code ?? '', state ?? '');
+      res.redirect(302, 'venuewrangler://payroll?gusto=connected');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Gusto connection failed';
+      res.status(400).type('html').send(`<!doctype html><p>${escapeHtml(message)}</p>`);
+    }
+  }
+
+  @RequireSubscription('paid')
+  @Audited('payroll.gusto_push', { entityType: 'payroll', summary: 'Pushed hours to Gusto' })
+  @Post('gusto/push')
+  async pushGusto(@VenueScope() scope: Scope, @Body() body: PushPayrollDto) {
+    this.requireManager(scope);
+    const period = await resolvePayrollPeriod(this.prisma, scope.venueId, body.startDate, body.endDate);
+    return this.gusto.push(scope, period);
+  }
+
+  @RequireSubscription('paid')
+  @Audited('payroll.employee_mapped', { entityType: 'profile', summary: 'Mapped a Gusto employee id' })
+  @Post('gusto/mappings')
+  mapPayrollEmployee(@VenueScope() scope: Scope, @Body() body: MapPayrollEmployeeDto) {
+    this.requireManager(scope);
+    return this.gusto.mapEmployee(scope, body.profileId, body.payrollEmployeeId);
+  }
+
+  @RequireSubscription('paid')
+  @Post('connect/authorize')
+  authorizeProvider(@VenueScope() scope: Scope, @Body() body: ProviderDto) {
+    this.requireManager(scope);
+    if (body.provider === 'gusto') return this.gusto.authorize(scope);
+    return this.connect.authorize(scope, body.provider);
+  }
+
+  @Public()
+  @SkipVenueScope()
+  @Get('connect/callback')
+  async connectCallback(
+    @Query('code') code: string | undefined,
+    @Query('state') state: string | undefined,
+    @Query('realmId') realmId: string | undefined,
+    @Res() res: Response,
+  ) {
+    try {
+      const provider = await this.connect.completeCallback(code ?? '', state ?? '', realmId);
+      const target = provider === 'gusto' ? await this.gusto.completeCallback(code ?? '', state ?? '').then(() => 'gusto') : provider;
+      res.redirect(302, `venuewrangler://payroll?provider=${encodeURIComponent(target)}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Payroll connection failed';
+      res.status(400).type('html').send(`<!doctype html><p>${escapeHtml(message)}</p>`);
+    }
+  }
+
+  @RequireSubscription('paid')
+  @Audited('payroll.provider_push', { entityType: 'payroll', summary: 'Pushed hours to a payroll provider' })
+  @Post('connect/push')
+  async pushProvider(@VenueScope() scope: Scope, @Body() body: ProviderPushDto) {
+    this.requireManager(scope);
+    const unavailable = hoursPushUnavailable(body.provider);
+    if (unavailable) throw new BadRequestException(unavailable);
+    const period = await resolvePayrollPeriod(this.prisma, scope.venueId, body.startDate, body.endDate);
+    if (body.provider === 'gusto') return this.gusto.push(scope, period);
+    if (!isHoursPushProvider(body.provider)) throw new BadRequestException(unavailable);
+    return this.connect.push(scope, body.provider, period);
+  }
+
+  @RequireSubscription('paid')
+  @Audited('payroll.provider_mapped', { entityType: 'profile', summary: 'Mapped a payroll employee id' })
+  @Post('connect/mappings')
+  mapProviderEmployee(@VenueScope() scope: Scope, @Body() body: ProviderMapDto) {
+    this.requireManager(scope);
+    if (body.provider === 'gusto') return this.gusto.mapEmployee(scope, body.profileId, body.payrollEmployeeId);
+    return this.connect.mapEmployee(scope, body.provider, body.profileId, body.payrollEmployeeId);
+  }
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch] ?? ch));
 }

@@ -390,6 +390,7 @@ model Venue {
   waitlistEntries               Waitlist[]
   tableAssignments              TableAssignment[]
   posConnections                PosConnection[]
+  posAggregatorChannels         PosAggregatorChannel[]
   posLaborPunches               PosLaborPunch[]
   crmActivityLogs               CrmActivityLog[]
   crmBeos                       CrmBeo[]
@@ -402,6 +403,9 @@ model Venue {
   teams                         Team[]
   scheduleEmailEvents           ScheduleEmailEvent[]
   payrollExports                PayrollExport[]
+  payrollConnections            PayrollConnection[]
+  payrollTimeSheetPushes        PayrollTimeSheetPush[]
+  payrollEmployeeMaps           PayrollEmployeeMap[]
   reservationConnections        ReservationConnection[]
   reservationSyncEvents         ReservationSyncEvent[]
   barInventoryItems             BarInventoryItem[]
@@ -425,6 +429,7 @@ model Venue {
   joinRequestEvents             WorkplaceJoinRequestEvent[]
   eventExecutionWorkspaces      EventExecutionWorkspace[]
   documents                     VenueDocument[]
+  clockAlertDeliveries          ClockAlertDelivery[]
 }
 
 model Profile {
@@ -445,6 +450,7 @@ model Profile {
   allAccess                  Boolean              @default(false)
   sickHoursAccrued           Float                @default(0.0)
   ptoHoursAccrued            Float                @default(0.0)
+  payrollEmployeeId          String?
   trialEndsAt                DateTime?
   createdAt                  DateTime             @default(now())
   updatedAt                  DateTime             @updatedAt
@@ -472,8 +478,11 @@ model Profile {
   aiUsageEvents              AiUsageEvent[]
   scheduleEmailEvents        ScheduleEmailEvent[]
   staffOnboardingTasks       StaffOnboardingTask[]
+  clockAlertDeliveries       ClockAlertDelivery[]
+  payrollEmployeeMaps        PayrollEmployeeMap[]
 
   @@unique([userId, venueId])
+  @@unique([venueId, payrollEmployeeId])
   @@index([userId])
   @@index([venueId])
   @@index([email])
@@ -975,6 +984,23 @@ model TimeEntry {
   // already served by the composite indexes above.
 }
 
+// Claim row for a pushed late/missed clock alert. One row per person, kind,
+// and venue-local day so the cron cannot page managers on every tick.
+model ClockAlertDelivery {
+  id        String   @id @default(cuid())
+  venueId   String
+  profileId String
+  kind      String
+  localDate String
+  createdAt DateTime @default(now())
+  venue     Venue    @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  profile   Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@unique([venueId, profileId, kind, localDate])
+  @@index([venueId, localDate])
+  @@index([profileId])
+}
+
 model ShiftSwap {
   id                 String         @id @default(cuid())
   venueId            String
@@ -1132,6 +1158,9 @@ model Reservation {
   lastExternalEventAt DateTime?
   toastCheckGuid      String?
   depositStatus       String?
+  depositCheckoutSessionId String?
+  depositPaymentIntentId   String?
+  depositPaidAt            DateTime?
   checkInAt           DateTime?
   seatedAt            DateTime?
   completedAt         DateTime?
@@ -1341,6 +1370,23 @@ model PosConnection {
   @@index([venueId])
 }
 
+model PosAggregatorChannel {
+  id               String      @id @default(cuid())
+  venueId          String
+  name             String
+  zoneLabel        String
+  primaryProvider  PosProvider
+  fallbackProvider PosProvider
+  terminalCount    Int         @default(0)
+  active           Boolean     @default(true)
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+  venue            Venue       @relation(fields: [venueId], references: [id], onDelete: Cascade)
+
+  @@unique([venueId, name])
+  @@index([venueId, active])
+}
+
 model PosCheck {
   id              String         @id @default(cuid())
   venueId         String
@@ -1473,6 +1519,10 @@ model CrmBeo {
   fbMinimumCents      Int?
   depositCents        Int?
   depositDueDate      DateTime?
+  depositStatus       String?
+  depositCheckoutSessionId String?
+  depositPaymentIntentId   String?
+  depositPaidAt            DateTime?
   menuAppetizers      String?
   menuEntrees         String?
   menuDesserts        String?
@@ -1730,10 +1780,59 @@ model PayrollExport {
   rowCount    Int
   totalHours  Float
   createdBy   String
+  externalRef String?
   createdAt   DateTime @default(now())
   venue       Venue    @relation(fields: [venueId], references: [id], onDelete: Cascade)
 
   @@index([venueId, createdAt])
+}
+
+model PayrollConnection {
+  id                 String            @id @default(cuid())
+  venueId            String
+  provider           String
+  companyUuid        String
+  accessTokenCipher  String
+  refreshTokenCipher String
+  tokenExpiresAt     DateTime
+  status             IntegrationStatus @default(connected)
+  connectedBy        String?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  venue              Venue             @relation(fields: [venueId], references: [id], onDelete: Cascade)
+
+  @@unique([venueId, provider])
+  @@index([venueId])
+}
+
+model PayrollTimeSheetPush {
+  id          String   @id @default(cuid())
+  venueId     String
+  provider    String   @default("gusto")
+  timeEntryId String
+  externalId  String?
+  createdAt   DateTime @default(now())
+  venue       Venue    @relation(fields: [venueId], references: [id], onDelete: Cascade)
+
+  @@unique([venueId, provider, timeEntryId])
+  @@index([venueId])
+}
+
+model PayrollEmployeeMap {
+  id         String   @id @default(cuid())
+  venueId    String
+  profileId  String
+  provider   String
+  externalId String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  venue      Venue    @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  profile    Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@unique([venueId, profileId, provider])
+  @@unique([venueId, provider, externalId])
+  @@index([venueId])
+  @@index([profileId])
 }
 
 model ReservationConnection {

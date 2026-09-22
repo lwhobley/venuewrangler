@@ -322,6 +322,19 @@ describe('FloorService regressions', () => {
       return { prisma, tx };
     };
 
+    it('refuses to seat a party whose deposit is still due', async () => {
+      const { prisma } = makeAssignPrisma();
+      prisma.reservation.findFirst.mockResolvedValue({
+        id: 'res-1', partySize: 4, durationMinutes: 120, reservationTime: new Date(), status: 'confirmed',
+        depositDueCents: 5000, depositStatus: 'due',
+      });
+
+      await expect(
+        new FloorService(prisma, {} as any).assignReservationToTables('venue-1', 'res-1', ['table-1'], { holdType: 'seated' }),
+      ).rejects.toThrow('unpaid deposit');
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
     it('rejects assigning a table to a cancelled reservation that was never soft-deleted', async () => {
       // Cancelling a reservation (reservation-mutation.service.ts's
       // saveReservation cancel path) sets status: 'cancelled' without ever

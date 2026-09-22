@@ -7,6 +7,7 @@ import { getClientIp } from '../common/http';
 import { assertWithinSharedRateLimit } from '../common/rate-limit';
 import { secretsMatch, verifyStripeSignature } from '../common/webhook-auth';
 import { PrismaService } from '../prisma/prisma.service';
+import { markBeoDepositPaid, markReservationDepositPaid } from '../modules/reservations/deposit';
 
 type RevenueCatWebhookBody = {
   event?: {
@@ -185,6 +186,40 @@ export class BillingController {
     const event = body;
     const object = event.data?.object ?? {};
     const eventAt = unixToDate(event.created) ?? new Date();
+
+    if (event.type === 'checkout.session.completed' && object.metadata?.kind === 'reservation_deposit') {
+      const venueId = typeof object.metadata.venueId === 'string' ? object.metadata.venueId : '';
+      const reservationId = typeof object.metadata.reservationId === 'string' ? object.metadata.reservationId : '';
+      const amountCents = typeof object.amount_total === 'number' ? object.amount_total : Number(object.metadata.amountCents);
+      if (object.payment_status !== 'paid' || !venueId || !reservationId || !Number.isInteger(amountCents)) {
+        return { ok: true, ignored: true };
+      }
+      const result = await markReservationDepositPaid(this.prisma, {
+        venueId,
+        reservationId,
+        amountCents,
+        checkoutSessionId: typeof object.id === 'string' ? object.id : '',
+        paymentIntentId: typeof object.payment_intent === 'string' ? object.payment_intent : null,
+      });
+      return { ok: true, deposit: result };
+    }
+
+    if (event.type === 'checkout.session.completed' && object.metadata?.kind === 'beo_deposit') {
+      const venueId = typeof object.metadata.venueId === 'string' ? object.metadata.venueId : '';
+      const beoId = typeof object.metadata.beoId === 'string' ? object.metadata.beoId : '';
+      const amountCents = typeof object.amount_total === 'number' ? object.amount_total : Number(object.metadata.amountCents);
+      if (object.payment_status !== 'paid' || !venueId || !beoId || !Number.isInteger(amountCents)) {
+        return { ok: true, ignored: true };
+      }
+      const result = await markBeoDepositPaid(this.prisma, {
+        venueId,
+        beoId,
+        amountCents,
+        checkoutSessionId: typeof object.id === 'string' ? object.id : '',
+        paymentIntentId: typeof object.payment_intent === 'string' ? object.payment_intent : null,
+      });
+      return { ok: true, deposit: result };
+    }
 
     if (
       event.type === 'customer.subscription.created' ||

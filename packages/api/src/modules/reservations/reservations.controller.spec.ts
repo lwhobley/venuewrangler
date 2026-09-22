@@ -44,7 +44,7 @@ function makeController() {
     deleteHold: vi.fn(),
     removeReservation: vi.fn(),
   } as any;
-  const controller = new ReservationsController(prisma, notifier, mutations);
+  const controller = new ReservationsController(prisma, notifier, mutations, { get: vi.fn() } as any);
   return { controller, prisma, notifier, mutations };
 }
 
