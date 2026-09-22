@@ -19,7 +19,7 @@ export type GustoTimeSheet = {
 
 @Injectable()
 export class GustoClient {
-  constructor(private readonly fetchImpl: typeof fetch = fetch) {}
+  private readonly fetchImpl: typeof fetch = fetch;
 
   apiBase(): string {
     return (process.env.GUSTO_API_BASE?.trim() || 'https://api.gusto-demo.com').replace(/\/$/, '');

@@ -5,7 +5,7 @@ const SQUARE_VERSION = '2026-09-16';
 
 @Injectable()
 export class SquareClient {
-  constructor(private readonly fetchImpl: typeof fetch = fetch) {}
+  private readonly fetchImpl: typeof fetch = fetch;
 
   apiBase(): string {
     return (process.env.SQUARE_API_BASE?.trim() || 'https://connect.squareupsandbox.com').replace(/\/$/, '');

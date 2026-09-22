@@ -8,7 +8,7 @@ export type ProviderTokenSet = {
 
 @Injectable()
 export class QuickBooksClient {
-  constructor(private readonly fetchImpl: typeof fetch = fetch) {}
+  private readonly fetchImpl: typeof fetch = fetch;
 
   apiBase(): string {
     return (process.env.QUICKBOOKS_API_BASE?.trim() || 'https://sandbox-quickbooks.api.intuit.com').replace(/\/$/, '');
