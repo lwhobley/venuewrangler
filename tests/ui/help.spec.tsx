@@ -11,7 +11,7 @@ vi.mock('react-native-paper', async () => {
   const R = await import('react');
   const element = (type: string) => ({ children, ...props }: any) => R.createElement(type, props, children);
   const TextInput = Object.assign(element('TextInput'), { Icon: element('TextInput.Icon') });
-  return { IconButton: element('IconButton'), Text: element('Text'), TextInput };
+  return { Button: element('Button'), IconButton: element('IconButton'), Text: element('Text'), TextInput };
 });
 vi.mock('../../components/AppCard', () => {
   const React = require('react');
