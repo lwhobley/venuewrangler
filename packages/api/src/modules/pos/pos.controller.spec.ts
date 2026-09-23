@@ -19,6 +19,7 @@ function makeController() {
     },
     posCheck: {
       upsert: vi.fn().mockResolvedValue({}),
+      findUnique: vi.fn().mockResolvedValue(null),
       findMany: vi.fn().mockResolvedValue([]),
       aggregate: vi.fn().mockResolvedValue({ _sum: { totalCents: 0, tipCents: 0 } }),
       count: vi.fn().mockResolvedValue(0),

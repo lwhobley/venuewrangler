@@ -3,7 +3,7 @@ import { ScrollView, View } from 'react-native';
 import { Button, Card, Text, TextInput } from 'react-native-paper';
 import { router } from 'expo-router';
 import { api } from '../lib/railway-api';
-import { useMutation, useQuery } from '../lib/railway-hooks';
+import { useMutation, useQueryState } from '../lib/railway-hooks';
 import { useVenueAuth } from '../lib/useVenueAuth';
 import { colors, radius, spacing } from '../lib/theme';
 import { ManagerGate } from '../components/ManagerGate';
@@ -16,8 +16,10 @@ type Recipe = { _id: string; name: string; ingredients: Array<RecipeLine & { sto
 
 function InventoryRecipesScreen() {
   const { isReady, venue, canManage, profileLoading, profileError, refetchProfile } = useVenueAuth();
-  const stock = useQuery(api.barInventory.getBarStock, isReady && venue?.id ? { venueId: venue.id } : 'skip') as { items: InventoryItem[] } | null | undefined;
-  const recipes = useQuery(api.barInventory.listRecipes, isReady && canManage ? {} : 'skip') as Recipe[] | null | undefined;
+  const stockState = useQueryState<{ items: InventoryItem[] }>(api.barInventory.getBarStock, isReady && venue?.id ? { venueId: venue.id } : 'skip');
+  const recipesState = useQueryState<Recipe[]>(api.barInventory.listRecipes, isReady && canManage ? {} : 'skip');
+  const stock = stockState.data;
+  const recipes = recipesState.data;
   const saveRecipe = useMutation(api.barInventory.upsertRecipe);
   const saveConversion = useMutation(api.barInventory.updateItemConversion);
   const [name, setName] = useState('');
@@ -54,9 +56,12 @@ function InventoryRecipesScreen() {
   };
 
   return <ManagerGate canManage={canManage} profileLoading={profileLoading} profileError={profileError} onRetry={refetchProfile} feature="Recipe depletion">
-    <ScrollView style={{ flex: 1, backgroundColor: colors.background }} contentContainerStyle={{ padding: spacing.lg, gap: spacing.md, paddingBottom: spacing.xxl }}>
+    <ScrollView keyboardShouldPersistTaps="handled" style={{ flex: 1, backgroundColor: colors.background }} contentContainerStyle={{ padding: spacing.lg, gap: spacing.md, paddingBottom: spacing.xxl }}>
       <PageHeader kicker="Inventory" title="Recipes & conversions" detail="Map POS menu names to measured ingredient usage." />
       <Button mode="text" onPress={() => router.back()}>Back to inventory</Button>
+      {(stockState.error || recipesState.error) && <Card><Card.Content><Text>Could not load all inventory data. Check your connection and try again.</Text><Button onPress={() => { void stockState.refetch(); void recipesState.refetch(); }}>Retry</Button></Card.Content></Card>}
+      {(stockState.isLoading || recipesState.isLoading) && <Text>Loading inventory data…</Text>}
+      {(stockState.subscriptionRequired || recipesState.subscriptionRequired) && <Text>An active subscription is required for recipe inventory.</Text>}
       <Card style={{ backgroundColor: colors.surface, borderRadius: radius.sharp }}><Card.Content style={{ gap: spacing.sm }}>
         <Text variant="titleMedium">Stock pack conversions</Text>
         <Text>Define how much recipe measure is inside one stock unit. Example: bottle · 750 · ml.</Text>
@@ -92,7 +97,7 @@ function InventoryRecipesScreen() {
           <Text style={{ fontWeight: '700' }}>{recipe.name}</Text>
           {recipe.ingredients.map((line) => <Text key={line.itemId}>{line.quantity} {line.unit} {line.itemName} ({line.baseQuantity} {line.baseUnit}/{line.stockUnit})</Text>)}
         </View>)}
-        {!recipes?.length && <Text>No recipes configured yet.</Text>}
+        {recipes && !recipes.length && <Text>No recipes configured yet.</Text>}
       </Card.Content></Card>
     </ScrollView>
   </ManagerGate>;

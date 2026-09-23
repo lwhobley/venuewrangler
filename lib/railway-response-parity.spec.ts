@@ -72,6 +72,7 @@ const UNANALYSABLE_ROUTES = new Set([
   'reservations.listHolds',
   'payroll.exportPayrollCsv',
   'barInventory.getBarStock',
+  'barInventory.listRecipes',
   'barInventory.getUsageVelocity',
   'barInventory.getItemMovements',
   'barInventory.exportStockCsv',

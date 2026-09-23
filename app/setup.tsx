@@ -3,7 +3,7 @@ import { ScrollView, View } from 'react-native';
 import { Button, Card, Text } from 'react-native-paper';
 import { router } from 'expo-router';
 import { api } from '../lib/railway-api';
-import { useQuery } from '../lib/railway-hooks';
+import { useQueryState } from '../lib/railway-hooks';
 import { useVenueAuth } from '../lib/useVenueAuth';
 import { colors, radius, spacing } from '../lib/theme';
 import { ManagerGate } from '../components/ManagerGate';
@@ -16,12 +16,19 @@ type Item = { _id: string };
 function SetupScreen() {
   const [showMoreSteps, setShowMoreSteps] = useState(false);
   const { venue, isReady, canManage, profileLoading, profileError, refetchProfile } = useVenueAuth();
-  const staff = useQuery(api.app.listVenueStaff, isReady && canManage ? {} : 'skip') as Staff[] | undefined;
-  const stock = useQuery(api.barInventory.getBarStock, isReady && venue?.id ? { venueId: venue.id } : 'skip') as { items: Item[] } | null | undefined;
-  const pos = useQuery(api.pos.getPosOverview, isReady && canManage ? { venueId: venue?.id } : 'skip') as { connections: Connection[]; lastSyncAt: number | null; recentChecks: unknown[] } | undefined;
-  const reservations = useQuery(api.reservationIntegrations.getReservationIntegrationOverview, isReady && canManage ? { venueId: venue?.id } : 'skip') as { connections: Connection[]; recentEvents: unknown[]; processedProviders: string[] } | undefined;
-  const menuItems = useQuery(api.pos.getTopMenuItems, isReady && canManage ? { windowDays: 30, limit: 50 } : 'skip') as Array<{ name: string; quantity: number }> | undefined;
-  const recipes = useQuery(api.barInventory.listRecipes, isReady && canManage ? {} : 'skip') as Array<{ _id: string }> | undefined;
+  const staffState = useQueryState<Staff[]>(api.app.listVenueStaff, isReady && canManage ? {} : 'skip');
+  const stockState = useQueryState<{ items: Item[] }>(api.barInventory.getBarStock, isReady && venue?.id ? { venueId: venue.id } : 'skip');
+  const posState = useQueryState<{ connections: Connection[]; lastSyncAt: number | null; recentChecks: unknown[] }>(api.pos.getPosOverview, isReady && canManage ? { venueId: venue?.id } : 'skip');
+  const reservationsState = useQueryState<{ connections: Connection[]; recentEvents: unknown[]; processedProviders: string[] }>(api.reservationIntegrations.getReservationIntegrationOverview, isReady && canManage ? { venueId: venue?.id } : 'skip');
+  const menuItemsState = useQueryState<Array<{ name: string; quantity: number }>>(api.pos.getTopMenuItems, isReady && canManage ? { windowDays: 30, limit: 50 } : 'skip');
+  const recipesState = useQueryState<Array<{ _id: string }>>(api.barInventory.listRecipes, isReady && canManage ? {} : 'skip');
+  const states = [staffState, stockState, posState, reservationsState, menuItemsState, recipesState];
+  const staff = staffState.data;
+  const stock = stockState.data;
+  const pos = posState.data;
+  const reservations = reservationsState.data;
+  const menuItems = menuItemsState.data;
+  const recipes = recipesState.data;
 
   const posConnected = Boolean(pos?.connections?.some((connection) => connection.status === 'connected'));
   const reservationsConnected = Boolean(reservations?.connections?.some((connection) => connection.status === 'connected'));
@@ -43,6 +50,9 @@ function SetupScreen() {
   return <ManagerGate canManage={canManage} profileLoading={profileLoading} profileError={profileError} onRetry={refetchProfile} feature="Venue setup">
     <ScrollView style={{ flex: 1, backgroundColor: colors.background }} contentContainerStyle={{ padding: spacing.lg, gap: spacing.md, paddingBottom: spacing.xxl }}>
       <PageHeader kicker={venue?.name ?? 'Venue'} title="Get started" detail={`${completed} of ${tasks.length} steps ready · you can finish setup later`} />
+      {states.some((state) => state.error) && <Card><Card.Content><Text>Some setup progress could not load. Check your connection and try again.</Text><Button onPress={() => states.forEach((state) => { void state.refetch(); })}>Retry</Button></Card.Content></Card>}
+      {states.some((state) => state.isLoading) && <Text>Loading setup progress…</Text>}
+      {states.some((state) => state.subscriptionRequired) && <Text>An active subscription is required to view all setup steps.</Text>}
       <Card style={{ backgroundColor: colors.surface, borderRadius: radius.sharp }}><Card.Content style={{ gap: spacing.xs }}>
         <Text variant="titleMedium" style={{ fontWeight: '800' }}>Start with one useful step</Text>
         <Text style={{ color: colors.muted }}>Keep your current POS and reservation tools running. Set up only what you need today; you can connect systems and import more data later.</Text>
