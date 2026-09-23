@@ -3,6 +3,7 @@ node_modules
 dist
 **/dist
 .git
+gha-creds-*.json
 .expo
 # Docker matches these against the context-relative path, so a bare `.env`
 # covers ONLY the repo root — unlike .gitignore, where it is recursive.
