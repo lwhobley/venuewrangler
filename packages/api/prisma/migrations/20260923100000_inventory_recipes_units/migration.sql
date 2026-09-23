@@ -49,3 +49,9 @@ CREATE UNIQUE INDEX "PosInventoryConsumption_venueId_provider_externalCheckId_it
 CREATE INDEX "PosInventoryConsumption_venueId_createdAt_idx" ON "PosInventoryConsumption"("venueId", "createdAt");
 ALTER TABLE "PosInventoryConsumption" ADD CONSTRAINT "PosInventoryConsumption_itemId_fkey"
   FOREIGN KEY ("itemId") REFERENCES "BarInventoryItem"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- Keep new tables outside the Supabase Data API surface, as required for all
+-- tables created after the 20260805120000 lockdown migration.
+ALTER TABLE "InventoryRecipe" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "InventoryRecipeLine" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "PosInventoryConsumption" ENABLE ROW LEVEL SECURITY;

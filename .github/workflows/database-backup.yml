@@ -87,15 +87,16 @@ jobs:
             --env DATABASE_URL="$DATABASE_URL" --volume /tmp:/backup \
             postgres:17-alpine@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193 \
             pg_dump "$DATABASE_URL" --format=custom --no-owner --no-acl \
-            --schema=public \
+            --schema=public --schema=app_private \
             --exclude-extension=supabase_vault \
             --file="/backup/$(basename "$dump")"
           # A successful upload alone does not prove the dump is readable.
           docker run --rm --user "$(id -u):$(id -g)" --volume /tmp:/backup \
             postgres:17-alpine@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193 \
             pg_restore --list "/backup/$(basename "$dump")" >/dev/null
-          # The dump is --schema=public, so extensions living outside public are
-          # not carried in it. Two tables (TableAssignment, TimeEntry) declare
+          # The dump includes public and app_private because public triggers
+          # call functions in app_private. Extensions living outside these
+          # schemas are not carried in it. Two tables (TableAssignment, TimeEntry) declare
           # GiST exclusion constraints whose text-equality operators come from
           # btree_gist; without it every restore drill failed on those two
           # constraints and took the whole backup job with it. Production keeps
