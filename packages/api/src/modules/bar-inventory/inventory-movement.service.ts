@@ -57,6 +57,7 @@ export class InventoryMovementService {
       } });
       const movement = await tx.barInventoryMovement.create({ data: {
         venueId, itemId, movementType, quantity, previousOnHand, nextOnHand, notes,
+        reviewRequired: movementType === 'count' && previousOnHand !== nextOnHand,
         unitCostCents: item.unitCostCents ?? null, createdBy, createdAt: now,
         ...(operationId ? { operationId } : {}),
       } });

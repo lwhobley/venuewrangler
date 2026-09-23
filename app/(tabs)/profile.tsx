@@ -97,6 +97,8 @@ function ProfileScreen() {
         </Button>
       ) : null}
 
+      {canManage ? <Button mode="outlined" textColor={colors.primary} icon="clipboard-list-outline" onPress={() => router.push('/setup')} style={{ marginBottom: spacing.sm }}>Setup & imports</Button> : null}
+
       {canManage ? (
         <Button mode="outlined" textColor={colors.primary} icon="map-marker-radius" onPress={() => router.push('/venue/settings')} style={{ marginBottom: spacing.sm }}>
           {t('profile.venueLocation')}

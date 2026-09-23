@@ -40,7 +40,13 @@ describe('inventory movement transactions', () => {
     const { service, notifications, tx } = fixture();
     await service.record({ ...input, movementType: 'count', quantity: 3 });
     await service.record({ ...input, movementType: 'count', quantity: 3 });
-    expect(tx.barInventoryMovement.create).toHaveBeenCalledWith({ data: expect.objectContaining({ previousOnHand: 10, nextOnHand: 3, unitCostCents: 2500 }) });
+    expect(tx.barInventoryMovement.create).toHaveBeenCalledWith({ data: expect.objectContaining({ previousOnHand: 10, nextOnHand: 3, unitCostCents: 2500, reviewRequired: true }) });
     expect(notifications.notifyManagers).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not send an unchanged count to review', async () => {
+    const { service, tx } = fixture();
+    await service.record({ ...input, movementType: 'count', quantity: 10 });
+    expect(tx.barInventoryMovement.create).toHaveBeenCalledWith({ data: expect.objectContaining({ reviewRequired: false }) });
   });
 });

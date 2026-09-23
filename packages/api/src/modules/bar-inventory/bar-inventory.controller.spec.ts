@@ -81,6 +81,7 @@ function makeController() {
     },
     barInventoryMovement: {
       findMany: vi.fn().mockResolvedValue([]),
+      count: vi.fn().mockResolvedValue(0),
       create: vi.fn().mockImplementation((args: any) => Promise.resolve({ id: 'movement-1', ...args.data })),
     },
     prepBoardItem: {
@@ -118,6 +119,35 @@ afterEach(() => {
 });
 
 describe('BarInventoryController', () => {
+  describe('inventory review and velocity', () => {
+    it('nets POS voids out of usage velocity', async () => {
+      const { controller, prisma } = makeController();
+      prisma.barInventoryItem.findMany.mockResolvedValue([makeItem({ onHand: 10 })]);
+      prisma.barInventoryMovement.findMany.mockResolvedValue([
+        { itemId: 'item-1', movementType: 'transfer', createdBy: 'pos', quantity: -2, previousOnHand: 10, nextOnHand: 8 },
+        { itemId: 'item-1', movementType: 'received', createdBy: 'pos', quantity: 2, previousOnHand: 8, nextOnHand: 10 },
+      ]);
+      const result = await controller.getUsageVelocity(managerUser);
+      expect(result[0].usageLast4Weeks).toBe(0);
+      expect(result[0].daysUntilEmpty).toBeNull();
+    });
+
+    it('queries only new count variances awaiting review', async () => {
+      const { controller, prisma } = makeController();
+      prisma.barInventoryMovement.count.mockResolvedValue(1);
+      prisma.barInventoryMovement.findMany.mockResolvedValue([{
+        id: 'movement-1', previousOnHand: 10, quantity: 8, notes: null,
+        createdAt: new Date('2026-01-01T00:00:00Z'), item: { name: 'Vodka', unit: 'bottle' },
+      }]);
+      const result = await controller.getPendingCountReviews(managerUser);
+      expect(prisma.barInventoryMovement.findMany).toHaveBeenCalledWith(expect.objectContaining({
+        where: { venueId: 'venue-1', movementType: 'count', reviewRequired: true, reviewedAt: null },
+      }));
+      expect(result.totalCount).toBe(1);
+      expect(result.entries[0].variance).toBe(-2);
+    });
+  });
+
   describe('authorization — read access (requireVenueProfile)', () => {
     it('rejects when the caller has no profile at all', async () => {
       const { controller, prisma } = makeController();

@@ -12,6 +12,7 @@ function makeController() {
     },
     reservationSyncEvent: {
       findMany: vi.fn().mockResolvedValue([]),
+      groupBy: vi.fn().mockResolvedValue([]),
     },
   } as any;
   const controller = new IntegrationsController(prisma);
@@ -64,6 +65,7 @@ describe('IntegrationsController', () => {
       prisma.reservationSyncEvent.findMany.mockResolvedValue([
         { id: 'evt-1', venueId: 'venue-1', provider: 'opentable', processedAt: new Date() },
       ]);
+      prisma.reservationSyncEvent.groupBy.mockResolvedValue([{ provider: 'opentable' }]);
 
       const result = await controller.getReservationIntegrationOverview(managerScope);
 
@@ -73,10 +75,15 @@ describe('IntegrationsController', () => {
         orderBy: { processedAt: 'desc' },
         take: 20,
       });
+      expect(prisma.reservationSyncEvent.groupBy).toHaveBeenCalledWith({
+        by: ['provider'],
+        where: { venueId: 'venue-1', status: 'processed' },
+      });
       expect(result.connections).toEqual([expect.objectContaining({ _id: 'conn-1', provider: 'opentable' })]);
       expect(result.connections[0]).not.toHaveProperty('webhookSecret');
       expect(result.connections[0]).not.toHaveProperty('id');
       expect(result.recentEvents).toEqual([expect.objectContaining({ _id: 'evt-1' })]);
+      expect(result.processedProviders).toEqual(['opentable']);
     });
 
     it('returns empty lists when no connections or events exist', async () => {
@@ -84,7 +91,7 @@ describe('IntegrationsController', () => {
 
       const result = await controller.getReservationIntegrationOverview(managerScope);
 
-      expect(result).toEqual({ connections: [], recentEvents: [] });
+      expect(result).toEqual({ connections: [], recentEvents: [], processedProviders: [] });
     });
   });
 

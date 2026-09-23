@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
+import { Linking, Pressable, ScrollView, View } from 'react-native';
 import { router } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { IconButton, Text, TextInput } from 'react-native-paper';
+import { Button, IconButton, Text, TextInput } from 'react-native-paper';
 import { colors, spacing, type } from '../lib/theme';
 import { AppCard, Kicker } from '../components/AppCard';
 import { PageHeader } from '../components/design-system';
@@ -95,6 +95,8 @@ export default function HelpScreen() {
         left={<TextInput.Icon icon="magnify" />}
         style={{ backgroundColor: colors.surface }}
       />
+
+      <Button mode="outlined" icon="email-outline" onPress={() => void Linking.openURL('mailto:support@venuewrangler.com?subject=Venue%20Wrangler%20support')}>Contact support</Button>
 
       {filtered.length === 0 ? (
         <Text style={{ color: colors.muted }}>{t('help.noResults', { query })}</Text>

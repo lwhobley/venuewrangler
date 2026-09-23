@@ -167,6 +167,65 @@ function IntegrationsScreenInner() {
         detail={t('integrations.header.subtitle', { venue: venue?.name ?? t('integrations.header.venueFallback') })}
       />
 
+      <Card style={{ backgroundColor: colors.surfaceSoft, borderRadius: radius.sharp, borderWidth: 1, borderColor: colors.border }}>
+        <Card.Content style={{ gap: spacing.sm }}>
+          <Text variant="titleMedium" style={{ fontWeight: '700' }}>Run alongside your current systems</Text>
+          <Text style={{ color: colors.muted }}>
+            Keep using your current POS and reservation tools while evaluating Venue Wrangler. Connected webhook feeds bring data into this app without requiring a hardware or system cutover.
+          </Text>
+          <Text style={{ color: colors.muted, fontSize: 12 }}>
+            Feed age reflects the last webhook delivery. A quiet venue can have an older timestamp even when the connection is healthy; check with your provider if you expected recent activity.
+          </Text>
+        </Card.Content>
+      </Card>
+
+      <Card style={{ backgroundColor: colors.surface, borderRadius: radius.sharp }}>
+        <Card.Content style={{ gap: spacing.sm }}>
+          <Text variant="titleMedium" style={{ fontWeight: '700' }}>Feed freshness</Text>
+          {[
+            { label: 'POS', connections: overview?.connections ?? [] },
+            { label: 'Reservations', connections: reservationOverview?.connections ?? [] },
+          ].map((feed) => (
+            <View key={feed.label} style={{ borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.sm, gap: 2 }}>
+              <Text style={{ fontWeight: '700', color: colors.charcoal }}>{feed.label}</Text>
+              {feed.connections.length === 0 ? (
+                <Text style={{ color: colors.muted }}>Not configured</Text>
+              ) : feed.connections.map((connection: any) => {
+                const lastSync = connection.lastSyncAt ? new Date(connection.lastSyncAt) : null;
+                const ageHours = lastSync ? (Date.now() - lastSync.getTime()) / 3_600_000 : null;
+                const status = connection.status !== 'connected'
+                  ? `Connection ${connection.status}`
+                  : lastSync === null
+                    ? 'Connected · no webhook data received yet'
+                    : ageHours !== null && ageHours <= 24
+                      ? 'Recent webhook data'
+                      : 'No webhook data in the last 24 hours';
+                return (
+                  <View key={connection._id} style={{ gap: 2 }}>
+                    <Text style={{ color: connection.status === 'connected' && (ageHours === null || ageHours > 24) ? colors.warning : colors.muted }}>
+                      {connection.provider} · {status}
+                    </Text>
+                    <Text style={{ color: colors.muted, fontSize: 12 }}>
+                      Last delivery: {lastSync ? formatShortDateTime(connection.lastSyncAt) : 'Never'}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+          ))}
+          {(reservationOverview?.recentEvents ?? []).some((event: any) => event.status === 'failed') ? (
+            <View style={{ gap: 4 }}>
+              <Text style={{ fontWeight: '700', color: colors.warning }}>Recent reservation delivery issues</Text>
+              {reservationOverview.recentEvents.filter((event: any) => event.status === 'failed').slice(0, 3).map((event: any) => (
+                <Text key={event._id} style={{ color: colors.warning, fontSize: 12 }}>
+                  {event.provider} · {formatShortDateTime(event.processedAt)}{event.errorMessage ? ` · ${event.errorMessage}` : ''}
+                </Text>
+              ))}
+            </View>
+          ) : null}
+        </Card.Content>
+      </Card>
+
       {newSecret ? (
         <Card style={{ backgroundColor: colors.surfaceSoft, borderRadius: radius.sharp, borderWidth: 1, borderColor: colors.warning }}>
           <Card.Content style={{ gap: spacing.sm }}>

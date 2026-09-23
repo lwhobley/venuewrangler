@@ -1,5 +1,5 @@
 import { BadRequestException, Body, Controller, ForbiddenException, Get, Headers, NotFoundException, Param, Patch, Post, Query, Req, UnauthorizedException } from '@nestjs/common';
-import { ArrayMaxSize, IsArray, IsBoolean, IsIn, IsInt, IsNumber, IsOptional, IsString, MaxLength, Min, ValidateNested } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsBoolean, IsIn, IsInt, IsNumber, IsOptional, IsString, Max, MaxLength, Min, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import { Prisma, PosProvider, PosCheckStatus } from '@prisma/client';
 import type { Request } from 'express';
@@ -15,6 +15,7 @@ import { VenueScope } from '../../venue/venue-scope.decorator';
 import type { VenueScopedRequest } from '../../venue/venue-scope.interceptor';
 import { Audited } from '../audit/audited.decorator';
 import { capabilitiesFor, POS_CAPABILITY_LEGEND, POS_PROVIDER_CAPABILITIES, POS_PROVIDERS } from './pos-provider-capabilities';
+import { InventoryRecipeService } from '../bar-inventory/inventory-recipe.service';
 
 type Scope = VenueScopedRequest['venueScope'];
 
@@ -119,6 +120,8 @@ class IngestMenuItemDto {
   category?: string;
 
   @IsNumber()
+  @Min(0)
+  @Max(100_000)
   quantity!: number;
 
   @IsInt()
@@ -205,7 +208,7 @@ class PosIngestDto {
 
 @Controller('v1/pos')
 export class PosController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly inventoryRecipes?: InventoryRecipeService) {}
 
   // External POS providers POST normalized sales/labor here. Authenticated by a
   // per-connection webhook secret (issued by upsertPosConnection), not a user
@@ -351,6 +354,17 @@ export class PosController {
     ];
     for (let i = 0; i < operations.length; i += INGEST_CHUNK_SIZE) {
       await this.prisma.$transaction(operations.slice(i, i + INGEST_CHUNK_SIZE));
+    }
+
+    // Only paid checks consume recipe ingredients. Re-delivered checks are
+    // safe: recipe movements use stable idempotency keys. Voids reverse the
+    // recorded depletion once.
+    for (const input of body.checks ?? []) {
+      const check = await this.prisma.posCheck.findUnique({
+        where: { venueId_provider_externalCheckId: { venueId, provider, externalCheckId: input.externalCheckId } },
+        select: { venueId: true, provider: true, externalCheckId: true, status: true, menuItems: true, openedAt: true, closedAt: true },
+      });
+      if (check) await this.inventoryRecipes?.processPosCheck(check);
     }
 
     const checksUpserted = checkOperations.length;

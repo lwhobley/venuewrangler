@@ -38,17 +38,21 @@ export class IntegrationsController {
     if (!scope || !canManageVenue(scope.role, scope.allAccess)) {
       throw new ForbiddenException('Not authorized');
     }
-    const [rawConnections, rawEvents] = await Promise.all([
+    const [rawConnections, rawEvents, processedSources] = await Promise.all([
       this.prisma.reservationConnection.findMany({ where: { venueId: scope.venueId } }),
       this.prisma.reservationSyncEvent.findMany({
         where: { venueId: scope.venueId },
         orderBy: { processedAt: 'desc' },
         take: 20,
       }),
+      this.prisma.reservationSyncEvent.groupBy({
+        by: ['provider'],
+        where: { venueId: scope.venueId, status: 'processed' },
+      }),
     ]);
     const connections = rawConnections.map(({ id, webhookSecret: _, ...rest }) => ({ _id: id, ...rest }));
     const recentEvents = rawEvents.map(({ id, ...rest }) => ({ _id: id, ...rest }));
-    return { connections, recentEvents };
+    return { connections, recentEvents, processedProviders: processedSources.map((row) => row.provider) };
   }
 
   @RequireSubscription('active')

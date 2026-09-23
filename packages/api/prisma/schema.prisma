@@ -410,6 +410,7 @@ model Venue {
   reservationConnections        ReservationConnection[]
   reservationSyncEvents         ReservationSyncEvent[]
   barInventoryItems             BarInventoryItem[]
+  inventoryRecipes              InventoryRecipe[]
   barInventoryMovements         BarInventoryMovement[]
   prepBoardItems                PrepBoardItem[]
   staffOnboardingTasks          StaffOnboardingTask[]
@@ -1883,6 +1884,9 @@ model BarInventoryItem {
   category      BarStockCategory
   area          String?
   unit          String
+  // Each stock unit contains this many units of baseUnit (e.g. bottle => 750 ml).
+  baseUnit      String                 @default("each")
+  baseQuantity  Float                  @default(1)
   parLevel      Float
   onHand        Float
   unitCostCents Int?
@@ -1894,6 +1898,8 @@ model BarInventoryItem {
   updatedAt     DateTime               @updatedAt
   venue         Venue                  @relation(fields: [venueId], references: [id], onDelete: Cascade)
   movements     BarInventoryMovement[]
+  recipeLines   InventoryRecipeLine[]
+  posConsumptions PosInventoryConsumption[]
 
   @@index([venueId])
   @@index([venueId, category])
@@ -1903,6 +1909,50 @@ model BarInventoryItem {
   // so two items sharing one opened whichever row came back. NULLs stay
   // distinct in Postgres, so items with no SKU are unconstrained.
   @@unique([venueId, sku])
+}
+
+model InventoryRecipe {
+  id            String                @id @default(cuid())
+  venueId       String
+  name          String
+  normalizedName String
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+  venue         Venue                 @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  ingredients   InventoryRecipeLine[]
+
+  @@unique([venueId, normalizedName])
+  @@index([venueId])
+}
+
+model InventoryRecipeLine {
+  id          String          @id @default(cuid())
+  recipeId    String
+  itemId      String
+  quantity    Float
+  unit        String
+  recipe      InventoryRecipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  item        BarInventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@unique([recipeId, itemId])
+  @@index([itemId])
+}
+
+model PosInventoryConsumption {
+  id              String           @id @default(cuid())
+  venueId         String
+  provider        PosProvider
+  externalCheckId String
+  itemId          String
+  quantity        Float
+  appliedQuantity Float            @default(0)
+  cycle           Int              @default(1)
+  reversedAt      DateTime?
+  createdAt       DateTime         @default(now())
+  item            BarInventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@unique([venueId, provider, externalCheckId, itemId])
+  @@index([venueId, createdAt])
 }
 
 model BarInventoryMovement {
@@ -1920,6 +1970,9 @@ model BarInventoryMovement {
   unitCostCents  Int?
   notes          String?
   createdBy      String
+  reviewRequired Boolean              @default(false)
+  reviewedAt     DateTime?
+  reviewedBy     String?
   createdAt      DateTime             @default(now())
   venue          Venue                @relation(fields: [venueId], references: [id], onDelete: Cascade)
   item           BarInventoryItem     @relation(fields: [itemId], references: [id], onDelete: Cascade)

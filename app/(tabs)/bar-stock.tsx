@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { Modal, Platform, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
-import { useFocusEffect } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { Button, Card, Chip, Text, TextInput } from 'react-native-paper';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -12,7 +12,7 @@ import { api } from '../../lib/railway-api';
 import type { Id } from '../../lib/ids';
 import { accents, colors, radius, spacing } from '../../lib/theme';
 import { useVenueAuth } from '../../lib/useVenueAuth';
-import { errorMessage } from '../../lib/format';
+import { errorMessage, formatShortDateTime } from '../../lib/format';
 import { useI18n } from '../../lib/i18n';
 import { ManagerGate } from '../../components/ManagerGate';
 import {
@@ -222,6 +222,8 @@ function BarStockScreen() {
   const purchaseOrderCsv = useQuery(api.barInventory.exportPurchaseOrderCsv, isReady && canManage && showPurchaseOrderCsv ? {} : 'skip') as string | null | undefined;
   const costHistory = useQuery(api.barInventory.getCostHistory, isReady && canManage && costHistoryItemId ? { itemId: costHistoryItemId } : 'skip') as { itemName: string; currentCostCents: number | null; entries: CostHistoryEntry[] } | null | undefined;
   const agingReport = useQuery(api.barInventory.getAgingReport, isReady && canManage && showAgingReport ? {} : 'skip') as AgingReport | null | undefined;
+  const countReviews = useQuery(api.barInventory.getPendingCountReviews, isReady && canManage ? {} : 'skip') as { totalCount: number; entries: Array<{ _id: string; itemName: string; unit: string; previousOnHand: number; countedOnHand: number; variance: number; createdAt: number }> } | null | undefined;
+  const reviewCountMovement = useMutation(api.barInventory.reviewCountMovement);
 
   const allItems = useMemo(() => {
     const rawItems = (stock?.items ?? []) as BarItem[];
@@ -664,6 +666,21 @@ function BarStockScreen() {
       showsVerticalScrollIndicator={false}
     >
       <PageHeader kicker={t('barStock.header.kicker')} title={t('barStock.header.title')} detail={t('barStock.header.managerSubtitle')} />
+      {canManage ? <Button compact mode="outlined" icon="book-edit-outline" onPress={() => router.push('/inventory-recipes')}>Recipes & unit conversions</Button> : null}
+
+      {canManage && (countReviews?.totalCount ?? 0) > 0 ? <Card style={{ backgroundColor: accents[4].bg, borderRadius: radius.sharp }}>
+        <Card.Content style={{ gap: spacing.sm }}>
+          <Text variant="titleMedium" style={{ color: accents[4].fg, fontWeight: '800' }}>Count variances to review · {countReviews?.totalCount}</Text>
+          <Text style={{ color: colors.muted }}>Counts already updated on-hand stock. Review these differences to confirm the count and keep an audit trail.</Text>
+          {(countReviews?.entries ?? []).slice(0, 20).map((entry) => <View key={entry._id} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.xs }}>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: colors.charcoal, fontWeight: '700' }}>{entry.itemName}: {entry.previousOnHand} → {entry.countedOnHand} {entry.unit}</Text>
+              <Text style={{ color: colors.muted }}>Variance {entry.variance > 0 ? '+' : ''}{entry.variance} · {formatShortDateTime(entry.createdAt)}</Text>
+            </View>
+            <Button compact mode="outlined" onPress={() => { void reviewCountMovement({ movementId: entry._id }).catch((error) => setMessage(errorMessage(error, 'Could not record review.'))); }}>Reviewed</Button>
+          </View>)}
+        </Card.Content>
+      </Card> : null}
 
       {offlinePendingCount > 0 && (
         <Card style={{ backgroundColor: '#fff3cd', borderColor: '#ffeeba', borderWidth: 1, borderRadius: radius.sharp }}>

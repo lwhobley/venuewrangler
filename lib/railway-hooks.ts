@@ -73,6 +73,7 @@ const queryRoutes: Record<string, Route> = {
   'payroll.getPayrollSummary': { path: (args) => `/v1/payroll/summary${args.startDate ? `?startDate=${args.startDate}&endDate=${args.endDate ?? ''}` : ''}` },
   'payroll.exportPayrollCsv': { path: (args) => `/v1/payroll/export-csv${args.startDate ? `?startDate=${args.startDate}&endDate=${args.endDate ?? ''}` : ''}` },
   'barInventory.getBarStock': { path: '/v1/bar-inventory' },
+  'barInventory.listRecipes': { path: '/v1/bar-inventory/recipes' },
   'barInventory.getUsageVelocity': { path: '/v1/bar-inventory/velocity' },
   'barInventory.getItemMovements': { path: (args) => `/v1/bar-inventory/${enc(args.itemId)}/movements?limit=${args.limit ?? 50}` },
   'barInventory.exportStockCsv': { path: '/v1/bar-inventory/export-csv' },
@@ -82,6 +83,7 @@ const queryRoutes: Record<string, Route> = {
   'barInventory.exportPurchaseOrderCsv': { path: '/v1/bar-inventory/purchase-order/export-csv' },
   'barInventory.getCostHistory': { path: (args) => `/v1/bar-inventory/cost-history/${enc(args.itemId)}` },
   'barInventory.getAgingReport': { path: '/v1/bar-inventory/aging' },
+  'barInventory.getPendingCountReviews': { path: '/v1/bar-inventory/corrections' },
   'barInventory.listPrepBoard': { path: '/v1/bar-inventory/prep-board' },
   'cosmicInsights.getLatestInsights': { path: '/v1/insights' },
   'floor.getActiveFloorPlan': { path: '/v1/floor/active' },
@@ -418,6 +420,9 @@ const mutationRoutes: Record<string, Route> = {
   'guests.rotateLeadsWebhookSecret': { path: '/v1/guests/rotate-webhook-secret', method: 'POST', body: () => ({}), invalidate: [['guests', 'listGuests']] },
   'operations.upsertManagerGoal': { path: '/v1/operations/manager-goal', method: 'PATCH', body: stripVenue, invalidate: [['operations', 'getManagerDashboard']] },
   'barInventory.upsertBarItem': { path: '/v1/bar-inventory', method: 'POST', body: stripVenue, invalidate: inventoryInvalidations() },
+  'barInventory.upsertRecipe': { path: '/v1/bar-inventory/recipes', method: 'POST', body: stripVenue, invalidate: [['barInventory', 'listRecipes'], ['barInventory', 'getPurchaseOrder']] },
+  'barInventory.updateItemConversion': { path: (args) => `/v1/bar-inventory/${enc(args.itemId)}/conversion`, method: 'PATCH', body: ({ baseUnit, baseQuantity }) => ({ baseUnit, baseQuantity }), invalidate: inventoryInvalidations() },
+  'barInventory.reviewCountMovement': { path: (args) => `/v1/bar-inventory/movements/${enc(args.movementId)}/review`, method: 'PATCH', body: () => ({}), invalidate: [['barInventory', 'getPendingCountReviews']] },
   'barInventory.recordBarStockMovement': { path: (args) => `/v1/bar-inventory/${enc(args.itemId)}/movement`, method: 'POST', body: ({ movementType, quantity, notes, operationId }) => ({ movementType, quantity, notes, operationId }), invalidate: inventoryInvalidations() },
   'barInventory.importParsedBarItems': { path: '/v1/bar-inventory/import', method: 'POST', body: ({ items }) => ({ items }), invalidate: inventoryInvalidations() },
   'barInventory.parseBarInventoryInput': { path: '/v1/bar-inventory/parse', method: 'POST', body: ({ text, imageBase64, imageMimeType }) => ({ text, imageBase64, imageMimeType }) },
@@ -706,6 +711,7 @@ function inventoryInvalidations() {
   // the manager to reorder an item that had just been counted back to par.
   return [
     ['barInventory', 'getBarStock'],
+    ['barInventory', 'listRecipes'],
     ['barInventory', 'getPurchaseOrder'],
     ['barInventory', 'getUsageVelocity'],
     ['barInventory', 'getShrinkageReport'],

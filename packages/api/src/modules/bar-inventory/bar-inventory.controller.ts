@@ -13,7 +13,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { ArrayMaxSize, IsArray, IsIn, IsNumber, IsOptional, IsString, Matches, MaxLength, Min, ValidateNested } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsIn, IsNumber, IsOptional, IsString, Matches, Max, MaxLength, Min, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import { AuthGuard } from '../../auth/auth.guard';
 import { CurrentUser } from '../../auth/current-user.decorator';
@@ -29,6 +29,8 @@ import { EmailService } from '../../email/email.service';
 import { BarInventoryParserService } from './bar-inventory-parser.service';
 import { BarInventoryReportsService } from './bar-inventory-reports.service';
 import { InventoryMovementService } from './inventory-movement.service';
+import { convertQuantity, normalizeUnit } from './inventory-units';
+import { Audited } from '../audit/audited.decorator';
 
 const CATEGORIES = [
   'spirit', 'wine', 'beer', 'mixer', 'garnish', 'supply', 'other',
@@ -174,6 +176,36 @@ class UpdateCostDto {
   unitCostCents!: number;
 }
 
+class UpdateItemConversionDto {
+  @IsString() @MaxLength(30)
+  baseUnit!: string;
+
+  @IsNumber() @Min(0.000001) @Max(1_000_000_000)
+  baseQuantity!: number;
+}
+
+class RecipeIngredientDto {
+  @IsString() @MaxLength(64)
+  itemId!: string;
+
+  @IsNumber() @Min(0.000001) @Max(1_000_000)
+  quantity!: number;
+
+  @IsString() @MaxLength(30)
+  unit!: string;
+}
+
+class UpsertRecipeDto {
+  @IsString() @IsOptional() @MaxLength(64)
+  recipeId?: string;
+
+  @IsString() @MaxLength(200)
+  name!: string;
+
+  @IsArray() @ArrayMaxSize(100) @ValidateNested({ each: true }) @Type(() => RecipeIngredientDto)
+  ingredients!: RecipeIngredientDto[];
+}
+
 class ParseBarInventoryInputDto {
   @IsString()
   @IsOptional()
@@ -259,6 +291,8 @@ function mapItem(item: {
   category: string;
   area: string | null;
   unit: string;
+  baseUnit: string;
+  baseQuantity: number;
   parLevel: number;
   onHand: number;
   unitCostCents: number | null;
@@ -276,6 +310,8 @@ function mapItem(item: {
     category: item.category,
     area: item.area ?? null,
     unit: item.unit,
+    baseUnit: item.baseUnit,
+    baseQuantity: item.baseQuantity,
     parLevel: item.parLevel,
     onHand: item.onHand,
     unitCostCents: includeCosts ? item.unitCostCents ?? null : null,
@@ -363,6 +399,77 @@ export class BarInventoryController {
         )
         : null,
     };
+  }
+
+  @RequireSubscription('active')
+  @Get('recipes')
+  async listRecipes(@CurrentUser() user: AuthUser) {
+    const profile = await this.requireManagerProfile(user);
+    const recipes = await this.prisma.inventoryRecipe.findMany({
+      where: { venueId: profile.venueId! }, orderBy: { name: 'asc' },
+      include: { ingredients: { include: { item: { select: { id: true, name: true, unit: true, baseUnit: true, baseQuantity: true } } } } },
+    });
+    return recipes.map((recipe) => ({
+      _id: recipe.id, name: recipe.name,
+      ingredients: recipe.ingredients.map((line) => ({
+        itemId: line.itemId, itemName: line.item.name, quantity: line.quantity, unit: line.unit,
+        stockUnit: line.item.unit, baseUnit: line.item.baseUnit, baseQuantity: line.item.baseQuantity,
+      })),
+    }));
+  }
+
+  @RequireSubscription('active')
+  @Post('recipes')
+  async upsertRecipe(@CurrentUser() user: AuthUser, @Body() body: UpsertRecipeDto) {
+    const profile = await this.requireManagerProfile(user);
+    const venueId = profile.venueId!;
+    const name = body.name.trim();
+    if (!name) throw new BadRequestException('Recipe name is required');
+    if (!body.ingredients.length) throw new BadRequestException('A recipe must include at least one inventory ingredient');
+    const normalized = normalizeInventoryName(name);
+    const uniqueItems = new Set(body.ingredients.map((line) => line.itemId));
+    if (uniqueItems.size !== body.ingredients.length) throw new BadRequestException('Each inventory item can appear only once in a recipe');
+    const items = await this.prisma.barInventoryItem.findMany({ where: { venueId, id: { in: [...uniqueItems] } } });
+    if (items.length !== uniqueItems.size) throw new BadRequestException('Recipe ingredients must belong to this venue');
+    const itemById = new Map(items.map((item) => [item.id, item]));
+    for (const line of body.ingredients) {
+      const item = itemById.get(line.itemId)!;
+      convertQuantity(line.quantity, line.unit, item.baseUnit);
+      if (!(item.baseQuantity > 0)) throw new BadRequestException(`Set a valid pack conversion for ${item.name} before using it in a recipe`);
+    }
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const existing = body.recipeId
+          ? await tx.inventoryRecipe.findFirst({ where: { id: body.recipeId, venueId } })
+          : await tx.inventoryRecipe.findFirst({ where: { venueId, normalizedName: normalized } });
+        if (body.recipeId && !existing) throw new NotFoundException('Recipe not found');
+        const recipe = existing
+          ? await tx.inventoryRecipe.update({ where: { id: existing.id }, data: { name, normalizedName: normalized, updatedAt: new Date() } })
+          : await tx.inventoryRecipe.create({ data: { venueId, name, normalizedName: normalized } });
+        await tx.inventoryRecipeLine.deleteMany({ where: { recipeId: recipe.id } });
+        if (body.ingredients.length) await tx.inventoryRecipeLine.createMany({
+          data: body.ingredients.map((line) => ({ recipeId: recipe.id, itemId: line.itemId, quantity: line.quantity, unit: normalizeUnit(line.unit) })),
+        });
+        return { _id: recipe.id, name: recipe.name, ingredientCount: body.ingredients.length };
+      });
+    } catch (error: any) {
+      if (error?.code === 'P2002') throw new ConflictException('A recipe with this POS menu name already exists.');
+      throw error;
+    }
+  }
+
+  @RequireSubscription('active')
+  @Patch(':id/conversion')
+  async updateItemConversion(@CurrentUser() user: AuthUser, @Param('id') itemId: string, @Body() body: UpdateItemConversionDto) {
+    const profile = await this.requireManagerProfile(user);
+    const baseUnit = normalizeUnit(body.baseUnit);
+    convertQuantity(1, baseUnit, baseUnit); // validate that this is a supported canonical measure
+    const item = await this.prisma.barInventoryItem.findFirst({ where: { id: itemId, venueId: profile.venueId! } });
+    if (!item) throw new NotFoundException('Item not found');
+    const recipeLines = await this.prisma.inventoryRecipeLine.findMany({ where: { itemId }, select: { quantity: true, unit: true } });
+    for (const line of recipeLines) convertQuantity(line.quantity, line.unit, baseUnit);
+    const updated = await this.prisma.barInventoryItem.update({ where: { id: itemId }, data: { baseUnit, baseQuantity: body.baseQuantity, updatedAt: new Date() } });
+    return mapItem(updated);
   }
 
   @RequireSubscription('active')
@@ -511,31 +618,25 @@ export class BarInventoryController {
       where: {
         venueId,
         createdAt: { gte: fourWeeksAgo },
-        movementType: { in: ['waste', 'comp', 'transfer'] },
+        OR: [
+          { movementType: { in: ['waste', 'comp', 'transfer'] } },
+          { movementType: 'received', createdBy: 'pos' },
+        ],
       },
-      select: { itemId: true, quantity: true, createdAt: true },
-    });
-    const countMovements = await this.prisma.barInventoryMovement.findMany({
-      where: {
-        venueId,
-        createdAt: { gte: fourWeeksAgo },
-        movementType: 'count',
-      },
-      select: { itemId: true, quantity: true, previousOnHand: true, createdAt: true },
+      select: { itemId: true, quantity: true, movementType: true, createdBy: true, previousOnHand: true, nextOnHand: true },
     });
     const usageByItem = new Map<string, number>();
     for (const d of depletions) {
-      usageByItem.set(d.itemId, (usageByItem.get(d.itemId) ?? 0) + Math.abs(d.quantity));
-    }
-    for (const c of countMovements) {
-      const impliedUsage = c.previousOnHand - c.quantity;
-      if (impliedUsage > 0) {
-        usageByItem.set(c.itemId, (usageByItem.get(c.itemId) ?? 0) + impliedUsage);
-      }
+      // POS voids are received movements. Net the actual stock change so a
+      // paid check followed by a void contributes zero usage in this window.
+      const used = d.createdBy === 'pos'
+        ? d.previousOnHand - d.nextOnHand
+        : d.movementType === 'received' ? 0 : Math.abs(d.quantity);
+      usageByItem.set(d.itemId, (usageByItem.get(d.itemId) ?? 0) + used);
     }
     const weeks = 4;
     return items.map((item) => {
-      const totalUsed = usageByItem.get(item.id) ?? 0;
+      const totalUsed = Math.max(0, usageByItem.get(item.id) ?? 0);
       const perWeek = totalUsed / weeks;
       const daysUntilEmpty = perWeek > 0 ? Math.round((item.onHand / (perWeek / 7)) * 10) / 10 : null;
       return {
@@ -745,6 +846,38 @@ export class BarInventoryController {
   async getAgingReport(@CurrentUser() user: AuthUser) {
     const profile = await this.requireManagerProfile(user);
     return this.reports.agingReport(profile.venueId!);
+  }
+
+  @RequireSubscription('active')
+  @Get('corrections')
+  async getPendingCountReviews(@CurrentUser() user: AuthUser) {
+    const profile = await this.requireManagerProfile(user);
+    const where = { venueId: profile.venueId!, movementType: 'count' as const, reviewRequired: true, reviewedAt: null };
+    const [rows, totalCount] = await Promise.all([
+      this.prisma.barInventoryMovement.findMany({ where, include: { item: { select: { name: true, unit: true } } }, orderBy: { createdAt: 'desc' }, take: 100 }),
+      this.prisma.barInventoryMovement.count({ where }),
+    ]);
+    return {
+      totalCount,
+      entries: rows.map((row) => ({
+        _id: row.id, itemName: row.item.name, unit: row.item.unit,
+        previousOnHand: row.previousOnHand, countedOnHand: row.quantity,
+        variance: row.quantity - row.previousOnHand, notes: row.notes,
+        createdAt: row.createdAt.getTime(),
+      })),
+    };
+  }
+
+  @RequireSubscription('active')
+  @Audited('inventory.count_reviewed', { entityType: 'bar_inventory_movement', summary: 'Reviewed an inventory count variance' })
+  @Patch('movements/:id/review')
+  async reviewCountMovement(@CurrentUser() user: AuthUser, @Param('id') movementId: string) {
+    const profile = await this.requireManagerProfile(user);
+    const movement = await this.prisma.barInventoryMovement.findFirst({ where: { id: movementId, venueId: profile.venueId!, movementType: 'count' } });
+    if (!movement) throw new NotFoundException('Count adjustment not found');
+    const reviewedAt = movement.reviewedAt ?? new Date();
+    if (!movement.reviewedAt) await this.prisma.barInventoryMovement.update({ where: { id: movement.id }, data: { reviewedAt, reviewedBy: profile.id } });
+    return { reviewedAt: reviewedAt.getTime() };
   }
 
   // ── Send purchase order email ─────────────────────────────────────────

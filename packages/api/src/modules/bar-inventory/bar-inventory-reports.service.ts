@@ -2,28 +2,6 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { csvCell, csvDocument } from '../../common/csv';
 
-/** Escapes a POS/inventory name so it can be embedded in a RegExp literally. */
-function escapeRegExp(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-/**
- * Matches `name` as a whole phrase inside a larger string.
- *
- * \b only asserts a boundary next to a word character, so it never matches a
- * name that starts or ends with punctuation — "#9 Gin" or "Amaro (Nonino)"
- * would score zero velocity forever. Asserting "no word character adjacent"
- * instead behaves the same for ordinary names and works for these too.
- */
-function wholePhraseRegExp(name: string) {
-  return new RegExp(`(?<!\\w)${escapeRegExp(name)}(?!\\w)`, 'i');
-}
-
-/** Word tokens used to pre-filter match candidates. */
-function nameTokens(value: string) {
-  return value.match(/[a-z0-9]+/gi)?.map((token) => token.toLowerCase()) ?? [];
-}
-
 /**
  * Read-only bar-inventory analytics extracted from BarInventoryController.
  *
@@ -43,7 +21,7 @@ export class BarInventoryReportsService {
     const [movements, items] = await Promise.all([
       this.prisma.barInventoryMovement.findMany({
         where: { venueId, createdAt: { gte: thirtyDaysAgo } },
-        select: { itemId: true, movementType: true, quantity: true, createdAt: true },
+        select: { itemId: true, movementType: true, quantity: true, unitCostCents: true, createdAt: true },
       }),
       this.prisma.barInventoryItem.findMany({
         where: { venueId },
@@ -60,7 +38,7 @@ export class BarInventoryReportsService {
       if (!item) continue;
       const cat = item.category;
       const entry = byCategory.get(cat) ?? initCat();
-      const costCents = item.unitCostCents ?? 0;
+      const costCents = m.unitCostCents ?? item.unitCostCents ?? 0;
       if (m.movementType === 'received') {
         entry.received += Math.abs(m.quantity);
       } else if (m.movementType === 'waste') {
@@ -98,101 +76,21 @@ export class BarInventoryReportsService {
     return { rows, totals, windowDays: 30 };
   }
 
-  // ── Purchase order draft (below-par items grouped by supplier with AI POS Sync velocity) ──
+  // ── Purchase order draft, boosted by recipe-based POS ingredient usage ──
   async purchaseOrder(venueId: string) {
-    const [items, posChecks] = await Promise.all([
+    const [items, consumptions] = await Promise.all([
       this.prisma.barInventoryItem.findMany({
         where: { venueId },
         orderBy: [{ supplier: 'asc' }, { name: 'asc' }],
       }),
-      this.prisma.posCheck.findMany({
-        where: { venueId, openedAt: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } },
-        select: { menuItems: true },
+      this.prisma.posInventoryConsumption.findMany({
+        where: { venueId, createdAt: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) }, reversedAt: null },
+        select: { itemId: true, quantity: true },
       }),
     ]);
-
-    // Parse POS sales
-    const salesMap = new Map<string, number>();
-    for (const check of posChecks) {
-      if (!check.menuItems) continue;
-      try {
-        const checkItems = typeof check.menuItems === 'string' ? JSON.parse(check.menuItems) : check.menuItems;
-        if (Array.isArray(checkItems)) {
-          for (const ci of checkItems) {
-            const name = String(ci.name ?? '').toLowerCase().trim();
-            const qty = Number(ci.quantity ?? 1);
-            salesMap.set(name, (salesMap.get(name) ?? 0) + qty);
-          }
-        }
-      } catch (e) {
-        // ignore JSON parse error
-      }
-    }
-
-    // Single-attribution: each sold POS item credits AT MOST ONE best-matching inventory item.
-    // Loose substring matching (like .includes()) could erroneously credit "Gin" to "Ginger Ale", "Ginger Beer", etc.
     const inventoryVelocityMap = new Map<string, number>();
-    // Each item's word-boundary pattern is compiled once here, not once per
-    // (sold name x item) pair: this runs over the venue's whole item list and
-    // 30 days of check lines, neither of which is row-capped.
-    const normalizedItems = items.map((item, index) => {
-      const lower = item.name.toLowerCase().trim();
-      return { item, index, lower, wordRegex: wholePhraseRegExp(lower), tokens: nameTokens(lower) };
-    });
-    const itemsByExactName = new Map(normalizedItems.map((ni) => [ni.lower, ni]));
-    // Any phrase match in either direction shares at least one word with the
-    // sold name, so this index narrows the scan from the whole item list to a
-    // handful per check line.
-    const itemsByToken = new Map<string, typeof normalizedItems>();
-    // A name with no word characters at all indexes under no token, so it has
-    // to stay in every candidate set or it could never match.
-    const tokenlessItems = normalizedItems.filter((ni) => ni.tokens.length === 0);
-    for (const ni of normalizedItems) {
-      for (const token of new Set(ni.tokens)) {
-        const bucket = itemsByToken.get(token);
-        if (bucket) bucket.push(ni);
-        else itemsByToken.set(token, [ni]);
-      }
-    }
-
-    for (const [soldName, qty] of salesMap.entries()) {
-      if (!soldName || qty <= 0) continue;
-      // 1. Exact match
-      let bestItem = itemsByExactName.get(soldName);
-      // 2. If no exact match, try matching by word boundary
-      if (!bestItem) {
-        const soldRegex = wholePhraseRegExp(soldName);
-        const nearby = new Set<(typeof normalizedItems)[number]>(tokenlessItems);
-        for (const token of new Set(nameTokens(soldName))) {
-          for (const ni of itemsByToken.get(token) ?? []) nearby.add(ni);
-        }
-        const candidates = [...nearby]
-          .filter((ni) => ni.wordRegex.test(soldName) || soldRegex.test(ni.lower))
-          // Restore item order so an equal-length tie resolves the same way it
-          // would have when this scanned the item list directly.
-          .sort((a, b) => a.index - b.index);
-        if (candidates.length === 1) {
-          bestItem = candidates[0];
-        } else if (candidates.length > 1) {
-          // Longest name wins: "gin" and "gin fizz" both match a "Gin Fizz"
-          // sale, and the more specific item is the one actually poured.
-          bestItem = candidates.reduce((a, b) => (b.lower.length > a.lower.length ? b : a));
-        }
-      }
-      if (bestItem) {
-        inventoryVelocityMap.set(bestItem.item.id, (inventoryVelocityMap.get(bestItem.item.id) ?? 0) + qty);
-      }
-    }
-
-    const getVelocity = (idOrName: string) => {
-      const byId = inventoryVelocityMap.get(idOrName);
-      if (byId !== undefined) return Number((byId / 30).toFixed(2));
-      const found = itemsByExactName.get(idOrName.toLowerCase().trim());
-      if (found) {
-        return Number(((inventoryVelocityMap.get(found.item.id) ?? 0) / 30).toFixed(2));
-      }
-      return 0;
-    };
+    for (const row of consumptions) inventoryVelocityMap.set(row.itemId, (inventoryVelocityMap.get(row.itemId) ?? 0) + row.quantity);
+    const getVelocity = (itemId: string) => Number(((inventoryVelocityMap.get(itemId) ?? 0) / 30).toFixed(2));
 
     const belowPar = items.filter((i) => i.onHand < i.parLevel || getVelocity(i.id) > 0);
 
