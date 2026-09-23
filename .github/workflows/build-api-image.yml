@@ -2,6 +2,11 @@ name: Build API image
 
 on:
   workflow_dispatch:
+    inputs:
+      inspect_only:
+        description: Inspect the current API image and available registry repositories without building
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -22,7 +27,19 @@ jobs:
 
       - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
 
+      - name: Inspect production image destination
+        run: |
+          set -Eeuo pipefail
+          service_json="$(gcloud run services describe venue-wrangler-api --project venuewrangler --region us-east1 --format=json)"
+          revision="$(jq -r '.status.traffic | map(select((.percent // 0) > 0)) | max_by(.percent) | .revisionName // empty' <<<"$service_json")"
+          [[ -n "$revision" ]] || { echo "::error::No traffic-serving API revision found"; exit 1; }
+          serving_image="$(gcloud run revisions describe "$revision" --project venuewrangler --region us-east1 --format='value(status.imageDigest)')"
+          echo "Serving API image path: ${serving_image%@sha256:*}"
+          echo 'Artifact Registry repositories in us-east1:'
+          gcloud artifacts repositories list --project venuewrangler --location us-east1 --format='value(name)'
+
       - name: Build and push immutable API image
+        if: ${{ !inputs.inspect_only }}
         env:
           IMAGE_TAG: us-east1-docker.pkg.dev/venuewrangler/stadium-wrangler/venue-wrangler-api:${{ github.sha }}
         run: |
