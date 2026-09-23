@@ -107,6 +107,12 @@ jobs:
             postgres:17-alpine@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193 \
             psql "$RESTORE_DRILL_DATABASE_URL" -v ON_ERROR_STOP=1 -c \
             'CREATE SCHEMA IF NOT EXISTS extensions; CREATE EXTENSION IF NOT EXISTS btree_gist WITH SCHEMA extensions;'
+          # Production policies name this role. The disposable restore cluster
+          # needs its identity to recreate those policies, but no login access.
+          docker run --rm --network host \
+            postgres:17-alpine@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193 \
+            psql "$RESTORE_DRILL_DATABASE_URL" -v ON_ERROR_STOP=1 -c \
+            'CREATE ROLE stadium_api NOLOGIN;'
           docker run --rm --network host \
             postgres:17-alpine@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193 \
             psql "$RESTORE_DRILL_DATABASE_URL" -v ON_ERROR_STOP=1 -c \
