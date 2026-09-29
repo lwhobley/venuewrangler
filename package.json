@@ -71,7 +71,7 @@
     "react-native-screens": "~4.26.0",
     "react-native-web": "^0.21.0",
     "react-native-worklets": "0.10.1",
-    "undici": "^8.9.0",
+    "undici": "^8.11.2",
     "zustand": "^5.0.15"
   },
   "devDependencies": {
