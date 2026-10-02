@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../venues/application/venues_providers.dart';
 import '../application/chat_providers.dart';
 import '../domain/chat_message.dart';
-import '../domain/conversation.dart';
 
 class ChatScreen extends ConsumerWidget {
   const ChatScreen({super.key});

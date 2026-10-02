@@ -242,7 +242,7 @@ class SupabaseTimeClockRepository implements TimeClockRepository {
 
   AppError _mapPostgrestException(PostgrestException e) {
     if (e.code == '23505') {
-      return const ConflictError('You are already clocked in.');
+      return const UnknownError('You are already clocked in.');
     }
     if (e.code == '42501') {
       if (e.message.contains('geofence')) {
