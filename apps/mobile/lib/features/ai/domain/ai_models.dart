@@ -117,3 +117,33 @@ class WranglerAskResult {
         needsMoreInfo: json['needs_more_info'] as bool? ?? false,
       );
 }
+
+class ShiftInsightItem {
+  const ShiftInsightItem({
+    required this.kind,
+    required this.title,
+    required this.body,
+  });
+
+  final String kind;
+  final String title;
+  final String body;
+
+  factory ShiftInsightItem.fromJson(Map<String, dynamic> json) => ShiftInsightItem(
+        kind: json['kind'] as String? ?? 'shift_summary',
+        title: json['title'] as String? ?? 'Shift Insight',
+        body: json['body'] as String? ?? '',
+      );
+}
+
+class ShiftInsightsResult {
+  const ShiftInsightsResult(this.insights);
+
+  final List<ShiftInsightItem> insights;
+
+  factory ShiftInsightsResult.fromJson(Map<String, dynamic> json) => ShiftInsightsResult(
+        (json['insights'] as List<dynamic>? ?? const [])
+            .map((row) => ShiftInsightItem.fromJson(row as Map<String, dynamic>))
+            .toList(growable: false),
+      );
+}

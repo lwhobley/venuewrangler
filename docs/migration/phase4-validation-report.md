@@ -103,7 +103,7 @@ unverified work and should be the first thing done outside this environment.
 | `documents` (ClamAV-scanned uploads) | Not started |
 | `floor` (floor plans/tables/waitlist) | Not started |
 | `guests` (guest CRM + public leads webhook) | Not started |
-| `insights` ("cosmic insights") | Not started |
+| `insights` (Groq-powered shift insights) | **Ported** (schema + RLS + pgTAP + Groq `shift_insights` prompt + Flutter feature) |
 | `pos` (public ingest webhook + reporting) | Not started |
 | `reservations` (public ingest webhook + CRUD) | Not started |
 | `time-clock` (geofenced + App-Attest-checked) | Not started |

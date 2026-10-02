@@ -5,6 +5,7 @@ export const TASK_TYPES = [
   "inventory_parse",
   "scheduling_suggestion",
   "wrangler_ask",
+  "shift_insights",
 ] as const;
 
 export type TaskType = (typeof TASK_TYPES)[number];
@@ -44,6 +45,14 @@ export function systemPromptFor(task: TaskType): string {
         '"needs_more_info": boolean}. Set needs_more_info to true and ask a clarifying question ' +
         "in answer if the provided context is insufficient. Never fabricate specific numbers, " +
         "names, or dates that were not given to you."
+      );
+    case "shift_insights":
+      return (
+        "You are an expert hospitality operations analyst. Analyze the provided shift, roster, " +
+        "and operational context to generate actionable operational insights for the shift " +
+        "(e.g., coverage risks, peak rush preparation, fatigue/overtime warnings, station balance, or compliance). " +
+        'Respond with ONLY a JSON object: {"insights": [{"kind": "shift_summary"|"coverage_warning"|"labor_efficiency"|"rush_prep"|"fatigue_risk"|"station_balance"|"compliance_note", ' +
+        '"title": string, "body": string}]}. Keep insights concise, actionable, and strictly grounded in the provided context.'
       );
   }
 }

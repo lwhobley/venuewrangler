@@ -10,6 +10,7 @@ import '../features/ai/presentation/wrangler_assistant_screen.dart';
 import '../features/dashboard/presentation/dashboard_screen.dart';
 import '../features/events/presentation/event_list_screen.dart';
 import '../features/incidents/presentation/incident_list_screen.dart';
+import '../features/insights/presentation/shift_insights_screen.dart';
 import '../features/integrations/presentation/integrations_screen.dart';
 import '../features/inventory/presentation/inventory_list_screen.dart';
 import '../features/organizations/presentation/organization_venue_switcher_screen.dart';
@@ -105,6 +106,12 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/staff-requests',
         builder: (context, state) => const StaffRequestsScreen(),
+      ),
+      GoRoute(
+        path: '/shift-insights',
+        builder: (context, state) => ShiftInsightsScreen(
+          shiftId: state.uri.queryParameters['shiftId'],
+        ),
       ),
       GoRoute(
         path: '/settings',

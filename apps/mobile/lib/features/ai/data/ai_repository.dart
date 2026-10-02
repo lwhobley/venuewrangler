@@ -32,6 +32,11 @@ abstract interface class AiRepository {
     required String venueId,
     required String question,
   });
+
+  Future<ShiftInsightsResult> generateShiftInsights({
+    required String venueId,
+    required String context,
+  });
 }
 
 class SupabaseAiRepository implements AiRepository {
@@ -74,6 +79,16 @@ class SupabaseAiRepository implements AiRepository {
   }) async {
     final result = await _invoke(task: 'wrangler_ask', venueId: venueId, input: question);
     return WranglerAskResult.fromJson(result);
+  }
+
+  @override
+  Future<ShiftInsightsResult> generateShiftInsights({
+    required String venueId,
+    required String context,
+  }) async {
+    final result =
+        await _invoke(task: 'shift_insights', venueId: venueId, input: context);
+    return ShiftInsightsResult.fromJson(result);
   }
 
   /// Shared call path for all four task types. Maps the Edge Function's error-code JSON
