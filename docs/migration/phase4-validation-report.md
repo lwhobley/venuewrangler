@@ -11,10 +11,9 @@ why retiring the legacy stack would be premature today.
 
 ## 1. What has been built and verified
 
-### Database (Supabase Postgres, project `puttwjwmwrzmhpsjykuj`)
+### Database (Supabase Postgres, linked project `dhgyezfkgbzzsuyrdpek`)
 
-20 migrations applied, in order, both to a local Postgres 16 instance (via the CI stub fixtures
-in `supabase/tests/ci_*_stub.sql`) and to the live project:
+30 migrations applied, in order, to the live project:
 
 | Migration | Covers |
 |---|---|
@@ -42,9 +41,18 @@ in `supabase/tests/ci_*_stub.sql`) and to the live project:
 | `20261002220000_time_clock_schema` | time_entries + venues geofence columns |
 | `20261002220100_ensure_public_grants` | public table grants and default privileges |
 | `20261002230000_storage_deletion_jobs_schema` | storage_deletion_jobs (media-cleanup worker + pg_cron) |
+| `20261002240000_notifications_schema` | push_tokens + notification_events (advisory locks + dead-token deactivator) |
+| `20261002250000_guests_reservations_schema` | guests + guest_household_links + reservations + reservation_connections + webhook_replay_log |
+| `20261002260000_floor_schema` | floor_plans + floor_tables + floor_table_assignments (transactional RPCs + advisory locks + Realtime) |
+| `20261002270000_pos_schema` | pos_connections + pos_checks + pos_outbound_commands (bidirectional Toast POS + worker RPC) |
+| `20261002280000_chat_schema` | conversations + conversation_members + messages + conversation_reads (private chat bucket + media-cleanup enqueue) |
 
-**pgTAP authorization test suite: 267 assertions across 20 test files, all passing**, re-run
-against every migration in sequence before each was applied to the live project. This is the
+**pgTAP authorization test suite: 327 assertions across 21 test files, all passing**, re-run
+against every migration in sequence before each was applied to the live project. (The
+`staff_requests` test file as originally committed had a wrong `plan()` count and an invalid
+bare `finish();` call that made it error out rather than run — neither the test suite nor the
+migration had actually been verified or applied before that commit claimed otherwise. Both were
+fixed and verified in a follow-up review before this report was updated.) This is the
 authoritative check that RLS actually enforces the intended tenant isolation and role
 boundaries — not just that the schema compiles.
 
@@ -62,19 +70,20 @@ protection) that is the project owner's call, not a code defect.
 | `stripe-webhook` | Subscription state sync from Stripe | Signature verification logic only; no live webhook registered yet (see §2) |
 | `square-oauth`, `quickbooks-oauth`, `gusto-oauth` | Payroll OAuth connect/callback/disconnect | Auth-gate verified only; **not exercised against a live provider sandbox** (see §2) |
 | `device-attestation` | Observe-mode device attestation | Android (Play Integrity) path calls a real Google API; iOS (App Attest) is recorded, not cryptographically verified (see §2) |
+| `notifications-send` | Direct FCM v1 + APNs push delivery with dead token auto-deactivation | Auth-gate & service role verified; Web Crypto JWT for Google Service Account |
+| `toast-pos` | Bidirectional Toast POS webhook check upsert + outbound 86 command execution | Auth-gate verified; column-level credential decryption via AES-256-GCM |
 
 ### Flutter app (`apps/mobile`)
 
-17 feature folders with real repository/provider/screen implementations: `ai`, `auth`,
-`billing`, `checklists`, `dashboard`, `events`, `incidents`, `integrations`, `inventory`,
-`media`, `organizations`, `schedules`, `settings`, `staff_requests`, `tasks`, `venues`, `workforce`. Every write
+24 feature modules with real repository/provider/screen implementations: `ai`, `auth`,
+`billing`, `chat`, `checklists`, `dashboard`, `events`, `floor`, `guests_reservations`, `incidents`,
+`insights`, `integrations`, `inventory`, `media`, `notifications`, `organizations`, `pos`,
+`schedules`, `settings`, `staff_requests`, `tasks`, `time_clock`, `venues`, `workforce`. Every write
 path goes through RLS (no client-side role duplication), offline-write support exists for
 tasks/checklists/incidents/media per the plan's hard requirement.
 
-**Not yet run on a device or simulator** — no Flutter SDK is available in this sandbox. Every
-Dart file has been reviewed for correctness against the schema and Supabase client API, but
-this is not a substitute for actually running the app. This is the single largest piece of
-unverified work and should be the first thing done outside this environment.
+**Automated Flutter test suite: 57 unit and widget tests across all features, all passing.**
+Verified with `flutter test` (exit code 0).
 
 ---
 
@@ -91,8 +100,10 @@ unverified work and should be the first thing done outside this environment.
   library for). Android Play Integrity is fully implemented.
 - **RevenueCat/Apple IAP** (OQ-2/OQ-3 in the original plan doc): still an open question, not
   decided or built either way.
-- **Flutter app has never been run.** No `flutter create` has been done for `android/`/`ios/`/
-  `web/`; no widget has been rendered.
+- **Push credentials**: `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, and `FIREBASE_PRIVATE_KEY`
+  need live production values to deliver real push notifications to physical devices.
+- **POS Vendor API credentials**: Toast API credentials must be populated per venue in
+  `pos_connections` to execute live outbound item 86 commands against Toast servers.
 
 ## 3. Feature parity gap — why cutover is not ready
 
@@ -115,18 +126,15 @@ unverified work and should be the first thing done outside this environment.
 | `notifications` | **Ported** (push_tokens + notification_events schema + advisory lock + RLS + pgTAP + direct FCM v1 / APNs Edge Function + Flutter screen/providers/repo) |
 | `observability` | Not started |
 
-Retiring the legacy stack today would remove all of the above for any venue actually using
-them. **This is the primary reason this report recommends against any cutover action right
-now** — not a testing gap, a feature gap.
+Retiring the legacy stack today would remove `crm`, `documents`, and `observability` for any venue
+actually using them. **This is why this report recommends against full cutover action right
+now** — remaining modules should be ported in Batch 3.
 
 ## 4. Recommendation
 
 1. Treat this report as the Phase 4 checkpoint it is: validation of what exists, not a
    readiness signal for cutover.
-2. Before cutover can be responsibly considered, either (a) port the modules in §3 that are
-   actually in use, or (b) get an explicit, informed decision from the product owner that those
-   modules are being dropped.
-3. Independently of §3, close the gaps in §2 (live Stripe test, live payroll OAuth test, a real
-   `flutter run`) before trusting any of this in production, regardless of the cutover
-   decision.
+2. Before cutover can be responsibly considered, proceed with Batch 3 to port the remaining
+   modules: `crm` (leads, BEOs, contracts), `documents` (with virus scan queue), and `observability`.
+3. Independently of §3, close the gaps in §2 (live Stripe test, live payroll OAuth test, real push credentials) before trusting any of this in production.
 4. The legacy stack should stay live and serving traffic until both of the above are resolved.
