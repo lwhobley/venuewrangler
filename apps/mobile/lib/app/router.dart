@@ -3,6 +3,8 @@ import 'package:go_router/go_router.dart';
 
 import '../core/auth/auth_providers.dart';
 import '../features/auth/sign_in_screen.dart';
+import '../features/checklists/presentation/checklist_completion_screen.dart';
+import '../features/checklists/presentation/checklist_list_screen.dart';
 import '../features/dashboard/placeholder_home_screen.dart';
 import '../features/organizations/presentation/organization_venue_switcher_screen.dart';
 import '../features/tasks/presentation/task_list_screen.dart';
@@ -46,6 +48,17 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/tasks',
         builder: (context, state) => const TaskListScreen(),
+      ),
+      GoRoute(
+        path: '/checklists',
+        builder: (context, state) => const ChecklistListScreen(),
+      ),
+      GoRoute(
+        path: '/checklists/:templateId',
+        builder: (context, state) => ChecklistCompletionScreen(
+          templateId: state.pathParameters['templateId']!,
+          title: state.extra as String?,
+        ),
       ),
     ],
   );

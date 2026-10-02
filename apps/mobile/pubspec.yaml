@@ -37,6 +37,10 @@ dependencies:
   # Media
   image_picker: ^1.1.2
 
+  # Client-generated primary keys for idempotent offline-queued inserts (see
+  # features/checklists/data/checklists_repository.dart)
+  uuid: ^4.5.1
+
   cupertino_icons: ^1.0.8
 
 dev_dependencies:

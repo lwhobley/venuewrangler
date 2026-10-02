@@ -8,6 +8,7 @@ import '../core/errors/error_reporter.dart';
 import '../core/network/supabase_providers.dart';
 import '../core/offline/offline_queue_providers.dart';
 import '../core/offline/pending_mutation.dart';
+import '../features/checklists/application/checklists_providers.dart';
 import '../features/tasks/application/tasks_providers.dart';
 import 'app.dart';
 
@@ -35,6 +36,7 @@ Future<void> bootstrap(AppFlavor flavor) async {
         offlineQueueHandlersProvider.overrideWith(
           (ref) => <String, MutationHandler>{
             ...ref.watch(taskMutationHandlersProvider),
+            ...ref.watch(checklistMutationHandlersProvider),
           },
         ),
       ],
