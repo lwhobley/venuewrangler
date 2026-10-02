@@ -286,18 +286,37 @@ class _CreateStaffRequestDialogState
   StaffRequestKind _kind = StaffRequestKind.timeOff;
   final _titleController = TextEditingController();
   final _detailsController = TextEditingController();
-  final _startDateController = TextEditingController();
-  final _endDateController = TextEditingController();
+  DateTime? _startDate;
+  DateTime? _endDate;
   bool _submitting = false;
 
   @override
   void dispose() {
     _titleController.dispose();
     _detailsController.dispose();
-    _startDateController.dispose();
-    _endDateController.dispose();
     super.dispose();
   }
+
+  Future<void> _pickDate({required bool isStart}) async {
+    final initial = (isStart ? _startDate : _endDate) ?? DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime.now().subtract(const Duration(days: 1)),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+    );
+    if (picked == null) return;
+    setState(() {
+      if (isStart) {
+        _startDate = picked;
+      } else {
+        _endDate = picked;
+      }
+    });
+  }
+
+  String _formatDate(DateTime date) =>
+      '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
@@ -309,12 +328,8 @@ class _CreateStaffRequestDialogState
             kind: _kind,
             title: _titleController.text.trim(),
             details: _detailsController.text.trim(),
-            requestedRangeStart: _startDateController.text.trim().isEmpty
-                ? null
-                : _startDateController.text.trim(),
-            requestedRangeEnd: _endDateController.text.trim().isEmpty
-                ? null
-                : _endDateController.text.trim(),
+            requestedRangeStart: _startDate == null ? null : _formatDate(_startDate!),
+            requestedRangeEnd: _endDate == null ? null : _formatDate(_endDate!),
           );
       if (!mounted) return;
       ref.invalidate(staffRequestsForVenueProvider(widget.venueId));
@@ -373,20 +388,19 @@ class _CreateStaffRequestDialogState
                 maxLines: 2,
               ),
               const SizedBox(height: 12),
-              TextFormField(
-                controller: _startDateController,
-                decoration: const InputDecoration(
-                  labelText: 'Start Date (YYYY-MM-DD)',
-                  hintText: '2026-11-01',
-                ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Start date (optional)'),
+                subtitle: Text(_startDate == null ? 'Not set' : _formatDate(_startDate!)),
+                trailing: const Icon(Icons.edit_calendar_outlined),
+                onTap: () => _pickDate(isStart: true),
               ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _endDateController,
-                decoration: const InputDecoration(
-                  labelText: 'End Date (YYYY-MM-DD)',
-                  hintText: '2026-11-05',
-                ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('End date (optional)'),
+                subtitle: Text(_endDate == null ? 'Not set' : _formatDate(_endDate!)),
+                trailing: const Icon(Icons.edit_calendar_outlined),
+                onTap: () => _pickDate(isStart: false),
               ),
             ],
           ),

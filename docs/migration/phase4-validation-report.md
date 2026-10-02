@@ -39,8 +39,12 @@ in `supabase/tests/ci_*_stub.sql`) and to the live project:
 | `20261002190000_harden_subscription_is_entitled` | security fix |
 | `20261002200000_staff_requests_schema` | staff_requests |
 
-**pgTAP authorization test suite: 211 assertions across 17 test files, all passing**, re-run
-against every migration in sequence before each was applied to the live project. This is the
+**pgTAP authorization test suite: 213 assertions across 17 test files, all passing**, re-run
+against every migration in sequence before each was applied to the live project. (The
+`staff_requests` test file as originally committed had a wrong `plan()` count and an invalid
+bare `finish();` call that made it error out rather than run — neither the test suite nor the
+migration had actually been verified or applied before that commit claimed otherwise. Both were
+fixed and verified in a follow-up review before this report was updated.) This is the
 authoritative check that RLS actually enforces the intended tenant isolation and role
 boundaries — not just that the schema compiles.
 

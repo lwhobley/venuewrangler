@@ -3,7 +3,7 @@
 -- staff 1 ...005, staff 2 ...008), org B (owner ...006).
 
 begin;
-select plan(14);
+select plan(16);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-000000000002', 'org-a-owner@example.com'),
@@ -227,5 +227,5 @@ select is(
   'approving add_shift assigns staff 2 to the open shift'
 );
 
-finish();
+select * from finish();
 rollback;
