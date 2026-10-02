@@ -38,8 +38,12 @@ in `supabase/tests/ci_*_stub.sql`) and to the live project:
 | `20261002180000_events_schema` | events |
 | `20261002190000_harden_subscription_is_entitled` | security fix |
 | `20261002200000_staff_requests_schema` | staff_requests |
+| `20261002210000_shift_insights_schema` | shift_insights |
+| `20261002220000_time_clock_schema` | time_entries + venues geofence columns |
+| `20261002220100_ensure_public_grants` | public table grants and default privileges |
+| `20261002230000_storage_deletion_jobs_schema` | storage_deletion_jobs (media-cleanup worker + pg_cron) |
 
-**pgTAP authorization test suite: 211 assertions across 17 test files, all passing**, re-run
+**pgTAP authorization test suite: 267 assertions across 20 test files, all passing**, re-run
 against every migration in sequence before each was applied to the live project. This is the
 authoritative check that RLS actually enforces the intended tenant isolation and role
 boundaries — not just that the schema compiles.
@@ -107,7 +111,8 @@ unverified work and should be the first thing done outside this environment.
 | `pos` (public ingest webhook + reporting) | Not started |
 | `reservations` (public ingest webhook + CRUD) | Not started |
 | `time-clock` (geofenced + anti-replay detection) | **Ported** (venues migration + time_entries schema + Haversine SQL + RLS + pgTAP + Flutter screen/providers/repo) |
-| `notifications`, `media-cleanup`, `observability` | Not started |
+| `media-cleanup` (durable storage deletion queue) | **Ported** (storage_deletion_jobs schema + RLS + safe path guard regex + worker function + pg_cron schedule + pgTAP) |
+| `notifications`, `observability` | Not started |
 
 Retiring the legacy stack today would remove all of the above for any venue actually using
 them. **This is the primary reason this report recommends against any cutover action right

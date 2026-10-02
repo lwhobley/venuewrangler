@@ -18,7 +18,7 @@ insert into public.organizations (id, name) values
 -- Venue A1 at (29.7604, -95.3698) [Downtown Houston], geofence 100 metres
 insert into public.venues (id, organization_id, name, latitude, longitude, geofence_radius_m) values
   ('20000000-0000-0000-0000-0000000000a1', '10000000-0000-0000-0000-00000000000a', 'Venue A1', 29.7604, -95.3698, 100),
-  ('20000000-0000-0000-0000-00000000000b1', '10000000-0000-0000-0000-00000000000b', 'Venue B1', 29.7604, -95.3698, 100);
+  ('20000000-0000-0000-0000-0000000000b1', '10000000-0000-0000-0000-00000000000b', 'Venue B1', 29.7604, -95.3698, 100);
 
 insert into public.memberships (user_id, organization_id, venue_id, role) values
   ('00000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-00000000000a', null, 'organization_owner'),
@@ -208,5 +208,5 @@ select is(
   'staff delete does not affect time entries'
 );
 
-finish();
+select * from finish();
 rollback;

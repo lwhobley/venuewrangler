@@ -193,5 +193,5 @@ select is(
   'manager can delete shift insight'
 );
 
-finish();
+select * from finish();
 rollback;

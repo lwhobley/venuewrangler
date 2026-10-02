@@ -21,3 +21,6 @@ grant select (
   id, organization_id, venue_id, provider, status, external_account_id,
   token_expires_at, last_error, connected_by, created_at, updated_at
 ) on public.payroll_connections to authenticated;
+
+-- storage_deletion_jobs is internal/service-role only
+revoke all on public.storage_deletion_jobs from authenticated, anon;

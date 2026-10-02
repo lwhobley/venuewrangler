@@ -4,11 +4,11 @@
 
 -- 1. Extend venues table
 alter table public.venues
-  add column if not null latitude double precision check (latitude is null or (latitude >= -90 and latitude <= 90)),
-  add column if not null longitude double precision check (longitude is null or (longitude >= -180 and longitude <= 180)),
-  add column if not null geofence_radius_m integer not null default 100 check (geofence_radius_m > 0),
-  add column if not null timezone text not null default 'UTC',
-  add column if not null early_clock_in_window_min integer not null default 10 check (early_clock_in_window_min >= 0);
+  add column if not exists latitude double precision check (latitude is null or (latitude >= -90 and latitude <= 90)),
+  add column if not exists longitude double precision check (longitude is null or (longitude >= -180 and longitude <= 180)),
+  add column if not exists geofence_radius_m integer not null default 100 check (geofence_radius_m > 0),
+  add column if not exists timezone text not null default 'UTC',
+  add column if not exists early_clock_in_window_min integer not null default 10 check (early_clock_in_window_min >= 0);
 
 -- 2. Haversine distance function in metres
 create or replace function app_hidden.haversine_distance_m(
