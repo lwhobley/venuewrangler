@@ -12,13 +12,14 @@ import 'package:venuewrangler_mobile/features/venues/domain/venue.dart';
 
 class _FakeFloorRepository implements FloorRepository {
   _FakeFloorRepository({List<FloorTable>? initialTables})
-      : _tables = initialTables ?? [],
-        _controller = StreamController<List<FloorTable>>.broadcast() {
-    _controller.add(_tables);
+      : _tables = initialTables ?? [] {
+    _controller = StreamController<List<FloorTable>>.broadcast(
+      onListen: () => _controller.add(_tables),
+    );
   }
 
   final List<FloorTable> _tables;
-  final StreamController<List<FloorTable>> _controller;
+  late final StreamController<List<FloorTable>> _controller;
   bool updateStatusCalled = false;
   String? lastUpdatedStatus;
   bool mergeTablesCalled = false;
