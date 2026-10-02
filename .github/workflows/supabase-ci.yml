@@ -59,6 +59,13 @@ jobs:
       - name: Apply CI auth/role stub
         run: psql -v ON_ERROR_STOP=1 -f supabase/tests/ci_auth_stub.sql
 
+      # Must run before the migrations (unlike the grants stub below): the storage-buckets
+      # migration inserts into storage.buckets and creates policies on storage.objects, which
+      # this stub is what creates those tables at all outside a real Supabase project. See
+      # supabase/tests/ci_storage_stub.sql for why.
+      - name: Apply CI storage stub
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/ci_storage_stub.sql
+
       - name: Apply migrations in order
         run: |
           set -euo pipefail
