@@ -17,6 +17,7 @@ import '../features/integrations/presentation/integrations_screen.dart';
 import '../features/inventory/presentation/inventory_list_screen.dart';
 import '../features/notifications/presentation/notifications_screen.dart';
 import '../features/organizations/presentation/organization_venue_switcher_screen.dart';
+import '../features/pos/presentation/pos_management_screen.dart';
 import '../features/schedules/presentation/schedule_list_screen.dart';
 import '../features/settings/presentation/settings_screen.dart';
 import '../features/staff_requests/presentation/staff_requests_screen.dart';
@@ -132,6 +133,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/floor',
         builder: (context, state) => const FloorPlanScreen(),
+      ),
+      GoRoute(
+        path: '/pos',
+        builder: (context, state) => const PosManagementScreen(),
       ),
       GoRoute(
         path: '/settings',

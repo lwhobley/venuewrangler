@@ -108,7 +108,7 @@ unverified work and should be the first thing done outside this environment.
 | `floor` (floor plans/tables/waitlist) | **Ported** (floor_plans + floor_tables + floor_table_assignments schema + advisory locks + RPCs + RLS + Realtime publication + pgTAP + Flutter screen/providers/repo) |
 | `guests` (guest CRM + public leads webhook) | **Ported** (guests + guest_household_links schema + derive triggers + RLS + pgTAP) |
 | `insights` (Groq-powered shift insights) | **Ported** (schema + RLS + pgTAP + Groq `shift_insights` prompt + Flutter feature) |
-| `pos` (public ingest webhook + reporting) | Not started |
+| `pos` (public ingest webhook + reporting) | **Ported** (bidirectional pos_connections + pos_checks + pos_outbound_commands queue + Toast POS Edge Function + column security + pgTAP + Flutter screen/providers/repo) |
 | `reservations` (public ingest webhook + CRUD) | **Ported** (reservations + reservation_connections + webhook_replay_log schema + RLS + column security + pgTAP + Flutter screen/providers/repo) |
 | `time-clock` (geofenced + anti-replay detection) | **Ported** (venues migration + time_entries schema + Haversine SQL + RLS + pgTAP + Flutter screen/providers/repo) |
 | `media-cleanup` (durable storage deletion queue) | **Ported** (storage_deletion_jobs schema + RLS + safe path guard regex + worker function + pg_cron schedule + pgTAP) |
