@@ -105,7 +105,7 @@ unverified work and should be the first thing done outside this environment.
 | `chat` | Not started |
 | `crm` (leads/BEOs/contracts/forecast) | Not started — distinct from the simple `events` list built in this pass |
 | `documents` (ClamAV-scanned uploads) | Not started |
-| `floor` (floor plans/tables/waitlist) | Not started |
+| `floor` (floor plans/tables/waitlist) | **Ported** (floor_plans + floor_tables + floor_table_assignments schema + advisory locks + RPCs + RLS + Realtime publication + pgTAP + Flutter screen/providers/repo) |
 | `guests` (guest CRM + public leads webhook) | **Ported** (guests + guest_household_links schema + derive triggers + RLS + pgTAP) |
 | `insights` (Groq-powered shift insights) | **Ported** (schema + RLS + pgTAP + Groq `shift_insights` prompt + Flutter feature) |
 | `pos` (public ingest webhook + reporting) | Not started |
