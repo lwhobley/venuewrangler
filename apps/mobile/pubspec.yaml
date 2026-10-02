@@ -29,6 +29,7 @@ dependencies:
 
   # Offline/connectivity
   connectivity_plus: ^6.1.0
+  path_provider: ^2.1.5
 
   # Error monitoring
   sentry_flutter: ^8.11.2

@@ -6,6 +6,9 @@ import '../core/config/env_config.dart';
 import '../core/config/flavor.dart';
 import '../core/errors/error_reporter.dart';
 import '../core/network/supabase_providers.dart';
+import '../core/offline/offline_queue_providers.dart';
+import '../core/offline/pending_mutation.dart';
+import '../features/tasks/application/tasks_providers.dart';
 import 'app.dart';
 
 /// Shared bootstrap every `main_*.dart` entrypoint calls with its own hardcoded [flavor].
@@ -26,6 +29,14 @@ Future<void> bootstrap(AppFlavor flavor) async {
     () => ProviderScope(
       overrides: [
         supabaseClientProvider.overrideWithValue(Supabase.instance.client),
+        // Composition root for the offline-mutation-queue handler registry: each feature
+        // that queues mutations (currently only tasks) exposes its own handler-map
+        // provider, merged here so core/offline never imports a feature directly.
+        offlineQueueHandlersProvider.overrideWith(
+          (ref) => <String, MutationHandler>{
+            ...ref.watch(taskMutationHandlersProvider),
+          },
+        ),
       ],
       child: const VenueWranglerApp(),
     ),

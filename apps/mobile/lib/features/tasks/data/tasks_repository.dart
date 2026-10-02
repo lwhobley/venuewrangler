@@ -15,6 +15,18 @@ abstract interface class TasksRepository {
 
   Future<void> updateStatus(String taskId, TaskStatus status);
 
+  /// Like [updateStatus], but only applies when the row's `updated_at` still equals
+  /// [expectedUpdatedAt] — an optimistic-concurrency check. Returns `false` (no exception)
+  /// when the row changed in the meantime or no longer exists, so the caller can treat that
+  /// as a conflict rather than assume the write succeeded. Used by the offline queue handler
+  /// (see features/tasks/application/tasks_providers.dart) for mutations that were queued
+  /// while offline and may now be stale.
+  Future<bool> updateStatusIfUnchanged(
+    String taskId,
+    TaskStatus status,
+    DateTime expectedUpdatedAt,
+  );
+
   Future<void> deleteTask(String taskId);
 }
 
@@ -53,6 +65,22 @@ class SupabaseTasksRepository implements TasksRepository {
         .from('operational_tasks')
         .update({'status': status.toDb()})
         .eq('id', taskId);
+  }
+
+  @override
+  Future<bool> updateStatusIfUnchanged(
+    String taskId,
+    TaskStatus status,
+    DateTime expectedUpdatedAt,
+  ) async {
+    final rows = await _client
+        .from('operational_tasks')
+        .update({'status': status.toDb()})
+        .eq('id', taskId)
+        .eq('updated_at', expectedUpdatedAt.toIso8601String())
+        .select();
+
+    return rows.isNotEmpty;
   }
 
   @override

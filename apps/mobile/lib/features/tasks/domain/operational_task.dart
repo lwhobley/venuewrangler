@@ -34,6 +34,7 @@ class OperationalTask {
     this.dueAt,
     this.completedAt,
     required this.createdAt,
+    required this.updatedAt,
   });
 
   final String id;
@@ -46,6 +47,13 @@ class OperationalTask {
   final DateTime? dueAt;
   final DateTime? completedAt;
   final DateTime createdAt;
+
+  /// Set by the `sync_task_timestamps` trigger on every update
+  /// (supabase/migrations/20261002010000_tasks_schema.sql). The offline queue uses this as
+  /// an optimistic-concurrency token: a queued status change is only applied if the row's
+  /// `updated_at` still matches what it was when the change was made locally, so a change
+  /// made by someone else in the meantime is never silently overwritten.
+  final DateTime updatedAt;
 
   bool get isCompleted => status == TaskStatus.completed;
 
@@ -62,6 +70,7 @@ class OperationalTask {
             ? null
             : DateTime.parse(json['completed_at'] as String),
         createdAt: DateTime.parse(json['created_at'] as String),
+        updatedAt: DateTime.parse(json['updated_at'] as String),
       );
 
   @override
