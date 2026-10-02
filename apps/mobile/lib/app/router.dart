@@ -5,6 +5,7 @@ import '../core/auth/auth_providers.dart';
 import '../features/auth/sign_in_screen.dart';
 import '../features/checklists/presentation/checklist_completion_screen.dart';
 import '../features/checklists/presentation/checklist_list_screen.dart';
+import '../features/ai/presentation/wrangler_assistant_screen.dart';
 import '../features/dashboard/placeholder_home_screen.dart';
 import '../features/incidents/presentation/incident_list_screen.dart';
 import '../features/organizations/presentation/organization_venue_switcher_screen.dart';
@@ -64,6 +65,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/incidents',
         builder: (context, state) => const IncidentListScreen(),
+      ),
+      GoRoute(
+        path: '/wrangler',
+        builder: (context, state) => const WranglerAssistantScreen(),
       ),
     ],
   );

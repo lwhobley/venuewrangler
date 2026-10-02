@@ -13,16 +13,26 @@ const MAX_INPUT_CHARS = 20_000;
 const RATE_LIMIT_MAX_CALLS = 20;
 const RATE_LIMIT_WINDOW_MINUTES = 10;
 
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}
-
 Deno.serve(async (req) => {
   const preflight = handleCorsPreflight(req);
   if (preflight) return preflight;
+
+  // Echoed back on every response (and included in server-side logs) so a client-side trace
+  // can be joined with this function's logs for one request, per the convention noted in
+  // apps/mobile/lib/core/errors/error_reporter.dart's newCorrelationId(). The client always
+  // sends one; a fallback is generated here only for calls made outside the app (curl, etc).
+  const correlationId = req.headers.get("X-Correlation-Id") ?? crypto.randomUUID();
+
+  function jsonResponse(body: Record<string, unknown>, status = 200): Response {
+    return new Response(JSON.stringify({ ...body, correlation_id: correlationId }), {
+      status,
+      headers: {
+        ...corsHeaders,
+        "Content-Type": "application/json",
+        "X-Correlation-Id": correlationId,
+      },
+    });
+  }
 
   if (req.method !== "POST") {
     return jsonResponse({ error: "method_not_allowed" }, 405);
@@ -84,7 +94,7 @@ Deno.serve(async (req) => {
     .maybeSingle();
 
   if (venueError) {
-    console.error("venue lookup failed", venueError);
+    console.error(`[${correlationId}]`, "venue lookup failed", venueError);
     return jsonResponse({ error: "venue_lookup_failed" }, 500);
   }
   if (!venue) {
@@ -104,7 +114,7 @@ Deno.serve(async (req) => {
     .gte("created_at", windowStart);
 
   if (rateLimitError) {
-    console.error("rate limit check failed", rateLimitError);
+    console.error(`[${correlationId}]`, "rate limit check failed", rateLimitError);
     return jsonResponse({ error: "rate_limit_check_failed" }, 500);
   }
   if ((recentCallCount ?? 0) >= RATE_LIMIT_MAX_CALLS) {
@@ -121,7 +131,7 @@ Deno.serve(async (req) => {
   const model = Deno.env.get("GROQ_MODEL") ?? "openai/gpt-oss-120b";
   const apiKey = Deno.env.get("GROQ_API_KEY");
   if (!apiKey) {
-    console.error("GROQ_API_KEY is not configured");
+    console.error(`[${correlationId}]`, "GROQ_API_KEY is not configured");
     return jsonResponse({ error: "ai_provider_not_configured" }, 500);
   }
   const pricing = pricingFor(model);
@@ -150,7 +160,7 @@ Deno.serve(async (req) => {
     { p_org_id: organizationId },
   );
   if (spendError) {
-    console.error("spend lookup failed", spendError);
+    console.error(`[${correlationId}]`, "spend lookup failed", spendError);
     return jsonResponse({ error: "budget_check_failed" }, 500);
   }
   if ((currentSpend ?? 0) + estimatedCost > monthlyBudget) {
@@ -182,7 +192,7 @@ Deno.serve(async (req) => {
     .single();
 
   if (reservationError || !reservation) {
-    console.error("reservation insert failed", reservationError);
+    console.error(`[${correlationId}]`, "reservation insert failed", reservationError);
     return jsonResponse({ error: "budget_reservation_failed" }, 500);
   }
   const reservationId = reservation.id as string;
@@ -192,7 +202,7 @@ Deno.serve(async (req) => {
       .from("ai_budget_reservations")
       .update({ status: "released" })
       .eq("id", reservationId);
-    if (error) console.error("failed to release reservation", error);
+    if (error) console.error(`[${correlationId}]`, "failed to release reservation", error);
   }
 
   let groqResult;
@@ -205,7 +215,7 @@ Deno.serve(async (req) => {
       maxOutputTokens,
     });
   } catch (err) {
-    console.error("Groq call failed", err);
+    console.error(`[${correlationId}]`, "Groq call failed", err);
     await releaseReservation();
     return jsonResponse({ error: "ai_provider_call_failed" }, 502);
   }
@@ -214,7 +224,7 @@ Deno.serve(async (req) => {
   try {
     parsedResult = JSON.parse(groqResult.content);
   } catch (err) {
-    console.error("Groq response was not valid JSON", err, groqResult.content);
+    console.error(`[${correlationId}]`, "Groq response was not valid JSON", err, groqResult.content);
     await releaseReservation();
     return jsonResponse({ error: "ai_response_not_valid_json" }, 502);
   }
@@ -227,7 +237,7 @@ Deno.serve(async (req) => {
     .from("ai_budget_reservations")
     .update({ status: "committed" })
     .eq("id", reservationId);
-  if (commitError) console.error("failed to commit reservation", commitError);
+  if (commitError) console.error(`[${correlationId}]`, "failed to commit reservation", commitError);
 
   const { error: usageInsertError } = await serviceClient
     .from("ai_usage_events")
@@ -242,7 +252,7 @@ Deno.serve(async (req) => {
       cost_usd: actualCost,
     });
   if (usageInsertError) {
-    console.error("failed to record usage event", usageInsertError);
+    console.error(`[${correlationId}]`, "failed to record usage event", usageInsertError);
   }
 
   return jsonResponse({

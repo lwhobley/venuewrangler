@@ -52,6 +52,12 @@ class PlaceholderHomeScreen extends ConsumerWidget {
               icon: const Icon(Icons.report_outlined),
               label: const Text('Incidents'),
             ),
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              onPressed: () => context.go('/wrangler'),
+              icon: const Icon(Icons.auto_awesome_outlined),
+              label: const Text('Ask Wrangler'),
+            ),
           ],
         ),
       ),
