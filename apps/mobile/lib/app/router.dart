@@ -15,6 +15,7 @@ import '../features/inventory/presentation/inventory_list_screen.dart';
 import '../features/organizations/presentation/organization_venue_switcher_screen.dart';
 import '../features/schedules/presentation/schedule_list_screen.dart';
 import '../features/settings/presentation/settings_screen.dart';
+import '../features/staff_requests/presentation/staff_requests_screen.dart';
 import '../features/tasks/presentation/task_list_screen.dart';
 import '../features/venues/application/venues_providers.dart';
 import '../features/workforce/presentation/workforce_roster_screen.dart';
@@ -100,6 +101,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/events',
         builder: (context, state) => const EventListScreen(),
+      ),
+      GoRoute(
+        path: '/staff-requests',
+        builder: (context, state) => const StaffRequestsScreen(),
       ),
       GoRoute(
         path: '/settings',

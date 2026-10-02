@@ -37,8 +37,9 @@ in `supabase/tests/ci_*_stub.sql`) and to the live project:
 | `20261002170000_device_attestation` | device_attestations |
 | `20261002180000_events_schema` | events |
 | `20261002190000_harden_subscription_is_entitled` | security fix |
+| `20261002200000_staff_requests_schema` | staff_requests |
 
-**pgTAP authorization test suite: 197 assertions across 16 test files, all passing**, re-run
+**pgTAP authorization test suite: 211 assertions across 17 test files, all passing**, re-run
 against every migration in sequence before each was applied to the live project. This is the
 authoritative check that RLS actually enforces the intended tenant isolation and role
 boundaries — not just that the schema compiles.
@@ -60,9 +61,9 @@ protection) that is the project owner's call, not a code defect.
 
 ### Flutter app (`apps/mobile`)
 
-16 feature folders with real repository/provider/screen implementations: `ai`, `auth`,
+17 feature folders with real repository/provider/screen implementations: `ai`, `auth`,
 `billing`, `checklists`, `dashboard`, `events`, `incidents`, `integrations`, `inventory`,
-`media`, `organizations`, `schedules`, `settings`, `tasks`, `venues`, `workforce`. Every write
+`media`, `organizations`, `schedules`, `settings`, `staff_requests`, `tasks`, `venues`, `workforce`. Every write
 path goes through RLS (no client-side role duplication), offline-write support exists for
 tasks/checklists/incidents/media per the plan's hard requirement.
 
@@ -96,6 +97,7 @@ unverified work and should be the first thing done outside this environment.
 
 | Legacy module | Status in rebuild |
 |---|---|
+| `staff-requests` | **Ported** (schema + RLS + pgTAP + Flutter screen/providers/repo) |
 | `chat` | Not started |
 | `crm` (leads/BEOs/contracts/forecast) | Not started — distinct from the simple `events` list built in this pass |
 | `documents` (ClamAV-scanned uploads) | Not started |
@@ -104,7 +106,6 @@ unverified work and should be the first thing done outside this environment.
 | `insights` ("cosmic insights") | Not started |
 | `pos` (public ingest webhook + reporting) | Not started |
 | `reservations` (public ingest webhook + CRUD) | Not started |
-| `staff-requests` | Not started |
 | `time-clock` (geofenced + App-Attest-checked) | Not started |
 | `notifications`, `media-cleanup`, `observability` | Not started |
 

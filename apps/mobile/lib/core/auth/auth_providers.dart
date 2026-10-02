@@ -18,3 +18,12 @@ final isSignedInProvider = Provider<bool>((ref) {
     orElse: () => ref.read(authRepositoryProvider).currentSession != null,
   );
 });
+
+final currentUserIdProvider = Provider<String?>((ref) {
+  final authState = ref.watch(authStateChangesProvider);
+  return authState.maybeWhen(
+    data: (state) => state.session?.user.id,
+    orElse: () => ref.read(authRepositoryProvider).currentSession?.user.id,
+  );
+});
+
