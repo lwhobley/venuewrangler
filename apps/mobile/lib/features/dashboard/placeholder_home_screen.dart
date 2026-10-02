@@ -82,6 +82,12 @@ class PlaceholderHomeScreen extends ConsumerWidget {
               icon: const Icon(Icons.credit_card_outlined),
               label: const Text('Billing'),
             ),
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              onPressed: () => context.go('/integrations'),
+              icon: const Icon(Icons.extension_outlined),
+              label: const Text('Integrations'),
+            ),
           ],
         ),
       ),
