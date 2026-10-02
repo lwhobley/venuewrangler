@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/errors/app_error.dart';
+import '../../../core/network/supabase_providers.dart';
 import '../../ai/application/ai_providers.dart';
 import '../../ai/domain/ai_models.dart';
 import '../../venues/application/venues_providers.dart';
@@ -24,11 +25,16 @@ class ScheduleListScreen extends ConsumerWidget {
     }
 
     final shiftsAsync = ref.watch(shiftsForVenueProvider(venue.id));
+    final swapsAsync = ref.watch(shiftSwapsForVenueProvider(venue.id));
+    final currentUserId = ref.watch(supabaseClientProvider).auth.currentUser?.id;
 
     return Scaffold(
       appBar: AppBar(title: Text('Schedule — ${venue.name}')),
       body: RefreshIndicator(
-        onRefresh: () async => ref.invalidate(shiftsForVenueProvider(venue.id)),
+        onRefresh: () async {
+          ref.invalidate(shiftsForVenueProvider(venue.id));
+          ref.invalidate(shiftSwapsForVenueProvider(venue.id));
+        },
         child: shiftsAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (_, __) => Center(
@@ -45,7 +51,11 @@ class ScheduleListScreen extends ConsumerWidget {
             ),
           ),
           data: (shifts) {
-            if (shifts.isEmpty) {
+            final pendingSwaps = swapsAsync.maybeWhen(
+              data: (swaps) => swaps.where((s) => s.status == ShiftSwapStatus.pending).toList(),
+              orElse: () => const <ShiftSwap>[],
+            );
+            if (shifts.isEmpty && pendingSwaps.isEmpty) {
               return LayoutBuilder(
                 builder: (context, constraints) => SingleChildScrollView(
                   physics: const AlwaysScrollableScrollPhysics(),
@@ -58,7 +68,17 @@ class ScheduleListScreen extends ConsumerWidget {
             }
             return ListView(
               children: [
-                for (final shift in shifts) _ShiftTile(shift: shift),
+                if (pendingSwaps.isNotEmpty) ...[
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(16, 16, 16, 4),
+                    child: Text('Open swap requests', style: TextStyle(fontWeight: FontWeight.bold)),
+                  ),
+                  for (final swap in pendingSwaps)
+                    _SwapTile(swap: swap, currentUserId: currentUserId),
+                  const Divider(),
+                ],
+                for (final shift in shifts)
+                  _ShiftTile(shift: shift, currentUserId: currentUserId),
               ],
             );
           },
@@ -298,12 +318,15 @@ class ScheduleListScreen extends ConsumerWidget {
 }
 
 class _ShiftTile extends ConsumerWidget {
-  const _ShiftTile({required this.shift});
+  const _ShiftTile({required this.shift, required this.currentUserId});
 
   final Shift shift;
+  final String? currentUserId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final isMine = currentUserId != null && shift.staffId == currentUserId;
+
     return ListTile(
       leading: const Icon(Icons.schedule_outlined),
       title: Text(shift.roleLabel ?? 'Shift'),
@@ -312,11 +335,39 @@ class _ShiftTile extends ConsumerWidget {
         '${shift.staffId != null ? '\nStaff: ${shift.staffId}' : '\n(open shift)'}',
       ),
       isThreeLine: true,
-      trailing: IconButton(
-        icon: const Icon(Icons.delete_outline),
-        onPressed: () => _delete(context, ref),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (isMine)
+            IconButton(
+              icon: const Icon(Icons.swap_horiz_outlined),
+              tooltip: 'Request a swap',
+              onPressed: () => _requestSwap(context, ref),
+            ),
+          IconButton(
+            icon: const Icon(Icons.delete_outline),
+            onPressed: () => _delete(context, ref),
+          ),
+        ],
       ),
     );
+  }
+
+  Future<void> _requestSwap(BuildContext context, WidgetRef ref) async {
+    try {
+      await ref.read(schedulesRepositoryProvider).requestSwap(shiftId: shift.id);
+      ref.invalidate(shiftSwapsForVenueProvider(shift.venueId));
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Swap requested — any teammate can now accept it.')),
+      );
+    } on PostgrestException catch (error) {
+      if (!context.mounted) return;
+      final message = error.code == '42501'
+          ? "You can only request a swap for your own shift."
+          : 'Something went wrong. Please try again.';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    }
   }
 
   Future<void> _delete(BuildContext context, WidgetRef ref) async {
@@ -329,6 +380,70 @@ class _ShiftTile extends ConsumerWidget {
           ? "You don't have permission to delete this shift."
           : 'Something went wrong. Please try again.';
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    }
+  }
+}
+
+class _SwapTile extends ConsumerWidget {
+  const _SwapTile({required this.swap, required this.currentUserId});
+
+  final ShiftSwap swap;
+  final String? currentUserId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isRequester = currentUserId != null && swap.requestedBy == currentUserId;
+    final canAccept = !isRequester &&
+        currentUserId != null &&
+        (swap.offeredTo == null || swap.offeredTo == currentUserId);
+
+    return ListTile(
+      leading: const Icon(Icons.swap_horiz_outlined),
+      title: Text(
+        swap.offeredTo != null ? 'Offered to one teammate' : 'Open to anyone',
+      ),
+      subtitle: Text('Requested by ${swap.requestedBy}'),
+      trailing: isRequester
+          ? TextButton(
+              onPressed: () => _cancel(context, ref),
+              child: const Text('Cancel'),
+            )
+          : canAccept
+              ? FilledButton(
+                  onPressed: () => _accept(context, ref),
+                  child: const Text('Accept'),
+                )
+              : null,
+    );
+  }
+
+  Future<void> _accept(BuildContext context, WidgetRef ref) async {
+    final userId = currentUserId;
+    if (userId == null) return;
+    try {
+      await ref
+          .read(schedulesRepositoryProvider)
+          .acceptSwap(swapId: swap.id, accepterUserId: userId);
+      ref.invalidate(shiftSwapsForVenueProvider(swap.venueId));
+      ref.invalidate(shiftsForVenueProvider(swap.venueId));
+    } on PostgrestException catch (error) {
+      if (!context.mounted) return;
+      final message = error.code == '42501'
+          ? 'This swap is no longer available to you.'
+          : 'Something went wrong. Please try again.';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    }
+  }
+
+  Future<void> _cancel(BuildContext context, WidgetRef ref) async {
+    try {
+      await ref.read(schedulesRepositoryProvider).cancelSwap(swap.id);
+      ref.invalidate(shiftSwapsForVenueProvider(swap.venueId));
+    } on PostgrestException catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Something went wrong. Please try again.')),
+      );
     }
   }
 }

@@ -50,3 +50,53 @@ class Shift {
   @override
   int get hashCode => id.hashCode;
 }
+
+enum ShiftSwapStatus {
+  pending,
+  accepted,
+  declined,
+  cancelled;
+
+  static ShiftSwapStatus fromDb(String value) => switch (value) {
+        'pending' => ShiftSwapStatus.pending,
+        'accepted' => ShiftSwapStatus.accepted,
+        'declined' => ShiftSwapStatus.declined,
+        'cancelled' => ShiftSwapStatus.cancelled,
+        _ => throw ArgumentError('Unknown shift swap status: $value'),
+      };
+}
+
+/// A request from `shift_id`'s current assignee to give it up — to anyone (`offeredTo` is
+/// null) or to one named person. See
+/// supabase/migrations/20261002160000_shift_swaps_schema.sql for who may create/accept/cancel
+/// one; this app never applies the reassignment itself, the database trigger does it the
+/// moment a swap's status becomes accepted.
+class ShiftSwap {
+  const ShiftSwap({
+    required this.id,
+    required this.venueId,
+    required this.shiftId,
+    required this.requestedBy,
+    this.offeredTo,
+    required this.status,
+    this.acceptedBy,
+  });
+
+  final String id;
+  final String venueId;
+  final String shiftId;
+  final String requestedBy;
+  final String? offeredTo;
+  final ShiftSwapStatus status;
+  final String? acceptedBy;
+
+  factory ShiftSwap.fromJson(Map<String, dynamic> json) => ShiftSwap(
+        id: json['id'] as String,
+        venueId: json['venue_id'] as String,
+        shiftId: json['shift_id'] as String,
+        requestedBy: json['requested_by'] as String,
+        offeredTo: json['offered_to'] as String?,
+        status: ShiftSwapStatus.fromDb(json['status'] as String),
+        acceptedBy: json['accepted_by'] as String?,
+      );
+}

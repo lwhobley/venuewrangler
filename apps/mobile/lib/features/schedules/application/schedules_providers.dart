@@ -13,3 +13,8 @@ final shiftsForVenueProvider =
     FutureProvider.autoDispose.family<List<Shift>, String>((ref, venueId) {
   return ref.watch(schedulesRepositoryProvider).fetchShiftsForVenue(venueId);
 });
+
+final shiftSwapsForVenueProvider =
+    FutureProvider.autoDispose.family<List<ShiftSwap>, String>((ref, venueId) {
+  return ref.watch(schedulesRepositoryProvider).fetchSwapsForVenue(venueId);
+});
