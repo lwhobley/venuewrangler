@@ -10,6 +10,7 @@ import '../core/offline/offline_queue_providers.dart';
 import '../core/offline/pending_mutation.dart';
 import '../features/checklists/application/checklists_providers.dart';
 import '../features/incidents/application/incidents_providers.dart';
+import '../features/media/application/media_providers.dart';
 import '../features/tasks/application/tasks_providers.dart';
 import 'app.dart';
 
@@ -39,6 +40,7 @@ Future<void> bootstrap(AppFlavor flavor) async {
             ...ref.watch(taskMutationHandlersProvider),
             ...ref.watch(checklistMutationHandlersProvider),
             ...ref.watch(incidentMutationHandlersProvider),
+            ...ref.watch(mediaMutationHandlersProvider),
           },
         ),
       ],

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:venuewrangler_mobile/core/offline/offline_queue_providers.dart';
 import 'package:venuewrangler_mobile/core/offline/offline_queue_store.dart';
 import 'package:venuewrangler_mobile/core/offline/pending_mutation.dart';
@@ -8,6 +9,8 @@ import 'package:venuewrangler_mobile/features/incidents/application/incidents_pr
 import 'package:venuewrangler_mobile/features/incidents/data/incidents_repository.dart';
 import 'package:venuewrangler_mobile/features/incidents/domain/incident.dart';
 import 'package:venuewrangler_mobile/features/incidents/presentation/incident_list_screen.dart';
+import 'package:venuewrangler_mobile/features/media/application/image_picker_service.dart';
+import 'package:venuewrangler_mobile/features/media/data/media_repository.dart';
 import 'package:venuewrangler_mobile/features/venues/application/venues_providers.dart';
 import 'package:venuewrangler_mobile/features/venues/domain/venue.dart';
 
@@ -49,6 +52,31 @@ class _FakeIncidentsRepository implements IncidentsRepository {
   @override
   Future<void> updateStatus(String incidentId, IncidentStatus status) async {
     lastResolvedId = incidentId;
+  }
+}
+
+class _FakeImagePickerService implements ImagePickerService {
+  _FakeImagePickerService(this.pathToReturn);
+
+  final String? pathToReturn;
+
+  @override
+  Future<String?> pickImage({required ImageSource source}) async => pathToReturn;
+}
+
+class _FakeMediaRepository implements MediaRepository {
+  String? lastIncidentId;
+  String? lastObjectPath;
+
+  @override
+  Future<void> uploadIncidentEvidence({
+    required String attachmentId,
+    required String incidentId,
+    required String objectPath,
+    required String localFilePath,
+  }) async {
+    lastIncidentId = incidentId;
+    lastObjectPath = objectPath;
   }
 }
 
@@ -151,5 +179,39 @@ void main() {
     expect(find.textContaining('Saved offline'), findsOneWidget);
     expect(find.text('Broken glass'), findsOneWidget);
     expect(find.text('Syncing…'), findsOneWidget);
+  });
+
+  testWidgets('attaching a photo and reporting online uploads the evidence afterward',
+      (tester) async {
+    final fakeIncidents = _FakeIncidentsRepository([]);
+    final fakeMedia = _FakeMediaRepository();
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ...baseOverrides(fakeIncidents),
+          imagePickerServiceProvider
+              .overrideWithValue(_FakeImagePickerService('/tmp/evidence.jpg')),
+          mediaRepositoryProvider.overrideWithValue(fakeMedia),
+        ],
+        child: const MaterialApp(home: IncidentListScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(FloatingActionButton, 'Report incident'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.widgetWithText(TextField, 'What happened?'), 'Broken glass');
+    await tester.tap(find.widgetWithText(TextButton, 'Attach photo'));
+    await tester.pumpAndSettle();
+    expect(find.text('Photo attached'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Report'));
+    await tester.pumpAndSettle();
+
+    expect(fakeIncidents.lastReportedTitle, 'Broken glass');
+    expect(fakeMedia.lastIncidentId, isNotNull);
+    expect(fakeMedia.lastObjectPath, contains('org-1/venue-1/'));
   });
 }

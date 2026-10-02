@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../core/offline/offline_queue_providers.dart';
 import '../../../core/offline/pending_mutation.dart';
+import '../../media/application/image_picker_service.dart';
+import '../../media/application/media_providers.dart';
 import '../../venues/application/venues_providers.dart';
+import '../../venues/domain/venue.dart';
 import '../application/incidents_providers.dart';
 import '../domain/incident.dart';
 
@@ -13,7 +17,11 @@ const _uuid = Uuid();
 
 /// Incident reports are offline-writable ("incident drafts" in the migration plan): see
 /// `_reportIncident` below for the try-online-then-queue fallback, the same pattern used by
-/// features/checklists for completion submission.
+/// features/checklists for completion submission. An optional evidence photo is handled the
+/// same way via features/media (the "media-upload-retry metadata" item in the plan's offline
+/// scope) — see `_attachPhotoIfPicked`, which runs only after the incident report itself has
+/// either succeeded or been queued, since an attachment row can't exist before its incident
+/// does (see the ordering note in media_providers.dart).
 class IncidentListScreen extends ConsumerWidget {
   const IncidentListScreen({super.key});
 
@@ -75,17 +83,18 @@ class IncidentListScreen extends ConsumerWidget {
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showReportDialog(context, ref, venue.id),
+        onPressed: () => _showReportDialog(context, ref, venue),
         icon: const Icon(Icons.report_outlined),
         label: const Text('Report incident'),
       ),
     );
   }
 
-  Future<void> _showReportDialog(BuildContext context, WidgetRef ref, String venueId) async {
+  Future<void> _showReportDialog(BuildContext context, WidgetRef ref, Venue venue) async {
     final titleController = TextEditingController();
     final descriptionController = TextEditingController();
     var severity = IncidentSeverity.medium;
+    String? photoPath;
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -116,6 +125,20 @@ class IncidentListScreen extends ConsumerWidget {
                 ],
                 onChanged: (value) => setState(() => severity = value ?? severity),
               ),
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: () async {
+                    final path = await ref
+                        .read(imagePickerServiceProvider)
+                        .pickImage(source: ImageSource.camera);
+                    if (path != null) setState(() => photoPath = path);
+                  },
+                  icon: const Icon(Icons.camera_alt_outlined),
+                  label: Text(photoPath == null ? 'Attach photo' : 'Photo attached'),
+                ),
+              ),
             ],
           ),
           actions: [
@@ -137,59 +160,157 @@ class IncidentListScreen extends ConsumerWidget {
     await _reportIncident(
       context,
       ref,
-      venueId: venueId,
+      venue: venue,
       title: titleController.text.trim(),
       description:
           descriptionController.text.trim().isEmpty ? null : descriptionController.text.trim(),
       severity: severity,
+      photoPath: photoPath,
     );
   }
 
   Future<void> _reportIncident(
     BuildContext context,
     WidgetRef ref, {
-    required String venueId,
+    required Venue venue,
     required String title,
     String? description,
     required IncidentSeverity severity,
+    String? photoPath,
   }) async {
     final incidentId = _uuid.v4();
 
     try {
       await ref.read(incidentsRepositoryProvider).reportIncident(
             incidentId: incidentId,
-            venueId: venueId,
+            venueId: venue.id,
             title: title,
             description: description,
             severity: severity,
           );
-      ref.invalidate(incidentsForVenueProvider(venueId));
+      ref.invalidate(incidentsForVenueProvider(venue.id));
     } on PostgrestException catch (error) {
       if (error.code == '42501') {
         if (!context.mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("You don't have permission to report incidents here.")),
         );
-        return;
+        return; // the incident was never created; there is nothing to attach a photo to.
       }
-      await _queueOffline(context, ref, incidentId, venueId, title, description, severity);
+      await _queueIncidentOffline(context, ref, incidentId, venue, title, description, severity);
+      if (photoPath != null) {
+        await _attachPhotoOffline(ref, incidentId: incidentId, venue: venue, photoPath: photoPath);
+      }
+      return;
     } catch (_) {
-      await _queueOffline(context, ref, incidentId, venueId, title, description, severity);
+      await _queueIncidentOffline(context, ref, incidentId, venue, title, description, severity);
+      if (photoPath != null) {
+        await _attachPhotoOffline(ref, incidentId: incidentId, venue: venue, photoPath: photoPath);
+      }
+      return;
+    }
+
+    if (photoPath != null) {
+      await _attachPhoto(context, ref, incidentId: incidentId, venue: venue, photoPath: photoPath);
     }
   }
 
-  Future<void> _queueOffline(
+  Future<void> _attachPhoto(
+    BuildContext context,
+    WidgetRef ref, {
+    required String incidentId,
+    required Venue venue,
+    required String photoPath,
+  }) async {
+    final attachmentId = _uuid.v4();
+    final extension = photoPath.contains('.') ? photoPath.split('.').last : 'jpg';
+    final objectPath = '${venue.organizationId}/${venue.id}/$attachmentId.$extension';
+
+    try {
+      await ref.read(mediaRepositoryProvider).uploadIncidentEvidence(
+            attachmentId: attachmentId,
+            incidentId: incidentId,
+            objectPath: objectPath,
+            localFilePath: photoPath,
+          );
+    } on PostgrestException catch (error) {
+      if (error.code == '42501') {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              "Incident reported, but you don't have permission to attach evidence to it.",
+            ),
+          ),
+        );
+        return;
+      }
+      await _attachPhotoOffline(
+        ref,
+        incidentId: incidentId,
+        venue: venue,
+        photoPath: photoPath,
+        attachmentId: attachmentId,
+        objectPath: objectPath,
+      );
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Incident reported. The photo will upload once you're back online."),
+        ),
+      );
+    } catch (_) {
+      await _attachPhotoOffline(
+        ref,
+        incidentId: incidentId,
+        venue: venue,
+        photoPath: photoPath,
+        attachmentId: attachmentId,
+        objectPath: objectPath,
+      );
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Incident reported. The photo will upload once you're back online."),
+        ),
+      );
+    }
+  }
+
+  Future<void> _attachPhotoOffline(
+    WidgetRef ref, {
+    required String incidentId,
+    required Venue venue,
+    required String photoPath,
+    String? attachmentId,
+    String? objectPath,
+  }) async {
+    final resolvedAttachmentId = attachmentId ?? _uuid.v4();
+    final extension = photoPath.contains('.') ? photoPath.split('.').last : 'jpg';
+    final resolvedObjectPath =
+        objectPath ?? '${venue.organizationId}/${venue.id}/$resolvedAttachmentId.$extension';
+
+    final mutation = buildIncidentEvidenceUploadMutation(
+      attachmentId: resolvedAttachmentId,
+      incidentId: incidentId,
+      objectPath: resolvedObjectPath,
+      localFilePath: photoPath,
+    );
+    await ref.read(offlineQueueControllerProvider.notifier).enqueue(mutation);
+  }
+
+  Future<void> _queueIncidentOffline(
     BuildContext context,
     WidgetRef ref,
     String incidentId,
-    String venueId,
+    Venue venue,
     String title,
     String? description,
     IncidentSeverity severity,
   ) async {
     final mutation = buildIncidentReportMutation(
       incidentId: incidentId,
-      venueId: venueId,
+      venueId: venue.id,
       title: title,
       description: description,
       severity: severity,

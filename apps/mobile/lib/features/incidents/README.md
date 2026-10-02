@@ -22,6 +22,8 @@ Resolving an incident is recorded in `public.audit_log` automatically by a datab
 requirement — there's no separate incident-specific audit table or UI for it yet, since the
 existing audit_log schema already covers it.
 
-Not yet implemented: evidence photo attachments (depends on Supabase Storage, which is Phase
-3 scope), and a dedicated incident detail screen (the list screen shows everything there is
-to show today).
+The report dialog also offers an optional evidence photo, handled by `features/media` (see
+its README) — uploaded immediately if online, or queued alongside the incident report if not.
+Attachments are not yet shown anywhere in the UI after upload (there's no incident detail
+screen to show them on — the list screen is everything there is today), so this is currently
+write-only from the user's perspective, which is worth fixing before this ships for real.
