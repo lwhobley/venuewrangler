@@ -12,14 +12,9 @@ import 'package:venuewrangler_mobile/features/venues/domain/venue.dart';
 
 class _FakeFloorRepository implements FloorRepository {
   _FakeFloorRepository({List<FloorTable>? initialTables})
-      : _tables = initialTables ?? [] {
-    _controller = StreamController<List<FloorTable>>.broadcast(
-      onListen: () => _controller.add(_tables),
-    );
-  }
+      : _tables = initialTables ?? [];
 
   final List<FloorTable> _tables;
-  late final StreamController<List<FloorTable>> _controller;
   bool updateStatusCalled = false;
   String? lastUpdatedStatus;
   bool mergeTablesCalled = false;
@@ -31,7 +26,9 @@ class _FakeFloorRepository implements FloorRepository {
   Future<List<FloorTable>> getFloorTables({required String floorPlanId}) async => _tables;
 
   @override
-  Stream<List<FloorTable>> streamFloorTables({required String venueId}) => _controller.stream;
+  Stream<List<FloorTable>> streamFloorTables({required String venueId}) async* {
+    yield _tables;
+  }
 
   @override
   Future<void> updateTableStatus({
@@ -57,7 +54,6 @@ class _FakeFloorRepository implements FloorRepository {
         createdAt: old.createdAt,
         updatedAt: DateTime.now(),
       );
-      _controller.add(_tables);
     }
   }
 
