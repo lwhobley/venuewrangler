@@ -1,0 +1,232 @@
+Phase 4 handoff, batch 2
+For: Antigravity (or whoever picks this up next)
+
+Read first: docs/migration/phase4-port-remaining-modules-handoff.md. That document has the
+full methodology (the step-by-step loop every module in this rebuild follows: read the legacy
+scope, design the schema with derive-don't-trust triggers and RLS, write the pgTAP test, verify
+it locally with the exact command sequence given there, apply to the live project, re-check the
+advisors, build the Edge Function if one's needed, build the Flutter feature, commit, update
+the validation report). This doc does not repeat that. Follow it exactly for every module
+below, no exceptions.
+
+Also read docs/migration/phase4-validation-report.md for current state. One more thing to carry
+forward from the last round: a module is not done until its migration is actually applied to
+the live Supabase project and its pgTAP file has actually been run, not just written. The
+staff_requests port in this same rebuild shipped with a test file that could not even run
+(wrong assertion count, invalid finish() call) and a migration that was never applied to the
+live project, while the commit itself claimed both were fine. Verify every step yourself. Do
+not assume a later step succeeded just because an earlier one exists.
+
+This batch covers modules 2, 3, 5, 6, 7, 8, and 9 from the original numbered list:
+2. time-clock
+3. media-cleanup
+5. guests and reservations
+6. floor
+7. pos
+8. chat
+9. notifications
+
+Module 7, pos, has a scope change from the original handoff: it should be built bidirectional,
+not ingestion-only. More on that below.
+
+Suggested build order, by dependency:
+1. media-cleanup (chat depends on it)
+2. time-clock (independent, geofencing logic, do it early while it's fresh)
+3. notifications (resolve the push backend decision first; several other modules want a
+   notify-on-X hook once this exists)
+4. guests and reservations (together, same webhook pattern)
+5. floor (depends on guests/reservations)
+6. pos (independent of the rest of this batch; confirm the outbound vendor decision before
+   starting the outbound half, the inbound half can start right away)
+7. chat (depends on media-cleanup)
+
+1. media-cleanup
+
+No controller, no client-facing endpoints, an internal deletion-queue worker. Build a
+storage_deletion_jobs table: id, organization_id, venue_id (nullable), object_path (a Supabase
+Storage path, not a raw S3 key), status (pending, processing, completed, failed, dead, matching
+the legacy ObjectDeletionJob shape), attempts (capped, legacy used 10, keep that), last_error,
+created_at, updated_at. RLS: service-role only, no policy for authenticated at all, same as
+ai_budget_reservations.
+
+Preserve the legacy safety regex in spirit. The original code refuses to delete any key that
+doesn't match ^(chat|documents)/<venueId>/<32-hex>$ before actually deleting it, specifically so
+a future bug that queues a client-controlled path can't delete an arbitrary object in the
+shared bucket. Work out the equivalent pattern for this rebuild's actual Storage object paths
+(read supabase/migrations/20261002040000_storage_buckets.sql first) and enforce it in the
+worker itself, not just trust whatever inserted the row.
+
+For processing: this is long-running batch work that doesn't fit an Edge Function's execution
+limit for a large backlog, per the migration plan doc's own note on this. Use a pg_cron
+schedule calling a plpgsql function that claims a small batch with FOR UPDATE SKIP LOCKED, then
+calls Storage's delete API via pg_net or a thin Edge Function. Check which of pg_cron and pg_net
+are actually enabled on the live project before committing to this shape. If neither is
+available, fall back to a self-retriggering Edge Function on a schedule instead.
+
+Any feature that deletes a chat image or a document should insert a row here rather than
+calling Storage's delete API directly.
+
+2. time-clock
+
+Read packages/api/src/common/geofence.ts in full before starting. Two pieces of real logic to
+port faithfully:
+
+Geofencing: assertWithinGeofence rejects a punch outside the venue's latitude/longitude/
+geofenceRadiusM, and rejects anything flagged as mock GPS. venues needs new columns (latitude,
+longitude, geofence_radius_m) added via a migration against the existing table, not a new one.
+Compute the distance in a plpgsql function, verify the haversine formula against a known test
+case before trusting it, and call it from the clock-in/out insert path, raising a permission
+error on a genuine out-of-radius or mocked punch. This is an authorization-adjacent check so it
+belongs in the database layer, not left to client-side trust.
+
+Anti-replay on GPS fixes: assertFixNotReplayed flags, it does not hard-block, a reused or
+replayed coarse GPS fix across days, via a locationAnomaly flag. Port it as a flag column, keep
+it soft unless told otherwise.
+
+Schema: time_entries, venue-scoped, user_id, clock_in_at, clock_out_at, break start/end (check
+break-transitions.ts for the actual state machine before deciding on one break column pair vs a
+separate breaks table), location_anomaly boolean, and the lat/lng/accuracy captured per punch
+for audit. RLS: self can insert and view own, manager can view the venue's.
+
+The late/missed clock-in alerting depends on notifications below. Build the table and the
+clock-in/out flow now, defer the alerting cron until notifications exists, and say so plainly in
+this feature's README.
+
+3. notifications
+
+Resolve the push backend question before writing any code. The legacy implementation is
+Expo-push-specific, which only works for an Expo-managed app. That does not apply to the new
+native Flutter build. Pick one: direct FCM and APNs calls from an Edge Function with the
+Flutter app registering tokens itself, or a push-relay service in front of FCM/APNs. Either
+way, keep two things from the legacy code: the advisory-lock pattern on token registration
+(pg_advisory_xact_lock keyed on venue plus token, stopping a token from being hijacked by a
+different profile mid-registration), and dead-token handling (auto-disable a token on a
+DeviceNotRegistered-shaped signal rather than retrying forever).
+
+Schema: push_tokens (user_id, venue_id, token, platform, created_at, disabled_at),
+notification_events for an in-app feed, written first and independent of whether the push send
+itself succeeds, matching the legacy ordering where a push failure is swallowed, not thrown.
+RLS: self manages own tokens, self reads own notification_events.
+
+Do not start the clock-in alerting cron, or any other module's notify-on-X hook, until this
+exists.
+
+4. guests and reservations
+
+Build together, they share the same webhook-with-replay-protection shape: a per-venue secret
+checked via a header, plus a webhook-id and webhook-timestamp pair for replay protection.
+
+Secret storage: hash the secret at rest, the same column-level-grant treatment
+payroll_connections gives its OAuth tokens (revoke all from authenticated, grant select on the
+non-secret columns only).
+
+Replay protection: a webhook_replay_log table, venue_id, webhook_id, received_at, checked then
+inserted inside the same function call before processing the payload, short retention window.
+
+Schema: guests, venue-scoped, name, contact info, notes. Confirm with the product owner whether
+household linking (the legacy GuestHouseholdLink) is wanted now or a flat contact list is
+enough. reservations: venue-scoped, guest_id, party_size, reserved_for, status, deposit fields.
+The inbound webhook ingestion side is well understood from the legacy code and can be built
+directly.
+
+Open question before building the sync side: ReservationConnection and ReservationSyncEvent in
+the legacy schema imply an ongoing sync with an external reservation platform whose identity
+wasn't determined from a read of this module alone. If the only requirement right now is
+accepting inbound webhook reservations, build that and stop. Don't invent an outbound sync
+protocol for an unnamed partner.
+
+Stripe deposits on both reservations and the legacy crm's BEO flow should reuse this rebuild's
+existing Stripe Edge Function infrastructure rather than the legacy code's inline raw API calls.
+This is a new Stripe use case, a one-time charge rather than a subscription, so verify
+Checkout's one-time-payment mode shape against Stripe's real docs before coding against it.
+
+5. floor
+
+Depends on guests and reservations. Table merge, split, and assignment need real transactional
+guarantees, RLS does not change isolation level. Wrap these operations in serializable
+isolation inside a plpgsql function that retries internally on a serialization failure, rather
+than pushing retry logic to the Flutter client.
+
+Schema: floor_plans, floor_tables, floor_table_assignments linking a table to a reservation or
+waitlist entry, and a table-state-history table only if that history is actually used, confirm
+before porting it. RLS: standard venue-member-read, manager-write.
+
+No real-time layer existed in the legacy code either. If live floor updates across devices are
+wanted now, that is a new requirement to raise explicitly, not something to assume, and
+Supabase Realtime on the table-state table would be the natural fit if asked for.
+
+6. pos, bidirectional, not ingestion-only
+
+This is an explicit scope change from the original handoff, and from what the legacy system
+did. The legacy pos module was deliberately ingest-only, its own code documents that it never
+calls vendor APIs, a partner's middleware pushes data in. The product decision now is that the
+new system should also send information back to POS systems, for example pushing 86'd or
+out-of-stock items, or syncing menu changes. Confirm the exact outbound operations wanted,
+don't assume the full legacy ingest capability list applies symmetrically in reverse, since
+there is no legacy behavior to port for the outbound half, only fresh design work.
+
+Before writing any outbound code, pick one vendor to integrate with first, rather than building
+a generic multi-vendor abstraction against APIs nobody has read yet. The legacy capabilities
+file lists toast, square, clover, shopify_pos, lightspeed_restaurant, spoton, and generic as
+ingest-only providers. Ask which one needs outbound support first. Square is a reasonable
+starting point only because this rebuild already has verified, working Square OAuth code to
+study, in supabase/functions/square-oauth, not because Square's POS/Catalog/Inventory API is
+assumed to behave the same way as Square's Connect API used for payroll, those are different
+product surfaces. Verify the real POS API endpoints against Square's live docs before writing
+anything.
+
+Inbound, keep as originally scoped: pos_connections, venue-scoped, provider, status, a hashed
+webhook secret with the same column-level grant restriction as payroll_connections, webhook
+ingestion with idempotent upserts keyed on natural external ids, a unique constraint on venue,
+provider, and external check id handles the idempotency directly through ON CONFLICT.
+
+Outbound, new: extend pos_connections to also hold encrypted OAuth tokens once a vendor's OAuth
+flow exists, using the same AES-256-GCM helper already in supabase/functions/_shared/crypto.ts,
+and the same connect, callback, disconnect Edge Function shape as square-oauth, quickbooks-
+oauth, and gusto-oauth. Each outbound action (push an 86 status, sync a menu change) should be
+its own Edge Function, authenticated the same way stripe-create-checkout is, the caller's JWT
+plus a manager-role check via the caller's own RLS-respecting client, which looks up the
+connection, decrypts the token, and calls the vendor's real API.
+
+For reliability, consider a pos_outbound_commands queue table, status pending, sent, failed,
+with an attempts counter, processed the same pg_cron-or-self-retriggering-Edge-Function way as
+media-cleanup, rather than only a synchronous call-and-hope from the Flutter client, especially
+once more than one outbound action type exists.
+
+Flag clearly in this feature's README which specific outbound operations are actually
+implemented versus which legacy ingest-only behaviors remain ingest-only, so the asymmetry is
+documented rather than assumed.
+
+7. chat
+
+Depends on media-cleanup. Confirmed REST and poll based in the legacy code, no websocket
+anywhere, which simplifies this to a normal RLS-gated table set.
+
+Schema: conversations, conversation_members, messages, conversation_reads for read-receipt
+tracking. Venue-scoped, matching the legacy directory endpoint's apparent scope. Confirm
+whether cross-venue DMs within the same organization should be possible before locking the
+schema down to venue-only.
+
+Images: a private Storage bucket, same policy pattern as the existing storage_buckets
+migration, plus Supabase's own createSignedUrl for the time-limited fetch URL, instead of
+reimplementing the legacy code's hand-rolled HMAC token, the platform already provides this.
+Deleting an orphaned chat image goes through the media-cleanup queue from section 1, insert a
+storage_deletion_jobs row rather than calling Storage's delete API directly from chat.
+
+RLS: a user can see conversations and messages for conversations they are a member of, model
+this on shift_swaps' "any party to the row can see it" pattern rather than inventing a new
+shape.
+
+Open questions to resolve before, not during, the affected module:
+- notifications: FCM and APNs direct, or a push-relay service.
+- reservations: what ReservationConnection actually needs to sync with externally, if anything
+  beyond inbound webhook ingestion.
+- guests: whether household linking is wanted in this pass, or a flat contact list is enough.
+- floor: whether live cross-device floor updates are wanted, or REST-poll parity with the
+  legacy behavior is enough.
+- pos: which vendor or vendors need outbound support, and which specific outbound operations
+  are actually wanted.
+
+What not to change: the legacy NestJS, Prisma, Cloud Run stack stays live and serving
+production traffic for every module until its replacement is built, pgTAP-verified,
+advisor-clean, and actually applied to the live project, not just written.
