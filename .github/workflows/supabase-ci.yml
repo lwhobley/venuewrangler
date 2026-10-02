@@ -1,0 +1,80 @@
+name: Supabase CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/**'
+      - '.github/workflows/supabase-ci.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'supabase/**'
+      - '.github/workflows/supabase-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rls-authorization-tests:
+    name: Apply migrations and run RLS authorization tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      PGHOST: localhost
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: supabase_migration_check
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install pgTAP
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends postgresql-client-16 postgresql-16-pgtap
+
+      - name: Create test database
+        run: psql -h localhost -U postgres -c "CREATE DATABASE supabase_migration_check;"
+
+      # Stubs the parts of a real Supabase project (auth schema, auth.uid(), anon/
+      # authenticated/service_role roles) that the migrations under supabase/migrations
+      # assume already exist. This file is CI-only fixture, never applied to a real
+      # Supabase project — see supabase/tests/ci_auth_stub.sql for why.
+      - name: Apply CI auth/role stub
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/ci_auth_stub.sql
+
+      - name: Apply migrations in order
+        run: |
+          set -euo pipefail
+          for migration in supabase/migrations/*.sql; do
+            echo "Applying $migration"
+            psql -v ON_ERROR_STOP=1 -f "$migration"
+          done
+
+      # Real Supabase grants broad table-level privileges to anon/authenticated by default
+      # and relies on RLS (not GRANT) for row-level filtering. Applied only after the
+      # migrations create the tables.
+      - name: Apply CI grants stub
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/ci_grants_stub.sql
+
+      - name: Install pgTAP extension
+        run: psql -v ON_ERROR_STOP=1 -c "CREATE EXTENSION IF NOT EXISTS pgtap;"
+
+      - name: Run RLS authorization tests
+        run: pg_prove --dbname "$PGDATABASE" supabase/tests/database/*.test.sql
