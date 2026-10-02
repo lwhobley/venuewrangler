@@ -13,6 +13,7 @@ import '../features/incidents/presentation/incident_list_screen.dart';
 import '../features/insights/presentation/shift_insights_screen.dart';
 import '../features/integrations/presentation/integrations_screen.dart';
 import '../features/inventory/presentation/inventory_list_screen.dart';
+import '../features/notifications/presentation/notifications_screen.dart';
 import '../features/organizations/presentation/organization_venue_switcher_screen.dart';
 import '../features/schedules/presentation/schedule_list_screen.dart';
 import '../features/settings/presentation/settings_screen.dart';
@@ -117,6 +118,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/time-clock',
         builder: (context, state) => const TimeClockScreen(),
+      ),
+      GoRoute(
+        path: '/notifications',
+        builder: (context, state) => const NotificationsScreen(),
       ),
       GoRoute(
         path: '/settings',

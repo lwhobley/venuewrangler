@@ -112,7 +112,8 @@ unverified work and should be the first thing done outside this environment.
 | `reservations` (public ingest webhook + CRUD) | Not started |
 | `time-clock` (geofenced + anti-replay detection) | **Ported** (venues migration + time_entries schema + Haversine SQL + RLS + pgTAP + Flutter screen/providers/repo) |
 | `media-cleanup` (durable storage deletion queue) | **Ported** (storage_deletion_jobs schema + RLS + safe path guard regex + worker function + pg_cron schedule + pgTAP) |
-| `notifications`, `observability` | Not started |
+| `notifications` | **Ported** (push_tokens + notification_events schema + advisory lock + RLS + pgTAP + direct FCM v1 / APNs Edge Function + Flutter screen/providers/repo) |
+| `observability` | Not started |
 
 Retiring the legacy stack today would remove all of the above for any venue actually using
 them. **This is the primary reason this report recommends against any cutover action right
