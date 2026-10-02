@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/auth/auth_providers.dart';
 import '../venues/application/venues_providers.dart';
 
 /// Phase 1/early-Phase-2 placeholder authenticated landing screen. The real dashboard (see
-/// features/dashboard/README.md) lands later in Phase 2 once tasks/events/inventory exist to
+/// features/dashboard/README.md) lands later in Phase 2 once more feature screens exist to
 /// summarize.
 class PlaceholderHomeScreen extends ConsumerWidget {
   const PlaceholderHomeScreen({super.key});
@@ -30,8 +31,12 @@ class PlaceholderHomeScreen extends ConsumerWidget {
           ),
         ],
       ),
-      body: const Center(
-        child: Text('Signed in with a venue selected. Feature screens land in Phase 2.'),
+      body: Center(
+        child: FilledButton.icon(
+          onPressed: () => context.go('/tasks'),
+          icon: const Icon(Icons.checklist_outlined),
+          label: const Text('Tasks'),
+        ),
       ),
     );
   }

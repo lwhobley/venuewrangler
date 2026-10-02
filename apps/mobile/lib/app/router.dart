@@ -5,6 +5,7 @@ import '../core/auth/auth_providers.dart';
 import '../features/auth/sign_in_screen.dart';
 import '../features/dashboard/placeholder_home_screen.dart';
 import '../features/organizations/presentation/organization_venue_switcher_screen.dart';
+import '../features/tasks/presentation/task_list_screen.dart';
 import '../features/venues/application/venues_providers.dart';
 
 /// Redirects between the auth flow, venue selection, and the authenticated app shell based
@@ -41,6 +42,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/select-venue',
         builder: (context, state) => const OrganizationVenueSwitcherScreen(),
+      ),
+      GoRoute(
+        path: '/tasks',
+        builder: (context, state) => const TaskListScreen(),
       ),
     ],
   );
