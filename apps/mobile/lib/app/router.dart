@@ -7,12 +7,14 @@ import '../features/billing/presentation/billing_screen.dart';
 import '../features/checklists/presentation/checklist_completion_screen.dart';
 import '../features/checklists/presentation/checklist_list_screen.dart';
 import '../features/ai/presentation/wrangler_assistant_screen.dart';
-import '../features/dashboard/placeholder_home_screen.dart';
+import '../features/dashboard/presentation/dashboard_screen.dart';
+import '../features/events/presentation/event_list_screen.dart';
 import '../features/incidents/presentation/incident_list_screen.dart';
 import '../features/integrations/presentation/integrations_screen.dart';
 import '../features/inventory/presentation/inventory_list_screen.dart';
 import '../features/organizations/presentation/organization_venue_switcher_screen.dart';
 import '../features/schedules/presentation/schedule_list_screen.dart';
+import '../features/settings/presentation/settings_screen.dart';
 import '../features/tasks/presentation/task_list_screen.dart';
 import '../features/venues/application/venues_providers.dart';
 import '../features/workforce/presentation/workforce_roster_screen.dart';
@@ -42,7 +44,7 @@ final routerProvider = Provider<GoRouter>((ref) {
     routes: [
       GoRoute(
         path: '/',
-        builder: (context, state) => const PlaceholderHomeScreen(),
+        builder: (context, state) => const DashboardScreen(),
       ),
       GoRoute(
         path: '/sign-in',
@@ -94,6 +96,14 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/integrations',
         builder: (context, state) => const IntegrationsScreen(),
+      ),
+      GoRoute(
+        path: '/events',
+        builder: (context, state) => const EventListScreen(),
+      ),
+      GoRoute(
+        path: '/settings',
+        builder: (context, state) => const SettingsScreen(),
       ),
     ],
   );
