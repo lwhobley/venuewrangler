@@ -8,9 +8,12 @@ import '../features/checklists/presentation/checklist_list_screen.dart';
 import '../features/ai/presentation/wrangler_assistant_screen.dart';
 import '../features/dashboard/placeholder_home_screen.dart';
 import '../features/incidents/presentation/incident_list_screen.dart';
+import '../features/inventory/presentation/inventory_list_screen.dart';
 import '../features/organizations/presentation/organization_venue_switcher_screen.dart';
+import '../features/schedules/presentation/schedule_list_screen.dart';
 import '../features/tasks/presentation/task_list_screen.dart';
 import '../features/venues/application/venues_providers.dart';
+import '../features/workforce/presentation/workforce_roster_screen.dart';
 
 /// Redirects between the auth flow, venue selection, and the authenticated app shell based
 /// on [isSignedInProvider] and [activeVenueProvider]. Feature routes are added here as
@@ -69,6 +72,18 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/wrangler',
         builder: (context, state) => const WranglerAssistantScreen(),
+      ),
+      GoRoute(
+        path: '/workforce',
+        builder: (context, state) => const WorkforceRosterScreen(),
+      ),
+      GoRoute(
+        path: '/inventory',
+        builder: (context, state) => const InventoryListScreen(),
+      ),
+      GoRoute(
+        path: '/schedules',
+        builder: (context, state) => const ScheduleListScreen(),
       ),
     ],
   );
