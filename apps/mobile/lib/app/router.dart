@@ -18,6 +18,7 @@ import '../features/schedules/presentation/schedule_list_screen.dart';
 import '../features/settings/presentation/settings_screen.dart';
 import '../features/staff_requests/presentation/staff_requests_screen.dart';
 import '../features/tasks/presentation/task_list_screen.dart';
+import '../features/time_clock/presentation/time_clock_screen.dart';
 import '../features/venues/application/venues_providers.dart';
 import '../features/workforce/presentation/workforce_roster_screen.dart';
 
@@ -112,6 +113,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => ShiftInsightsScreen(
           shiftId: state.uri.queryParameters['shiftId'],
         ),
+      ),
+      GoRoute(
+        path: '/time-clock',
+        builder: (context, state) => const TimeClockScreen(),
       ),
       GoRoute(
         path: '/settings',

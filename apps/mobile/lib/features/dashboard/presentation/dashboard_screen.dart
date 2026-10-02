@@ -121,6 +121,7 @@ class DashboardScreen extends ConsumerWidget {
             _NavTile(icon: Icons.report_outlined, label: 'Incidents', route: '/incidents'),
             _NavTile(icon: Icons.auto_awesome_outlined, label: 'Ask Wrangler', route: '/wrangler'),
             _NavTile(icon: Icons.groups_outlined, label: 'Staff', route: '/workforce'),
+            _NavTile(icon: Icons.timer_outlined, label: 'Time Clock', route: '/time-clock'),
             _NavTile(icon: Icons.assignment_outlined, label: 'Staff Requests', route: '/staff-requests'),
             _NavTile(icon: Icons.lightbulb_outlined, label: 'Shift Insights', route: '/shift-insights'),
             _NavTile(icon: Icons.credit_card_outlined, label: 'Billing', route: '/billing'),

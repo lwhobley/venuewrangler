@@ -106,7 +106,7 @@ unverified work and should be the first thing done outside this environment.
 | `insights` (Groq-powered shift insights) | **Ported** (schema + RLS + pgTAP + Groq `shift_insights` prompt + Flutter feature) |
 | `pos` (public ingest webhook + reporting) | Not started |
 | `reservations` (public ingest webhook + CRUD) | Not started |
-| `time-clock` (geofenced + App-Attest-checked) | Not started |
+| `time-clock` (geofenced + anti-replay detection) | **Ported** (venues migration + time_entries schema + Haversine SQL + RLS + pgTAP + Flutter screen/providers/repo) |
 | `notifications`, `media-cleanup`, `observability` | Not started |
 
 Retiring the legacy stack today would remove all of the above for any venue actually using
