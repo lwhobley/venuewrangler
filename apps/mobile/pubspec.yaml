@@ -37,6 +37,10 @@ dependencies:
   # Media
   image_picker: ^1.1.2
 
+  # Opening Stripe's hosted Checkout/Customer Portal URLs in an external browser — the app
+  # never embeds a payment form or touches Stripe secret material (see features/billing/README.md)
+  url_launcher: ^6.3.1
+
   # Client-generated primary keys for idempotent offline-queued inserts (see
   # features/checklists/data/checklists_repository.dart)
   uuid: ^4.5.1

@@ -76,6 +76,12 @@ class PlaceholderHomeScreen extends ConsumerWidget {
               icon: const Icon(Icons.calendar_month_outlined),
               label: const Text('Schedule'),
             ),
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              onPressed: () => context.go('/billing'),
+              icon: const Icon(Icons.credit_card_outlined),
+              label: const Text('Billing'),
+            ),
           ],
         ),
       ),

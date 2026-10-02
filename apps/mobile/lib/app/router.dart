@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../core/auth/auth_providers.dart';
 import '../features/auth/sign_in_screen.dart';
+import '../features/billing/presentation/billing_screen.dart';
 import '../features/checklists/presentation/checklist_completion_screen.dart';
 import '../features/checklists/presentation/checklist_list_screen.dart';
 import '../features/ai/presentation/wrangler_assistant_screen.dart';
@@ -84,6 +85,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/schedules',
         builder: (context, state) => const ScheduleListScreen(),
+      ),
+      GoRoute(
+        path: '/billing',
+        builder: (context, state) => const BillingScreen(),
       ),
     ],
   );
