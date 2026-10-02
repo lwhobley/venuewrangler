@@ -106,10 +106,10 @@ unverified work and should be the first thing done outside this environment.
 | `crm` (leads/BEOs/contracts/forecast) | Not started — distinct from the simple `events` list built in this pass |
 | `documents` (ClamAV-scanned uploads) | Not started |
 | `floor` (floor plans/tables/waitlist) | Not started |
-| `guests` (guest CRM + public leads webhook) | Not started |
+| `guests` (guest CRM + public leads webhook) | **Ported** (guests + guest_household_links schema + derive triggers + RLS + pgTAP) |
 | `insights` (Groq-powered shift insights) | **Ported** (schema + RLS + pgTAP + Groq `shift_insights` prompt + Flutter feature) |
 | `pos` (public ingest webhook + reporting) | Not started |
-| `reservations` (public ingest webhook + CRUD) | Not started |
+| `reservations` (public ingest webhook + CRUD) | **Ported** (reservations + reservation_connections + webhook_replay_log schema + RLS + column security + pgTAP + Flutter screen/providers/repo) |
 | `time-clock` (geofenced + anti-replay detection) | **Ported** (venues migration + time_entries schema + Haversine SQL + RLS + pgTAP + Flutter screen/providers/repo) |
 | `media-cleanup` (durable storage deletion queue) | **Ported** (storage_deletion_jobs schema + RLS + safe path guard regex + worker function + pg_cron schedule + pgTAP) |
 | `notifications` | **Ported** (push_tokens + notification_events schema + advisory lock + RLS + pgTAP + direct FCM v1 / APNs Edge Function + Flutter screen/providers/repo) |

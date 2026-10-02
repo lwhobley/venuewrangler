@@ -9,6 +9,7 @@ import '../features/checklists/presentation/checklist_list_screen.dart';
 import '../features/ai/presentation/wrangler_assistant_screen.dart';
 import '../features/dashboard/presentation/dashboard_screen.dart';
 import '../features/events/presentation/event_list_screen.dart';
+import '../features/guests_reservations/presentation/reservations_screen.dart';
 import '../features/incidents/presentation/incident_list_screen.dart';
 import '../features/insights/presentation/shift_insights_screen.dart';
 import '../features/integrations/presentation/integrations_screen.dart';
@@ -122,6 +123,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/notifications',
         builder: (context, state) => const NotificationsScreen(),
+      ),
+      GoRoute(
+        path: '/reservations',
+        builder: (context, state) => const ReservationsScreen(),
       ),
       GoRoute(
         path: '/settings',
