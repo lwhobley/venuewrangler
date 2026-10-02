@@ -6,6 +6,7 @@ import '../features/auth/sign_in_screen.dart';
 import '../features/billing/presentation/billing_screen.dart';
 import '../features/checklists/presentation/checklist_completion_screen.dart';
 import '../features/checklists/presentation/checklist_list_screen.dart';
+import '../features/chat/presentation/chat_screen.dart';
 import '../features/ai/presentation/wrangler_assistant_screen.dart';
 import '../features/dashboard/presentation/dashboard_screen.dart';
 import '../features/events/presentation/event_list_screen.dart';
@@ -137,6 +138,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/pos',
         builder: (context, state) => const PosManagementScreen(),
+      ),
+      GoRoute(
+        path: '/chat',
+        builder: (context, state) => const ChatScreen(),
       ),
       GoRoute(
         path: '/settings',

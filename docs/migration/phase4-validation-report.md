@@ -102,7 +102,7 @@ unverified work and should be the first thing done outside this environment.
 | Legacy module | Status in rebuild |
 |---|---|
 | `staff-requests` | **Ported** (schema + RLS + pgTAP + Flutter screen/providers/repo) |
-| `chat` | Not started |
+| `chat` | **Ported** (conversations + conversation_members + messages + conversation_reads schema + media-cleanup integration + private bucket + RLS + pgTAP + Flutter screen/providers/repo) |
 | `crm` (leads/BEOs/contracts/forecast) | Not started — distinct from the simple `events` list built in this pass |
 | `documents` (ClamAV-scanned uploads) | Not started |
 | `floor` (floor plans/tables/waitlist) | **Ported** (floor_plans + floor_tables + floor_table_assignments schema + advisory locks + RPCs + RLS + Realtime publication + pgTAP + Flutter screen/providers/repo) |
