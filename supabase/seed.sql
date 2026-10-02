@@ -1,0 +1,8 @@
+-- Local development seed data for `supabase db reset`.
+--
+-- Intentionally empty for now. Do not add real customer data, real secrets, or guessed
+-- provider credentials here. Once Phase 2 authorization-test personas stabilize
+-- (docs/migration/flutter-supabase-rebuild-plan.md), promote the fixture pattern already
+-- proven in supabase/tests/database/foundation_rls.test.sql into a minimal, clearly-fake
+-- dev dataset (e.g. "Demo Organization" / "Demo Venue" with one user per role) so a fresh
+-- `supabase start` gives engineers something to click through locally.

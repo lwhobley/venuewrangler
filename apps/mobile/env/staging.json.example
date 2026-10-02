@@ -1,0 +1,5 @@
+{
+  "SUPABASE_URL": "https://replace-me-staging.supabase.co",
+  "SUPABASE_ANON_KEY": "replace-with-the-staging-project-anon-key",
+  "SENTRY_DSN": "replace-with-staging-sentry-dsn"
+}

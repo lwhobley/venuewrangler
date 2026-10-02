@@ -82,6 +82,19 @@ prowler_output/
 
 # Supabase CLI link metadata
 supabase/.temp/
+supabase/.env
+
+# Flutter app build/generated output
+apps/mobile/.dart_tool/
+apps/mobile/.flutter-plugins
+apps/mobile/.flutter-plugins-dependencies
+apps/mobile/build/
+apps/mobile/.env
+apps/mobile/env/development.json
+apps/mobile/env/staging.json
+apps/mobile/env/production.json
+apps/mobile/**/*.g.dart
+apps/mobile/**/*.freezed.dart
 
 # Build artifacts and assets
 builds/
