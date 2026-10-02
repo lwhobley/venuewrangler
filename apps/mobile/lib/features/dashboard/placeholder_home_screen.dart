@@ -46,6 +46,12 @@ class PlaceholderHomeScreen extends ConsumerWidget {
               icon: const Icon(Icons.fact_check_outlined),
               label: const Text('Checklists'),
             ),
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              onPressed: () => context.go('/incidents'),
+              icon: const Icon(Icons.report_outlined),
+              label: const Text('Incidents'),
+            ),
           ],
         ),
       ),

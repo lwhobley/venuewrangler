@@ -9,6 +9,7 @@ import '../core/network/supabase_providers.dart';
 import '../core/offline/offline_queue_providers.dart';
 import '../core/offline/pending_mutation.dart';
 import '../features/checklists/application/checklists_providers.dart';
+import '../features/incidents/application/incidents_providers.dart';
 import '../features/tasks/application/tasks_providers.dart';
 import 'app.dart';
 
@@ -31,12 +32,13 @@ Future<void> bootstrap(AppFlavor flavor) async {
       overrides: [
         supabaseClientProvider.overrideWithValue(Supabase.instance.client),
         // Composition root for the offline-mutation-queue handler registry: each feature
-        // that queues mutations (currently only tasks) exposes its own handler-map
-        // provider, merged here so core/offline never imports a feature directly.
+        // that queues mutations exposes its own handler-map provider, merged here so
+        // core/offline never imports a feature directly.
         offlineQueueHandlersProvider.overrideWith(
           (ref) => <String, MutationHandler>{
             ...ref.watch(taskMutationHandlersProvider),
             ...ref.watch(checklistMutationHandlersProvider),
+            ...ref.watch(incidentMutationHandlersProvider),
           },
         ),
       ],

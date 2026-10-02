@@ -6,6 +6,7 @@ import '../features/auth/sign_in_screen.dart';
 import '../features/checklists/presentation/checklist_completion_screen.dart';
 import '../features/checklists/presentation/checklist_list_screen.dart';
 import '../features/dashboard/placeholder_home_screen.dart';
+import '../features/incidents/presentation/incident_list_screen.dart';
 import '../features/organizations/presentation/organization_venue_switcher_screen.dart';
 import '../features/tasks/presentation/task_list_screen.dart';
 import '../features/venues/application/venues_providers.dart';
@@ -59,6 +60,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           templateId: state.pathParameters['templateId']!,
           title: state.extra as String?,
         ),
+      ),
+      GoRoute(
+        path: '/incidents',
+        builder: (context, state) => const IncidentListScreen(),
       ),
     ],
   );
