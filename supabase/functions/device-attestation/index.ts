@@ -7,15 +7,28 @@
 // for a Google OAuth2 token (see ../_shared/google-auth.ts) and calls the real
 // decodeIntegrityToken API, so `status` reflects an actual verdict from Google.
 //
-// iOS (App Attest): NOT cryptographically verified. Real verification means parsing a CBOR/
-// COSE attestation object and validating its certificate chain against Apple's App Attest
-// root CA — a non-trivial parser this environment has no verified CBOR library for. The
-// submitted assertion is stored as-is (status='observed') so the telemetry pipeline and
-// schema are in place; implement real verification as a follow-up before this ever moves
-// past observe mode for iOS.
+// iOS (App Attest): cryptographically verified — see ../_shared/app-attest.ts for the full
+// 9-step algorithm (CBOR/COSE parsing, certificate chain validation against Apple's real App
+// Attestation Root CA, nonce/rpIdHash/counter/aaguid/credentialId checks), implemented with a
+// hand-rolled DER parser and Web Crypto since Deno's edge runtime has no Node `crypto` module.
+//
+// Two-step flow, since App Attest needs a server-issued challenge before the client can attest:
+//   1. POST { action: "challenge", platform: "ios", device_id } -> { challenge }. The challenge
+//      is a signed, timestamped token (see signAttestationChallenge in ../_shared/crypto.ts),
+//      bound to this exact user and device_id, not a server-stored single-use nonce — there is
+//      no attestation_challenges table. That means a captured, still-fresh challenge+attestation
+//      pair could in principle be replayed within its 5-minute TTL; closing that fully would
+//      need real server-side challenge storage, which is a reasonable follow-up but out of
+//      scope for "implement the verification" and is flagged here rather than silently assumed
+//      away. observe mode's own purpose (recording, never blocking) makes this an acceptable
+//      interim gap, not one to carry into `enforce` mode unexamined.
+//   2. POST { platform: "ios", device_id, key_id, attestation_object, challenge } -> verified
+//      and recorded.
 import { corsHeaders, handleCorsPreflight } from "../_shared/cors.ts";
 import { createServiceClient, createUserClient } from "../_shared/supabase-clients.ts";
 import { getGoogleAccessToken } from "../_shared/google-auth.ts";
+import { signAttestationChallenge, verifyAttestationChallenge } from "../_shared/crypto.ts";
+import { verifyAppAttest } from "../_shared/app-attest.ts";
 
 function jsonResponse(body: Record<string, unknown>, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -24,17 +37,16 @@ function jsonResponse(body: Record<string, unknown>, status = 200): Response {
   });
 }
 
+function base64ToBytes(b64: string): Uint8Array {
+  return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+}
+
 Deno.serve(async (req) => {
   const preflight = handleCorsPreflight(req);
   if (preflight) return preflight;
 
   if (req.method !== "POST") {
     return jsonResponse({ error: "method_not_allowed" }, 405);
-  }
-
-  const mode = Deno.env.get("DEVICE_ATTESTATION_MODE") ?? "observe";
-  if (mode === "off") {
-    return jsonResponse({ recorded: false, mode: "off" });
   }
 
   const authHeader = req.headers.get("Authorization");
@@ -48,11 +60,13 @@ Deno.serve(async (req) => {
   }
 
   let payload: {
+    action?: string;
     platform?: string;
     device_id?: string;
     integrity_token?: string;
     key_id?: string;
     attestation_object?: string;
+    challenge?: string;
   };
   try {
     payload = await req.json();
@@ -60,11 +74,28 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: "invalid_json_body" }, 400);
   }
 
-  if (payload.platform !== "ios" && payload.platform !== "android") {
-    return jsonResponse({ error: "invalid_platform" }, 400);
-  }
   if (!payload.device_id) {
     return jsonResponse({ error: "missing_device_id" }, 400);
+  }
+
+  // Step 1 of the iOS flow: issue a signed challenge. Not gated by DEVICE_ATTESTATION_MODE
+  // since issuing a challenge records nothing and blocks nothing either way.
+  if (payload.action === "challenge") {
+    const challengeSigningKey = Deno.env.get("APP_ATTEST_CHALLENGE_SIGNING_KEY");
+    if (!challengeSigningKey) {
+      return jsonResponse({ error: "app_attest_not_configured" }, 503);
+    }
+    const challenge = await signAttestationChallenge(userData.user.id, payload.device_id, challengeSigningKey);
+    return jsonResponse({ challenge });
+  }
+
+  const mode = Deno.env.get("DEVICE_ATTESTATION_MODE") ?? "observe";
+  if (mode === "off") {
+    return jsonResponse({ recorded: false, mode: "off" });
+  }
+
+  if (payload.platform !== "ios" && payload.platform !== "android") {
+    return jsonResponse({ error: "invalid_platform" }, 400);
   }
 
   const serviceClient = createServiceClient();
@@ -120,12 +151,50 @@ Deno.serve(async (req) => {
       }
     }
   } else {
-    // iOS — recorded only, see the header comment above.
-    detail = {
-      key_id: payload.key_id ?? null,
-      attestation_object_length: payload.attestation_object?.length ?? 0,
-      note: "not cryptographically verified in this build",
-    };
+    // iOS — real cryptographic verification via app-attest.ts.
+    if (!payload.key_id || !payload.attestation_object || !payload.challenge) {
+      return jsonResponse({ error: "missing_key_id_attestation_object_or_challenge" }, 400);
+    }
+
+    const challengeSigningKey = Deno.env.get("APP_ATTEST_CHALLENGE_SIGNING_KEY");
+    const teamId = Deno.env.get("APP_ATTEST_TEAM_ID");
+    const bundleId = Deno.env.get("APP_ATTEST_BUNDLE_ID");
+
+    if (!challengeSigningKey || !teamId || !bundleId) {
+      console.error("App Attest is not configured");
+      detail = { error: "app_attest_not_configured" };
+    } else {
+      const nonceBytes = await verifyAttestationChallenge(
+        payload.challenge,
+        userData.user.id,
+        payload.device_id,
+        challengeSigningKey,
+      );
+
+      if (!nonceBytes) {
+        status = "invalid";
+        detail = { error: "challenge_invalid_or_expired" };
+      } else {
+        try {
+          const result = await verifyAppAttest({
+            attestationObject: base64ToBytes(payload.attestation_object),
+            challenge: nonceBytes,
+            keyId: payload.key_id,
+            bundleIdentifier: bundleId,
+            teamIdentifier: teamId,
+            // Non-production builds (TestFlight/dev) attest with the development AAGUID;
+            // allow it everywhere for now since this is observe-mode only — tighten this to
+            // production-only once this feature is actually used to gate anything.
+            allowDevelopmentEnvironment: true,
+          });
+          status = "valid";
+          detail = { environment: result.environment, key_id: result.keyId };
+        } catch (err) {
+          status = "invalid";
+          detail = { error: err instanceof Error ? err.message : String(err) };
+        }
+      }
+    }
   }
 
   const { error: insertError } = await serviceClient.from("device_attestations").insert({
