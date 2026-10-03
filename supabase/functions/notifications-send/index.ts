@@ -2,6 +2,9 @@ import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { corsHeaders } from "../_shared/cors.ts";
 import { createServiceClient, createUserClient } from "../_shared/supabase-clients.ts";
 import { getGoogleAccessToken } from "../_shared/google-auth.ts";
+import { initObservability, captureException, flushObservability } from "../_shared/observability.ts";
+
+initObservability();
 
 const FCM_SCOPE = "https://www.googleapis.com/auth/firebase.messaging";
 
@@ -209,6 +212,8 @@ serve(async (req: Request) => {
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (error) {
+    captureException(error, { function: "notifications-send", url: req.url });
+    await flushObservability();
     const message = error instanceof Error ? error.message : String(error);
     return new Response(JSON.stringify({ error: message }), {
       status: 500,
