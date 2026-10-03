@@ -124,10 +124,17 @@ select lives_ok(
   'a venue member can upload to checklist-evidence under their own venue''s path'
 );
 
-select lives_ok(
+-- staff-documents is the documents module's bucket (supabase/migrations/20261003003000) and no
+-- longer has a direct insert policy for `authenticated` at all, unlike checklist-evidence above
+-- — uploads must go through the documents-upload Edge Function, since that's the only place the
+-- required ClamAV scan and magic-byte MIME validation can happen; RLS has no way to verify a
+-- file was scanned.
+select throws_ok(
   $$ insert into storage.objects (bucket_id, name)
-     values ('staff-documents', '10000000-0000-0000-0000-00000000000a/20000000-0000-0000-0000-0000000000a1/w9.pdf') $$,
-  'a venue member can upload to staff-documents under their own venue''s path'
+     values ('staff-documents', '10000000-0000-0000-0000-00000000000a/20000000-0000-0000-0000-0000000000a1/sop--aaaa--w9.pdf') $$,
+  '42501',
+  null,
+  'a client can never upload directly into staff-documents (Edge-Function/service-role only, see documents_rls.test.sql)'
 );
 
 -- ---------------------------------------------------------------------------

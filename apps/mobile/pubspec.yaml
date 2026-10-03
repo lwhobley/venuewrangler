@@ -37,6 +37,12 @@ dependencies:
   # Media
   image_picker: ^1.1.2
 
+  # Generic document picker (PDF/Office/text) for features/documents — image_picker alone
+  # can't select non-image files. Added in this change; not yet verified to resolve/compile,
+  # since no Flutter SDK is available in this environment to run `flutter pub get` — see
+  # features/documents/README.md.
+  file_picker: ^8.1.6
+
   # Opening Stripe's hosted Checkout/Customer Portal URLs in an external browser — the app
   # never embeds a payment form or touches Stripe secret material (see features/billing/README.md)
   url_launcher: ^6.3.1
