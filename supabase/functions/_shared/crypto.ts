@@ -3,14 +3,27 @@
 // `state` parameter carried through a provider's redirect, using Web Crypto (SubtleCrypto)
 // since Deno's edge runtime has no Node `crypto` module.
 
-function base64ToBytes(b64: string): Uint8Array {
-  return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+// Uint8Array<ArrayBuffer>, not the default Uint8Array<ArrayBufferLike>: Web Crypto's
+// BufferSource rejects the wider type (it admits SharedArrayBuffer) under current TypeScript.
+function base64ToBytes(b64: string): Uint8Array<ArrayBuffer> {
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
 }
 
 function bytesToBase64(bytes: Uint8Array): string {
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);
   return btoa(binary);
+}
+
+// Used to look up an attestation_challenges row by its nonce without storing the nonce itself.
+export async function sha256Hex(bytes: Uint8Array<ArrayBuffer>): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 async function importAesKey(base64Key: string): Promise<CryptoKey> {
@@ -112,11 +125,19 @@ const ATTESTATION_CHALLENGE_TTL_MS = 5 * 60 * 1000; // 5 minutes — long enough
 // Same signed-not-encrypted pattern as signOAuthState: binds a fresh random nonce to the exact
 // user and device that requested it, so an attestation generated for one user/device's
 // challenge can't be replayed against another's.
+export interface SignedAttestationChallenge {
+  token: string;
+  nonceBytes: Uint8Array<ArrayBuffer>;
+}
+
+// Returns the nonce bytes alongside the signed token so the caller can record a server-side,
+// single-use row for it (see attestation_challenges table) without needing to re-decode the
+// token or duplicate the random-generation logic.
 export async function signAttestationChallenge(
   userId: string,
   deviceId: string,
   base64Key: string,
-): Promise<string> {
+): Promise<SignedAttestationChallenge> {
   const nonceBytes = crypto.getRandomValues(new Uint8Array(32));
   const payload: AttestationChallengePayload = {
     user_id: userId,
@@ -127,7 +148,7 @@ export async function signAttestationChallenge(
   const payloadB64 = btoa(JSON.stringify(payload));
   const key = await importHmacKey(base64Key);
   const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payloadB64));
-  return `${payloadB64}.${bytesToBase64(new Uint8Array(signature))}`;
+  return { token: `${payloadB64}.${bytesToBase64(new Uint8Array(signature))}`, nonceBytes };
 }
 
 export async function verifyAttestationChallenge(
@@ -135,7 +156,7 @@ export async function verifyAttestationChallenge(
   userId: string,
   deviceId: string,
   base64Key: string,
-): Promise<Uint8Array | null> {
+): Promise<Uint8Array<ArrayBuffer> | null> {
   const [payloadB64, signatureB64] = token.split(".");
   if (!payloadB64 || !signatureB64) return null;
 

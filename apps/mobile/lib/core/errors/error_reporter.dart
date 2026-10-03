@@ -35,9 +35,11 @@ SentryEvent? _scrubEvent(SentryEvent event, Hint hint) {
   final request = event.request;
   if (request == null) return event;
 
-  final scrubbedHeaders = Map<String, String>.from(request.headers ?? {})
-    ..remove('Authorization')
-    ..remove('apikey');
+  // Header names are case-insensitive — an exact-case remove('Authorization') would let a
+  // lowercase `authorization` header through.
+  const sensitiveHeaders = {'authorization', 'apikey', 'cookie'};
+  final scrubbedHeaders = Map<String, String>.from(request.headers)
+    ..removeWhere((key, _) => sensitiveHeaders.contains(key.toLowerCase()));
 
   final scrubbedUrl = _stripSensitiveQueryParams(request.url);
 

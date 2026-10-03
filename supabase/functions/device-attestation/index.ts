@@ -27,7 +27,7 @@
 import { corsHeaders, handleCorsPreflight } from "../_shared/cors.ts";
 import { createServiceClient, createUserClient } from "../_shared/supabase-clients.ts";
 import { getGoogleAccessToken } from "../_shared/google-auth.ts";
-import { signAttestationChallenge, verifyAttestationChallenge } from "../_shared/crypto.ts";
+import { signAttestationChallenge, verifyAttestationChallenge, sha256Hex } from "../_shared/crypto.ts";
 import { verifyAppAttest } from "../_shared/app-attest.ts";
 import { initObservability, captureException, flushObservability } from "../_shared/observability.ts";
 
@@ -42,6 +42,42 @@ function jsonResponse(body: Record<string, unknown>, status = 200): Response {
 
 function base64ToBytes(b64: string): Uint8Array {
   return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+}
+
+// deno-lint-ignore no-explicit-any
+async function consumeAttestationChallenge(
+  // deno-lint-ignore no-explicit-any
+  serviceClient: any,
+  nonceHash: string,
+): Promise<"consumed" | "already_used" | "not_found"> {
+  // Atomic claim: only succeeds (updates a row) the first time it's called for a given
+  // nonce_hash, since the WHERE clause excludes rows already marked consumed. A second call
+  // with the same hash updates zero rows, which is exactly the replay case this guards against.
+  const { data, error } = await serviceClient
+    .from("attestation_challenges")
+    .update({ consumed_at: new Date().toISOString() })
+    .eq("nonce_hash", nonceHash)
+    .is("consumed_at", null)
+    .gt("expires_at", new Date().toISOString())
+    .select("id");
+
+  if (error) {
+    console.error("failed to consume attestation challenge", error);
+    return "not_found";
+  }
+  if (data && data.length > 0) return "consumed";
+
+  // Zero rows updated: either no row with this hash exists (recording failed at issuance, or
+  // this predates the attestation_challenges table), or one exists but is already consumed or
+  // expired. Distinguish the two so an issuance-time recording failure doesn't become a hard
+  // verification failure.
+  const { data: existing } = await serviceClient
+    .from("attestation_challenges")
+    .select("consumed_at")
+    .eq("nonce_hash", nonceHash)
+    .maybeSingle();
+
+  return existing?.consumed_at ? "already_used" : "not_found";
 }
 
 Deno.serve(async (req) => {
@@ -99,8 +135,25 @@ async function handleRequest(req: Request): Promise<Response> {
     if (!challengeSigningKey) {
       return jsonResponse({ error: "app_attest_not_configured" }, 503);
     }
-    const challenge = await signAttestationChallenge(userData.user.id, payload.device_id, challengeSigningKey);
-    return jsonResponse({ challenge });
+    const { token, nonceBytes } = await signAttestationChallenge(
+      userData.user.id,
+      payload.device_id,
+      challengeSigningKey,
+    );
+    // Record the challenge server-side so it can be consumed exactly once on verification —
+    // closes the replay-window gap the signed token alone can't (see attestation_challenges
+    // migration). Recording failure is non-fatal: the challenge still works, it just can't be
+    // tracked as single-use, same fail-open posture as this function's observe mode generally.
+    const { error: recordError } = await createServiceClient().from("attestation_challenges").insert({
+      user_id: userData.user.id,
+      device_id: payload.device_id,
+      nonce_hash: await sha256Hex(nonceBytes),
+      expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+    });
+    if (recordError) {
+      console.error("failed to record attestation challenge", recordError);
+    }
+    return jsonResponse({ challenge: token });
   }
 
   const mode = Deno.env.get("DEVICE_ATTESTATION_MODE") ?? "observe";
@@ -188,6 +241,14 @@ async function handleRequest(req: Request): Promise<Response> {
       if (!nonceBytes) {
         status = "invalid";
         detail = { error: "challenge_invalid_or_expired" };
+      } else if ((await consumeAttestationChallenge(serviceClient, await sha256Hex(nonceBytes))) === "already_used") {
+        // The signed token itself is still valid and unexpired, but this exact nonce was already
+        // consumed by a prior verification attempt — the actual replay case this table exists to
+        // catch. A row that was never found (e.g. the insert at issuance time failed) is treated
+        // as pass-through rather than a hard failure, matching this function's fail-open,
+        // observe-only posture elsewhere.
+        status = "invalid";
+        detail = { error: "challenge_already_used" };
       } else {
         try {
           const result = await verifyAppAttest({

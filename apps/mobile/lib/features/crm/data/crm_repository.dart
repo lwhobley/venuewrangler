@@ -1,5 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../core/errors/app_error.dart';
 import '../domain/crm_beo.dart';
 import '../domain/crm_contract.dart';
 import '../domain/crm_lead.dart';
@@ -41,6 +42,21 @@ abstract class CrmRepository {
 
   Future<List<CrmForecastRow>> getForecast({required String venueId});
   Future<List<CrmStaleLead>> getStaleLeads({required String venueId, int days = 5});
+
+  /// Returns a hosted Stripe Checkout URL (mode: payment) for this BEO's deposit, to open in
+  /// an external browser — same never-embed-a-payment-form discipline as features/billing.
+  /// Throws [AppError] if the deposit is already paid/waived or nothing is due.
+  Future<String> createDepositCheckoutUrl({required String beoId});
+
+  /// Renders [templateId] against [leadId]/[beoId] context and sends it to [to] via the
+  /// `crm-send-email` Edge Function (the only place an email template is ever actually
+  /// delivered — see that function's header comment).
+  Future<void> sendTemplateEmail({
+    required String templateId,
+    String? leadId,
+    String? beoId,
+    required String to,
+  });
 }
 
 class SupabaseCrmRepository implements CrmRepository {
@@ -204,5 +220,79 @@ class SupabaseCrmRepository implements CrmRepository {
     final response =
         await _client.rpc('crm_stale_leads', params: {'p_venue_id': venueId, 'p_days': days});
     return (response as List<dynamic>).map((row) => CrmStaleLead.fromJson(row as Map<String, dynamic>)).toList();
+  }
+
+  @override
+  Future<String> createDepositCheckoutUrl({required String beoId}) async {
+    try {
+      final response = await _client.functions.invoke(
+        'crm-create-deposit-checkout',
+        body: {'beo_id': beoId},
+      );
+      final url = (response.data as Map?)?['url'] as String?;
+      if (url == null) {
+        throw const UnknownError('Could not start checkout. Please try again.');
+      }
+      return url;
+    } on FunctionException catch (error) {
+      throw _mapDepositCheckoutError(error);
+    }
+  }
+
+  AppError _mapDepositCheckoutError(FunctionException error) {
+    final details = error.details;
+    final code = details is Map ? details['error'] as String? : null;
+
+    return switch (code) {
+      'forbidden' => const PermissionDeniedError('Only a venue manager can collect this deposit.'),
+      'no_deposit_due' => const UnknownError('There is no deposit due on this event.'),
+      'deposit_already_paid' => const UnknownError('This deposit has already been paid.'),
+      'deposit_waived' => const UnknownError('This deposit was waived.'),
+      'beo_not_found' => const NotFoundError('That event could not be found.'),
+      'billing_not_configured' => const UnknownError('Payments are not configured yet. Please try again later.'),
+      'invalid_or_expired_session' => const AuthError('Your session has expired. Please sign in again.'),
+      _ => error.status >= 500
+          ? const UnknownError('Checkout is temporarily unavailable.')
+          : const UnknownError('Something went wrong. Please try again.'),
+    };
+  }
+
+  @override
+  Future<void> sendTemplateEmail({
+    required String templateId,
+    String? leadId,
+    String? beoId,
+    required String to,
+  }) async {
+    try {
+      await _client.functions.invoke(
+        'crm-send-email',
+        body: {
+          'template_id': templateId,
+          if (leadId != null) 'lead_id': leadId,
+          if (beoId != null) 'beo_id': beoId,
+          'to': to,
+        },
+      );
+    } on FunctionException catch (error) {
+      throw _mapSendEmailError(error);
+    }
+  }
+
+  AppError _mapSendEmailError(FunctionException error) {
+    final details = error.details;
+    final code = details is Map ? details['error'] as String? : null;
+
+    return switch (code) {
+      'forbidden' => const PermissionDeniedError('Only a venue manager can send this template.'),
+      'template_not_found' => const NotFoundError('That email template could not be found.'),
+      'missing_or_invalid_to_address' => const UnknownError('Enter a valid recipient email address.'),
+      'email_not_configured' => const UnknownError('Email sending is not configured yet. Please try again later.'),
+      'email_send_failed' => const UnknownError('The email could not be sent. Please try again.'),
+      'invalid_or_expired_session' => const AuthError('Your session has expired. Please sign in again.'),
+      _ => error.status >= 500
+          ? const UnknownError('Email is temporarily unavailable.')
+          : const UnknownError('Something went wrong. Please try again.'),
+    };
   }
 }

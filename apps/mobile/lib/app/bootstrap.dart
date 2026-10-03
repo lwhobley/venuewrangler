@@ -1,3 +1,6 @@
+import 'dart:io';
+
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -26,6 +29,22 @@ Future<void> bootstrap(AppFlavor flavor) async {
     url: env.supabaseUrl,
     anonKey: env.supabaseAnonKey,
   );
+
+  // Android push notifications only — iOS uses native APNs directly (see
+  // ios/Runner/PushNotificationsPlugin.swift) and has no google-services equivalent file here,
+  // so Firebase is never initialized there. Guarded with a try/catch, not just the platform
+  // check: android/app/google-services.json may still be the placeholder note rather than a
+  // real config (see that path), in which case this throws at startup rather than registering
+  // push for the wrong Firebase project — app startup must not depend on this succeeding.
+  if (Platform.isAndroid) {
+    try {
+      await Firebase.initializeApp();
+    } catch (error) {
+      // ignore: avoid_print
+      print('Firebase.initializeApp() failed — Android push notifications will not work until '
+          'android/app/google-services.json is replaced with the real config: $error');
+    }
+  }
 
   await runAppWithErrorReporting(
     env,

@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/offline/offline_queue_connectivity.dart';
+import '../core/security/app_attest_providers.dart';
 import '../core/theme/app_theme.dart';
+import '../features/notifications/application/notifications_providers.dart';
 import 'router.dart';
 
 class VenueWranglerApp extends ConsumerWidget {
@@ -13,6 +15,12 @@ class VenueWranglerApp extends ConsumerWidget {
     // Side-effect only: activates the offline-mutation-queue flush-on-reconnect listener for
     // the whole app's lifetime. See core/offline/offline_queue_connectivity.dart.
     ref.watch(offlineQueueConnectivityProvider);
+    // Side-effect only: fires an App Attest attestation attempt on sign-in. See
+    // core/security/app_attest_providers.dart.
+    ref.watch(appAttestTriggerProvider);
+    // Side-effect only: registers a push token for the active venue. See
+    // features/notifications/application/notifications_providers.dart.
+    ref.watch(pushRegistrationTriggerProvider);
 
     final router = ref.watch(routerProvider);
 

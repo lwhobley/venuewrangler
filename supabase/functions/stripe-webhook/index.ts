@@ -10,6 +10,51 @@ import { initObservability, captureException, flushObservability } from "../_sha
 
 initObservability();
 
+// The only writer of crm_beos.deposit_status/deposit_payment_intent_id/deposit_paid_at (see
+// crm-create-deposit-checkout's header comment).
+async function markBeoDepositPaid(
+  serviceClient: ReturnType<typeof createServiceClient>,
+  session: Stripe.Checkout.Session,
+): Promise<void> {
+  const beoId = session.metadata?.beo_id;
+  if (!beoId) {
+    console.error("beo_deposit session missing beo_id in metadata", session.id);
+    return;
+  }
+  const paymentIntentId =
+    typeof session.payment_intent === "string" ? session.payment_intent : session.payment_intent?.id;
+
+  const { data, error } = await serviceClient
+    .from("crm_beos")
+    .update({
+      deposit_status: "paid",
+      deposit_payment_intent_id: paymentIntentId ?? null,
+      deposit_paid_at: new Date().toISOString(),
+    })
+    .eq("id", beoId)
+    // null means "due" everywhere else in this schema (waive_beo_deposit's coalesce, the
+    // Flutter client's depositDueAndUnpaid) — matching only 'due' would silently drop real
+    // payments on BEOs whose status was never explicitly set. Excluding 'paid'/'waived' keeps
+    // Stripe's redeliveries idempotent and never clobbers a manager's later waive.
+    .or("deposit_status.is.null,deposit_status.eq.due")
+    .select("id");
+
+  if (error) {
+    // Thrown, not just logged: Stripe retries on a 500, which is what a transient DB failure
+    // on a real payment needs.
+    throw error;
+  }
+  if (!data || data.length === 0) {
+    // Already paid (a redelivery — expected) or waived after checkout began (money was taken
+    // anyway and needs a manual refund decision).
+    console.warn("beo_deposit payment matched no due/unset BEO; already paid or waived", {
+      beoId,
+      session: session.id,
+      paymentIntentId,
+    });
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: "method_not_allowed" }), { status: 405 });
@@ -40,6 +85,23 @@ Deno.serve(async (req) => {
     switch (event.type) {
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
+
+        // CRM BEO deposit checkout (crm-create-deposit-checkout) is a one-off "payment" mode
+        // session, distinguished from a subscription checkout by this metadata tag — it has no
+        // organization_id/customer to upsert into subscriptions, it marks a crm_beos row paid
+        // instead. This is the only place deposit_status/deposit_payment_intent_id/
+        // deposit_paid_at are ever written, matching that function's own comment that it never
+        // marks a deposit paid itself.
+        if (session.metadata?.checkout_type === "beo_deposit") {
+          // Delayed-notification payment methods (e.g. bank debits) complete the session with
+          // payment_status "unpaid" — money hasn't moved yet. Those are settled by
+          // checkout.session.async_payment_succeeded below instead.
+          if (session.payment_status === "paid") {
+            await markBeoDepositPaid(serviceClient, session);
+          }
+          break;
+        }
+
         const organizationId = session.metadata?.organization_id;
         const customerId =
           typeof session.customer === "string" ? session.customer : session.customer?.id;
@@ -63,6 +125,14 @@ Deno.serve(async (req) => {
             organizationId,
             customerId,
           });
+        }
+        break;
+      }
+
+      case "checkout.session.async_payment_succeeded": {
+        const session = event.data.object as Stripe.Checkout.Session;
+        if (session.metadata?.checkout_type === "beo_deposit") {
+          await markBeoDepositPaid(serviceClient, session);
         }
         break;
       }
@@ -105,8 +175,8 @@ Deno.serve(async (req) => {
       }
 
       default:
-        // Every other event type is intentionally ignored — only the three above affect
-        // subscription state this app cares about.
+        // Every other event type is intentionally ignored — only the cases above affect
+        // subscription or deposit state this app cares about.
         break;
     }
   } catch (err) {

@@ -5,7 +5,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../core/offline/offline_queue_providers.dart';
-import '../../../core/offline/pending_mutation.dart';
 import '../../media/application/image_picker_service.dart';
 import '../../media/application/media_providers.dart';
 import '../../venues/application/venues_providers.dart';

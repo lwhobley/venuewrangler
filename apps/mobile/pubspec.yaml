@@ -38,9 +38,7 @@ dependencies:
   image_picker: ^1.1.2
 
   # Generic document picker (PDF/Office/text) for features/documents — image_picker alone
-  # can't select non-image files. Added in this change; not yet verified to resolve/compile,
-  # since no Flutter SDK is available in this environment to run `flutter pub get` — see
-  # features/documents/README.md.
+  # can't select non-image files. See features/documents/README.md.
   file_picker: ^8.1.6
 
   # Opening Stripe's hosted Checkout/Customer Portal URLs in an external browser — the app
@@ -53,6 +51,15 @@ dependencies:
 
   cupertino_icons: ^1.0.8
 
+  # Android push token acquisition only — iOS uses native APNs directly (see
+  # ios/Runner/PushNotificationsPlugin.swift), matching the APNS_KEY/APNS_KEY_ID/APNS_TEAM_ID/
+  # APNS_BUNDLE_ID secrets already set on notifications-send, rather than bridging iOS through
+  # Firebase too. firebase_core is required by firebase_messaging regardless of platform, but
+  # Firebase.initializeApp() itself is only ever called when running on Android (see
+  # app/bootstrap.dart) — iOS has no google-services equivalent file and doesn't need one here.
+  firebase_core: ^3.8.0
+  firebase_messaging: ^15.1.5
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -61,6 +68,15 @@ dev_dependencies:
   freezed: ^2.5.7
   json_serializable: ^6.9.0
   riverpod_generator: ^2.6.3
+
+  # Test-only: mocking the HTTP layer under SupabaseClient (app_attest_service_test.dart) and
+  # the platform-interface singletons for url_launcher/flutter_secure_storage, so tests can
+  # fake a plugin's behavior instead of hitting a real platform channel that doesn't exist on
+  # a test host. Already present transitively via supabase_flutter/url_launcher/
+  # flutter_secure_storage; pinned here explicitly rather than relying on that.
+  http: ^1.6.0
+  url_launcher_platform_interface: ^2.3.2
+  flutter_secure_storage_platform_interface: ^1.1.2
 
 flutter:
   uses-material-design: true

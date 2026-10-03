@@ -10,5 +10,5 @@
     }
   },
   "include": ["**/*.ts", "**/*.tsx"],
-  "exclude": ["packages/api/**"]
+  "exclude": ["packages/api/**", "supabase/functions/**"]
 }

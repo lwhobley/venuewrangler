@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "966806557735",
+    "project_id": "venuewrangler-ed056",
+    "storage_bucket": "venuewrangler-ed056.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:966806557735:android:4bbd6f12ade1c6c4e8aa02",
+        "android_client_info": {
+          "package_name": "com.venuewrangler.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCT7RwRr7FOQ5Tdnxt_gXSEtK2BsBX0DZ4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

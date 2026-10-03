@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../venues/application/venues_providers.dart';
 import '../application/crm_providers.dart';
@@ -280,20 +281,50 @@ class _BeoTile extends ConsumerWidget {
           ListTile(
             title: const Text('Deposit due'),
             subtitle: Text('\$${(beo.depositCents! / 100).toStringAsFixed(2)}'),
-            trailing: TextButton(
-              onPressed: () async {
-                try {
-                  await ref.read(crmRepositoryProvider).waiveBeoDeposit(beoId: beo.id);
-                  ref.invalidate(crmBeosProvider(venueId));
-                } catch (_) {
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Could not waive deposit.')),
-                    );
-                  }
-                }
-              },
-              child: const Text('Waive'),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextButton(
+                  onPressed: () async {
+                    try {
+                      // Opens Stripe's hosted Checkout in an external browser, same
+                      // never-embed-a-payment-form discipline as features/billing — this app
+                      // never sees card details or Stripe secret material. The deposit itself
+                      // is only ever marked paid by stripe-webhook once Stripe confirms the
+                      // charge, not by this screen.
+                      final url = await ref.read(crmRepositoryProvider).createDepositCheckoutUrl(beoId: beo.id);
+                      final launched = await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+                      if (!launched && context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Could not open checkout.')),
+                        );
+                      }
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text(_friendlyError(e))),
+                        );
+                      }
+                    }
+                  },
+                  child: const Text('Collect'),
+                ),
+                TextButton(
+                  onPressed: () async {
+                    try {
+                      await ref.read(crmRepositoryProvider).waiveBeoDeposit(beoId: beo.id);
+                      ref.invalidate(crmBeosProvider(venueId));
+                    } catch (_) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Could not waive deposit.')),
+                        );
+                      }
+                    }
+                  },
+                  child: const Text('Waive'),
+                ),
+              ],
             ),
           ),
         Padding(

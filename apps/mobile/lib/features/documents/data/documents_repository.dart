@@ -6,19 +6,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/errors/app_error.dart';
 import '../domain/venue_document.dart';
 
-/// Thrown when documents-upload rejects a file for malware-scanning or validation reasons the
-/// user needs to see verbatim (distinct from a generic [UnknownError]/[NetworkError]).
-final class DocumentRejectedError extends AppError {
-  const DocumentRejectedError(super.message);
-}
-
-/// Thrown when ClamAV itself isn't reachable/configured (503 from documents-upload) — distinct
-/// from [DocumentRejectedError] since this isn't about the file, it's the scanner being down.
-final class DocumentScanUnavailableAppError extends AppError {
-  const DocumentScanUnavailableAppError()
-      : super('Document scanning is temporarily unavailable. Please try again shortly.');
-}
-
 /// Reads go straight through RLS (public.documents' category-aware select policy, see
 /// supabase/migrations/20261003003000) — this repository does not duplicate that check. Writes
 /// (upload) can only go through the documents-upload Edge Function: the table has no insert
@@ -80,7 +67,7 @@ class SupabaseDocumentsRepository implements DocumentsRepository {
     // pointless base64-encoded multi-MB round trip when the file is already too large.
     const maxBytes = 10 * 1024 * 1024;
     if (bytes.length > maxBytes) {
-      throw const DocumentRejectedError('That file is too large (max 10MB).');
+      throw const UnknownError('That file is too large (max 10MB).');
     }
 
     try {
@@ -140,13 +127,16 @@ class SupabaseDocumentsRepository implements DocumentsRepository {
       return const PermissionDeniedError('Only venue managers can upload documents.');
     }
     if (error.status == 503) {
-      return const DocumentScanUnavailableAppError();
+      // documents-upload returns 503 on a Storage upload failure (see its
+      // document_storage_temporarily_unavailable error) — there is no malware-scanning step
+      // to be unavailable any more (see that function's header comment on why it was removed).
+      return const UnknownError('Document storage is temporarily unavailable. Please try again shortly.');
     }
     if (error.status == 400 && rawMessage != null) {
-      // documents-upload's 400 bodies are already user-facing validation/scan-rejection
-      // messages (e.g. "Unsupported file type...", "Document was rejected by malware
-      // scanning.") — show them verbatim rather than re-wording.
-      return DocumentRejectedError(rawMessage);
+      // documents-upload's 400 bodies are already user-facing validation messages (e.g.
+      // "Unsupported file type...", "Invalid PDF file.") — show them verbatim rather than
+      // re-wording.
+      return UnknownError(rawMessage);
     }
     if (rawMessage == 'invalid_or_expired_session') {
       return const AuthError('Your session has expired. Please sign in again.');
