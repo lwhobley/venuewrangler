@@ -117,6 +117,7 @@ class DashboardScreen extends ConsumerWidget {
             const SizedBox(height: 24),
             Text('More', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
+            _NavTile(icon: Icons.handshake_outlined, label: 'CRM', route: '/crm'),
             _NavTile(icon: Icons.fact_check_outlined, label: 'Checklists', route: '/checklists'),
             _NavTile(icon: Icons.report_outlined, label: 'Incidents', route: '/incidents'),
             _NavTile(icon: Icons.auto_awesome_outlined, label: 'Ask Wrangler', route: '/wrangler'),
