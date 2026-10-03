@@ -22,7 +22,7 @@ actually on the live project when that claim was made; `list_migrations` against
 `puttwjwmwrzmhpsjykuj` showed only the 20 migrations through `staff_requests_schema`. They have
 since actually been applied, verified below, during this review.
 
-33 migrations applied, in order, to the live project `puttwjwmwrzmhpsjykuj`:
+34 migrations applied, in order, to the live project `puttwjwmwrzmhpsjykuj`:
 
 | Migration | Covers |
 |---|---|
@@ -59,9 +59,11 @@ since actually been applied, verified below, during this review.
 | `20261003000100_harden_batch2_search_path_and_rpc_grants` | security fixes found by this review: mutable search_path on two functions, six RPCs callable by `anon` |
 | `20261003001000_storage_deletion_worker_and_schedule` | media-cleanup batch worker function + `pg_cron` schedule (applied manually, see below) |
 | `20261003002000_crm_schema` | crm_leads + crm_notes + crm_beos + crm_contracts + crm_activity_log + email_templates (pipeline forecast/source-ROI/stale-leads RPCs, idempotent BEO→contract conversion, real `reservations.beo_id` FK replacing legacy's tag-based pseudo-FK) |
+| `20261003003000_documents_schema` | documents table (category-aware RLS) + storage_deletion_jobs cleanup trigger + staff-documents bucket policy tightening (closes the direct-upload ClamAV-bypass gap from Phase 3) |
 
-**pgTAP authorization test suite: 351 assertions across 26 test files, all passing** (326 from
-the prior review plus 25 new assertions in `crm_rls.test.sql`), actually
+**pgTAP authorization test suite: 364 assertions across 27 test files, all passing** (326 from
+the prior review, plus 25 new assertions in `crm_rls.test.sql`, plus 13 new assertions in
+`documents_rls.test.sql`), actually
 re-run locally against the full migration sequence by this review (not assumed from a prior
 claim). Three real bugs were found and fixed in the process, not just test-count or
 `finish()`-call errors this time:
@@ -139,6 +141,7 @@ sequence (32 migrations, 326 assertions, all passing) before being treated as do
 | `device-attestation` | Device attestation (observe mode: records a verdict, never blocks) | Android (Play Integrity) path calls a real Google API. iOS (App Attest) is now **cryptographically verified** (this batch) — full CBOR/COSE parsing, certificate chain validation against Apple's real App Attestation Root CA, nonce/rpIdHash/counter/aaguid/credentialId checks, hand-rolled DER parser + Web Crypto (`_shared/app-attest.ts`, `_shared/der.ts`, `_shared/cbor.ts`). The DER parser, OID decoder, and ECDSA verification pipeline were independently verified against the real Apple root CA certificate's own self-signature (including a negative control: tampered bytes correctly rejected) — this sandbox cannot produce a real device attestation object (needs Secure Enclave hardware), so this is the strongest verification available short of a physical device. The two-step challenge flow was live-smoke-tested end to end with a real JWT; the one request that reached `verifyAppAttest` returned `app_attest_not_configured` exactly as coded, since `APP_ATTEST_CHALLENGE_SIGNING_KEY` isn't set as a live secret (see §2). The challenge itself is a signed, timestamped token (reusing the existing OAuth-state pattern), not server-stored/single-use — see §2's replay-window note. |
 | `notifications-send` | Direct FCM v1 + APNs push delivery with dead token auto-deactivation | Deployed in an earlier review after a real fix: as committed, it imported `getServiceRoleClient`/`getUserClient` from `_shared/supabase-clients.ts`, which only exports `createServiceClient`/`createUserClient` — the function could not have run a single invocation without crashing on import, so the "live-verified" status claimed for it earlier was not possible. It also never checked that the caller belonged to the venue they were sending notifications to, letting any authenticated user push notifications to any venue/audience. Both fixed (corrected imports; added a venue-membership + manager-role check mirroring toast-pos's own pattern) and deployed. **Android/FCM dispatch now live-verified** (see §2) with a real Firebase service account — the Google OAuth2 token exchange and the FCM API call both actually succeed; no real physical device has received a push yet. iOS push has no APNs dispatch branch at all (see §2). This batch also wired in Sentry-equivalent error reporting (`_shared/observability.ts`, see below) as the reference pattern for the rest of the functions. |
 | `toast-pos` | Bidirectional Toast POS webhook check upsert + outbound 86 command execution | Deployed in this review (was not previously deployed). The outbound-command path's manager-role authorization is real and correct. The inbound `/webhook` path does **not** verify the request against `pos_connections.webhook_secret_hash` at all — despite that column existing specifically for this — so anyone who can guess a venue id and check id can write fake POS check data with no authentication. **Product decision: deferred, not a defect to fix now** — webhook secret verification will be configured post-production in a later update, once a real Toast vendor integration is actually being onboarded and their real signing scheme can be checked against live docs rather than guessed at now. |
+| `documents-upload` | Validates, ClamAV-scans, and stores venue documents (SOPs/manuals/forms/etc.) — the only way a `documents` row can be created | Deployed this batch. Live-smoke-tested with a real manager JWT through auth → manager-role check → filename sanitize → size cap → magic-byte MIME validation: a real PDF reaches the expected `"Document malware scanning is not configured."` 503 (since `CLAMAV_HOST` is unset), and a fake PDF is correctly rejected by magic-byte validation with `"Invalid PDF file"`. **The actual ClamAV TCP round-trip (`Deno.connect` to a real clamd) is unverified** — no reachable instance exists in this environment — though the wire-protocol and response-parsing logic were unit-tested against real clamd request/response formats. |
 
 ### Observability (Edge Functions)
 
@@ -158,14 +161,36 @@ block without crashing. Both tests ran in the `SENTRY_DSN`-unset, disabled/no-op
 **`SENTRY_DSN` is not set live**, so whether events actually reach Sentry when enabled is
 unverified (see §2).
 
+### Documents
+
+The last of the three modules this report previously listed as unported (`crm`, `documents`,
+`observability`). Ported from `packages/api/src/modules/documents`: a venue document library
+(SOPs/manuals/recipes/menus/training/forms) with category-aware RLS matching legacy's
+manager-only `form`/`other` split exactly. The one piece of legacy's behavior RLS genuinely
+cannot replicate is the hard, fail-closed ClamAV malware-scan requirement — not expressible as a
+Postgres policy — so `public.documents` has no insert policy for `authenticated` at all; creation
+is only possible through the new `documents-upload` Edge Function. Closed a real gap found while
+building this: the Phase 3 `staff-documents` Storage bucket had a generic "any venue member can
+upload" policy that would have let a client bypass the scan entirely — replaced with a
+category-aware select policy and no direct insert/delete for `authenticated` (deletes instead go
+through an `AFTER DELETE` trigger that enqueues cleanup via the existing `storage_deletion_jobs`
+worker, reusing media-cleanup's infrastructure rather than inventing a second one).
+`DROP POLICY` on `storage.objects` consistently timed out via this project's SQL tooling (the
+same class of flakiness as `process_storage_deletion_batch` earlier in this engagement) —
+`ALTER POLICY ... using/with check (false)` was used instead, live-verified to produce an
+identical effect, and the committed migration matches what's actually live rather than a
+DROP-based version that would diverge from it on replay.
+
 ### Flutter app (`apps/mobile`)
 
-25 feature modules with real repository/provider/screen implementations: `ai`, `auth`,
-`billing`, `chat`, `checklists`, `crm`, `dashboard`, `events`, `floor`, `guests_reservations`, `incidents`,
+26 feature modules with real repository/provider/screen implementations: `ai`, `auth`,
+`billing`, `chat`, `checklists`, `crm`, `dashboard`, `documents`, `events`, `floor`, `guests_reservations`, `incidents`,
 `insights`, `integrations`, `inventory`, `media`, `notifications`, `organizations`, `pos`,
 `schedules`, `settings`, `staff_requests`, `tasks`, `time_clock`, `venues`, `workforce`. Every write
 path goes through RLS (no client-side role duplication), offline-write support exists for
-tasks/checklists/incidents/media per the plan's hard requirement.
+tasks/checklists/incidents/media per the plan's hard requirement (`documents` is deliberately not
+offline-writable — legacy had no offline mode either, and a synchronous server-side scan
+inherently needs a live connection anyway).
 
 **Automated Flutter test suite: claimed 57 unit and widget tests, all passing, `flutter test`
 exit 0 — not independently re-verified by this review** (no Flutter SDK in this sandbox, same
@@ -201,11 +226,28 @@ should be treated as unverified rather than trusted until it's actually re-run.
 - **CRM**: Stripe-backed deposit checkout and Resend email delivery (`render_email_template`'s
   output) are not wired to anything — the schema/RPCs exist, the actual Stripe/Resend calls do
   not, consistent with Stripe/Resend being unverified everywhere else in this report.
-- **Leftover test fixture**: a throwaway auth user created to smoke-test the App Attest challenge
-  endpoint and the observability wiring (`16d4a3bd-e5f4-4daf-97b6-c235734c4175`,
-  `attest.test.1790990012@gmail.com`) could not be deleted — `execute_sql` timed out repeatedly
-  on the delete, the same flaky-tool pattern noted elsewhere in this engagement. Run manually:
-  `delete from auth.users where id = '16d4a3bd-e5f4-4daf-97b6-c235734c4175';`
+- **Documents**: the ClamAV scan's wire protocol and response parsing are unit-tested, but the
+  actual `Deno.connect` TCP round-trip to a real clamd has never run — no reachable instance
+  exists in this environment. `CLAMAV_HOST` is unset by design, so every upload 503s until a real
+  clamd is configured. `file_picker` (needed to pick non-image files like PDFs) is a brand-new
+  Flutter dependency that has not been confirmed to resolve/compile — no Flutter SDK is available
+  in this sandbox to run `flutter pub get`.
+- **Leftover test fixtures**: three throwaway auth users (plus their org/venue/membership rows)
+  created to smoke-test the App Attest challenge endpoint, the observability wiring, FCM push,
+  and documents-upload could not be deleted — `execute_sql` timed out repeatedly on each delete,
+  the same flaky-tool pattern noted elsewhere in this engagement. Run manually:
+  ```sql
+  delete from auth.users where id = '16d4a3bd-e5f4-4daf-97b6-c235734c4175';
+  delete from push_tokens where venue_id = '3a995d7d-cdab-4952-90bf-18c0736ffe0f';
+  delete from memberships where venue_id = '3a995d7d-cdab-4952-90bf-18c0736ffe0f';
+  delete from venues where id = '3a995d7d-cdab-4952-90bf-18c0736ffe0f';
+  delete from organizations where id = 'bbad9d47-8a61-4d06-a9f2-a5e20a8c1c89';
+  delete from auth.users where id = 'b980ab91-271a-4f48-ac5f-bdd7c4140e7d';
+  delete from memberships where venue_id = 'c6edf871-6c4f-4daf-aa43-107aea96119f';
+  delete from venues where id = 'c6edf871-6c4f-4daf-aa43-107aea96119f';
+  delete from organizations where id = '0e75dd17-466b-4add-a0dc-e4f935b22968';
+  delete from auth.users where id = '43982c3a-fa2f-45d8-9539-786b67056e2f';
+  ```
 - **RevenueCat/Apple IAP** (OQ-2/OQ-3 in the original plan doc): still an open question, not
   decided or built either way.
 - **Push credentials (Android/FCM): now configured and live-verified.** `FIREBASE_SERVICE_ACCOUNT`
@@ -243,7 +285,7 @@ should be treated as unverified rather than trusted until it's actually re-run.
 | `staff-requests` | **Ported** (schema + RLS + pgTAP + Flutter screen/providers/repo) |
 | `chat` | **Ported** (conversations + conversation_members + messages + conversation_reads schema + media-cleanup integration + private bucket + RLS + pgTAP + Flutter screen/providers/repo) |
 | `crm` (leads/BEOs/contracts/forecast) | **Ported** (crm_leads + crm_notes + crm_beos + crm_contracts + crm_activity_log + email_templates schema + RLS + pgTAP + Flutter screen/providers/repo). Deliberate improvement over legacy: a real `reservations.beo_id` FK replaces the tag-based pseudo-FK legacy used, which the earlier research report flagged as the module's single most RLS-hostile piece of denormalization. Stripe deposit checkout and Resend email delivery not built (see §2). |
-| `documents` (ClamAV-scanned uploads) | Not started |
+| `documents` (ClamAV-scanned uploads) | **Ported** (documents schema + category-aware RLS + storage_deletion_jobs cleanup trigger + pgTAP + documents-upload Edge Function + Flutter screen/providers/repo). The ClamAV TCP round-trip itself is unverified — no reachable clamd in this environment (see §2) — but every step before it (auth, manager-role gate, magic-byte MIME validation) is live-verified. |
 | `floor` (floor plans/tables/waitlist) | **Ported** (floor_plans + floor_tables + floor_table_assignments schema + advisory locks + RPCs + RLS + Realtime publication + pgTAP + Flutter screen/providers/repo) |
 | `guests` (guest CRM + public leads webhook) | **Ported** (guests + guest_household_links schema + derive triggers + RLS + pgTAP) |
 | `insights` (Groq-powered shift insights) | **Ported** (schema + RLS + pgTAP + Groq `shift_insights` prompt + Flutter feature) |
@@ -254,20 +296,23 @@ should be treated as unverified rather than trusted until it's actually re-run.
 | `notifications` | **Ported** (push_tokens + notification_events schema + advisory lock + RLS + pgTAP + direct FCM v1 / APNs Edge Function + Flutter screen/providers/repo) |
 | `observability` | **Ported** (reference pattern only — wired into `notifications-send`; the other 9 Edge Functions still need the same `_shared/observability.ts` calls added, and `SENTRY_DSN` isn't set live) |
 
-Retiring the legacy stack today would still remove `documents` for any venue actually using it,
-and leave the other 9 Edge Functions without error reporting. **This is why this report
-recommends against full cutover action right now** — `documents` should be ported next, and
-observability's reference pattern should be rolled out to the remaining Edge Functions.
+Every legacy module now has a ported equivalent — `documents` was the last one. Retiring the
+legacy stack today would still leave the other 9 Edge Functions without error reporting, and
+every item in §2 (no real ClamAV instance, Stripe/payroll never live-tested, the App Attest
+replay-window gap, CRM's Stripe/Resend wiring, etc.) unresolved. **This is why this report still
+recommends against full cutover action right now** — feature parity alone isn't the same as
+production-readiness; §2's gaps are what's actually blocking that, not missing modules.
 
 ## 4. Recommendation
 
 1. Treat this report as the Phase 4 checkpoint it is: validation of what exists, not a
    readiness signal for cutover.
-2. Before cutover can be responsibly considered: port `documents` (ClamAV-scanned uploads, the
-   one remaining unported legacy module), roll `_shared/observability.ts` out to the other 9 Edge
-   Functions, and set the live secrets this batch left unset (`APP_ATTEST_CHALLENGE_SIGNING_KEY`,
-   `APP_ATTEST_TEAM_ID`, `SENTRY_DSN`).
-3. Independently of §3, close the gaps in §2 (live Stripe test, live payroll OAuth test, real
-   push credentials, CRM's Stripe/Resend wiring, the App Attest replay-window gap, the Flutter
-   App Attest client) before trusting any of this in production.
+2. Feature parity is done (§3) — nothing further to port. Before cutover can be responsibly
+   considered: roll `_shared/observability.ts` out to the other 9 Edge Functions, configure a
+   real reachable clamd for `documents-upload`, and set the live secrets this engagement has left
+   unset (`APP_ATTEST_CHALLENGE_SIGNING_KEY`, `APP_ATTEST_TEAM_ID`, `SENTRY_DSN`, `CLAMAV_HOST`).
+3. Independently of §3, close the gaps in §2 (live Stripe test, live payroll OAuth test, a real
+   physical-device push test, CRM's Stripe/Resend wiring, the App Attest replay-window gap, the
+   Flutter App Attest client, the `file_picker` dependency's first real `flutter pub get`) before
+   trusting any of this in production.
 4. The legacy stack should stay live and serving traffic until both of the above are resolved.
