@@ -137,7 +137,7 @@ sequence (32 migrations, 326 assertions, all passing) before being treated as do
 | `stripe-webhook` | Subscription state sync from Stripe | Signature verification logic only; no live webhook registered yet (see §2) |
 | `square-oauth`, `quickbooks-oauth`, `gusto-oauth` | Payroll OAuth connect/callback/disconnect | Auth-gate verified only; **not exercised against a live provider sandbox** (see §2) |
 | `device-attestation` | Device attestation (observe mode: records a verdict, never blocks) | Android (Play Integrity) path calls a real Google API. iOS (App Attest) is now **cryptographically verified** (this batch) — full CBOR/COSE parsing, certificate chain validation against Apple's real App Attestation Root CA, nonce/rpIdHash/counter/aaguid/credentialId checks, hand-rolled DER parser + Web Crypto (`_shared/app-attest.ts`, `_shared/der.ts`, `_shared/cbor.ts`). The DER parser, OID decoder, and ECDSA verification pipeline were independently verified against the real Apple root CA certificate's own self-signature (including a negative control: tampered bytes correctly rejected) — this sandbox cannot produce a real device attestation object (needs Secure Enclave hardware), so this is the strongest verification available short of a physical device. The two-step challenge flow was live-smoke-tested end to end with a real JWT; the one request that reached `verifyAppAttest` returned `app_attest_not_configured` exactly as coded, since `APP_ATTEST_CHALLENGE_SIGNING_KEY` isn't set as a live secret (see §2). The challenge itself is a signed, timestamped token (reusing the existing OAuth-state pattern), not server-stored/single-use — see §2's replay-window note. |
-| `notifications-send` | Direct FCM v1 + APNs push delivery with dead token auto-deactivation | Deployed in an earlier review after a real fix: as committed, it imported `getServiceRoleClient`/`getUserClient` from `_shared/supabase-clients.ts`, which only exports `createServiceClient`/`createUserClient` — the function could not have run a single invocation without crashing on import, so the "live-verified" status claimed for it earlier was not possible. It also never checked that the caller belonged to the venue they were sending notifications to, letting any authenticated user push notifications to any venue/audience. Both fixed (corrected imports; added a venue-membership + manager-role check mirroring toast-pos's own pattern) and deployed. Not live-tested against a real device/FCM project. This batch also wired in Sentry-equivalent error reporting (`_shared/observability.ts`, see below) as the reference pattern for the rest of the functions. |
+| `notifications-send` | Direct FCM v1 + APNs push delivery with dead token auto-deactivation | Deployed in an earlier review after a real fix: as committed, it imported `getServiceRoleClient`/`getUserClient` from `_shared/supabase-clients.ts`, which only exports `createServiceClient`/`createUserClient` — the function could not have run a single invocation without crashing on import, so the "live-verified" status claimed for it earlier was not possible. It also never checked that the caller belonged to the venue they were sending notifications to, letting any authenticated user push notifications to any venue/audience. Both fixed (corrected imports; added a venue-membership + manager-role check mirroring toast-pos's own pattern) and deployed. **Android/FCM dispatch now live-verified** (see §2) with a real Firebase service account — the Google OAuth2 token exchange and the FCM API call both actually succeed; no real physical device has received a push yet. iOS push has no APNs dispatch branch at all (see §2). This batch also wired in Sentry-equivalent error reporting (`_shared/observability.ts`, see below) as the reference pattern for the rest of the functions. |
 | `toast-pos` | Bidirectional Toast POS webhook check upsert + outbound 86 command execution | Deployed in this review (was not previously deployed). The outbound-command path's manager-role authorization is real and correct. The inbound `/webhook` path does **not** verify the request against `pos_connections.webhook_secret_hash` at all — despite that column existing specifically for this — so anyone who can guess a venue id and check id can write fake POS check data with no authentication. **Product decision: deferred, not a defect to fix now** — webhook secret verification will be configured post-production in a later update, once a real Toast vendor integration is actually being onboarded and their real signing scheme can be checked against live docs rather than guessed at now. |
 
 ### Observability (Edge Functions)
@@ -208,8 +208,24 @@ should be treated as unverified rather than trusted until it's actually re-run.
   `delete from auth.users where id = '16d4a3bd-e5f4-4daf-97b6-c235734c4175';`
 - **RevenueCat/Apple IAP** (OQ-2/OQ-3 in the original plan doc): still an open question, not
   decided or built either way.
-- **Push credentials**: `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, and `FIREBASE_PRIVATE_KEY`
-  need live production values to deliver real push notifications to physical devices.
+- **Push credentials (Android/FCM): now configured and live-verified.** `FIREBASE_SERVICE_ACCOUNT`
+  was set as a live Edge Function secret this session (a real Firebase service account from
+  project `venuewrangler-ed056`). Verified end to end against the real FCM API, not just that the
+  JSON parses: a throwaway venue/membership/push-token fixture plus a real signed-in JWT were used
+  to invoke `notifications-send`, and the function logs show no "FCM service account configuration
+  invalid" warning and no thrown exception — meaning the Google OAuth2 token exchange in
+  `_shared/google-auth.ts` actually succeeded and a real call reached `fcm.googleapis.com`.
+  `delivered_count: 0` in the response is expected (a deliberately fake registration token was
+  used; Google correctly rejects it, which isn't logged as an error by the function's own
+  best-effort design — see the "silent non-ok response" note in `notifications-send/index.ts`).
+  `FIREBASE_SERVICE_ACCOUNT` was also missing from `supabase/.env.example` entirely despite the
+  function reading it — added as part of this fix. **Still not covered**: native APNs dispatch for
+  iOS — the function has no APNs-sending branch at all; its dispatch loop only ever calls the FCM
+  HTTP v1 API, and setting `APNS_KEY` actually makes things worse, since the loop's own condition
+  (`platform === "android" || platform === "web" || !Deno.env.get("APNS_KEY")`) would then skip
+  iOS tokens entirely rather than route them anywhere — so `APNS_KEY` must stay unset for iOS push
+  to keep working (via FCM-for-iOS) at all. Also, no real physical device has received a push yet
+  (the fixture used a syntactically-fake token, not a real device-registered one).
 - **POS Vendor API credentials**: Toast API credentials must be populated per venue in
   `pos_connections` to execute live outbound item 86 commands against Toast servers.
 - **POS inbound webhook has no authentication.** See the `toast-pos` row above — a deliberate,
