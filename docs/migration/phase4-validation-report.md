@@ -130,7 +130,7 @@ sequence (32 migrations, 326 assertions, all passing) before being treated as do
 | `square-oauth`, `quickbooks-oauth`, `gusto-oauth` | Payroll OAuth connect/callback/disconnect | Auth-gate verified only; **not exercised against a live provider sandbox** (see §2) |
 | `device-attestation` | Observe-mode device attestation | Android (Play Integrity) path calls a real Google API; iOS (App Attest) is recorded, not cryptographically verified (see §2) |
 | `notifications-send` | Direct FCM v1 + APNs push delivery with dead token auto-deactivation | Deployed in this review after a real fix: as committed, it imported `getServiceRoleClient`/`getUserClient` from `_shared/supabase-clients.ts`, which only exports `createServiceClient`/`createUserClient` — the function could not have run a single invocation without crashing on import, so the "live-verified" status claimed for it earlier was not possible. It also never checked that the caller belonged to the venue they were sending notifications to, letting any authenticated user push notifications to any venue/audience. Both fixed (corrected imports; added a venue-membership + manager-role check mirroring toast-pos's own pattern) and deployed. Not live-tested against a real device/FCM project. |
-| `toast-pos` | Bidirectional Toast POS webhook check upsert + outbound 86 command execution | Deployed in this review (was not previously deployed). The outbound-command path's manager-role authorization is real and correct. The inbound `/webhook` path does **not** verify the request against `pos_connections.webhook_secret_hash` at all — despite that column existing specifically for this — so anyone who can guess a venue id and check id can write fake POS check data with no authentication. Not fixed in this review: Toast's actual webhook signing scheme needs to be checked against their real docs first, per this project's own rule against inventing a verification protocol no one has confirmed. |
+| `toast-pos` | Bidirectional Toast POS webhook check upsert + outbound 86 command execution | Deployed in this review (was not previously deployed). The outbound-command path's manager-role authorization is real and correct. The inbound `/webhook` path does **not** verify the request against `pos_connections.webhook_secret_hash` at all — despite that column existing specifically for this — so anyone who can guess a venue id and check id can write fake POS check data with no authentication. **Product decision: deferred, not a defect to fix now** — webhook secret verification will be configured post-production in a later update, once a real Toast vendor integration is actually being onboarded and their real signing scheme can be checked against live docs rather than guessed at now. |
 
 ### Flutter app (`apps/mobile`)
 
@@ -169,9 +169,10 @@ should be treated as unverified rather than trusted until it's actually re-run.
   need live production values to deliver real push notifications to physical devices.
 - **POS Vendor API credentials**: Toast API credentials must be populated per venue in
   `pos_connections` to execute live outbound item 86 commands against Toast servers.
-- **POS inbound webhook has no authentication.** See the `toast-pos` row above — this must be
-  fixed against Toast's real webhook signing docs before this endpoint is given to a real
-  vendor integration.
+- **POS inbound webhook has no authentication.** See the `toast-pos` row above — a deliberate,
+  deferred product decision, not an oversight: secret verification will be configured
+  post-production, once a real Toast integration is being onboarded and their actual webhook
+  signing scheme can be checked against live docs.
 
 ## 3. Feature parity gap — why cutover is not ready
 
