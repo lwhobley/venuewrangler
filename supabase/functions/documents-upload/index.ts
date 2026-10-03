@@ -23,6 +23,9 @@ import {
   safeDocumentFileName,
 } from "../_shared/document-bytes.ts";
 import { assertDocumentClean, DocumentScanRejectedError, DocumentScanUnavailableError } from "../_shared/clamav.ts";
+import { initObservability, captureException, flushObservability } from "../_shared/observability.ts";
+
+initObservability();
 
 const DOCUMENT_CATEGORIES = ["sop", "manual", "recipe", "menu", "training", "form", "other"];
 const MANAGER_ROLES = ["venue_manager", "organization_owner", "organization_admin"];
@@ -46,6 +49,17 @@ Deno.serve(async (req) => {
   const preflight = handleCorsPreflight(req);
   if (preflight) return preflight;
 
+  try {
+    return await handleRequest(req);
+  } catch (error) {
+    console.error("documents-upload: unexpected error", error);
+    captureException(error, { function: "documents-upload", url: req.url });
+    await flushObservability();
+    return jsonResponse({ error: "internal_error" }, 500);
+  }
+});
+
+async function handleRequest(req: Request): Promise<Response> {
   if (req.method !== "POST") {
     return jsonResponse({ error: "method_not_allowed" }, 405);
   }
@@ -178,4 +192,4 @@ Deno.serve(async (req) => {
   }
 
   return jsonResponse({ id: inserted.id }, 201);
-});
+}

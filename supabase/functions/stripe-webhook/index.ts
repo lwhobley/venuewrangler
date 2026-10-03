@@ -6,6 +6,9 @@
 import { createServiceClient } from "../_shared/supabase-clients.ts";
 import { createStripeClient } from "../_shared/stripe.ts";
 import type Stripe from "https://esm.sh/stripe@23.0.0?target=deno";
+import { initObservability, captureException, flushObservability } from "../_shared/observability.ts";
+
+initObservability();
 
 Deno.serve(async (req) => {
   if (req.method !== "POST") {
@@ -111,6 +114,8 @@ Deno.serve(async (req) => {
     // that a retry won't fix (e.g. a row genuinely doesn't exist yet), but let an unexpected
     // throw surface as 500 so Stripe DOES retry a transient failure (a dropped DB connection).
     console.error("stripe-webhook handler error", err);
+    captureException(err, { function: "stripe-webhook", url: req.url, event_type: event.type });
+    await flushObservability();
     return new Response(JSON.stringify({ error: "webhook_handler_error" }), { status: 500 });
   }
 

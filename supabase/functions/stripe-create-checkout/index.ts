@@ -7,6 +7,9 @@
 import { corsHeaders, handleCorsPreflight } from "../_shared/cors.ts";
 import { createServiceClient, createUserClient } from "../_shared/supabase-clients.ts";
 import { createStripeClient } from "../_shared/stripe.ts";
+import { initObservability, captureException, flushObservability } from "../_shared/observability.ts";
+
+initObservability();
 
 function jsonResponse(body: Record<string, unknown>, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -19,6 +22,17 @@ Deno.serve(async (req) => {
   const preflight = handleCorsPreflight(req);
   if (preflight) return preflight;
 
+  try {
+    return await handleRequest(req);
+  } catch (error) {
+    console.error("stripe-create-checkout: unexpected error", error);
+    captureException(error, { function: "stripe-create-checkout", url: req.url });
+    await flushObservability();
+    return jsonResponse({ error: "internal_error" }, 500);
+  }
+});
+
+async function handleRequest(req: Request): Promise<Response> {
   if (req.method !== "POST") {
     return jsonResponse({ error: "method_not_allowed" }, 405);
   }
@@ -121,4 +135,4 @@ Deno.serve(async (req) => {
   });
 
   return jsonResponse({ url: session.url });
-});
+}

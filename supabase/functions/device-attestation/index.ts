@@ -29,6 +29,9 @@ import { createServiceClient, createUserClient } from "../_shared/supabase-clien
 import { getGoogleAccessToken } from "../_shared/google-auth.ts";
 import { signAttestationChallenge, verifyAttestationChallenge } from "../_shared/crypto.ts";
 import { verifyAppAttest } from "../_shared/app-attest.ts";
+import { initObservability, captureException, flushObservability } from "../_shared/observability.ts";
+
+initObservability();
 
 function jsonResponse(body: Record<string, unknown>, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -45,6 +48,17 @@ Deno.serve(async (req) => {
   const preflight = handleCorsPreflight(req);
   if (preflight) return preflight;
 
+  try {
+    return await handleRequest(req);
+  } catch (error) {
+    console.error("unexpected error", error);
+    captureException(error, { function: "device-attestation", url: req.url });
+    await flushObservability();
+    return jsonResponse({ error: "internal_error" }, 500);
+  }
+});
+
+async function handleRequest(req: Request): Promise<Response> {
   if (req.method !== "POST") {
     return jsonResponse({ error: "method_not_allowed" }, 405);
   }
@@ -212,4 +226,4 @@ Deno.serve(async (req) => {
   // Always a success response: observe mode never blocks, regardless of status or whether the
   // insert itself succeeded.
   return jsonResponse({ recorded: !insertError, mode, status });
-});
+}

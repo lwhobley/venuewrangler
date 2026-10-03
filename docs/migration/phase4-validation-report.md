@@ -143,7 +143,7 @@ sequence (32 migrations, 326 assertions, all passing) before being treated as do
 | `toast-pos` | Bidirectional Toast POS webhook check upsert + outbound 86 command execution | Deployed in this review (was not previously deployed). The outbound-command path's manager-role authorization is real and correct. The inbound `/webhook` path does **not** verify the request against `pos_connections.webhook_secret_hash` at all — despite that column existing specifically for this — so anyone who can guess a venue id and check id can write fake POS check data with no authentication. **Product decision: deferred, not a defect to fix now** — webhook secret verification will be configured post-production in a later update, once a real Toast vendor integration is actually being onboarded and their real signing scheme can be checked against live docs rather than guessed at now. |
 | `documents-upload` | Validates, ClamAV-scans, and stores venue documents (SOPs/manuals/forms/etc.) — the only way a `documents` row can be created | Deployed this batch. Live-smoke-tested with a real manager JWT through auth → manager-role check → filename sanitize → size cap → magic-byte MIME validation: a real PDF reaches the expected `"Document malware scanning is not configured."` 503 (since `CLAMAV_HOST` is unset), and a fake PDF is correctly rejected by magic-byte validation with `"Invalid PDF file"`. **The actual ClamAV TCP round-trip (`Deno.connect` to a real clamd) is unverified** — no reachable instance exists in this environment — though the wire-protocol and response-parsing logic were unit-tested against real clamd request/response formats. |
 
-### Observability (Edge Functions)
+### Observability (Edge Functions) — now rolled out to all 10 functions
 
 `packages/api/src/observability/sentry.ts` is a 51-line Sentry wrapper with no Prisma models or
 endpoints — not a schema-porting task. Ported to `supabase/functions/_shared/observability.ts`
@@ -151,15 +151,28 @@ using `npm:@sentry/deno@^8` per Supabase's own documented pattern for this runti
 (`defaultIntegrations: false`, per-call `Sentry.withScope()`, since the Deno SDK has no
 `Deno.serve` instrumentation and a worker can be reused across requests). Preserves the two real
 pieces of the legacy wrapper's logic: `tracesSampleRate: 0`/no default PII, and the `beforeSend`
-redaction of media-token query params and invite-code paths. Wired into `notifications-send` only,
-as the reference pattern — **not all 10 Edge Functions**; the rest should adopt the same
-`initObservability()`/`captureException()`/`flushObservability()` calls as a follow-up. Live-smoke-
-tested against the deployed function with a real JWT: a normal request confirms the
-`npm:@sentry/deno` import resolves and the function boots (a failed import would have crashed
-every invocation, not just the catch path); a malformed-JSON request exercises the actual catch
-block without crashing. Both tests ran in the `SENTRY_DSN`-unset, disabled/no-op state —
-**`SENTRY_DSN` is not set live**, so whether events actually reach Sentry when enabled is
-unverified (see §2).
+redaction of media-token query params and invite-code paths.
+
+Originally wired into `notifications-send` only as a reference pattern; this batch rolled the
+same `initObservability()`/`captureException()`/`flushObservability()` calls out to the other 9
+functions (`ai-assistant`, `device-attestation`, `documents-upload`, `gusto-oauth`,
+`quickbooks-oauth`, `square-oauth`, `stripe-create-checkout`, `stripe-create-portal`,
+`stripe-webhook`, `toast-pos`). Most of these had no top-level `try`/`catch` at all before this —
+an uncaught exception would have surfaced as a bare platform error with nothing captured — so
+each function's body was moved into a `handleRequest()` helper wrapped in a `try`/`catch` in
+`Deno.serve` that calls `captureException` + `flushObservability` before returning a generic 500.
+`stripe-webhook` already had its own catch around the event-processing switch, so only the
+`captureException` call was added there, no restructuring.
+
+All 10 redeployed functions were live-verified: the three `verify_jwt=false` functions
+(`toast-pos`, `square-oauth`, `stripe-webhook`) were invoked directly and returned their normal
+business-logic error responses (not a crash), and `ai-assistant`/`device-attestation` were
+invoked with a real signed-in JWT — `ai-assistant` completed a real Groq call end to end, and
+`device-attestation`'s challenge endpoint returned the expected `app_attest_not_configured`.
+Every one of these would have failed differently (or not responded with their own code's error
+shape at all) had the `npm:@sentry/deno` import or the new `handleRequest` restructuring broken
+anything. **`SENTRY_DSN` is still not set live**, so whether events actually reach Sentry when
+enabled remains unverified (see §2) — only the disabled/no-op code path has been exercised.
 
 ### Documents
 
@@ -221,8 +234,9 @@ should be treated as unverified rather than trusted until it's actually re-run.
   but it should be closed with real server-side challenge storage before `enforce` mode is ever
   used. (3) There is no Flutter client-side App Attest code yet at all — the server can verify an
   attestation, but nothing in the app generates one.
-- **Observability**: wired into `notifications-send` only, not the other 9 Edge Functions (see
-  above). `SENTRY_DSN` is not set live, so the enabled/event-delivery path is unverified.
+- **Observability**: now wired into all 10 Edge Functions (see above). `SENTRY_DSN` is still not
+  set live, so only the disabled/no-op code path has been exercised — the actual
+  event-reaches-Sentry path is unverified until a real DSN is configured.
 - **CRM**: Stripe-backed deposit checkout and Resend email delivery (`render_email_template`'s
   output) are not wired to anything — the schema/RPCs exist, the actual Stripe/Resend calls do
   not, consistent with Stripe/Resend being unverified everywhere else in this report.
@@ -294,23 +308,24 @@ should be treated as unverified rather than trusted until it's actually re-run.
 | `time-clock` (geofenced + anti-replay detection) | **Ported** (venues migration + time_entries schema + Haversine SQL + RLS + pgTAP + Flutter screen/providers/repo) |
 | `media-cleanup` (durable storage deletion queue) | **Ported** (storage_deletion_jobs schema + RLS + safe path guard regex + worker function + pg_cron schedule + pgTAP) |
 | `notifications` | **Ported** (push_tokens + notification_events schema + advisory lock + RLS + pgTAP + direct FCM v1 / APNs Edge Function + Flutter screen/providers/repo) |
-| `observability` | **Ported** (reference pattern only — wired into `notifications-send`; the other 9 Edge Functions still need the same `_shared/observability.ts` calls added, and `SENTRY_DSN` isn't set live) |
+| `observability` | **Ported** (wired into all 10 Edge Functions; `SENTRY_DSN` isn't set live, so only the disabled/no-op path is verified) |
 
-Every legacy module now has a ported equivalent — `documents` was the last one. Retiring the
-legacy stack today would still leave the other 9 Edge Functions without error reporting, and
-every item in §2 (no real ClamAV instance, Stripe/payroll never live-tested, the App Attest
-replay-window gap, CRM's Stripe/Resend wiring, etc.) unresolved. **This is why this report still
-recommends against full cutover action right now** — feature parity alone isn't the same as
-production-readiness; §2's gaps are what's actually blocking that, not missing modules.
+Every legacy module now has a ported equivalent — `documents` was the last one — and every Edge
+Function now reports its own unexpected failures (see Observability above). What remains is
+entirely §2's list: no real ClamAV instance, Stripe/payroll never live-tested against a real
+provider, the App Attest replay-window gap, CRM's Stripe/Resend wiring, and no live `SENTRY_DSN`
+to confirm events actually reach Sentry. **This is why this report still recommends against full
+cutover action right now** — feature parity and error-reporting coverage are both done; §2's
+remaining gaps are what's actually blocking production-readiness, not missing modules or code.
 
 ## 4. Recommendation
 
 1. Treat this report as the Phase 4 checkpoint it is: validation of what exists, not a
    readiness signal for cutover.
-2. Feature parity is done (§3) — nothing further to port. Before cutover can be responsibly
-   considered: roll `_shared/observability.ts` out to the other 9 Edge Functions, configure a
-   real reachable clamd for `documents-upload`, and set the live secrets this engagement has left
-   unset (`APP_ATTEST_CHALLENGE_SIGNING_KEY`, `APP_ATTEST_TEAM_ID`, `SENTRY_DSN`, `CLAMAV_HOST`).
+2. Feature parity (§3) and observability rollout are both done — nothing further to port or wire.
+   Before cutover can be responsibly considered: configure a real reachable clamd for
+   `documents-upload`, and set the live secrets this engagement has left unset
+   (`APP_ATTEST_CHALLENGE_SIGNING_KEY`, `APP_ATTEST_TEAM_ID`, `SENTRY_DSN`, `CLAMAV_HOST`).
 3. Independently of §3, close the gaps in §2 (live Stripe test, live payroll OAuth test, a real
    physical-device push test, CRM's Stripe/Resend wiring, the App Attest replay-window gap, the
    Flutter App Attest client, the `file_picker` dependency's first real `flutter pub get`) before

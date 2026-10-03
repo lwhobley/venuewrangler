@@ -8,6 +8,9 @@ import { corsHeaders, handleCorsPreflight } from "../_shared/cors.ts";
 import { createServiceClient, createUserClient } from "../_shared/supabase-clients.ts";
 import { callGroqJson, estimateInputTokens, pricingFor } from "../_shared/groq.ts";
 import { systemPromptFor, TASK_TYPES, type TaskType } from "./prompts.ts";
+import { initObservability, captureException, flushObservability } from "../_shared/observability.ts";
+
+initObservability();
 
 const MAX_INPUT_CHARS = 20_000;
 const RATE_LIMIT_MAX_CALLS = 20;
@@ -34,6 +37,21 @@ Deno.serve(async (req) => {
     });
   }
 
+  try {
+    return await handleRequest(req, jsonResponse, correlationId);
+  } catch (error) {
+    console.error(`[${correlationId}]`, "unexpected error", error);
+    captureException(error, { function: "ai-assistant", url: req.url, correlation_id: correlationId });
+    await flushObservability();
+    return jsonResponse({ error: "internal_error" }, 500);
+  }
+});
+
+async function handleRequest(
+  req: Request,
+  jsonResponse: (body: Record<string, unknown>, status?: number) => Response,
+  correlationId: string,
+): Promise<Response> {
   if (req.method !== "POST") {
     return jsonResponse({ error: "method_not_allowed" }, 405);
   }
@@ -264,4 +282,4 @@ Deno.serve(async (req) => {
     },
     cost_usd: actualCost,
   });
-});
+}

@@ -5,6 +5,9 @@
 
 import { corsHeaders, handleCorsPreflight } from "../_shared/cors.ts";
 import { createServiceClient, createUserClient } from "../_shared/supabase-clients.ts";
+import { initObservability, captureException, flushObservability } from "../_shared/observability.ts";
+
+initObservability();
 
 function jsonResponse(body: Record<string, unknown>, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -17,6 +20,17 @@ Deno.serve(async (req) => {
   const preflight = handleCorsPreflight(req);
   if (preflight) return preflight;
 
+  try {
+    return await handleRequest(req);
+  } catch (error) {
+    console.error("toast-pos: unexpected error", error);
+    captureException(error, { function: "toast-pos", url: req.url });
+    await flushObservability();
+    return jsonResponse({ error: "internal_error" }, 500);
+  }
+});
+
+async function handleRequest(req: Request): Promise<Response> {
   const url = new URL(req.url);
   const action = url.pathname.split("/").pop();
 
@@ -151,4 +165,4 @@ Deno.serve(async (req) => {
   }
 
   return jsonResponse({ error: "not_found" }, 404);
-});
+}

@@ -10,6 +10,9 @@
 import { corsHeaders, handleCorsPreflight } from "../_shared/cors.ts";
 import { createServiceClient, createUserClient } from "../_shared/supabase-clients.ts";
 import { encryptToken, signOAuthState, verifyOAuthState } from "../_shared/crypto.ts";
+import { initObservability, captureException, flushObservability } from "../_shared/observability.ts";
+
+initObservability();
 
 const AUTHORIZE_URL = "https://appcenter.intuit.com/connect/oauth2";
 const TOKEN_URL = "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer";
@@ -56,6 +59,17 @@ Deno.serve(async (req) => {
   const preflight = handleCorsPreflight(req);
   if (preflight) return preflight;
 
+  try {
+    return await handleRequest(req);
+  } catch (error) {
+    console.error("quickbooks-oauth: unexpected error", error);
+    captureException(error, { function: "quickbooks-oauth", url: req.url });
+    await flushObservability();
+    return jsonResponse({ error: "internal_error" }, 500);
+  }
+});
+
+async function handleRequest(req: Request): Promise<Response> {
   const url = new URL(req.url);
   const encryptionKey = Deno.env.get("PAYROLL_TOKEN_ENCRYPTION_KEY")!;
   const clientId = Deno.env.get("QUICKBOOKS_CLIENT_ID")!;
@@ -185,4 +199,4 @@ Deno.serve(async (req) => {
   }
 
   return jsonResponse({ error: "not_found" }, 404);
-});
+}
