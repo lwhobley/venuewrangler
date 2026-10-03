@@ -477,5 +477,14 @@ grant execute on function public.split_floor_tables to authenticated;
 grant execute on function public.assign_tables_to_reservation to authenticated;
 grant execute on function public.update_floor_table_status to authenticated;
 
-alter publication supabase_realtime add table public.floor_tables;
-alter publication supabase_realtime add table public.floor_table_assignments;
+-- supabase_realtime is a platform-managed publication that exists on every real Supabase
+-- project but not on a vanilla local Postgres instance (e.g. the CI stub sequence in
+-- supabase/tests/ci_*_stub.sql). Guard it so local verification doesn't break here.
+do $$
+begin
+  if exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
+    alter publication supabase_realtime add table public.floor_tables;
+    alter publication supabase_realtime add table public.floor_table_assignments;
+  end if;
+end;
+$$;

@@ -192,11 +192,25 @@ declare
   v_conv_org_id uuid;
 begin
   if tg_op = 'INSERT' then
+    -- A null conversation_id here means the caller's own (RLS-filtered) lookup found no
+    -- visible row for a conversation they are not a member of — that is an authorization
+    -- failure, not a missing-row condition, so it must not surface as a generic FK error.
+    if new.conversation_id is null and auth.uid() is not null then
+      raise exception 'not authorized to post in this conversation' using errcode = '42501';
+    end if;
+
     select venue_id, organization_id into v_conv_venue_id, v_conv_org_id
     from public.conversations where id = new.conversation_id;
 
     if v_conv_venue_id is null then
       raise exception 'invalid_conversation_id: conversation does not exist' using errcode = '23503';
+    end if;
+
+    -- Only enforce here for real authenticated callers; a null auth.uid() means this is a
+    -- privileged/internal context (service role, migration fixtures) where RLS itself would
+    -- not apply either, matching the derive-trigger convention used elsewhere in this schema.
+    if auth.uid() is not null and not app_hidden.is_conversation_member(new.conversation_id) then
+      raise exception 'not authorized to post in this conversation' using errcode = '42501';
     end if;
 
     new.venue_id := v_conv_venue_id;

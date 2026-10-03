@@ -24,3 +24,19 @@ grant select (
 
 -- storage_deletion_jobs is internal/service-role only
 revoke all on public.storage_deletion_jobs from authenticated, anon;
+
+-- pos_connections' own migration (20261002270000) narrows `authenticated` to a column-level
+-- grant excluding webhook_secret_hash/credentials_encrypted, for the same reason
+-- payroll_connections does above. Re-apply it here so local tests see the real end state.
+revoke all on public.pos_connections from authenticated;
+grant select (
+  id, organization_id, venue_id, provider, external_location_id, status, last_sync_at, created_at, updated_at
+) on public.pos_connections to authenticated;
+
+-- reservation_connections' own migration (20261002250000) does the same narrowing for its
+-- webhook_secret_hash column; webhook_replay_log is revoked entirely (service-role only).
+revoke all on public.reservation_connections from authenticated;
+grant select (
+  id, organization_id, venue_id, provider, status, created_at, updated_at
+) on public.reservation_connections to authenticated;
+revoke all on public.webhook_replay_log from authenticated, anon;

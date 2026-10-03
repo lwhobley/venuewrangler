@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { corsHeaders } from "../_shared/cors.ts";
-import { getServiceRoleClient, getUserClient } from "../_shared/supabase-clients.ts";
+import { createServiceClient, createUserClient } from "../_shared/supabase-clients.ts";
 import { getGoogleAccessToken } from "../_shared/google-auth.ts";
 
 const FCM_SCOPE = "https://www.googleapis.com/auth/firebase.messaging";
@@ -30,7 +30,7 @@ serve(async (req: Request) => {
     }
 
     // Authenticate caller
-    const userClient = getUserClient(authHeader);
+    const userClient = createUserClient(authHeader);
     const { data: { user }, error: userError } = await userClient.auth.getUser();
     if (userError || !user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
@@ -49,7 +49,38 @@ serve(async (req: Request) => {
       });
     }
 
-    const adminClient = getServiceRoleClient();
+    // Verify the caller actually belongs to this venue before letting them notify anyone in
+    // it — never trust a venue_id the client sends without checking it against their own
+    // RLS-respecting membership first (same pattern as toast-pos's outbound-command check).
+    const { data: callerMembership, error: callerMembershipError } = await userClient
+      .from("memberships")
+      .select("role")
+      .eq("venue_id", venue_id)
+      .maybeSingle();
+
+    if (callerMembershipError || !callerMembership) {
+      return new Response(JSON.stringify({ error: "Forbidden: not a member of this venue" }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const managerRoles = ["venue_manager", "organization_owner", "organization_admin"];
+    const isManager = managerRoles.includes(callerMembership.role);
+    if (audience !== "user" && !isManager) {
+      return new Response(JSON.stringify({ error: "Forbidden: manager role required to notify a venue-wide audience" }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    if (audience === "user" && target_user_ids && target_user_ids.some((id) => id !== user.id) && !isManager) {
+      return new Response(JSON.stringify({ error: "Forbidden: manager role required to notify other users" }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const adminClient = createServiceClient();
 
     // 1. Write in-app notification event(s) first (independent of push delivery success)
     if (audience === "user" && target_user_ids && target_user_ids.length > 0) {
