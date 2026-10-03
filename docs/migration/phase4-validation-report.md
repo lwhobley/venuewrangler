@@ -22,7 +22,7 @@ actually on the live project when that claim was made; `list_migrations` against
 `puttwjwmwrzmhpsjykuj` showed only the 20 migrations through `staff_requests_schema`. They have
 since actually been applied, verified below, during this review.
 
-31 migrations applied, in order, to the live project `puttwjwmwrzmhpsjykuj`:
+32 migrations applied, in order, to the live project `puttwjwmwrzmhpsjykuj`:
 
 | Migration | Covers |
 |---|---|
@@ -57,6 +57,7 @@ since actually been applied, verified below, during this review.
 | `20261002280000_chat_schema` | conversations + conversation_members + messages + conversation_reads (private chat bucket + media-cleanup enqueue) |
 | `20261002235935_floor_realtime_publication` | Realtime publication for floor_tables/floor_table_assignments (split out from floor_schema for CI compatibility, see below) |
 | `20261003000100_harden_batch2_search_path_and_rpc_grants` | security fixes found by this review: mutable search_path on two functions, six RPCs callable by `anon` |
+| `20261003001000_storage_deletion_worker_and_schedule` | media-cleanup batch worker function + `pg_cron` schedule (applied manually, see below) |
 
 **pgTAP authorization test suite: 326 assertions across 25 test files, all passing**, actually
 re-run locally against the full migration sequence by this review (not assumed from a prior
@@ -104,19 +105,20 @@ same pre-existing, documented, intentional ones from before this batch: `platfor
 no client-facing policy by design, and leaked-password protection is an account-level setting,
 not a code defect.
 
-**Not yet applied — needs a manual step.** `app_hidden.process_storage_deletion_batch()`, the
-media-cleanup batch worker function, and its `pg_cron` schedule (both part of the original
-`storage_deletion_jobs_schema` migration) could not be applied to the live project during this
-review — the Supabase SQL execution tool timed out on this specific function body roughly a
-dozen times in a row across both `apply_migration` and `execute_sql`, including on a shortened
-reproduction, while every other statement in this batch (including equally long ones) went
-through normally. Everything else in `storage_deletion_jobs_schema` (the table, RLS, the path
-safety-guard function, the insert trigger) is live. Until this function exists, media cleanup
-has no worker to actually process the queue — `storage_deletion_jobs` rows will accumulate but
-never get processed. The exact SQL needed is the `process_storage_deletion_batch` function body
-in `supabase/migrations/20261002230000_storage_deletion_jobs_schema.sql`, followed by the
-`pg_cron` scheduling block at the end of that same file — both can be pasted directly into the
-Supabase SQL editor.
+**Update — now resolved.** `app_hidden.process_storage_deletion_batch()` initially could not be
+applied via the Supabase SQL tools during this review (the tool timed out on this specific
+function body roughly a dozen times in a row across both `apply_migration` and `execute_sql`,
+including on a shortened reproduction, while every other statement in this batch went through
+normally). It was applied manually through the Supabase SQL editor instead, then verified live:
+the function exists, runs cleanly on an empty queue, and is wired into `pg_cron`. `pg_cron`
+itself was not yet installed on the live project (available, but `installed_version` was null) —
+installed it (`create extension pg_cron`) and scheduled `storage-deletion-worker` to run
+`process_storage_deletion_batch(25)` every 10 minutes (`cron.job` confirms `active = true` with
+the correct command). Recorded in
+`supabase/migrations/20261003001000_storage_deletion_worker_and_schedule.sql`, with the same
+existence-guard pattern as the Realtime publication fix (`pg_cron` isn't available in a vanilla
+local Postgres either) — verified applying cleanly through the full local migration + pgTAP
+sequence (32 migrations, 326 assertions, all passing) before being treated as done.
 
 ### Edge Functions (all deployed, `ACTIVE`, on the live project)
 
@@ -170,9 +172,6 @@ should be treated as unverified rather than trusted until it's actually re-run.
 - **POS inbound webhook has no authentication.** See the `toast-pos` row above — this must be
   fixed against Toast's real webhook signing docs before this endpoint is given to a real
   vendor integration.
-- **Media-cleanup has no worker yet.** `process_storage_deletion_batch()` and its `pg_cron`
-  schedule are not yet applied to the live project (see the database section above) — queued
-  deletions will not be processed until this manual step is done.
 
 ## 3. Feature parity gap — why cutover is not ready
 
