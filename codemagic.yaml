@@ -1,0 +1,54 @@
+workflows:
+  ios-testflight:
+    name: iOS TestFlight
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    working_directory: apps/mobile
+    integrations:
+      app_store_connect: venuewrangler-asc-key
+    environment:
+      flutter: 3.47.5
+      xcode: latest
+      cocoapods: default
+      vars:
+        BUNDLE_ID: "com.venuewrangler.app"
+        XCODE_WORKSPACE: "Runner.xcworkspace"
+        XCODE_SCHEME: "Runner"
+    triggering:
+      events:
+        - tag
+      tag_patterns:
+        - pattern: "ios-v*"
+      cancel_previous_builds: false
+    scripts:
+      - name: Install Flutter dependencies
+        script: flutter packages pub get
+      - name: Static analysis
+        script: flutter analyze
+      - name: Run tests
+        script: flutter test
+      - name: Set up iOS code signing
+        script: |
+          keychain initialize
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --type IOS_APP_STORE \
+            --create
+          keychain add-certificates
+          xcode-project use-profiles
+      - name: Build IPA for App Store
+        script: |
+          flutter build ipa --release \
+            --export-options-plist=/Users/builder/export_options.plist
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - "/tmp/xcodebuild_logs/*.log"
+      - flutter_drive.log
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+        # Internal testers only until App Attest/APNs/App Links have been verified on a
+        # physical device per docs/migration/flutter-cutover-closeout-2026-10-03.md — flip to
+        # beta_groups/submit_to_app_store once that's done.
+        beta_groups:
+          - "Internal Testers"
