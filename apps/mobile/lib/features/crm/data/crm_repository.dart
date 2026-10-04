@@ -168,7 +168,6 @@ class SupabaseCrmRepository implements CrmRepository {
           if (guestCount != null) 'guest_count': guestCount,
           if (venueSpace != null) 'venue_space': venueSpace,
           if (depositCents != null) 'deposit_cents': depositCents,
-          if (depositCents != null && depositCents > 0) 'deposit_status': 'due',
         })
         .select()
         .single();
@@ -244,12 +243,17 @@ class SupabaseCrmRepository implements CrmRepository {
     final code = details is Map ? details['error'] as String? : null;
 
     return switch (code) {
-      'forbidden' => const PermissionDeniedError('Only a venue manager can collect this deposit.'),
+      'forbidden' => const PermissionDeniedError('Only a venue manager or organization admin can collect this deposit.'),
       'no_deposit_due' => const UnknownError('There is no deposit due on this event.'),
       'deposit_already_paid' => const UnknownError('This deposit has already been paid.'),
       'deposit_waived' => const UnknownError('This deposit was waived.'),
       'beo_not_found' => const NotFoundError('That event could not be found.'),
       'billing_not_configured' => const UnknownError('Payments are not configured yet. Please try again later.'),
+      'connect_account_required' => const UnknownError('An organization owner or admin must set up the deposit account in Billing first.'),
+      'connect_account_not_ready' => const UnknownError('The organization deposit account is still being verified for payments or payouts. Check its status in Billing.'),
+      'connect_not_configured' => const UnknownError('Deposit payments are not configured yet. Please try again later.'),
+      'deposit_changed_during_checkout' => const UnknownError('The deposit changed while checkout was starting. Please try again.'),
+      'deposit_payment_processing' => const UnknownError('A deposit payment is still processing. Please check its status before trying again.'),
       'invalid_or_expired_session' => const AuthError('Your session has expired. Please sign in again.'),
       _ => error.status >= 500
           ? const UnknownError('Checkout is temporarily unavailable.')

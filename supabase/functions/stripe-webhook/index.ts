@@ -15,11 +15,37 @@ initObservability();
 async function markBeoDepositPaid(
   serviceClient: ReturnType<typeof createServiceClient>,
   session: Stripe.Checkout.Session,
+  connectedAccountId: string | undefined,
 ): Promise<void> {
   const beoId = session.metadata?.beo_id;
-  if (!beoId) {
-    console.error("beo_deposit session missing beo_id in metadata", session.id);
-    return;
+  if (!beoId || !session.id || session.payment_status !== "paid") return;
+  const { data: beo, error: lookupError } = await serviceClient
+    .from("crm_beos")
+    .select("id, organization_id, deposit_cents, deposit_checkout_session_id, deposit_checkout_account_id")
+    .eq("id", beoId)
+    .maybeSingle();
+  if (lookupError) throw lookupError;
+  if (!beo || beo.deposit_checkout_session_id !== session.id ||
+      beo.deposit_cents !== session.amount_total) {
+    throw new Error("beo_deposit event does not match its recorded checkout session and amount");
+  }
+  if (beo.deposit_checkout_account_id !== (connectedAccountId ?? null)) {
+    throw new Error("beo_deposit event came from an unexpected Stripe account");
+  }
+  if (connectedAccountId) {
+    const { data: linkedAccount, error: accountError } = await serviceClient
+      .from("organization_stripe_accounts")
+      .select("stripe_account_id")
+      .eq("organization_id", beo.organization_id)
+      .maybeSingle();
+    if (accountError) throw accountError;
+    if (linkedAccount?.stripe_account_id !== connectedAccountId) {
+      throw new Error("beo_deposit connected account no longer belongs to its organization");
+    }
+  } else {
+    // Sessions created before Connect migration were platform charges. Preserve
+    // truthful payment state, while flagging their funds for manual reconciliation.
+    console.warn("legacy platform BEO deposit requires payout reconciliation", { beoId, session: session.id });
   }
   const paymentIntentId =
     typeof session.payment_intent === "string" ? session.payment_intent : session.payment_intent?.id;
@@ -32,6 +58,8 @@ async function markBeoDepositPaid(
       deposit_paid_at: new Date().toISOString(),
     })
     .eq("id", beoId)
+    .eq("deposit_checkout_session_id", session.id)
+    .eq("deposit_cents", session.amount_total)
     // null means "due" everywhere else in this schema (waive_beo_deposit's coalesce, the
     // Flutter client's depositDueAndUnpaid) — matching only 'due' would silently drop real
     // payments on BEOs whose status was never explicitly set. Excluding 'paid'/'waived' keeps
@@ -55,6 +83,30 @@ async function markBeoDepositPaid(
   }
 }
 
+async function releaseFailedBeoDepositSession(
+  serviceClient: ReturnType<typeof createServiceClient>,
+  session: Stripe.Checkout.Session,
+  connectedAccountId: string | undefined,
+): Promise<void> {
+  const beoId = session.metadata?.beo_id;
+  if (!beoId || !session.id) return;
+  let query = serviceClient
+    .from("crm_beos")
+    .update({
+      deposit_checkout_session_id: null,
+      deposit_checkout_account_id: null,
+      deposit_checkout_nonce: crypto.randomUUID(),
+    })
+    .eq("id", beoId)
+    .eq("deposit_checkout_session_id", session.id)
+    .or("deposit_status.is.null,deposit_status.eq.due");
+  query = connectedAccountId
+    ? query.eq("deposit_checkout_account_id", connectedAccountId)
+    : query.is("deposit_checkout_account_id", null);
+  const { error } = await query;
+  if (error) throw error;
+}
+
 Deno.serve(async (req) => {
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: "method_not_allowed" }), { status: 405 });
@@ -62,6 +114,7 @@ Deno.serve(async (req) => {
 
   const signature = req.headers.get("stripe-signature");
   const webhookSecret = Deno.env.get("STRIPE_WEBHOOK_SECRET");
+  const connectWebhookSecret = Deno.env.get("STRIPE_CONNECT_WEBHOOK_SECRET");
   if (!signature || !webhookSecret) {
     return new Response(JSON.stringify({ error: "missing_signature_or_secret" }), {
       status: 400,
@@ -75,8 +128,15 @@ Deno.serve(async (req) => {
   try {
     event = await stripe.webhooks.constructEventAsync(rawBody, signature, webhookSecret);
   } catch (err) {
-    console.error("Stripe webhook signature verification failed", err);
-    return new Response(JSON.stringify({ error: "invalid_signature" }), { status: 400 });
+    if (!connectWebhookSecret) {
+      console.error("Stripe webhook signature verification failed", err);
+      return new Response(JSON.stringify({ error: "invalid_signature" }), { status: 400 });
+    }
+    try {
+      event = await stripe.webhooks.constructEventAsync(rawBody, signature, connectWebhookSecret);
+    } catch {
+      return new Response(JSON.stringify({ error: "invalid_signature" }), { status: 400 });
+    }
   }
 
   const serviceClient = createServiceClient();
@@ -97,10 +157,12 @@ Deno.serve(async (req) => {
           // payment_status "unpaid" — money hasn't moved yet. Those are settled by
           // checkout.session.async_payment_succeeded below instead.
           if (session.payment_status === "paid") {
-            await markBeoDepositPaid(serviceClient, session);
+            await markBeoDepositPaid(serviceClient, session, event.account);
           }
           break;
         }
+
+        if (event.account) break; // Connect payments never mutate platform subscriptions.
 
         const organizationId = session.metadata?.organization_id;
         const customerId =
@@ -110,7 +172,8 @@ Deno.serve(async (req) => {
             ? session.subscription
             : session.subscription?.id;
 
-        if (organizationId && customerId) {
+        if (!organizationId) break; // The platform Stripe account is shared with other projects.
+        if (customerId) {
           const { error } = await serviceClient.from("subscriptions").upsert(
             {
               organization_id: organizationId,
@@ -119,12 +182,9 @@ Deno.serve(async (req) => {
             },
             { onConflict: "organization_id" },
           );
-          if (error) console.error("checkout.session.completed upsert failed", error);
+          if (error) throw error;
         } else {
-          console.error("checkout.session.completed missing organization_id or customer", {
-            organizationId,
-            customerId,
-          });
+          throw new Error("subscription checkout missing customer");
         }
         break;
       }
@@ -132,7 +192,15 @@ Deno.serve(async (req) => {
       case "checkout.session.async_payment_succeeded": {
         const session = event.data.object as Stripe.Checkout.Session;
         if (session.metadata?.checkout_type === "beo_deposit") {
-          await markBeoDepositPaid(serviceClient, session);
+          await markBeoDepositPaid(serviceClient, session, event.account);
+        }
+        break;
+      }
+
+      case "checkout.session.async_payment_failed": {
+        const session = event.data.object as Stripe.Checkout.Session;
+        if (session.metadata?.checkout_type === "beo_deposit") {
+          await releaseFailedBeoDepositSession(serviceClient, session, event.account);
         }
         break;
       }
@@ -140,6 +208,7 @@ Deno.serve(async (req) => {
       case "customer.subscription.created":
       case "customer.subscription.updated":
       case "customer.subscription.deleted": {
+        if (event.account) break;
         const subscription = event.data.object as Stripe.Subscription;
         const customerId =
           typeof subscription.customer === "string"
@@ -155,7 +224,7 @@ Deno.serve(async (req) => {
         const status =
           event.type === "customer.subscription.deleted" ? "canceled" : subscription.status;
 
-        const { error } = await serviceClient
+        const { data, error } = await serviceClient
           .from("subscriptions")
           .update({
             stripe_subscription_id: subscription.id,
@@ -166,10 +235,14 @@ Deno.serve(async (req) => {
               : null,
             cancel_at_period_end: subscription.cancel_at_period_end,
           })
-          .eq("stripe_customer_id", customerId);
+          .eq("stripe_customer_id", customerId)
+          .select("id");
 
-        if (error) {
-          console.error(`${event.type} update failed`, error);
+        if (error) throw error;
+        if (!data || data.length === 0) {
+          // Other products also use this Stripe platform account. Their customers
+          // have no subscriptions row in Venue Wrangler.
+          console.warn("subscription event for unlinked Stripe customer", { eventType: event.type, customerId });
         }
         break;
       }
@@ -180,9 +253,8 @@ Deno.serve(async (req) => {
         break;
     }
   } catch (err) {
-    // Stripe retries on a non-2xx response; log and still return 200 for a processing error
-    // that a retry won't fix (e.g. a row genuinely doesn't exist yet), but let an unexpected
-    // throw surface as 500 so Stripe DOES retry a transient failure (a dropped DB connection).
+    // Stripe retries on a non-2xx response. Never acknowledge a subscription
+    // change until it has actually been persisted.
     console.error("stripe-webhook handler error", err);
     captureException(err, { function: "stripe-webhook", url: req.url, event_type: event.type });
     await flushObservability();

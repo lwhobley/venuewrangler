@@ -14,9 +14,21 @@
 </head>
 <body>
   <main>
-    <h1>Billing update received</h1>
-    <p>If you completed checkout, your venue subscription will activate in a few seconds. Open the Venue Wrangler app to continue.</p>
+    <h1 id="title">Billing update received</h1>
+    <p id="message">If you completed checkout, your venue subscription will activate in a few seconds. Open the Venue Wrangler app to continue.</p>
     <p><a href="venuewrangler://billing">Open the app</a> · <a href="/support/">Need help?</a></p>
   </main>
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    if (params.has('connect')) {
+      document.getElementById('title').textContent = 'Stripe account setup';
+      document.getElementById('message').textContent = params.get('connect') === 'refresh'
+        ? 'Your setup link expired. Open Billing in the Venue Wrangler app and tap Continue Stripe setup for a new link.'
+        : 'Open Billing in the Venue Wrangler app and refresh your deposit account status. If Stripe needs more information, tap Continue Stripe setup.';
+    } else if (params.has('deposit')) {
+      document.getElementById('title').textContent = 'Event deposit checkout';
+      document.getElementById('message').textContent = 'Open the Venue Wrangler app to review the deposit status. A payment is marked paid only after Stripe confirms it.';
+    }
+  </script>
 </body>
 </html>

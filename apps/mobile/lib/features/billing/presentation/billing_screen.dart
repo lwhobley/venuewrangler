@@ -22,60 +22,173 @@ class BillingScreen extends ConsumerWidget {
     }
 
     final organizationId = venue.organizationId;
-    final subscriptionAsync = ref.watch(subscriptionForOrgProvider(organizationId));
+    final subscriptionAsync =
+        ref.watch(subscriptionForOrgProvider(organizationId));
+    final depositAccountAsync =
+        ref.watch(depositAccountForOrgProvider(organizationId));
 
     return Scaffold(
       appBar: AppBar(title: const Text('Billing')),
       body: RefreshIndicator(
-        onRefresh: () async => ref.invalidate(subscriptionForOrgProvider(organizationId)),
-        child: subscriptionAsync.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (_, __) => const Center(
-            child: Text('Could not load billing status.', textAlign: TextAlign.center),
-          ),
-          data: (subscription) => ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              _StatusCard(subscription: subscription),
-              const SizedBox(height: 24),
-              if (subscription == null || !subscription.isEntitled)
-                FilledButton.icon(
-                  onPressed: () => _subscribe(context, ref, organizationId),
-                  icon: const Icon(Icons.credit_card_outlined),
-                  label: const Text('Subscribe'),
-                ),
-              if (subscription?.isEntitled ?? false) ...[
-                const SizedBox(height: 12),
-                OutlinedButton.icon(
-                  onPressed: () => _manageBilling(context, ref, organizationId),
-                  icon: const Icon(Icons.settings_outlined),
-                  label: const Text('Manage billing'),
-                ),
-              ],
-            ],
-          ),
+        onRefresh: () async {
+          ref.invalidate(subscriptionForOrgProvider(organizationId));
+          ref.invalidate(depositAccountForOrgProvider(organizationId));
+        },
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            Text('App subscription',
+                style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 8),
+            subscriptionAsync.when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (_, __) =>
+                  const Text('Could not load subscription status.'),
+              data: (subscription) => Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _StatusCard(subscription: subscription),
+                  const SizedBox(height: 12),
+                  if (subscription == null || !subscription.isEntitled)
+                    FilledButton.icon(
+                      onPressed: () => _subscribe(context, ref, organizationId),
+                      icon: const Icon(Icons.credit_card_outlined),
+                      label: const Text('Subscribe'),
+                    ),
+                  if (subscription?.isEntitled ?? false)
+                    OutlinedButton.icon(
+                      onPressed: () =>
+                          _manageBilling(context, ref, organizationId),
+                      icon: const Icon(Icons.settings_outlined),
+                      label: const Text('Manage billing'),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 32),
+            Text('Event deposit payments',
+                style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 8),
+            const Text(
+                'Deposits are paid to your organization’s Stripe account. App subscription payments are separate.'),
+            const SizedBox(height: 12),
+            depositAccountAsync.when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (_, __) => const Text(
+                  'Could not load deposit account status. Pull down to retry.'),
+              data: (account) => Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Card(
+                      child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Text(!account.connected
+                        ? 'Account setup needed'
+                        : account.ready && account.payoutsReady
+                            ? 'Ready to collect deposits and receive payouts'
+                            : account.ready
+                                ? 'Card payments are enabled; payouts are still being verified'
+                                : 'Stripe is verifying your account'),
+                  )),
+                  const SizedBox(height: 12),
+                  if (!account.ready || !account.payoutsReady)
+                    FilledButton.icon(
+                      onPressed: () => _setupDepositAccount(
+                          context, ref, organizationId, account.connected),
+                      icon: const Icon(Icons.account_balance_outlined),
+                      label: Text(account.connected
+                          ? 'Continue Stripe setup'
+                          : 'Set up deposit account'),
+                    ),
+                  TextButton(
+                    onPressed: () => ref.invalidate(
+                        depositAccountForOrgProvider(organizationId)),
+                    child: const Text('Refresh account status'),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Future<void> _subscribe(BuildContext context, WidgetRef ref, String organizationId) async {
+  Future<void> _subscribe(
+      BuildContext context, WidgetRef ref, String organizationId) async {
     try {
-      final url = await ref.read(billingRepositoryProvider).createCheckoutUrl(organizationId);
+      final url = await ref
+          .read(billingRepositoryProvider)
+          .createCheckoutUrl(organizationId);
       await _openUrl(context, url);
     } on AppError catch (error) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message)));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error.message)));
     }
   }
 
-  Future<void> _manageBilling(BuildContext context, WidgetRef ref, String organizationId) async {
+  Future<void> _manageBilling(
+      BuildContext context, WidgetRef ref, String organizationId) async {
     try {
-      final url = await ref.read(billingRepositoryProvider).createPortalUrl(organizationId);
+      final url = await ref
+          .read(billingRepositoryProvider)
+          .createPortalUrl(organizationId);
       await _openUrl(context, url);
     } on AppError catch (error) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message)));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error.message)));
+    }
+  }
+
+  Future<void> _setupDepositAccount(BuildContext context, WidgetRef ref,
+      String organizationId, bool connected) async {
+    String country = '';
+    if (!connected) {
+      final selected = await showDialog<String>(
+        context: context,
+        builder: (dialogContext) {
+          return AlertDialog(
+            title: const Text('Business country'),
+            content: TextField(
+              onChanged: (value) => country = value,
+              autofocus: true,
+              maxLength: 2,
+              textCapitalization: TextCapitalization.characters,
+              decoration: const InputDecoration(
+                hintText: 'US',
+                helperText:
+                    'Enter the two-letter country code for your organization.',
+              ),
+            ),
+            actions: [
+              TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: const Text('Cancel')),
+              FilledButton(
+                onPressed: () => Navigator.pop(
+                    dialogContext, country.trim().toUpperCase()),
+                child: const Text('Continue'),
+              ),
+            ],
+          );
+        },
+      );
+      if (selected == null || selected.length != 2) return;
+      country = selected;
+    }
+    try {
+      final url = await ref
+          .read(billingRepositoryProvider)
+          .createDepositAccountOnboardingUrl(organizationId, country: country);
+      if (!context.mounted) return;
+      await _openUrl(context, url);
+      ref.invalidate(depositAccountForOrgProvider(organizationId));
+    } on AppError catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error.message)));
     }
   }
 

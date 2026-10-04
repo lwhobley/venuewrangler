@@ -2,7 +2,7 @@
 -- Fixture: org A (owner ...002), venue A1 (manager ...004, staff 1 ...005, staff 2 ...008), org B (owner ...006).
 
 begin;
-select plan(15);
+select plan(16);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-000000000002', 'org-a-owner@example.com'),
@@ -236,6 +236,11 @@ set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-000000000005';
 select lives_ok(
   $$ update public.notification_events set read_at = now() where id = 'b0000000-0000-0000-0000-000000000001' $$,
   'target user can mark notification as read'
+);
+
+select throws_ok(
+  $$ update public.notification_events set title = 'forged' where id = 'b0000000-0000-0000-0000-000000000001' $$,
+  '42501', null, 'recipient cannot change notification contents'
 );
 
 select * from finish();

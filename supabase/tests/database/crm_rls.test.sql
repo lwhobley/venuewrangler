@@ -2,7 +2,7 @@
 -- Fixtures: Org A, Venue A1 (manager 004, staff 005), Org B, Venue B1 (owner 006).
 
 begin;
-select plan(25);
+select plan(28);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-000000000004', 'venue-a1-manager@example.com'),
@@ -250,8 +250,25 @@ select results_eq(
 -- ---------------------------------------------------------------------------
 -- 22. Conversion is blocked while a deposit is due and unpaid
 -- ---------------------------------------------------------------------------
-insert into public.crm_beos (id, venue_id, event_name, status, deposit_cents, deposit_status)
-values ('70000000-0000-0000-0000-000000000004', '20000000-0000-0000-0000-0000000000a1', 'Unpaid Deposit Event', 'confirmed', 50000, 'due');
+insert into public.crm_beos (id, venue_id, event_name, status, deposit_cents)
+values ('70000000-0000-0000-0000-000000000004', '20000000-0000-0000-0000-0000000000a1', 'Unpaid Deposit Event', 'confirmed', 50000);
+
+select is(
+  (select deposit_status from public.crm_beos where id = '70000000-0000-0000-0000-000000000004'),
+  'due',
+  'new BEO deposits default to due'
+);
+
+select throws_ok(
+  $$ update public.crm_beos set deposit_status = 'paid' where id = '70000000-0000-0000-0000-000000000004' $$,
+  '42501', null, 'manager cannot mark a BEO deposit paid'
+);
+
+select throws_ok(
+  $$ insert into public.crm_beos (venue_id, event_name, deposit_cents, deposit_status)
+     values ('20000000-0000-0000-0000-0000000000a1', 'Forged Paid Event', 50000, 'paid') $$,
+  '42501', null, 'manager cannot create a pre-paid BEO'
+);
 
 select throws_ok(
   $$ select * from public.convert_beo_to_contract('70000000-0000-0000-0000-000000000004') $$,
@@ -269,8 +286,11 @@ select is(
   'waiving a due deposit succeeds'
 );
 
+reset role;
 insert into public.crm_beos (id, venue_id, event_name, status, deposit_cents, deposit_status)
 values ('70000000-0000-0000-0000-000000000005', '20000000-0000-0000-0000-0000000000a1', 'Paid Deposit Event', 'confirmed', 50000, 'paid');
+set local role authenticated;
+set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-000000000004';
 
 select is(
   (select waive_beo_deposit from public.waive_beo_deposit('70000000-0000-0000-0000-000000000005')),

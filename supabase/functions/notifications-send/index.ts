@@ -124,9 +124,10 @@ serve(async (req: Request) => {
         body,
         data,
       }));
-      await adminClient.from("notification_events").insert(rows);
+      const { error: insertError } = await adminClient.from("notification_events").insert(rows);
+      if (insertError) throw insertError;
     } else {
-      await adminClient.from("notification_events").insert({
+      const { error: insertError } = await adminClient.from("notification_events").insert({
         venue_id,
         audience,
         kind,
@@ -134,6 +135,7 @@ serve(async (req: Request) => {
         body,
         data,
       });
+      if (insertError) throw insertError;
     }
 
     // 2. Resolve target tokens
@@ -280,10 +282,10 @@ serve(async (req: Request) => {
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (error) {
+    console.error("notifications-send failed", error);
     captureException(error, { function: "notifications-send", url: req.url });
     await flushObservability();
-    const message = error instanceof Error ? error.message : String(error);
-    return new Response(JSON.stringify({ error: message }), {
+    return new Response(JSON.stringify({ error: "notification_send_failed" }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

@@ -17,6 +17,14 @@ abstract interface class BillingRepository {
 
   /// Returns a hosted Stripe Billing Portal URL to open in an external browser.
   Future<String> createPortalUrl(String organizationId);
+
+  /// Event deposits use a separate organization-owned Stripe Connect account.
+  Future<({bool connected, bool ready, bool payoutsReady})>
+      fetchDepositAccountStatus(String organizationId);
+
+  /// Starts or resumes Stripe-hosted onboarding for the organization's account.
+  Future<String> createDepositAccountOnboardingUrl(String organizationId,
+      {required String country});
 }
 
 class SupabaseBillingRepository implements BillingRepository {
@@ -45,7 +53,48 @@ class SupabaseBillingRepository implements BillingRepository {
     return _invokeForUrl('stripe-create-portal', organizationId);
   }
 
-  Future<String> _invokeForUrl(String functionName, String organizationId) async {
+  @override
+  Future<({bool connected, bool ready, bool payoutsReady})>
+      fetchDepositAccountStatus(String organizationId) async {
+    try {
+      final response = await _client.functions.invoke(
+        'stripe-connect-account',
+        body: {'organization_id': organizationId, 'action': 'status'},
+      );
+      final data = response.data as Map?;
+      return (
+        connected: data?['connected'] == true,
+        ready: data?['ready'] == true,
+        payoutsReady: data?['payouts_ready'] == true,
+      );
+    } on FunctionException catch (error) {
+      throw _mapFunctionException(error);
+    }
+  }
+
+  @override
+  Future<String> createDepositAccountOnboardingUrl(String organizationId,
+      {required String country}) async {
+    try {
+      final response = await _client.functions.invoke(
+        'stripe-connect-account',
+        body: {
+          'organization_id': organizationId,
+          'action': 'onboard',
+          'country': country
+        },
+      );
+      final url = (response.data as Map?)?['url'] as String?;
+      if (url == null)
+        throw const UnknownError('Could not start Stripe account setup.');
+      return url;
+    } on FunctionException catch (error) {
+      throw _mapFunctionException(error);
+    }
+  }
+
+  Future<String> _invokeForUrl(
+      String functionName, String organizationId) async {
     try {
       final response = await _client.functions.invoke(
         functionName,
@@ -75,7 +124,14 @@ class SupabaseBillingRepository implements BillingRepository {
       'billing_not_configured' => const UnknownError(
           'Billing is not configured yet. Please try again later.',
         ),
-      'invalid_or_expired_session' => const AuthError('Your session has expired. Please sign in again.'),
+      'connect_not_configured' =>
+        const UnknownError('Deposit payment setup is not configured yet.'),
+      'connect_unavailable' =>
+        const UnknownError('Stripe account setup is temporarily unavailable.'),
+      'invalid_country' =>
+        const UnknownError('Enter a two-letter business country code.'),
+      'invalid_or_expired_session' =>
+        const AuthError('Your session has expired. Please sign in again.'),
       _ => error.status >= 500
           ? const UnknownError('Billing is temporarily unavailable.')
           : const UnknownError('Something went wrong. Please try again.'),
