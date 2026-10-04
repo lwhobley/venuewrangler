@@ -1,8 +1,11 @@
 # features/billing
 
-App subscription status and venue deposit account setup (no Stripe secret material
-ever reaches this app), backed by `supabase/migrations/20261002130000_subscriptions_schema.sql`
-and `supabase/functions/stripe-create-checkout`, `stripe-create-portal`, `stripe-webhook`.
+App subscription status (no Stripe secret material ever reaches this app), backed by
+`supabase/migrations/20261002130000_subscriptions_schema.sql` and
+`supabase/functions/stripe-create-checkout`, `stripe-create-portal`, `stripe-webhook`. Stripe
+is used only for this platform app-subscription — there is no Stripe Connect / connected-account
+flow anywhere in this app. BEO deposits are not collected through Stripe (see
+`features/crm`'s README for why that feature was removed rather than left half-functional).
 
 - `domain/subscription.dart` — `Subscription`.
 - `data/billing_repository.dart` — `BillingRepository` interface + Supabase implementation:
@@ -14,26 +17,6 @@ and `supabase/functions/stripe-create-checkout`, `stripe-create-portal`, `stripe
   without a purchase link. App subscriptions are sold directly to organizations outside
   the mobile app. The existing Checkout and Portal Edge Functions remain available for
   an appropriate business sales channel; the app does not call them.
-
-**Event deposits:** Billing also lets organization owners/admins set up a separate Stripe
-connected account. `stripe-connect-account` creates or resumes Stripe-hosted onboarding and
-reports live card-payment and payout capability status. BEO Checkout uses a direct charge on
-that account, with the account ID recorded beside the Checkout Session; it requires both
-capabilities active. Subscription Checkout and the Customer Portal continue using the
-platform account.
-
-Deploy `20261003005000_payment_and_notification_hardening.sql` before the changed functions.
-Set `STRIPE_CONNECT_RETURN_URL` and `STRIPE_CONNECT_REFRESH_URL` to working HTTPS billing
-return pages, and configure a connected-account webhook destination for
-`checkout.session.completed`, `checkout.session.async_payment_succeeded`, and
-`checkout.session.async_payment_failed` at
-`.../functions/v1/stripe-webhook`. Store its signing secret as
-`STRIPE_CONNECT_WEBHOOK_SECRET` separately from the platform webhook secret. The return
-page tells users to reopen Billing and refresh account status; an expired link can be
-resumed there. Do not enable deposit collection until the migration, function, webhook,
-and onboarding URLs are deployed and verified together. Existing platform-created BEO
-Checkout links should be expired or reconciled during rollout; the changed Checkout function
-expires each prior open link when that BEO is requested again.
 
 **Stripe account note:** this project's Stripe account is livemode-only (no test/sandbox
 account) and is shared with other, unrelated projects. `STRIPE_SECRET_KEY`/

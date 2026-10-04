@@ -16,7 +16,11 @@ event orders), contracts, and a pipeline forecast — to Supabase + Flutter.
     time slot is already held by another confirmed event/BEO — cancelling releases it. This
     replaces legacy's string-tag pseudo-FK (`tags: ['beo:<id>']`) with a real, unique,
     nullable FK, the single highest-value fix flagged in the legacy audit (a tags[] array isn't
-    something an RLS policy can cheaply join through).
+    something an RLS policy can cheaply join through). **No deposit tracking**: Stripe is used
+    only for the platform app-subscription (see `features/billing`), never for BEO deposits —
+    there is no Stripe Connect / connected-account flow in this app, so the deposit due/paid/
+    waived columns and the `waive_beo_deposit` RPC that used to live here were removed rather
+    than left half-functional with no way to ever collect one.
   - `public.crm_contracts`: the one real state-machine guard legacy has — once
     `status = 'fully_signed'`, content fields are frozen and the only legal next status is
     `cancelled` or `disputed`. No other lead/BEO/contract status transition is restricted,
@@ -27,20 +31,15 @@ event orders), contracts, and a pipeline forecast — to Supabase + Flutter.
   - RPCs: `crm_pipeline_forecast`, `crm_source_roi`, `crm_stale_leads` (read-only aggregates,
     legacy's STAGE_PROBABILITY weights copied verbatim), `convert_beo_to_contract` (idempotent —
     a second call on an already-converted BEO returns the existing contract rather than
-    duplicating it, matching legacy's explicit double-click fix), `waive_beo_deposit`
-    (conditional on not already paid, race-safe).
+    duplicating it, matching legacy's explicit double-click fix).
 - **RLS**: manager-tier only (`venue_manager`/`organization_owner`/`organization_admin`) on
   every table, matching legacy's `canManageVenue` gate on every CRM endpoint including reads —
   staff/supervisor get nothing, not even a read policy.
 
 ## Not built here (documented gap, not silently skipped)
 
-- **BEO deposit Stripe checkout** and **Resend email delivery** (BEO emails, template sends):
-  no Resend integration exists anywhere in this rebuild yet, and the one-time-charge Stripe
-  Checkout flow needs the same "verify against Stripe's real docs first" treatment already
-  flagged for reservation deposits in the guests/reservations handoff. The schema, RLS, and the
-  waive-deposit path (which needs no outbound call) are built; the two API calls out are not.
-  The Flutter UI surfaces a "Waive" action for a due deposit but no "Charge" action.
+- **Resend email delivery** (BEO emails, template sends): no Resend integration exists anywhere
+  in this rebuild yet.
 - The legacy public leads webhook does **not** feed this module — it writes to `public.guests`
   (a separate, already-ported concept). Confirmed from reading the legacy code, not assumed.
 

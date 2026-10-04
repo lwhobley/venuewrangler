@@ -9,8 +9,6 @@ class CrmBeo {
     this.guestCount,
     this.venueSpace,
     this.fbMinimumCents,
-    this.depositCents,
-    this.depositStatus,
     this.menuAppetizers,
     this.menuEntrees,
     this.menuDesserts,
@@ -31,8 +29,6 @@ class CrmBeo {
         guestCount: json['guest_count'] as int?,
         venueSpace: json['venue_space'] as String?,
         fbMinimumCents: json['fb_minimum_cents'] as int?,
-        depositCents: json['deposit_cents'] as int?,
-        depositStatus: json['deposit_status'] as String?,
         menuAppetizers: json['menu_appetizers'] as String?,
         menuEntrees: json['menu_entrees'] as String?,
         menuDesserts: json['menu_desserts'] as String?,
@@ -52,8 +48,6 @@ class CrmBeo {
   final int? guestCount;
   final String? venueSpace;
   final int? fbMinimumCents;
-  final int? depositCents;
-  final String? depositStatus;
   final String? menuAppetizers;
   final String? menuEntrees;
   final String? menuDesserts;
@@ -64,9 +58,6 @@ class CrmBeo {
   final DateTime updatedAt;
 
   static const statuses = ['draft', 'sent', 'reviewed', 'confirmed', 'amended', 'cancelled'];
-
-  bool get depositDueAndUnpaid =>
-      depositCents != null && depositCents! > 0 && (depositStatus == null || depositStatus == 'due');
 
   @override
   bool operator ==(Object other) => other is CrmBeo && other.id == id;

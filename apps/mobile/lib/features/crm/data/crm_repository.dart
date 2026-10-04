@@ -31,10 +31,8 @@ abstract class CrmRepository {
     DateTime? eventDate,
     int? guestCount,
     String? venueSpace,
-    int? depositCents,
   });
   Future<void> updateBeoStatus({required String beoId, required String status});
-  Future<bool> waiveBeoDeposit({required String beoId});
   Future<({String contractId, bool alreadyExisted})> convertBeoToContract({required String beoId});
 
   Future<List<CrmContract>> getContracts({required String venueId, int limit = 100});
@@ -42,11 +40,6 @@ abstract class CrmRepository {
 
   Future<List<CrmForecastRow>> getForecast({required String venueId});
   Future<List<CrmStaleLead>> getStaleLeads({required String venueId, int days = 5});
-
-  /// Returns a hosted Stripe Checkout URL (mode: payment) for this BEO's deposit, to open in
-  /// an external browser — same never-embed-a-payment-form discipline as features/billing.
-  /// Throws [AppError] if the deposit is already paid/waived or nothing is due.
-  Future<String> createDepositCheckoutUrl({required String beoId});
 
   /// Renders [templateId] against [leadId]/[beoId] context and sends it to [to] via the
   /// `crm-send-email` Edge Function (the only place an email template is ever actually
@@ -156,7 +149,6 @@ class SupabaseCrmRepository implements CrmRepository {
     DateTime? eventDate,
     int? guestCount,
     String? venueSpace,
-    int? depositCents,
   }) async {
     final response = await _client
         .from('crm_beos')
@@ -167,7 +159,6 @@ class SupabaseCrmRepository implements CrmRepository {
           if (eventDate != null) 'event_date': eventDate.toUtc().toIso8601String(),
           if (guestCount != null) 'guest_count': guestCount,
           if (venueSpace != null) 'venue_space': venueSpace,
-          if (depositCents != null) 'deposit_cents': depositCents,
         })
         .select()
         .single();
@@ -177,12 +168,6 @@ class SupabaseCrmRepository implements CrmRepository {
   @override
   Future<void> updateBeoStatus({required String beoId, required String status}) async {
     await _client.from('crm_beos').update({'status': status}).eq('id', beoId);
-  }
-
-  @override
-  Future<bool> waiveBeoDeposit({required String beoId}) async {
-    final response = await _client.rpc('waive_beo_deposit', params: {'p_beo_id': beoId});
-    return response as bool;
   }
 
   @override
@@ -219,46 +204,6 @@ class SupabaseCrmRepository implements CrmRepository {
     final response =
         await _client.rpc('crm_stale_leads', params: {'p_venue_id': venueId, 'p_days': days});
     return (response as List<dynamic>).map((row) => CrmStaleLead.fromJson(row as Map<String, dynamic>)).toList();
-  }
-
-  @override
-  Future<String> createDepositCheckoutUrl({required String beoId}) async {
-    try {
-      final response = await _client.functions.invoke(
-        'crm-create-deposit-checkout',
-        body: {'beo_id': beoId},
-      );
-      final url = (response.data as Map?)?['url'] as String?;
-      if (url == null) {
-        throw const UnknownError('Could not start checkout. Please try again.');
-      }
-      return url;
-    } on FunctionException catch (error) {
-      throw _mapDepositCheckoutError(error);
-    }
-  }
-
-  AppError _mapDepositCheckoutError(FunctionException error) {
-    final details = error.details;
-    final code = details is Map ? details['error'] as String? : null;
-
-    return switch (code) {
-      'forbidden' => const PermissionDeniedError('Only a venue manager or organization admin can collect this deposit.'),
-      'no_deposit_due' => const UnknownError('There is no deposit due on this event.'),
-      'deposit_already_paid' => const UnknownError('This deposit has already been paid.'),
-      'deposit_waived' => const UnknownError('This deposit was waived.'),
-      'beo_not_found' => const NotFoundError('That event could not be found.'),
-      'billing_not_configured' => const UnknownError('Payments are not configured yet. Please try again later.'),
-      'connect_account_required' => const UnknownError('An organization owner or admin must set up the deposit account in Billing first.'),
-      'connect_account_not_ready' => const UnknownError('The organization deposit account is still being verified for payments or payouts. Check its status in Billing.'),
-      'connect_not_configured' => const UnknownError('Deposit payments are not configured yet. Please try again later.'),
-      'deposit_changed_during_checkout' => const UnknownError('The deposit changed while checkout was starting. Please try again.'),
-      'deposit_payment_processing' => const UnknownError('A deposit payment is still processing. Please check its status before trying again.'),
-      'invalid_or_expired_session' => const AuthError('Your session has expired. Please sign in again.'),
-      _ => error.status >= 500
-          ? const UnknownError('Checkout is temporarily unavailable.')
-          : const UnknownError('Something went wrong. Please try again.'),
-    };
   }
 
   @override

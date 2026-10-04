@@ -14,7 +14,7 @@
           },
           {
             "/": "/billing*",
-            "comment": "Stripe Checkout/Customer Portal success_url/cancel_url/return_url (stripe-create-checkout, stripe-create-portal, crm-create-deposit-checkout), matching the legacy API's ${base}/billing?status=... pattern exactly. The `*` covers the query string: AASA path matching ignores query params on its own, but legacy's own rules (packages/api) used a trailing wildcard here too, so this mirrors that rather than relying on undocumented query-string behavior. site/billing/index.html is the static fallback page — it links to the venuewrangler:// scheme if the universal link doesn't reopen the app."
+            "comment": "Stripe Checkout/Customer Portal success_url/cancel_url/return_url (stripe-create-checkout, stripe-create-portal) for the platform app-subscription, matching the legacy API's ${base}/billing?status=... pattern exactly. The `*` covers the query string: AASA path matching ignores query params on its own, but legacy's own rules (packages/api) used a trailing wildcard here too, so this mirrors that rather than relying on undocumented query-string behavior. site/billing/index.html is the static fallback page — it links to the venuewrangler:// scheme if the universal link doesn't reopen the app."
           }
         ]
       }
