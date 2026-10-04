@@ -57,9 +57,9 @@ data and Edge Functions, with Firebase only for Android push notifications.
    hex digest in the active Toast `pos_connections.webhook_secret_hash` row.
    The calling gateway must send `X-Venue-Webhook-Secret`. Direct Toast delivery
    requires verification of Toast's actual signing scheme before it is enabled.
-7. Document the malware-scanning decision for venue document uploads. They
-   currently receive file type validation but no malware scan. Limit or disable
-   uploads until the venue accepts that risk or a supported scanner is connected.
+7. Connect a real, network-reachable `clamd` instance and set `CLAMAV_HOST`.
+   `documents-upload` already fails closed (503) without one, so no action is
+   needed to avoid unscanned uploads — this item is just "make uploads work."
 8. Map and rehearse legacy user, organization, venue, membership, subscription,
    schedule, inventory, time, CRM, media, and in-flight payment migration.
    Reconcile record counts and business balances; preserve a rollback path.

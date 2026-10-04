@@ -2,7 +2,7 @@
 -- Fixtures: Org A, Venue A1 (manager 004, staff 005), Org B, Venue B1 (owner 006).
 
 begin;
-select plan(28);
+select plan(22);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-000000000004', 'venue-a1-manager@example.com'),
@@ -232,8 +232,8 @@ reset role;
 set local role authenticated;
 set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-000000000004';
 
-insert into public.crm_beos (id, venue_id, event_name, status, deposit_cents)
-values ('70000000-0000-0000-0000-000000000003', '20000000-0000-0000-0000-0000000000a1', 'Convertible Event', 'confirmed', 0);
+insert into public.crm_beos (id, venue_id, event_name, status)
+values ('70000000-0000-0000-0000-000000000003', '20000000-0000-0000-0000-0000000000a1', 'Convertible Event', 'confirmed');
 
 select results_eq(
   $$ select already_existed from public.convert_beo_to_contract('70000000-0000-0000-0000-000000000003') $$,
@@ -247,59 +247,14 @@ select results_eq(
   'a second conversion of the same BEO is idempotent, not a duplicate'
 );
 
--- ---------------------------------------------------------------------------
--- 22. Conversion is blocked while a deposit is due and unpaid
--- ---------------------------------------------------------------------------
-insert into public.crm_beos (id, venue_id, event_name, status, deposit_cents)
-values ('70000000-0000-0000-0000-000000000004', '20000000-0000-0000-0000-0000000000a1', 'Unpaid Deposit Event', 'confirmed', 50000);
-
-select is(
-  (select deposit_status from public.crm_beos where id = '70000000-0000-0000-0000-000000000004'),
-  'due',
-  'new BEO deposits default to due'
-);
-
-select throws_ok(
-  $$ update public.crm_beos set deposit_status = 'paid' where id = '70000000-0000-0000-0000-000000000004' $$,
-  '42501', null, 'manager cannot mark a BEO deposit paid'
-);
-
-select throws_ok(
-  $$ insert into public.crm_beos (venue_id, event_name, deposit_cents, deposit_status)
-     values ('20000000-0000-0000-0000-0000000000a1', 'Forged Paid Event', 50000, 'paid') $$,
-  '42501', null, 'manager cannot create a pre-paid BEO'
-);
-
-select throws_ok(
-  $$ select * from public.convert_beo_to_contract('70000000-0000-0000-0000-000000000004') $$,
-  '42501',
-  null,
-  'conversion is blocked while the BEO deposit is due and unpaid'
-);
+-- BEO deposit collection (deposit_cents/deposit_status/waive_beo_deposit) was removed
+-- entirely by 20261004010000_remove_beo_deposit_and_stripe_connect.sql: Stripe is
+-- subscription-billing only now, with no other mechanism to ever mark a deposit "paid".
+-- The deposit-blocking/waive tests that used to live here (22 & 23) were removed along with
+-- the feature rather than left testing dropped columns/functions.
 
 -- ---------------------------------------------------------------------------
--- 23. Waiving a deposit is conditional on it not already being paid
--- ---------------------------------------------------------------------------
-select is(
-  (select waive_beo_deposit from public.waive_beo_deposit('70000000-0000-0000-0000-000000000004')),
-  true,
-  'waiving a due deposit succeeds'
-);
-
-reset role;
-insert into public.crm_beos (id, venue_id, event_name, status, deposit_cents, deposit_status)
-values ('70000000-0000-0000-0000-000000000005', '20000000-0000-0000-0000-0000000000a1', 'Paid Deposit Event', 'confirmed', 50000, 'paid');
-set local role authenticated;
-set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-000000000004';
-
-select is(
-  (select waive_beo_deposit from public.waive_beo_deposit('70000000-0000-0000-0000-000000000005')),
-  false,
-  'waiving an already-paid deposit is a no-op, not an error'
-);
-
--- ---------------------------------------------------------------------------
--- 25. Pipeline forecast RPC returns weighted values per the legacy probability table
+-- 24. Pipeline forecast RPC returns weighted values per the legacy probability table
 -- ---------------------------------------------------------------------------
 select is(
   (select weighted_value_cents from public.crm_pipeline_forecast('20000000-0000-0000-0000-0000000000a1') where status = 'contacted'),

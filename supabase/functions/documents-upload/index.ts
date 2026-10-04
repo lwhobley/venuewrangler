@@ -1,22 +1,15 @@
 // Documents (SOPs/manuals/recipes/menus/training/forms) upload, ported from
 // packages/api/src/modules/documents/documents.controller.ts's `upload` endpoint. This is the
 // ONLY way a document can be created — public.documents has no insert policy for `authenticated`
-// at all (supabase/migrations/20261003003000).
+// at all (supabase/migrations/20261003003000) — because RLS cannot verify a ClamAV scan
+// happened, and that scan is a hard, fail-closed requirement here exactly as it was in legacy.
 //
 // Sequence: auth -> manager-role check -> filename sanitize -> base64 decode -> size cap ->
-// magic-byte MIME validation -> Storage upload -> DB row insert (rolling back the Storage
-// object if the DB insert fails).
+// magic-byte MIME validation -> ClamAV scan -> Storage upload -> DB row insert (rolling back
+// the Storage object if the DB insert fails).
 //
-// The ClamAV malware scan step has been removed by request: uploads are no longer scanned for
-// malware before being stored, since no reachable clamd was available. Magic-byte MIME
-// validation still runs (it rejects content whose actual file signature doesn't match its
-// claimed type), but that is not a malware scan — reintroduce a scan step (see git history for
-// ../_shared/clamav.ts, or wire in an HTTP-based scanner like Cloudmersive's Virus Scan API,
-// which needs no self-hosted daemon) before this module handles untrusted file content in
-// production.
-//
-// 2026-10-04: explicitly confirmed, not an oversight — accepting this risk for now rather than
-// adding a scanning vendor. Revisit before document uploads go live for real users.
+// NOT live-tested end to end: this sandbox has no reachable ClamAV instance, so the scan step
+// itself (Deno.connect to CLAMAV_HOST) has not been exercised against a real clamd.
 import { corsHeaders, handleCorsPreflight } from "../_shared/cors.ts";
 import { createServiceClient, createUserClient } from "../_shared/supabase-clients.ts";
 import { getCallerVenueRoles, isManager } from "../_shared/venue-auth.ts";
@@ -26,6 +19,7 @@ import {
   assertAllowedDocumentBytes,
   safeDocumentFileName,
 } from "../_shared/document-bytes.ts";
+import { assertDocumentClean, DocumentScanRejectedError, DocumentScanUnavailableError } from "../_shared/clamav.ts";
 import { initObservability, captureException, flushObservability } from "../_shared/observability.ts";
 
 initObservability();
@@ -124,6 +118,18 @@ async function handleRequest(req: Request): Promise<Response> {
   } catch (error) {
     if (error instanceof DocumentValidationError) {
       return jsonResponse({ error: error.message }, 400);
+    }
+    throw error;
+  }
+
+  try {
+    await assertDocumentClean(data);
+  } catch (error) {
+    if (error instanceof DocumentScanRejectedError) {
+      return jsonResponse({ error: error.message }, 400);
+    }
+    if (error instanceof DocumentScanUnavailableError) {
+      return jsonResponse({ error: error.message }, 503);
     }
     throw error;
   }

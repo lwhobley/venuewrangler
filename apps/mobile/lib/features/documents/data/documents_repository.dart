@@ -141,9 +141,9 @@ class SupabaseDocumentsRepository implements DocumentsRepository {
       return const PermissionDeniedError('Only venue managers can upload documents.');
     }
     if (error.status == 503) {
-      // documents-upload returns 503 on a Storage upload failure (see its
-      // document_storage_temporarily_unavailable error) — there is no malware-scanning step
-      // to be unavailable any more (see that function's header comment on why it was removed).
+      // documents-upload returns 503 on either a Storage upload failure or the ClamAV scan
+      // being unreachable/unconfigured (fail-closed) — both are "try again shortly", not a
+      // validation error, from the user's perspective.
       return const UnknownError('Document storage is temporarily unavailable. Please try again shortly.');
     }
     if (error.status == 400 && rawMessage != null) {

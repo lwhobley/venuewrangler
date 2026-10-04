@@ -40,3 +40,9 @@ grant select (
   id, organization_id, venue_id, provider, status, created_at, updated_at
 ) on public.reservation_connections to authenticated;
 revoke all on public.webhook_replay_log from authenticated, anon;
+
+-- notification_events' hardening migration (20261003005000) narrows `authenticated` to
+-- update only read_at (clients may mark a notification read, never rewrite its contents).
+-- Re-apply the same narrowing here for the same reason as the tables above.
+revoke update on public.notification_events from authenticated;
+grant update (read_at) on public.notification_events to authenticated;

@@ -1,9 +1,11 @@
--- pgTAP tests for invite redemption (supabase/migrations/20261002150000). Exercises
--- app_hidden.handle_new_user()'s extended logic: a new auth.users row with a matching email
--- should atomically become a membership, with the invite marked accepted.
+-- pgTAP tests for invite redemption (supabase/migrations/20261002150000, hardened by
+-- 20261004040000 to redeem only once the signup email is confirmed). Exercises
+-- app_hidden.handle_new_user()'s extended logic: a matching invite is redeemed when the
+-- auth.users row is confirmed, whether that happens at insert (OAuth / pre-verified) or via
+-- a later update of email_confirmed_at (magic-link / OTP confirmation).
 
 begin;
-select plan(7);
+select plan(8);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-000000000004', 'venue-a1-manager@example.com');
@@ -31,16 +33,25 @@ insert into public.invites (id, venue_id, email, role, invited_by, expires_at) v
 update public.invites set status = 'revoked' where id = '30000000-0000-0000-0000-000000000002';
 
 -- ---------------------------------------------------------------------------
--- signup matching a pending, unexpired invite
+-- signup matching a pending, unexpired invite, confirmed later (magic-link/OTP flow)
 -- ---------------------------------------------------------------------------
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-000000000010', 'New-Hire@Example.com');
 
 select is(
+  (select count(*)::int from public.memberships where user_id = '00000000-0000-0000-0000-000000000010'),
+  0,
+  'an unconfirmed signup does not redeem the invite yet'
+);
+
+update auth.users set email_confirmed_at = now()
+  where id = '00000000-0000-0000-0000-000000000010';
+
+select is(
   (select role from public.memberships where user_id = '00000000-0000-0000-0000-000000000010'),
   'staff',
-  'signing up with an invited (case-insensitive) email creates the matching membership'
+  'confirming the email (case-insensitive match) creates the matching membership'
 );
 
 select is(
@@ -62,42 +73,42 @@ select is(
 );
 
 -- ---------------------------------------------------------------------------
--- signup with no matching invite
+-- signup with no matching invite, already confirmed (OAuth-style insert)
 -- ---------------------------------------------------------------------------
 
-insert into auth.users (id, email) values
-  ('00000000-0000-0000-0000-000000000011', 'nobody-invited@example.com');
+insert into auth.users (id, email, email_confirmed_at) values
+  ('00000000-0000-0000-0000-000000000011', 'nobody-invited@example.com', now());
 
 select is(
   (select count(*)::int from public.memberships where user_id = '00000000-0000-0000-0000-000000000011'),
   0,
-  'signing up with no matching invite creates no membership'
+  'a confirmed signup with no matching invite creates no membership'
 );
 
 -- ---------------------------------------------------------------------------
--- a revoked invite is never redeemed
+-- a revoked invite is never redeemed, even once confirmed
 -- ---------------------------------------------------------------------------
 
-insert into auth.users (id, email) values
-  ('00000000-0000-0000-0000-000000000012', 'revoked-hire@example.com');
+insert into auth.users (id, email, email_confirmed_at) values
+  ('00000000-0000-0000-0000-000000000012', 'revoked-hire@example.com', now());
 
 select is(
   (select count(*)::int from public.memberships where user_id = '00000000-0000-0000-0000-000000000012'),
   0,
-  'a revoked invite is not redeemed on signup'
+  'a revoked invite is not redeemed on confirmed signup'
 );
 
 -- ---------------------------------------------------------------------------
--- an expired invite is never redeemed
+-- an expired invite is never redeemed, even once confirmed
 -- ---------------------------------------------------------------------------
 
-insert into auth.users (id, email) values
-  ('00000000-0000-0000-0000-000000000013', 'expired-hire@example.com');
+insert into auth.users (id, email, email_confirmed_at) values
+  ('00000000-0000-0000-0000-000000000013', 'expired-hire@example.com', now());
 
 select is(
   (select count(*)::int from public.memberships where user_id = '00000000-0000-0000-0000-000000000013'),
   0,
-  'an expired invite is not redeemed on signup'
+  'an expired invite is not redeemed on confirmed signup'
 );
 
 select * from finish();

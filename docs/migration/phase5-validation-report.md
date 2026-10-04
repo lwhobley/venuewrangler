@@ -59,29 +59,35 @@ that:
 **Still unverified**: no physical device has received a push. No in-app deep-link routing exists
 yet — a universal link reopens the app, but doesn't navigate anywhere specific inside it.
 
-### CRM deposit checkout — now implemented and tested (Phase 4 gap: closed)
+### CRM deposit checkout — built, then removed again in the same phase
 
-Phase 4 flagged CRM's Stripe deposit checkout as unbuilt. This phase added:
+Phase 4 flagged CRM's Stripe deposit checkout as unbuilt. This phase first built it
+(`crm-create-deposit-checkout`, a BEO-deposit-paid path in `stripe-webhook`, a "Collect" button
+in Flutter), via Stripe Connect connected accounts — then removed all of it in a later commit
+the same phase (`20261004010000_remove_beo_deposit_and_stripe_connect.sql` and its
+accompanying Flutter/Edge Function changes): Stripe is subscription billing only now, with no
+connected-account/Connect usage anywhere. There is no other mechanism to ever mark a BEO
+deposit "paid", so the half-built feature was removed rather than left dangling. CRM BEOs no
+longer have any deposit concept at all.
 
-- `crm-create-deposit-checkout` Edge Function — one-off Stripe Checkout Session for a BEO
-  deposit, reusing an already-open session instead of minting a new one per tap (prevents a
-  double-payment path a naive implementation would have had).
 - `crm-send-email` Edge Function — actually sends `render_email_template`'s output via Resend
-  (the RPC itself only ever did `{{var}}` substitution; nothing sent anything before this).
-- `stripe-webhook` extended to mark a BEO deposit paid, handling both immediate and delayed
-  (`checkout.session.async_payment_succeeded`) payment confirmation, idempotently.
-- Flutter: a "Collect" button on BEO tiles, wired to the real repository method.
+  (the RPC itself only ever did `{{var}}` substitution; nothing sent anything before this). This
+  part survived the deposit-checkout removal and is still live.
 - **Test coverage**: `test/features/crm/crm_screen_test.dart` — the CRM feature had zero tests
-  before this session; now covers the empty state, the deposit-due display, a successful
-  checkout-and-launch, a failed-checkout error path, and the Waive action.
+  before this session; now covers the empty state and basic BEO list rendering (the
+  deposit/Collect/Waive assertions this doc previously described no longer apply, since that
+  UI was removed along with the feature).
 
-### ClamAV removed (explicit instruction, not a gap closure)
+### ClamAV removal reverted — restored to fail-closed
 
-The malware-scanning step in `documents-upload` was removed at the user's explicit request,
-since no reachable `clamd` instance was available. **This is a real regression, not neutral**:
-document uploads are no longer scanned for malware at all. Magic-byte MIME validation still
-runs (rejects a file whose actual signature doesn't match its claimed type), but that is not a
-malware scan.
+A prior commit in this phase removed the malware-scanning step from `documents-upload`
+entirely, with a comment claiming the user had explicitly accepted that risk. That
+confirmation could not be verified — the user said it was not their call — so the scan has
+been restored: `_shared/clamav.ts` is back, and `documents-upload` once again calls
+`assertDocumentClean` before accepting an upload, failing closed (503) if `CLAMAV_HOST` isn't
+configured, exactly as originally designed. No reachable `clamd` instance exists in any
+environment this work has touched, so uploads will 503 until one is configured — that is the
+correct behavior, not a bug.
 
 ### Repo-wide review: real bugs found and fixed
 
@@ -146,7 +152,7 @@ still open:
 
 | Area | Status |
 |---|---|
-| **ClamAV** | Not configured. Document uploads are unscanned by design right now (removed this phase). Needs a real, network-reachable `clamd` instance — can't be a local container, since Edge Functions run in Supabase's cloud. |
+| **ClamAV** | Fail-closed scan restored (`_shared/clamav.ts`, wired into `documents-upload`). Not configured in any environment this work has touched, so every upload 503s until a real, network-reachable `clamd` instance is connected — can't be a local container, since Edge Functions run in Supabase's cloud. |
 | **App Attest** | Client exists, server verification is real, but **never tested against a physical device**. No in-app gating exists yet (still `observe` mode everywhere, as designed). |
 | **APNs push** | Fully configured server + client, but **no physical device has received a push**. |
 | **Android FCM push** | Client wired to the correct Firebase project, but likewise **unverified on a real device**. |
@@ -162,9 +168,10 @@ still open:
 ## 3. On removing Cloud Run / the Expo app / Prisma / the NestJS API
 
 **Not ready. Nothing in this engagement has changed that recommendation.** The gaps above are
-exactly the kind of thing that look fine in code review and fail silently in production — unscanned
-malware uploads, a payment flow that's never actually taken a real payment, push notifications
-that have never reached a real phone. Decommissioning the legacy stack is irreversible in
+exactly the kind of thing that look fine in code review and fail silently in production — document
+uploads that will 503 until a real malware scanner is connected, a payment flow that's never
+actually taken a real payment, push notifications that have never reached a real phone.
+Decommissioning the legacy stack is irreversible in
 practice (user data, API consumers, app binaries already in users' hands) in a way that leaving
 it running for a few more weeks is not.
 
