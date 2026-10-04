@@ -5,12 +5,15 @@
 
 import { corsHeaders, handleCorsPreflight } from "../_shared/cors.ts";
 import { createServiceClient, createUserClient } from "../_shared/supabase-clients.ts";
+import { getCallerVenueRoles, isManager } from "../_shared/venue-auth.ts";
 import { initObservability, captureException, flushObservability } from "../_shared/observability.ts";
 import { sha256Hex } from "../_shared/crypto.ts";
 
 initObservability();
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const ALLOWED_COMMAND_TYPES = ["86_item", "void_item", "menu_item_update"];
+const MAX_WEBHOOK_BYTES = 256 * 1024;
 
 function jsonResponse(body: Record<string, unknown>, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -46,9 +49,17 @@ async function handleRequest(req: Request): Promise<Response> {
     if (!suppliedSecret || suppliedSecret.length < 32 || suppliedSecret.length > 512) {
       return jsonResponse({ error: "unauthorized_webhook" }, 401);
     }
+    const contentLength = Number(req.headers.get("content-length") ?? "0");
+    if (contentLength > MAX_WEBHOOK_BYTES) {
+      return jsonResponse({ error: "payload_too_large" }, 413);
+    }
     let payload: Record<string, unknown>;
     try {
-      payload = await req.json();
+      const text = await req.text();
+      if (text.length > MAX_WEBHOOK_BYTES) {
+        return jsonResponse({ error: "payload_too_large" }, 413);
+      }
+      payload = JSON.parse(text);
     } catch {
       return jsonResponse({ error: "invalid_json_body" }, 400);
     }
@@ -111,7 +122,8 @@ async function handleRequest(req: Request): Promise<Response> {
     );
 
     if (upsertError) {
-      return jsonResponse({ error: "failed_to_upsert_check", detail: upsertError.message }, 500);
+      console.error("toast-pos: pos_checks upsert failed", upsertError);
+      return jsonResponse({ error: "failed_to_upsert_check" }, 500);
     }
 
     return jsonResponse({ ok: true, external_check_id: externalCheckId });
@@ -140,22 +152,26 @@ async function handleRequest(req: Request): Promise<Response> {
     if (!venue_id || !command_type || !payload) {
       return jsonResponse({ error: "missing_required_parameters" }, 400);
     }
+    if (typeof venue_id !== "string" || !UUID_PATTERN.test(venue_id)) {
+      return jsonResponse({ error: "invalid_venue_id" }, 400);
+    }
+    if (!ALLOWED_COMMAND_TYPES.includes(command_type)) {
+      return jsonResponse({ error: "invalid_command_type" }, 400);
+    }
+    if (typeof payload !== "object" || payload === null || Array.isArray(payload)) {
+      return jsonResponse({ error: "invalid_command_payload" }, 400);
+    }
 
-    // Verify user authorization with RLS-respecting user client
+    // Verify user authorization with RLS-respecting user client. Org owners/admins
+    // hold org-level memberships (venue_id null), so cover both venue and org rows.
     const userClient = createUserClient(authHeader);
     const { data: userData, error: userError } = await userClient.auth.getUser();
     if (userError || !userData?.user) {
       return jsonResponse({ error: "invalid_session" }, 401);
     }
 
-    const { data: membership, error: membershipError } = await userClient
-      .from("memberships")
-      .select("role")
-      .eq("venue_id", venue_id)
-      .in("role", ["venue_manager", "organization_owner", "organization_admin"])
-      .maybeSingle();
-
-    if (membershipError || !membership) {
+    const callerRoles = await getCallerVenueRoles(userClient, userData.user.id, venue_id);
+    if (!callerRoles || !isManager(callerRoles.roles)) {
       return jsonResponse({ error: "forbidden_manager_role_required" }, 403);
     }
 
@@ -188,7 +204,8 @@ async function handleRequest(req: Request): Promise<Response> {
       .single();
 
     if (queueError) {
-      return jsonResponse({ error: "failed_to_queue_command", detail: queueError.message }, 500);
+      console.error("toast-pos: failed to queue command", queueError);
+      return jsonResponse({ error: "failed_to_queue_command" }, 500);
     }
 
     return jsonResponse({

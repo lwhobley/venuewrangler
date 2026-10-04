@@ -40,6 +40,16 @@ Deno.serve(async (req) => {
 
   const serviceClient = createServiceClient();
 
+  // Idempotency: never apply the same Stripe event twice (retries, redelivery).
+  const { data: alreadySeen } = await serviceClient
+    .from("stripe_processed_events")
+    .select("event_id")
+    .eq("event_id", event.id)
+    .maybeSingle();
+  if (alreadySeen) {
+    return new Response(JSON.stringify({ received: true, duplicate: true }), { status: 200 });
+  }
+
   try {
     switch (event.type) {
       case "checkout.session.completed": {
@@ -60,6 +70,12 @@ Deno.serve(async (req) => {
               organization_id: organizationId,
               stripe_customer_id: customerId,
               stripe_subscription_id: subscriptionId ?? null,
+              // checkout.session.completed fires when the subscription starts —
+              // subsequent subscription events refine this. Never leave it as 'none'
+              // after a successful checkout.
+              status: subscriptionId ? "active" : "none",
+              last_event_id: event.id,
+              last_event_created: event.created,
             },
             { onConflict: "organization_id" },
           );
@@ -88,7 +104,33 @@ Deno.serve(async (req) => {
         const status =
           event.type === "customer.subscription.deleted" ? "canceled" : subscription.status;
 
-        const { data, error } = await serviceClient
+        // Order-safety: fetch the row's last applied event timestamp first; an older
+        // event delivered late must never overwrite newer state.
+        const { data: current, error: fetchError } = await serviceClient
+          .from("subscriptions")
+          .select("id, last_event_created")
+          .eq("stripe_customer_id", customerId)
+          .maybeSingle();
+        if (fetchError) throw fetchError;
+        if (!current) {
+          // Other products also use this Stripe platform account. Their customers
+          // have no subscriptions row in Venue Wrangler.
+          console.warn("subscription event for unlinked Stripe customer", { eventType: event.type, customerId });
+          break;
+        }
+        if (
+          typeof current.last_event_created === "number" &&
+          current.last_event_created >= event.created
+        ) {
+          console.warn("ignoring out-of-order subscription event", {
+            eventId: event.id,
+            eventCreated: event.created,
+            lastApplied: current.last_event_created,
+          });
+          break;
+        }
+
+        const { error } = await serviceClient
           .from("subscriptions")
           .update({
             stripe_subscription_id: subscription.id,
@@ -98,16 +140,12 @@ Deno.serve(async (req) => {
               ? new Date(currentPeriodEnd * 1000).toISOString()
               : null,
             cancel_at_period_end: subscription.cancel_at_period_end,
+            last_event_id: event.id,
+            last_event_created: event.created,
           })
-          .eq("stripe_customer_id", customerId)
-          .select("id");
+          .eq("id", current.id);
 
         if (error) throw error;
-        if (!data || data.length === 0) {
-          // Other products also use this Stripe platform account. Their customers
-          // have no subscriptions row in Venue Wrangler.
-          console.warn("subscription event for unlinked Stripe customer", { eventType: event.type, customerId });
-        }
         break;
       }
 
@@ -116,6 +154,12 @@ Deno.serve(async (req) => {
         // subscription state this app cares about.
         break;
     }
+
+    // Record the event only after it applied cleanly so a failed handler retries.
+    await serviceClient.from("stripe_processed_events").insert({
+      event_id: event.id,
+      event_type: event.type,
+    });
   } catch (err) {
     // Stripe retries on a non-2xx response. Never acknowledge a subscription
     // change until it has actually been persisted.

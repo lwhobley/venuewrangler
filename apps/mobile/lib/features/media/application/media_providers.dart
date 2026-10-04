@@ -27,11 +27,13 @@ PendingMutation buildIncidentEvidenceUploadMutation({
   required String incidentId,
   required String objectPath,
   required String localFilePath,
+  String? userId,
 }) {
   return PendingMutation(
     id: attachmentId,
     kind: kIncidentEvidenceUploadMutationKind,
     createdAt: DateTime.now(),
+    userId: userId,
     payload: {
       'attachmentId': attachmentId,
       'incidentId': incidentId,

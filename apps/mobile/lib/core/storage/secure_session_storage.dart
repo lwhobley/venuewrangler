@@ -1,9 +1,9 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-/// Thin wrapper over `flutter_secure_storage` for session-sensitive values the app needs
-/// *outside* of what `supabase_flutter` already persists for you (it manages the Supabase
-/// session/refresh token itself via its own secure local-storage adapter — do not duplicate
-/// that here). Use this for things like a cached device-attestation key id (Phase 3) or a
+/// Thin wrapper over `flutter_secure_storage` for session-sensitive values, including
+/// the Supabase session itself (wired as the auth local-storage backend in
+/// app/bootstrap.dart — SharedPreferences/NSUserDefaults must never hold the refresh
+/// token). Use this for things like a cached device-attestation key id (Phase 3) or a
 /// correlation id tied to an in-flight privileged request.
 class SecureSessionStorage {
   const SecureSessionStorage([this._storage = const FlutterSecureStorage()]);

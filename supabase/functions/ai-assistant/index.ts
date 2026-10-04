@@ -122,30 +122,6 @@ async function handleRequest(
 
   const serviceClient = createServiceClient();
 
-  const windowStart = new Date(
-    Date.now() - RATE_LIMIT_WINDOW_MINUTES * 60_000,
-  ).toISOString();
-  const { count: recentCallCount, error: rateLimitError } = await serviceClient
-    .from("ai_usage_events")
-    .select("id", { count: "exact", head: true })
-    .eq("user_id", userId)
-    .gte("created_at", windowStart);
-
-  if (rateLimitError) {
-    console.error(`[${correlationId}]`, "rate limit check failed", rateLimitError);
-    return jsonResponse({ error: "rate_limit_check_failed" }, 500);
-  }
-  if ((recentCallCount ?? 0) >= RATE_LIMIT_MAX_CALLS) {
-    return jsonResponse(
-      {
-        error: "rate_limited",
-        max_calls: RATE_LIMIT_MAX_CALLS,
-        window_minutes: RATE_LIMIT_WINDOW_MINUTES,
-      },
-      429,
-    );
-  }
-
   const model = Deno.env.get("GROQ_MODEL") ?? "openai/gpt-oss-120b";
   const apiKey = Deno.env.get("GROQ_API_KEY");
   if (!apiKey) {
@@ -173,47 +149,55 @@ async function handleRequest(
   const monthlyBudget = parseFloat(
     Deno.env.get("AI_MONTHLY_ORG_BUDGET_USD") ?? "10",
   );
-  const { data: currentSpend, error: spendError } = await serviceClient.rpc(
-    "ai_org_spend_this_month",
-    { p_org_id: organizationId },
-  );
-  if (spendError) {
-    console.error(`[${correlationId}]`, "spend lookup failed", spendError);
-    return jsonResponse({ error: "budget_check_failed" }, 500);
-  }
-  if ((currentSpend ?? 0) + estimatedCost > monthlyBudget) {
-    return jsonResponse(
-      {
-        error: "monthly_budget_exceeded",
-        monthly_budget_usd: monthlyBudget,
-        current_spend_usd: currentSpend,
-      },
-      402,
-    );
-  }
-
   const reservationTtlSeconds = parseInt(
     Deno.env.get("AI_BUDGET_RESERVATION_TTL_SECONDS") ?? "120",
     10,
   );
-  const { data: reservation, error: reservationError } = await serviceClient
-    .from("ai_budget_reservations")
-    .insert({
-      organization_id: organizationId,
-      reserved_usd: estimatedCost,
-      status: "pending",
-      expires_at: new Date(
-        Date.now() + reservationTtlSeconds * 1000,
-      ).toISOString(),
-    })
-    .select("id")
-    .single();
+  // Atomic check-and-reserve: one RPC holds a per-org advisory lock, verifies budget
+  // + rate limit (including in-flight reservations), and inserts the reservation.
+  // Never check-then-insert in two round trips — concurrent requests would overspend.
+  const { data: reservationId, error: reservationError } = await serviceClient.rpc(
+    "reserve_ai_budget",
+    {
+      p_org_id: organizationId,
+      p_user_id: userId,
+      p_estimated_usd: estimatedCost,
+      p_monthly_budget_usd: monthlyBudget,
+      p_rate_limit_max: RATE_LIMIT_MAX_CALLS,
+      p_rate_limit_window_minutes: RATE_LIMIT_WINDOW_MINUTES,
+      p_ttl_seconds: reservationTtlSeconds,
+    },
+  );
 
-  if (reservationError || !reservation) {
-    console.error(`[${correlationId}]`, "reservation insert failed", reservationError);
+  if (reservationError) {
+    const msg = (reservationError as { message?: string }).message ?? "";
+    if (msg.includes("monthly_budget_exceeded")) {
+      const { data: currentSpend } = await serviceClient.rpc(
+        "ai_org_spend_this_month",
+        { p_org_id: organizationId },
+      );
+      return jsonResponse(
+        {
+          error: "monthly_budget_exceeded",
+          monthly_budget_usd: monthlyBudget,
+          current_spend_usd: currentSpend ?? 0,
+        },
+        402,
+      );
+    }
+    if (msg.includes("rate_limited")) {
+      return jsonResponse(
+        {
+          error: "rate_limited",
+          max_calls: RATE_LIMIT_MAX_CALLS,
+          window_minutes: RATE_LIMIT_WINDOW_MINUTES,
+        },
+        429,
+      );
+    }
+    console.error(`[${correlationId}]`, "reservation failed", reservationError);
     return jsonResponse({ error: "budget_reservation_failed" }, 500);
   }
-  const reservationId = reservation.id as string;
 
   async function releaseReservation() {
     const { error } = await serviceClient

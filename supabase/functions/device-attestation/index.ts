@@ -258,9 +258,8 @@ async function handleRequest(req: Request): Promise<Response> {
             bundleIdentifier: bundleId,
             teamIdentifier: teamId,
             // Non-production builds (TestFlight/dev) attest with the development AAGUID;
-            // allow it everywhere for now since this is observe-mode only — tighten this to
-            // production-only once this feature is actually used to gate anything.
-            allowDevelopmentEnvironment: true,
+            // allowed in observe/log mode only — enforce mode requires production.
+            allowDevelopmentEnvironment: mode !== "enforce",
           });
           status = "valid";
           detail = { environment: result.environment, key_id: result.keyId };

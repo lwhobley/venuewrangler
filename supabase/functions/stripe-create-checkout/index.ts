@@ -108,9 +108,12 @@ async function handleRequest(req: Request): Promise<Response> {
   let stripeCustomerId = existing?.stripe_customer_id as string | undefined;
 
   if (!stripeCustomerId) {
-    const customer = await stripe.customers.create({
-      metadata: { organization_id: organizationId },
-    });
+    const customer = await stripe.customers.create(
+      {
+        metadata: { organization_id: organizationId },
+      },
+      { idempotencyKey: `org-customer:${organizationId}` },
+    );
     stripeCustomerId = customer.id;
 
     const { error: upsertError } = await serviceClient

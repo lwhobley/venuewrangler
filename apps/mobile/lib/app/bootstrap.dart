@@ -11,6 +11,7 @@ import '../core/errors/error_reporter.dart';
 import '../core/network/supabase_providers.dart';
 import '../core/offline/offline_queue_providers.dart';
 import '../core/offline/pending_mutation.dart';
+import '../core/storage/secure_local_storage.dart';
 import '../features/checklists/application/checklists_providers.dart';
 import '../features/incidents/application/incidents_providers.dart';
 import '../features/media/application/media_providers.dart';
@@ -28,6 +29,7 @@ Future<void> bootstrap(AppFlavor flavor) async {
   await Supabase.initialize(
     url: env.supabaseUrl,
     anonKey: env.supabaseAnonKey,
+    authOptions: FlutterAuthClientOptions(localStorage: SecureLocalStorage()),
   );
 
   // Android push notifications only — iOS uses native APNs directly (see

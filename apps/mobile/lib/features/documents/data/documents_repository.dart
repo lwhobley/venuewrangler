@@ -104,6 +104,20 @@ class SupabaseDocumentsRepository implements DocumentsRepository {
   Future<void> deleteDocument({required String documentId}) async {
     try {
       await _client.from('documents').delete().eq('id', documentId);
+      // RLS makes a non-manager's delete a silent no-op (zero rows, no error) by
+      // design. Verify so the UI can tell "deleted" from "not permitted".
+      final remaining = await _client
+          .from('documents')
+          .select('id')
+          .eq('id', documentId)
+          .maybeSingle();
+      if (remaining != null) {
+        throw const PermissionDeniedError(
+          'Only venue managers can delete documents.',
+        );
+      }
+    } on AppError {
+      rethrow;
     } on PostgrestException {
       throw const NetworkError();
     }

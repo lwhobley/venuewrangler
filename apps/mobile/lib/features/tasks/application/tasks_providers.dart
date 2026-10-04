@@ -25,11 +25,13 @@ const String kTaskStatusUpdateMutationKind = 'task_status_update';
 PendingMutation buildTaskStatusUpdateMutation({
   required OperationalTask task,
   required TaskStatus newStatus,
+  String? userId,
 }) {
   return PendingMutation(
     id: '${task.id}-${DateTime.now().microsecondsSinceEpoch}',
     kind: kTaskStatusUpdateMutationKind,
     createdAt: DateTime.now(),
+    userId: userId,
     payload: {
       'taskId': task.id,
       'status': newStatus.toDb(),

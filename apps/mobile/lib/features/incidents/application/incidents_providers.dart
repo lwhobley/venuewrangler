@@ -28,11 +28,13 @@ PendingMutation buildIncidentReportMutation({
   required String title,
   String? description,
   required IncidentSeverity severity,
+  String? userId,
 }) {
   return PendingMutation(
     id: incidentId,
     kind: kIncidentReportMutationKind,
     createdAt: DateTime.now(),
+    userId: userId,
     payload: {
       'incidentId': incidentId,
       'venueId': venueId,

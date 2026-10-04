@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/auth/auth_providers.dart';
+import '../../../core/auth/sign_out_service.dart';
 import '../../venues/application/venues_providers.dart';
 import '../../venues/domain/venue.dart';
 import '../application/organizations_providers.dart';
@@ -26,7 +26,7 @@ class OrganizationVenueSwitcherScreen extends ConsumerWidget {
           IconButton(
             icon: const Icon(Icons.logout),
             tooltip: 'Sign out',
-            onPressed: () => ref.read(authRepositoryProvider).signOut(),
+            onPressed: () => signOutAndClearScopedData(ref),
           ),
         ],
       ),

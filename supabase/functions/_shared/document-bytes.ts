@@ -29,8 +29,17 @@ export class DocumentValidationError extends Error {}
 
 export function safeDocumentFileName(value: string): string {
   const leaf = value.split(/[\\/]/).pop()?.trim() ?? "";
+  // Slug so the result always satisfies is_safe_storage_deletion_path
+  // ([a-zA-Z0-9_-.]+): strip accents, replace any other char (spaces, brackets,
+  // unicode) with _, collapse repeats. Original name stays in documents.file_name.
+  const noAccents = leaf.normalize("NFKD").replace(/[\u0300-\u036f]/g, "");
   // deno-lint-ignore no-control-regex
-  const cleaned = leaf.replace(/[\u0000-\u001f\u007f"<>:|?*]/g, "_").slice(0, 180);
+  const cleaned = noAccents
+    .replace(/[\u0000-\u001f\u007f"<>:|?*]/g, "_")
+    .replace(/[^a-zA-Z0-9_.\-]/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^[_.]+|[_.]+$/g, "")
+    .slice(0, 180);
   if (!cleaned || cleaned === "." || cleaned === "..") {
     throw new DocumentValidationError("A valid file name is required");
   }

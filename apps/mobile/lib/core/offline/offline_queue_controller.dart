@@ -32,12 +32,15 @@ class OfflineQueueState {
 /// queues (see TasksRepository/TaskListScreen for the first consumer) rather than this class
 /// knowing about tasks, checklists, or incidents itself.
 class OfflineQueueController extends StateNotifier<OfflineQueueState> {
-  OfflineQueueController(this._store, this._handlers) : super(const OfflineQueueState()) {
+  OfflineQueueController(this._store, this._handlers, {String? Function()? currentUserId})
+      : _currentUserId = currentUserId,
+        super(const OfflineQueueState()) {
     _loaded = _load();
   }
 
   final OfflineQueueStore _store;
   final Map<String, MutationHandler> _handlers;
+  final String? Function()? _currentUserId;
   late final Future<void> _loaded;
   bool _flushing = false;
 
@@ -50,8 +53,24 @@ class OfflineQueueController extends StateNotifier<OfflineQueueState> {
 
   Future<void> enqueue(PendingMutation mutation) async {
     await _loaded;
-    state = state.copyWith(pending: [...state.pending, mutation]);
+    final stamped = mutation.userId != null
+        ? mutation
+        : PendingMutation(
+            id: mutation.id,
+            kind: mutation.kind,
+            payload: mutation.payload,
+            createdAt: mutation.createdAt,
+            attemptCount: mutation.attemptCount,
+            userId: _currentUserId?.call(),
+          );
+    state = state.copyWith(pending: [...state.pending, stamped]);
     await _store.saveAll(state.pending);
+  }
+
+  Future<void> clearAll() async {
+    await _loaded;
+    state = const OfflineQueueState();
+    await _store.saveAll(const []);
   }
 
   void dismissConflict(String mutationId) {
@@ -64,7 +83,13 @@ class OfflineQueueController extends StateNotifier<OfflineQueueState> {
   /// change to the same record is applied — and can be conflict-detected against — before a
   /// later one. Safe to call repeatedly (e.g. on every connectivity-restored event); a second
   /// call while one is already running is a no-op.
-  Future<void> flush() async {
+  ///
+  /// When [onlyUserId] is set, entries owned by a different user are left untouched
+  /// (kept pending, never applied). Pass the current user id; a null here with
+  /// pending entries present still flushes legacy entries with no owner, but never
+  /// another user's entries.
+  Future<void> flush({String? onlyUserId}) async {
+    final effectiveUserId = onlyUserId ?? _currentUserId?.call();
     if (_flushing) return;
     _flushing = true;
     try {
@@ -73,6 +98,12 @@ class OfflineQueueController extends StateNotifier<OfflineQueueState> {
       final newConflicts = <PendingMutation>[];
 
       for (final mutation in state.pending) {
+        if (mutation.userId != null &&
+            effectiveUserId != null &&
+            mutation.userId != effectiveUserId) {
+          stillPending.add(mutation);
+          continue;
+        }
         final handler = _handlers[mutation.kind];
         if (handler == null) {
           // No feature has registered a handler for this kind (e.g. an older app version

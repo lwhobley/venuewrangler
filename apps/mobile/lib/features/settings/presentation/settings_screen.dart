@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../../../core/auth/auth_providers.dart';
+import '../../../core/auth/sign_out_service.dart';
 import '../../../core/network/supabase_providers.dart';
 import '../application/settings_providers.dart';
 
@@ -41,7 +41,7 @@ class SettingsScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 24),
             OutlinedButton.icon(
-              onPressed: () => ref.read(authRepositoryProvider).signOut(),
+              onPressed: () => signOutAndClearScopedData(ref),
               icon: const Icon(Icons.logout),
               label: const Text('Sign out'),
             ),

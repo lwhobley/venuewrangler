@@ -19,6 +19,7 @@
 // adding a scanning vendor. Revisit before document uploads go live for real users.
 import { corsHeaders, handleCorsPreflight } from "../_shared/cors.ts";
 import { createServiceClient, createUserClient } from "../_shared/supabase-clients.ts";
+import { getCallerVenueRoles, isManager } from "../_shared/venue-auth.ts";
 import {
   MAX_DOCUMENT_BYTES,
   DocumentValidationError,
@@ -30,7 +31,6 @@ import { initObservability, captureException, flushObservability } from "../_sha
 initObservability();
 
 const DOCUMENT_CATEGORIES = ["sop", "manual", "recipe", "menu", "training", "form", "other"];
-const MANAGER_ROLES = ["venue_manager", "organization_owner", "organization_admin"];
 
 function jsonResponse(body: Record<string, unknown>, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -102,18 +102,13 @@ async function handleRequest(req: Request): Promise<Response> {
   }
 
   // Never trust venue_id/role from the client — verify the caller is an actual manager of this
-  // venue via their own RLS-respecting client first, same pattern as every other Edge Function
-  // in this codebase (e.g. notifications-send's venue-membership check).
-  const { data: membership, error: membershipError } = await userClient
-    .from("memberships")
-    .select("role")
-    .eq("venue_id", venue_id)
-    .maybeSingle();
-
-  if (membershipError || !membership) {
+  // venue via their own RLS-respecting client first. Org owners/admins hold org-level
+  // memberships (venue_id null), so the lookup must cover both venue and org rows.
+  const callerRoles = await getCallerVenueRoles(userClient, userData.user.id, venue_id);
+  if (!callerRoles) {
     return jsonResponse({ error: "forbidden_not_a_member_of_this_venue" }, 403);
   }
-  if (!MANAGER_ROLES.includes(membership.role)) {
+  if (!isManager(callerRoles.roles)) {
     return jsonResponse({ error: "forbidden_manager_role_required" }, 403);
   }
 

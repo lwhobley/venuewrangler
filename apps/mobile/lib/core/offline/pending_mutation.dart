@@ -9,6 +9,7 @@ class PendingMutation {
     required this.payload,
     required this.createdAt,
     this.attemptCount = 0,
+    this.userId,
   });
 
   final String id;
@@ -17,12 +18,18 @@ class PendingMutation {
   final DateTime createdAt;
   final int attemptCount;
 
+  /// Owner who queued this write. Flush only replays entries matching the
+  /// currently signed-in user so a shared tablet can't apply user A's queued
+  /// writes as user B. Null = legacy entry written before this field existed.
+  final String? userId;
+
   PendingMutation withIncrementedAttempt() => PendingMutation(
         id: id,
         kind: kind,
         payload: payload,
         createdAt: createdAt,
         attemptCount: attemptCount + 1,
+        userId: userId,
       );
 
   Map<String, dynamic> toJson() => {
@@ -31,6 +38,7 @@ class PendingMutation {
         'payload': payload,
         'created_at': createdAt.toIso8601String(),
         'attempt_count': attemptCount,
+        if (userId != null) 'user_id': userId,
       };
 
   factory PendingMutation.fromJson(Map<String, dynamic> json) => PendingMutation(
@@ -39,6 +47,7 @@ class PendingMutation {
         payload: Map<String, dynamic>.from(json['payload'] as Map),
         createdAt: DateTime.parse(json['created_at'] as String),
         attemptCount: json['attempt_count'] as int? ?? 0,
+        userId: json['user_id'] as String?,
       );
 }
 

@@ -85,3 +85,28 @@ jobs:
 
       - name: Run RLS authorization tests
         run: pg_prove --dbname "$PGDATABASE" supabase/tests/database/*.test.sql
+
+  edge-functions-check:
+    name: Deno check, lint and test Edge Functions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: denoland/setup-deno@e6d9465a4a544d1a8a3b8c29e96d9957f3a86027 # v2.0.2
+        with:
+          deno-version: v2.x
+
+      - name: Deno check all functions
+        run: |
+          set -euo pipefail
+          for entry in supabase/functions/*/index.ts; do
+            echo "Checking $entry"
+            deno check "$entry"
+          done
+          deno check supabase/functions/_shared/venue-auth.ts
+
+      - name: Deno lint
+        run: deno lint supabase/functions
+
+      - name: Deno test shared modules
+        run: deno test --allow-none supabase/functions/_shared/

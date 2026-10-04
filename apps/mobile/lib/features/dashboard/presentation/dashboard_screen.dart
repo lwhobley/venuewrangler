@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/auth/auth_providers.dart';
+import '../../../core/auth/sign_out_service.dart';
 import '../../events/application/events_providers.dart';
 import '../../inventory/application/inventory_providers.dart';
 import '../../schedules/application/schedules_providers.dart';
@@ -66,7 +66,7 @@ class DashboardScreen extends ConsumerWidget {
           IconButton(
             icon: const Icon(Icons.logout),
             tooltip: 'Sign out',
-            onPressed: () => ref.read(authRepositoryProvider).signOut(),
+            onPressed: () => signOutAndClearScopedData(ref),
           ),
         ],
       ),

@@ -38,11 +38,13 @@ PendingMutation buildChecklistCompletionMutation({
   required String templateId,
   required List<ItemResult> itemResults,
   String? notes,
+  String? userId,
 }) {
   return PendingMutation(
     id: completionId,
     kind: kChecklistCompletionSubmitMutationKind,
     createdAt: DateTime.now(),
+    userId: userId,
     payload: {
       'completionId': completionId,
       'templateId': templateId,

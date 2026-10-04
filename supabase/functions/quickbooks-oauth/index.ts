@@ -9,6 +9,7 @@
 // payroll-push vs. plain accounting access.
 import { corsHeaders, handleCorsPreflight } from "../_shared/cors.ts";
 import { createServiceClient, createUserClient } from "../_shared/supabase-clients.ts";
+import { getCallerVenueRoles, isManager } from "../_shared/venue-auth.ts";
 import { encryptToken, signOAuthState, verifyOAuthState } from "../_shared/crypto.ts";
 import { initObservability, captureException, flushObservability } from "../_shared/observability.ts";
 
@@ -40,16 +41,12 @@ async function requireVenueManager(
   if (userError || !userData?.user) {
     return { error: jsonResponse({ error: "invalid_or_expired_session" }, 401) };
   }
-  const { data: membership, error: membershipError } = await userClient
-    .from("memberships")
-    .select("role")
-    .eq("venue_id", venueId)
-    .in("role", ["venue_manager", "organization_owner", "organization_admin"])
-    .maybeSingle();
-  if (membershipError) {
-    return { error: jsonResponse({ error: "membership_lookup_failed" }, 500) };
+  // Org owners/admins hold org-level memberships (venue_id null) — cover both rows.
+  const callerRoles = await getCallerVenueRoles(userClient, userData.user.id, venueId);
+  if (!callerRoles) {
+    return { error: jsonResponse({ error: "not_a_venue_manager" }, 403) };
   }
-  if (!membership) {
+  if (!isManager(callerRoles.roles)) {
     return { error: jsonResponse({ error: "not_a_venue_manager" }, 403) };
   }
   return { userId: userData.user.id };
@@ -71,11 +68,21 @@ Deno.serve(async (req) => {
 
 async function handleRequest(req: Request): Promise<Response> {
   const url = new URL(req.url);
-  const encryptionKey = Deno.env.get("PAYROLL_TOKEN_ENCRYPTION_KEY")!;
-  const clientId = Deno.env.get("QUICKBOOKS_CLIENT_ID")!;
-  const clientSecret = Deno.env.get("QUICKBOOKS_CLIENT_SECRET")!;
-  const redirectUri = Deno.env.get("QUICKBOOKS_REDIRECT_URI")!;
+  const encryptionKey = Deno.env.get("PAYROLL_TOKEN_ENCRYPTION_KEY");
+  const stateSigningKey = Deno.env.get("OAUTH_STATE_SIGNING_KEY") ?? encryptionKey;
+  const clientId = Deno.env.get("QUICKBOOKS_CLIENT_ID");
+  const clientSecret = Deno.env.get("QUICKBOOKS_CLIENT_SECRET");
+  const redirectUri = Deno.env.get("QUICKBOOKS_REDIRECT_URI");
   const scopes = Deno.env.get("QUICKBOOKS_OAUTH_SCOPES") ?? "com.intuit.quickbooks.accounting";
+
+  if (!encryptionKey || !stateSigningKey || !clientId || !clientSecret || !redirectUri) {
+    console.error("quickbooks-oauth is not fully configured");
+    if (url.pathname.endsWith("/callback")) {
+      const errorUrl = Deno.env.get("PAYROLL_OAUTH_ERROR_URL") ?? "venuewrangler://integrations/error";
+      return redirectResponse(`${errorUrl}?provider=quickbooks&reason=not_configured`);
+    }
+    return jsonResponse({ error: "billing_not_configured" }, 500);
+  }
 
   if (url.pathname.endsWith("/connect") && req.method === "POST") {
     let payload: { venue_id?: string };
@@ -91,7 +98,7 @@ async function handleRequest(req: Request): Promise<Response> {
 
     const state = await signOAuthState(
       { venue_id: payload.venue_id, user_id: auth.userId },
-      encryptionKey,
+      stateSigningKey,
     );
     const authorizeUrl = new URL(AUTHORIZE_URL);
     authorizeUrl.searchParams.set("client_id", clientId);
@@ -115,7 +122,7 @@ async function handleRequest(req: Request): Promise<Response> {
       return redirectResponse(`${errorUrl}?provider=quickbooks&reason=missing_code_or_state`);
     }
 
-    const statePayload = await verifyOAuthState(state, encryptionKey);
+    const statePayload = await verifyOAuthState(state, stateSigningKey);
     if (!statePayload) {
       return redirectResponse(`${errorUrl}?provider=quickbooks&reason=invalid_state`);
     }
