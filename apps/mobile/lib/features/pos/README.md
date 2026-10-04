@@ -24,3 +24,4 @@ The legacy NestJS pos module was strictly **ingest-only** and never called exter
   - Edge Function `supabase/functions/toast-pos/index.ts` mediates authenticated outbound calls with manager authorization checks, looking up venue credentials securely.
 - Security:
   - `webhook_secret_hash` and `credentials_encrypted` are strictly revoked from `authenticated` at the database column level.
+  - Inbound `toast-pos/webhook` requires `X-Venue-Webhook-Secret` (a unique random secret of at least 32 characters for the venue). Store only its lowercase SHA-256 hex digest in the active Toast `pos_connections.webhook_secret_hash` row. Requests without a configured active connection or a matching secret fail closed with 401. A POS gateway must add this header; do not expose the secret to the Flutter app or publish the endpoint as a native Toast destination until Toast's actual signing scheme is integrated and verified.

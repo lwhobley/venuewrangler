@@ -6,8 +6,11 @@
 import { corsHeaders, handleCorsPreflight } from "../_shared/cors.ts";
 import { createServiceClient, createUserClient } from "../_shared/supabase-clients.ts";
 import { initObservability, captureException, flushObservability } from "../_shared/observability.ts";
+import { sha256Hex } from "../_shared/crypto.ts";
 
 initObservability();
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function jsonResponse(body: Record<string, unknown>, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -36,6 +39,13 @@ async function handleRequest(req: Request): Promise<Response> {
 
   // Inbound Webhook Ingestion (/toast-pos/webhook)
   if (req.method === "POST" && action === "webhook") {
+    // The webhook endpoint has no user JWT. Require a per-venue, high-entropy secret
+    // provisioned by the POS gateway and stored only as a SHA-256 hash. Fail closed
+    // for venues that have not configured one.
+    const suppliedSecret = req.headers.get("X-Venue-Webhook-Secret");
+    if (!suppliedSecret || suppliedSecret.length < 32 || suppliedSecret.length > 512) {
+      return jsonResponse({ error: "unauthorized_webhook" }, 401);
+    }
     let payload: Record<string, unknown>;
     try {
       payload = await req.json();
@@ -43,14 +53,38 @@ async function handleRequest(req: Request): Promise<Response> {
       return jsonResponse({ error: "invalid_json_body" }, 400);
     }
 
-    const venueId = payload.venue_id as string;
-    const externalCheckId = (payload.external_check_id || payload.check_guid) as string;
+    const venueId = payload.venue_id;
+    const externalCheckId = payload.external_check_id || payload.check_guid;
 
-    if (!venueId || !externalCheckId) {
+    if (typeof venueId !== "string" || !UUID_PATTERN.test(venueId) ||
+        typeof externalCheckId !== "string" || externalCheckId.length === 0 ||
+        externalCheckId.length > 256) {
       return jsonResponse({ error: "missing_required_fields" }, 400);
     }
 
     const serviceClient = createServiceClient();
+    const { data: connection, error: connectionError } = await serviceClient
+      .from("pos_connections")
+      .select("webhook_secret_hash")
+      .eq("venue_id", venueId)
+      .eq("provider", "toast")
+      .eq("status", "active")
+      .maybeSingle();
+    if (connectionError || !connection?.webhook_secret_hash) {
+      return jsonResponse({ error: "unauthorized_webhook" }, 401);
+    }
+    const suppliedHash = await sha256Hex(new TextEncoder().encode(suppliedSecret));
+    const expectedHash = connection.webhook_secret_hash.toLowerCase();
+    if (!/^[0-9a-f]{64}$/.test(expectedHash)) {
+      return jsonResponse({ error: "unauthorized_webhook" }, 401);
+    }
+    let mismatch = 0;
+    for (let i = 0; i < 64; i++) {
+      mismatch |= suppliedHash.charCodeAt(i) ^ expectedHash.charCodeAt(i);
+    }
+    if (mismatch !== 0) {
+      return jsonResponse({ error: "unauthorized_webhook" }, 401);
+    }
 
     // Idempotent upsert of the check into pos_checks
     const { error: upsertError } = await serviceClient.from("pos_checks").upsert(

@@ -7,10 +7,9 @@ import '../../venues/application/venues_providers.dart';
 import '../application/billing_providers.dart';
 import '../domain/subscription.dart';
 
-/// Billing status + hosted Stripe Checkout/Customer Portal entry points. Only an organization
-/// owner/admin can act here — RLS hides the `subscriptions` row entirely from anyone else, and
-/// the Edge Functions re-check the same role before creating a session (see
-/// supabase/functions/stripe-create-checkout and stripe-create-portal).
+/// Shows the organization's subscription status. App subscriptions are sold directly to
+/// organizations outside the mobile app; no in-app link initiates a digital purchase.
+/// Event deposits are separate payments for real-world venue services.
 class BillingScreen extends ConsumerWidget {
   const BillingScreen({super.key});
 
@@ -49,19 +48,9 @@ class BillingScreen extends ConsumerWidget {
                 children: [
                   _StatusCard(subscription: subscription),
                   const SizedBox(height: 12),
-                  if (subscription == null || !subscription.isEntitled)
-                    FilledButton.icon(
-                      onPressed: () => _subscribe(context, ref, organizationId),
-                      icon: const Icon(Icons.credit_card_outlined),
-                      label: const Text('Subscribe'),
-                    ),
-                  if (subscription?.isEntitled ?? false)
-                    OutlinedButton.icon(
-                      onPressed: () =>
-                          _manageBilling(context, ref, organizationId),
-                      icon: const Icon(Icons.settings_outlined),
-                      label: const Text('Manage billing'),
-                    ),
+                  const Text(
+                    'Your organization manages its app subscription through its business account.',
+                  ),
                 ],
               ),
             ),
@@ -112,34 +101,6 @@ class BillingScreen extends ConsumerWidget {
         ),
       ),
     );
-  }
-
-  Future<void> _subscribe(
-      BuildContext context, WidgetRef ref, String organizationId) async {
-    try {
-      final url = await ref
-          .read(billingRepositoryProvider)
-          .createCheckoutUrl(organizationId);
-      await _openUrl(context, url);
-    } on AppError catch (error) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(error.message)));
-    }
-  }
-
-  Future<void> _manageBilling(
-      BuildContext context, WidgetRef ref, String organizationId) async {
-    try {
-      final url = await ref
-          .read(billingRepositoryProvider)
-          .createPortalUrl(organizationId);
-      await _openUrl(context, url);
-    } on AppError catch (error) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(error.message)));
-    }
   }
 
   Future<void> _setupDepositAccount(BuildContext context, WidgetRef ref,

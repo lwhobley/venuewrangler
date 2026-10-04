@@ -1,6 +1,6 @@
 # features/billing
 
-Stripe Checkout/Customer Portal entry points (hosted URLs only — no Stripe secret material
+App subscription status and venue deposit account setup (no Stripe secret material
 ever reaches this app), backed by `supabase/migrations/20261002130000_subscriptions_schema.sql`
 and `supabase/functions/stripe-create-checkout`, `stripe-create-portal`, `stripe-webhook`.
 
@@ -10,12 +10,10 @@ and `supabase/functions/stripe-create-checkout`, `stripe-create-portal`, `stripe
   a non-admin simply sees `null`, not an error); `createCheckoutUrl`/`createPortalUrl` invoke
   the two Edge Functions and return a hosted Stripe URL.
 - `application/billing_providers.dart` — repository + subscription-for-org provider.
-- `presentation/billing_screen.dart` — routed at `/billing`: shows subscription status, a
-  "Subscribe" button (opens Checkout via `url_launcher` in an external browser) when not
-  entitled, and a "Manage billing" button (opens the Customer Portal) when entitled. A
-  non-admin can still tap "Subscribe" since the client doesn't duplicate the role check — the
-  Edge Function rejects it and the screen shows that error as a snackbar, same pattern as
-  every other Phase 2/3 write path in this app.
+- `presentation/billing_screen.dart` — routed at `/billing`: shows subscription status
+  without a purchase link. App subscriptions are sold directly to organizations outside
+  the mobile app. The existing Checkout and Portal Edge Functions remain available for
+  an appropriate business sales channel; the app does not call them.
 
 **Event deposits:** Billing also lets organization owners/admins set up a separate Stripe
 connected account. `stripe-connect-account` creates or resumes Stripe-hosted onboarding and
