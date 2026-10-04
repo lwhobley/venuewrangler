@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:venuewrangler_mobile/features/notifications/application/notifications_providers.dart';
 import 'package:venuewrangler_mobile/features/notifications/data/notifications_repository.dart';
 import 'package:venuewrangler_mobile/features/notifications/domain/notification_event.dart';
@@ -140,6 +141,50 @@ void main() {
 
     expect(fakeRepo.markAsReadCalled, isTrue);
     expect(fakeRepo.lastReadId, 'n-1');
+  });
+
+  testWidgets('tapping a notification with a mapped kind navigates to its route', (tester) async {
+    final fakeRepo = _FakeNotificationsRepository(
+      initial: [
+        NotificationEvent(
+          id: 'n-1',
+          organizationId: 'org-1',
+          venueId: 'venue-1',
+          audience: 'user',
+          kind: 'staff_request',
+          title: 'New staff request',
+          body: 'A time-off request needs review.',
+          readAt: DateTime.now().subtract(const Duration(days: 1)),
+          createdAt: DateTime.now().subtract(const Duration(days: 1)),
+        ),
+      ],
+    );
+
+    final router = GoRouter(
+      initialLocation: '/notifications',
+      routes: [
+        GoRoute(path: '/notifications', builder: (context, state) => const NotificationsScreen()),
+        GoRoute(path: '/staff-requests', builder: (context, state) => const Text('Staff Requests Page')),
+      ],
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          activeVenueProvider.overrideWith((ref) => testVenue),
+          notificationsRepositoryProvider.overrideWithValue(fakeRepo),
+        ],
+        child: MaterialApp.router(routerConfig: router),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('New staff request'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Staff Requests Page'), findsOneWidget);
+    // Already read in the fixture above — tapping it must not call markAsRead again.
+    expect(fakeRepo.markAsReadCalled, isFalse);
   });
 
   testWidgets('mark all as read button triggers markAllAsRead', (tester) async {

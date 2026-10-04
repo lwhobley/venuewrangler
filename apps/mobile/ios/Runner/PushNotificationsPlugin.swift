@@ -9,14 +9,26 @@
 // itself, asynchronously, disconnected from the Dart call that triggered registration — so this
 // plugin holds a single pending FlutterResult between "requestPermissionAndRegister" being
 // called and AppDelegate forwarding whichever callback fires first.
+//
+// Also the app's UNUserNotificationCenterDelegate, for two things iOS otherwise does badly:
+// without one, a push delivered while the app is foregrounded shows no banner at all (the
+// default behavior absent a delegate); and a tap on a notification — whether the app was
+// foregrounded, backgrounded, or not running at all — has nowhere to carry the notification's
+// `kind`/custom data to Dart for `notification_routing.dart` to act on. `didReceive response`
+// fires for all three of those cases uniformly, so this is the one place that needs to handle
+// it, rather than also threading `didFinishLaunchingWithOptions`'s remote-notification key.
 import Flutter
 import UIKit
 import UserNotifications
 
-public class PushNotificationsPlugin: NSObject, FlutterPlugin {
+public class PushNotificationsPlugin: NSObject, FlutterPlugin, UNUserNotificationCenterDelegate {
   static var shared: PushNotificationsPlugin?
 
   private var pendingTokenResult: FlutterResult?
+  private var channel: FlutterMethodChannel?
+  // A tap that arrived before Dart had a chance to register its handler — most notably, the
+  // tap that cold-launched the app. Consumed exactly once via "consumePendingNotificationTap".
+  private var pendingTappedPayload: [String: Any]?
 
   public static func register(with registrar: FlutterPluginRegistrar) {
     let channel = FlutterMethodChannel(
@@ -24,8 +36,10 @@ public class PushNotificationsPlugin: NSObject, FlutterPlugin {
       binaryMessenger: registrar.messenger()
     )
     let instance = PushNotificationsPlugin()
+    instance.channel = channel
     shared = instance
     registrar.addMethodCallDelegate(instance, channel: channel)
+    UNUserNotificationCenter.current().delegate = instance
   }
 
   public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
@@ -48,9 +62,40 @@ public class PushNotificationsPlugin: NSObject, FlutterPlugin {
         }
       }
 
+    case "consumePendingNotificationTap":
+      result(pendingTappedPayload)
+      pendingTappedPayload = nil
+
     default:
       result(FlutterMethodNotImplemented)
     }
+  }
+
+  // Lets a push show its banner/sound while the app is in the foreground — iOS suppresses it
+  // entirely otherwise, with no delegate set at all to opt in.
+  public func userNotificationCenter(
+    _ center: UNUserNotificationCenter,
+    willPresent notification: UNNotification,
+    withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+  ) {
+    completionHandler([.banner, .sound, .list])
+  }
+
+  // Fires once the user taps the notification (banner, lock screen, or notification center),
+  // regardless of whether that tap foregrounded an already-running app, resumed a backgrounded
+  // one, or cold-launched it. The payload carries `kind` and whatever custom `data` fields
+  // notifications-send attached — routed on the Dart side by notification_routing.dart.
+  public func userNotificationCenter(
+    _ center: UNUserNotificationCenter,
+    didReceive response: UNNotificationResponse,
+    withCompletionHandler completionHandler: @escaping () -> Void
+  ) {
+    let payload = response.notification.request.content.userInfo as? [String: Any] ?? [:]
+    pendingTappedPayload = payload
+    // Harmless no-op if Dart hasn't registered a handler yet (e.g. a cold launch still
+    // bootstrapping) — that case is covered by "consumePendingNotificationTap" instead.
+    channel?.invokeMethod("onNotificationTapped", arguments: payload)
+    completionHandler()
   }
 
   // Called from AppDelegate's didRegisterForRemoteNotificationsWithDeviceToken.

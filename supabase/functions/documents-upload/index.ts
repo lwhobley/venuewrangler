@@ -11,7 +11,12 @@
 // malware before being stored, since no reachable clamd was available. Magic-byte MIME
 // validation still runs (it rejects content whose actual file signature doesn't match its
 // claimed type), but that is not a malware scan — reintroduce a scan step (see git history for
-// ../_shared/clamav.ts) before this module handles untrusted file content in production.
+// ../_shared/clamav.ts, or wire in an HTTP-based scanner like Cloudmersive's Virus Scan API,
+// which needs no self-hosted daemon) before this module handles untrusted file content in
+// production.
+//
+// 2026-10-04: explicitly confirmed, not an oversight — accepting this risk for now rather than
+// adding a scanning vendor. Revisit before document uploads go live for real users.
 import { corsHeaders, handleCorsPreflight } from "../_shared/cors.ts";
 import { createServiceClient, createUserClient } from "../_shared/supabase-clients.ts";
 import {

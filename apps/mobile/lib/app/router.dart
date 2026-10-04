@@ -18,6 +18,8 @@ import '../features/incidents/presentation/incident_list_screen.dart';
 import '../features/insights/presentation/shift_insights_screen.dart';
 import '../features/integrations/presentation/integrations_screen.dart';
 import '../features/inventory/presentation/inventory_list_screen.dart';
+import '../features/notifications/application/notification_routing.dart';
+import '../features/notifications/application/notifications_providers.dart';
 import '../features/notifications/presentation/notifications_screen.dart';
 import '../features/organizations/presentation/organization_venue_switcher_screen.dart';
 import '../features/pos/presentation/pos_management_screen.dart';
@@ -159,4 +161,19 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
     ],
   );
+});
+
+/// Side-effect only, watched once at the app root (see app/app.dart) — starts
+/// [NotificationTapService] and routes whatever `kind` it reports through
+/// [routeForNotificationKind]. Lives here (not in notifications_providers.dart) specifically
+/// so that file never has to import this one back: this router already depends on every
+/// feature screen, including the notifications one.
+final notificationTapRoutingProvider = Provider<void>((ref) {
+  final router = ref.watch(routerProvider);
+  // ignore: unawaited_futures
+  ref.read(notificationTapServiceProvider).start((data) {
+    final kind = data['kind'] as String? ?? '';
+    final route = routeForNotificationKind(kind);
+    if (route != null) router.go(route);
+  });
 });

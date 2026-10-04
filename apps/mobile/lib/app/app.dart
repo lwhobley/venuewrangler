@@ -21,6 +21,9 @@ class VenueWranglerApp extends ConsumerWidget {
     // Side-effect only: registers a push token for the active venue. See
     // features/notifications/application/notifications_providers.dart.
     ref.watch(pushRegistrationTriggerProvider);
+    // Side-effect only: routes a tapped push notification (or one tapped while already in the
+    // notifications list) to its destination screen. See app/router.dart.
+    ref.watch(notificationTapRoutingProvider);
 
     final router = ref.watch(routerProvider);
 

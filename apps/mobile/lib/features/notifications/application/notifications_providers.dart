@@ -5,6 +5,7 @@ import '../../venues/application/venues_providers.dart';
 import '../../venues/domain/venue.dart';
 import '../data/notifications_repository.dart';
 import '../domain/notification_event.dart';
+import 'notification_tap_service.dart';
 import 'push_registration_service.dart';
 
 final notificationsRepositoryProvider = Provider<NotificationsRepository>((ref) {
@@ -14,6 +15,14 @@ final notificationsRepositoryProvider = Provider<NotificationsRepository>((ref) 
 
 final pushRegistrationServiceProvider = Provider<PushRegistrationService>((ref) {
   return PushRegistrationService(repository: ref.watch(notificationsRepositoryProvider));
+});
+
+/// Stateless bridge to the tapped-notification payload — see its own doc comment. Routing the
+/// payload to an actual app route lives in `app/router.dart`'s `notificationTapRoutingProvider`,
+/// not here, so this file never has to import the router (which itself depends on screens that
+/// import this file).
+final notificationTapServiceProvider = Provider<NotificationTapService>((ref) {
+  return NotificationTapService();
 });
 
 /// Watching this provider anywhere (app/app.dart does, once, app-wide) activates a listener

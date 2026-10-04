@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../venues/application/venues_providers.dart';
+import '../application/notification_routing.dart';
 import '../application/notifications_providers.dart';
 import '../domain/notification_event.dart';
 
@@ -147,14 +149,18 @@ class _NotificationListTile extends ConsumerWidget {
                 shape: BoxShape.circle,
               ),
             ),
-      onTap: item.isRead
-          ? null
-          : () async {
-              await ref
-                  .read(notificationsRepositoryProvider)
-                  .markAsRead(notificationId: item.id);
-              ref.invalidate(notificationsFeedProvider);
-            },
+      onTap: () async {
+        if (!item.isRead) {
+          await ref.read(notificationsRepositoryProvider).markAsRead(notificationId: item.id);
+          ref.invalidate(notificationsFeedProvider);
+        }
+        final route = routeForNotificationKind(item.kind);
+        // maybeOf, not of: a plain MaterialApp test host (no GoRouter ancestor) should still
+        // mark the notification read without crashing on navigation it can't perform.
+        if (route != null && context.mounted) {
+          GoRouter.maybeOf(context)?.go(route);
+        }
+      },
     );
   }
 
