@@ -97,6 +97,43 @@ async function handleRequest(req: Request): Promise<Response> {
       return jsonResponse({ error: "unauthorized_webhook" }, 401);
     }
 
+    // Amounts are whole cents; reject anything else rather than letting a malformed or
+    // hostile payload write negative/fractional/absurd money into revenue reporting.
+    const cents = (value: unknown): number | null => {
+      if (value === undefined || value === null) return 0;
+      return typeof value === "number" && Number.isInteger(value) && value >= 0 &&
+          value <= 100_000_000
+        ? value
+        : null;
+    };
+    const subtotal = cents(payload.subtotal_cents);
+    const tax = cents(payload.tax_cents);
+    const tip = cents(payload.tip_cents);
+    const total = cents(payload.total_cents);
+    const status = (payload.status as string | undefined) ?? "closed";
+    if (
+      subtotal === null || tax === null || tip === null || total === null ||
+      !["open", "paid", "closed", "void"].includes(status)
+    ) {
+      return jsonResponse({ error: "invalid_check_fields" }, 400);
+    }
+
+    // A closed/paid check is final: a replayed or late webhook must not rewrite its totals.
+    // Redelivery of the same close event is expected, so acknowledge it instead of erroring.
+    const { data: existingCheck, error: existingError } = await serviceClient
+      .from("pos_checks")
+      .select("status, closed_at")
+      .eq("venue_id", venueId)
+      .eq("provider", "toast")
+      .eq("external_check_id", externalCheckId)
+      .maybeSingle();
+    if (existingError) {
+      return jsonResponse({ error: "failed_to_read_check" }, 500);
+    }
+    if (existingCheck && existingCheck.closed_at && existingCheck.status !== "open") {
+      return jsonResponse({ ok: true, external_check_id: externalCheckId, ignored: "check_already_closed" });
+    }
+
     // Idempotent upsert of the check into pos_checks
     const { error: upsertError } = await serviceClient.from("pos_checks").upsert(
       {
@@ -109,11 +146,11 @@ async function handleRequest(req: Request): Promise<Response> {
         guest_count: (payload.guest_count as number) ?? 1,
         opened_at: (payload.opened_at as string) || new Date().toISOString(),
         closed_at: payload.closed_at as string | null,
-        subtotal_cents: (payload.subtotal_cents as number) ?? 0,
-        tax_cents: (payload.tax_cents as number) ?? 0,
-        tip_cents: (payload.tip_cents as number) ?? 0,
-        total_cents: (payload.total_cents as number) ?? 0,
-        status: (payload.status as string) || "closed",
+        subtotal_cents: subtotal,
+        tax_cents: tax,
+        tip_cents: tip,
+        total_cents: total,
+        status,
         menu_items: payload.menu_items || [],
         raw_payload: payload,
         updated_at: new Date().toISOString(),

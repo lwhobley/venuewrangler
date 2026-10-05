@@ -1,13 +1,11 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { corsHeaders } from "../_shared/cors.ts";
 import { createServiceClient, createUserClient } from "../_shared/supabase-clients.ts";
-import { getGoogleAccessToken } from "../_shared/google-auth.ts";
-import { loadApnsConfigFromEnv, sendApnsPush } from "../_shared/apns.ts";
+import { deliverPush } from "../_shared/push-delivery.ts";
 import { initObservability, captureException, flushObservability } from "../_shared/observability.ts";
 
 initObservability();
 
-const FCM_SCOPE = "https://www.googleapis.com/auth/firebase.messaging";
 const MANAGER_ROLES = ["venue_manager", "organization_owner", "organization_admin"];
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -138,149 +136,22 @@ serve(async (req: Request) => {
       if (insertError) throw insertError;
     }
 
-    // 2. Resolve target tokens
-    let tokensQuery = adminClient
-      .from("push_tokens")
-      .select("token, platform, user_id")
-      .eq("venue_id", venue_id)
-      .eq("enabled", true);
+    // 2. Deliver (shared with notifications-dispatch — see _shared/push-delivery.ts)
+    const result = await deliverPush(adminClient, {
+      venueId: venue_id,
+      organizationId: venue!.organization_id,
+      audience,
+      targetUserIds: target_user_ids,
+      kind,
+      title,
+      body,
+      data,
+    });
 
-    if (audience === "user") {
-      tokensQuery = tokensQuery.in("user_id", target_user_ids!);
-    } else if (audience === "venue_managers" || audience === "organization_owners") {
-      // Org owners/admins hold org-level memberships (venue_id null), never venue rows — a
-      // venue_id-only lookup can never find them. venue_staff is intentionally unfiltered.
-      const orgFilter = audience === "venue_managers"
-        ? `and(venue_id.eq.${venue_id},role.eq.venue_manager),and(venue_id.is.null,organization_id.eq.${venue!.organization_id},role.in.(organization_owner,organization_admin))`
-        : `and(venue_id.is.null,organization_id.eq.${venue!.organization_id},role.eq.organization_owner)`;
-      const { data: recipients } = await adminClient
-        .from("memberships")
-        .select("user_id")
-        .or(orgFilter);
-      const recipientIds = (recipients || []).map((m: { user_id: string }) => m.user_id);
-      tokensQuery = tokensQuery.in("user_id", recipientIds);
-    }
-
-    const { data: tokens, error: tokensError } = await tokensQuery;
-    if (tokensError || !tokens || tokens.length === 0) {
-      return new Response(JSON.stringify({ ok: true, delivered_count: 0, reason: "No active push tokens found" }), {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // 3. Deliver via direct FCM / APNs (best-effort, delivery errors never throw to caller)
-    const fcmServiceAccount = Deno.env.get("FIREBASE_SERVICE_ACCOUNT");
-    let fcmToken: string | null = null;
-    let fcmProjectId: string | null = null;
-    if (fcmServiceAccount) {
-      try {
-        const parsed = JSON.parse(fcmServiceAccount);
-        fcmProjectId = parsed.project_id;
-        fcmToken = await getGoogleAccessToken(fcmServiceAccount, FCM_SCOPE);
-      } catch (err) {
-        console.warn("FCM service account configuration invalid or token exchange failed:", err);
-      }
-    }
-
-    // Native APNs dispatch for iOS tokens. The Flutter client registers raw APNs device tokens
-    // (ios/Runner/PushNotificationsPlugin.swift), so iOS delivery requires all four APNS_*
-    // secrets — without them iOS tokens fall through to FCM below, which can't deliver to a
-    // raw APNs token.
-    const apnsConfig = loadApnsConfigFromEnv();
-
-    const deadTokens: string[] = [];
-    let deliveredCount = 0;
-
-    for (const tokenRecord of tokens) {
-      const { token, platform } = tokenRecord;
-
-      if (platform === "ios" && apnsConfig) {
-        try {
-          const message = { deviceToken: token, title, body, data: { kind, ...data } };
-          let result = await sendApnsPush(apnsConfig, message);
-          // Xcode debug builds register sandbox tokens; TestFlight/App Store builds register
-          // production ones. Each gateway rejects the other's tokens as BadDeviceToken, so try
-          // the other environment before declaring the token dead — otherwise every dev-build
-          // token gets disabled on its first push.
-          if (!result.ok && result.reason === "BadDeviceToken") {
-            result = await sendApnsPush({ ...apnsConfig, sandbox: !apnsConfig.sandbox }, message);
-          }
-          if (result.ok) {
-            deliveredCount++;
-          } else if (result.reason === "BadDeviceToken" || result.reason === "Unregistered" || result.status === 410) {
-            deadTokens.push(token);
-          } else {
-            console.warn(`APNs push failed (status ${result.status}): ${result.reason ?? "unknown"}`);
-          }
-        } catch (err) {
-          console.warn("Failed sending APNs push to token:", err);
-        }
-        continue;
-      }
-
-      if (platform === "android" || platform === "web" || (platform === "ios" && !apnsConfig)) {
-        // FCM HTTP v1 dispatch
-        if (!fcmToken || !fcmProjectId) {
-          continue;
-        }
-
-        try {
-          const res = await fetch(`https://fcm.googleapis.com/v1/projects/${fcmProjectId}/messages:send`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${fcmToken}`,
-            },
-            body: JSON.stringify({
-              message: {
-                token,
-                notification: { title, body },
-                data: { kind, ...Object.fromEntries(Object.entries(data).map(([k, v]) => [k, String(v)])) },
-              },
-            }),
-            signal: AbortSignal.timeout(5000),
-          });
-
-          if (res.ok) {
-            deliveredCount++;
-          } else {
-            const errBody = await res.json().catch(() => ({}));
-            const errCode = errBody?.error?.details?.[0]?.errorCode || errBody?.error?.status;
-            if (errCode === "UNREGISTERED" || res.status === 404) {
-              deadTokens.push(token);
-            }
-          }
-        } catch (err) {
-          console.warn(`Failed sending FCM push to token:`, err);
-        }
-      }
-    }
-
-    // 4. Disable dead tokens if any were reported. A direct update, not
-    // rpc("disable_push_tokens"): that function lives in app_hidden, which PostgREST doesn't
-    // expose, so the RPC call always failed — and its error was never checked.
-    if (deadTokens.length > 0) {
-      const now = new Date().toISOString();
-      const { error: disableError } = await adminClient
-        .from("push_tokens")
-        .update({ enabled: false, disabled_at: now, updated_at: now })
-        .in("token", deadTokens)
-        .eq("enabled", true);
-      if (disableError) {
-        console.error("failed to disable dead push tokens", disableError);
-      }
-    }
-
-    return new Response(
-      JSON.stringify({
-        ok: true,
-        targeted_tokens: tokens.length,
-        delivered_count: deliveredCount,
-        dead_tokens_disabled: deadTokens.length,
-      }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
+    return new Response(JSON.stringify({ ok: true, ...result }), {
+      status: 200,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   } catch (error) {
     console.error("notifications-send failed", error);
     captureException(error, { function: "notifications-send", url: req.url });

@@ -156,10 +156,12 @@ Deno.serve(async (req) => {
     }
 
     // Record the event only after it applied cleanly so a failed handler retries.
-    await serviceClient.from("stripe_processed_events").insert({
-      event_id: event.id,
-      event_type: event.type,
-    });
+    const { error: recordError } = await serviceClient
+      .from("stripe_processed_events")
+      .insert({ event_id: event.id, event_type: event.type });
+    // 23505 = a concurrent delivery of this same event already recorded it — fine, the
+    // handlers above are idempotent. Anything else must surface so Stripe retries.
+    if (recordError && recordError.code !== "23505") throw recordError;
   } catch (err) {
     // Stripe retries on a non-2xx response. Never acknowledge a subscription
     // change until it has actually been persisted.
