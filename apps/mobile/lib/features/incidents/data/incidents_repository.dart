@@ -56,13 +56,17 @@ class SupabaseIncidentsRepository implements IncidentsRepository {
         'severity': severity.toDb(),
       });
     } on PostgrestException catch (error) {
-      if (error.code == '23505') return; // already submitted by an earlier retry; done.
+      if (error.code == '23505') {
+        return; // already submitted by an earlier retry; done.
+      }
       rethrow;
     }
   }
 
   @override
   Future<void> updateStatus(String incidentId, IncidentStatus status) async {
-    await _client.from('incidents').update({'status': status.toDb()}).eq('id', incidentId);
+    await _client
+        .from('incidents')
+        .update({'status': status.toDb()}).eq('id', incidentId);
   }
 }

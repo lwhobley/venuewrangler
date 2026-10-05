@@ -43,7 +43,8 @@ class StaffRequestsScreen extends ConsumerWidget {
                 const Text('Could not load staff requests.'),
                 const SizedBox(height: 12),
                 OutlinedButton(
-                  onPressed: () => ref.invalidate(staffRequestsForVenueProvider(venue.id)),
+                  onPressed: () =>
+                      ref.invalidate(staffRequestsForVenueProvider(venue.id)),
                   child: const Text('Retry'),
                 ),
               ],
@@ -55,7 +56,8 @@ class StaffRequestsScreen extends ConsumerWidget {
                 builder: (context, constraints) => SingleChildScrollView(
                   physics: const AlwaysScrollableScrollPhysics(),
                   child: ConstrainedBox(
-                    constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                    constraints:
+                        BoxConstraints(minHeight: constraints.maxHeight),
                     child: const Center(
                       child: Text('No staff requests yet.'),
                     ),
@@ -148,7 +150,8 @@ class _StaffRequestTile extends ConsumerWidget {
               'Dates: ${request.requestedRangeStart}'
               '${request.requestedRangeEnd != null ? ' – ${request.requestedRangeEnd}' : ''}',
             ),
-          if (request.responseNotes != null && request.responseNotes!.isNotEmpty)
+          if (request.responseNotes != null &&
+              request.responseNotes!.isNotEmpty)
             Text(
               'Response: ${request.responseNotes}',
               style: const TextStyle(fontStyle: FontStyle.italic),
@@ -328,7 +331,8 @@ class _CreateStaffRequestDialogState
             kind: _kind,
             title: _titleController.text.trim(),
             details: _detailsController.text.trim(),
-            requestedRangeStart: _startDate == null ? null : _formatDate(_startDate!),
+            requestedRangeStart:
+                _startDate == null ? null : _formatDate(_startDate!),
             requestedRangeEnd: _endDate == null ? null : _formatDate(_endDate!),
           );
       if (!mounted) return;
@@ -376,8 +380,9 @@ class _CreateStaffRequestDialogState
                   labelText: 'Title',
                   hintText: 'e.g. Time off for doctor appointment',
                 ),
-                validator: (val) =>
-                    (val == null || val.trim().isEmpty) ? 'Title is required' : null,
+                validator: (val) => (val == null || val.trim().isEmpty)
+                    ? 'Title is required'
+                    : null,
               ),
               const SizedBox(height: 12),
               TextFormField(
@@ -391,14 +396,17 @@ class _CreateStaffRequestDialogState
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('Start date (optional)'),
-                subtitle: Text(_startDate == null ? 'Not set' : _formatDate(_startDate!)),
+                subtitle: Text(
+                  _startDate == null ? 'Not set' : _formatDate(_startDate!),
+                ),
                 trailing: const Icon(Icons.edit_calendar_outlined),
                 onTap: () => _pickDate(isStart: true),
               ),
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('End date (optional)'),
-                subtitle: Text(_endDate == null ? 'Not set' : _formatDate(_endDate!)),
+                subtitle:
+                    Text(_endDate == null ? 'Not set' : _formatDate(_endDate!)),
                 trailing: const Icon(Icons.edit_calendar_outlined),
                 onTap: () => _pickDate(isStart: false),
               ),

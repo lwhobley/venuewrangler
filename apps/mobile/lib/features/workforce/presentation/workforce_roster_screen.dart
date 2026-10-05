@@ -41,7 +41,8 @@ class WorkforceRosterScreen extends ConsumerWidget {
                 padding: EdgeInsets.all(16),
                 child: Center(child: CircularProgressIndicator()),
               ),
-              error: (_, __) => const ListTile(title: Text('Could not load roster.')),
+              error: (_, __) =>
+                  const ListTile(title: Text('Could not load roster.')),
               data: (roster) => roster.isEmpty
                   ? const ListTile(title: Text('No roster members yet.'))
                   : Column(
@@ -62,10 +63,12 @@ class WorkforceRosterScreen extends ConsumerWidget {
                 padding: EdgeInsets.all(16),
                 child: Center(child: CircularProgressIndicator()),
               ),
-              error: (_, __) => const ListTile(title: Text('Could not load invites.')),
+              error: (_, __) =>
+                  const ListTile(title: Text('Could not load invites.')),
               data: (invites) {
-                final pending =
-                    invites.where((invite) => invite.status == InviteStatus.pending).toList();
+                final pending = invites
+                    .where((invite) => invite.status == InviteStatus.pending)
+                    .toList();
                 if (pending.isEmpty) {
                   return const ListTile(title: Text('No pending invites.'));
                 }
@@ -77,7 +80,8 @@ class WorkforceRosterScreen extends ConsumerWidget {
                         title: Text(invite.email),
                         subtitle: Text(invite.role.label),
                         trailing: TextButton(
-                          onPressed: () => _revokeInvite(context, ref, invite.id, venue.id),
+                          onPressed: () =>
+                              _revokeInvite(context, ref, invite.id, venue.id),
                           child: const Text('Revoke'),
                         ),
                       ),
@@ -109,8 +113,12 @@ class WorkforceRosterScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _showInviteDialog(BuildContext context, WidgetRef ref, String venueId,
-      {String? prefillEmail}) async {
+  Future<void> _showInviteDialog(
+    BuildContext context,
+    WidgetRef ref,
+    String venueId, {
+    String? prefillEmail,
+  }) async {
     final emailController = TextEditingController(text: prefillEmail);
     var role = WorkforceRole.staff;
 
@@ -130,7 +138,7 @@ class WorkforceRosterScreen extends ConsumerWidget {
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<WorkforceRole>(
-                value: role,
+                initialValue: role,
                 decoration: const InputDecoration(labelText: 'Role'),
                 items: [
                   for (final value in WorkforceRole.values)
@@ -154,7 +162,11 @@ class WorkforceRosterScreen extends ConsumerWidget {
       ),
     );
 
-    if (confirmed != true || emailController.text.trim().isEmpty || !context.mounted) return;
+    if (confirmed != true ||
+        emailController.text.trim().isEmpty ||
+        !context.mounted) {
+      return;
+    }
 
     try {
       await ref.read(workforceRepositoryProvider).createInvite(
@@ -170,7 +182,8 @@ class WorkforceRosterScreen extends ConsumerWidget {
         '23505' => 'There is already a pending invite for that email.',
         _ => 'Something went wrong. Please try again.',
       };
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
     }
   }
 
@@ -186,12 +199,18 @@ class WorkforceRosterScreen extends ConsumerWidget {
     } on PostgrestException catch (_) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("You don't have permission to revoke this invite.")),
+        const SnackBar(
+          content: Text("You don't have permission to revoke this invite."),
+        ),
       );
     }
   }
 
-  Future<void> _showImportDialog(BuildContext context, WidgetRef ref, String venueId) async {
+  Future<void> _showImportDialog(
+    BuildContext context,
+    WidgetRef ref,
+    String venueId,
+  ) async {
     final textController = TextEditingController();
 
     final pastedText = await showDialog<String>(
@@ -203,7 +222,8 @@ class WorkforceRosterScreen extends ConsumerWidget {
           autofocus: true,
           maxLines: 8,
           decoration: const InputDecoration(
-            hintText: 'Paste names/emails/phones copied from a spreadsheet or email…',
+            hintText:
+                'Paste names/emails/phones copied from a spreadsheet or email…',
             border: OutlineInputBorder(),
           ),
         ),
@@ -213,7 +233,8 @@ class WorkforceRosterScreen extends ConsumerWidget {
             child: const Text('Cancel'),
           ),
           FilledButton(
-            onPressed: () => Navigator.of(context).pop(textController.text.trim()),
+            onPressed: () =>
+                Navigator.of(context).pop(textController.text.trim()),
             child: const Text('Parse'),
           ),
         ],
@@ -229,14 +250,17 @@ class WorkforceRosterScreen extends ConsumerWidget {
           .parseStaffImport(venueId: venueId, pastedText: pastedText);
     } on AppError catch (error) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message)));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error.message)));
       return;
     }
 
     if (!context.mounted) return;
     if (result.staff.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Nothing could be parsed from that text.')),
+        const SnackBar(
+          content: Text('Nothing could be parsed from that text.'),
+        ),
       );
       return;
     }
@@ -253,16 +277,23 @@ class WorkforceRosterScreen extends ConsumerWidget {
               for (final row in result.staff)
                 ListTile(
                   title: Text(row.fullName),
-                  subtitle: Text([
-                    if (row.email != null) row.email!,
-                    if (row.roleHint != null) row.roleHint!,
-                  ].join(' · ')),
+                  subtitle: Text(
+                    [
+                      if (row.email != null) row.email!,
+                      if (row.roleHint != null) row.roleHint!,
+                    ].join(' · '),
+                  ),
                   trailing: row.email == null
                       ? null
                       : TextButton(
                           onPressed: () {
                             Navigator.of(context).pop();
-                            _showInviteDialog(context, ref, venueId, prefillEmail: row.email);
+                            _showInviteDialog(
+                              context,
+                              ref,
+                              venueId,
+                              prefillEmail: row.email,
+                            );
                           },
                           child: const Text('Invite'),
                         ),

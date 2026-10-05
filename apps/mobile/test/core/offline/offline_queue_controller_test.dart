@@ -15,7 +15,11 @@ class _InMemoryOfflineQueueStore implements OfflineQueueStore {
   }
 }
 
-PendingMutation _mutation({String id = 'm1', String kind = 'test_kind', int attempts = 0}) {
+PendingMutation _mutation({
+  String id = 'm1',
+  String kind = 'test_kind',
+  int attempts = 0,
+}) {
   return PendingMutation(
     id: id,
     kind: kind,
@@ -41,7 +45,8 @@ void main() {
     test('flush removes a mutation whose handler reports applied', () async {
       final store = _InMemoryOfflineQueueStore();
       final controller = OfflineQueueController(store, {
-        'test_kind': (payload) async => const MutationResult(MutationOutcome.applied),
+        'test_kind': (payload) async =>
+            const MutationResult(MutationOutcome.applied),
       });
       await controller.ready;
       await controller.enqueue(_mutation());
@@ -52,14 +57,18 @@ void main() {
       expect(controller.state.conflicts, isEmpty);
     });
 
-    test('flush moves a mutation whose handler reports a conflict out of pending, and never '
+    test(
+        'flush moves a mutation whose handler reports a conflict out of pending, and never '
         'retries it again', () async {
       var callCount = 0;
       final store = _InMemoryOfflineQueueStore();
       final controller = OfflineQueueController(store, {
         'test_kind': (payload) async {
           callCount++;
-          return const MutationResult(MutationOutcome.conflict, message: 'changed elsewhere');
+          return const MutationResult(
+            MutationOutcome.conflict,
+            message: 'changed elsewhere',
+          );
         },
       });
       await controller.ready;
@@ -70,13 +79,20 @@ void main() {
 
       expect(controller.state.pending, isEmpty);
       expect(controller.state.conflicts, hasLength(1));
-      expect(callCount, 1, reason: 'a conflicted mutation must not be retried on a later flush');
+      expect(
+        callCount,
+        1,
+        reason: 'a conflicted mutation must not be retried on a later flush',
+      );
     });
 
-    test('flush keeps a retryable failure pending and increments its attempt count', () async {
+    test(
+        'flush keeps a retryable failure pending and increments its attempt count',
+        () async {
       final store = _InMemoryOfflineQueueStore();
       final controller = OfflineQueueController(store, {
-        'test_kind': (payload) async => const MutationResult(MutationOutcome.retryableFailure),
+        'test_kind': (payload) async =>
+            const MutationResult(MutationOutcome.retryableFailure),
       });
       await controller.ready;
       await controller.enqueue(_mutation());
@@ -88,11 +104,13 @@ void main() {
       expect(controller.state.conflicts, isEmpty);
     });
 
-    test('a retryable failure becomes a conflict once it reaches kMaxMutationAttempts',
+    test(
+        'a retryable failure becomes a conflict once it reaches kMaxMutationAttempts',
         () async {
       final store = _InMemoryOfflineQueueStore();
       final controller = OfflineQueueController(store, {
-        'test_kind': (payload) async => const MutationResult(MutationOutcome.retryableFailure),
+        'test_kind': (payload) async =>
+            const MutationResult(MutationOutcome.retryableFailure),
       });
       await controller.ready;
       await controller.enqueue(_mutation(attempts: kMaxMutationAttempts - 1));
@@ -103,7 +121,8 @@ void main() {
       expect(controller.state.conflicts, hasLength(1));
     });
 
-    test('a handler that throws is treated as a retryable failure, not a crash', () async {
+    test('a handler that throws is treated as a retryable failure, not a crash',
+        () async {
       final store = _InMemoryOfflineQueueStore();
       final controller = OfflineQueueController(store, {
         'test_kind': (payload) async => throw Exception('network down'),
@@ -120,7 +139,8 @@ void main() {
     test('dismissConflict removes it from the conflicts list', () async {
       final store = _InMemoryOfflineQueueStore();
       final controller = OfflineQueueController(store, {
-        'test_kind': (payload) async => const MutationResult(MutationOutcome.conflict),
+        'test_kind': (payload) async =>
+            const MutationResult(MutationOutcome.conflict),
       });
       await controller.ready;
       await controller.enqueue(_mutation(id: 'conflicted'));
@@ -132,7 +152,8 @@ void main() {
       expect(controller.state.conflicts, isEmpty);
     });
 
-    test('a mutation with no registered handler stays pending rather than being dropped',
+    test(
+        'a mutation with no registered handler stays pending rather than being dropped',
         () async {
       final store = _InMemoryOfflineQueueStore();
       final controller = OfflineQueueController(store, const {});

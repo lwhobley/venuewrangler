@@ -22,7 +22,10 @@ class _FakeChatRepository implements ChatRepository {
   String? lastSentText;
 
   @override
-  Future<List<Conversation>> getConversations({required String venueId}) async => conversations;
+  Future<List<Conversation>> getConversations({
+    required String venueId,
+  }) async =>
+      conversations;
 
   @override
   Future<List<ChatMessage>> getMessages({
@@ -62,7 +65,10 @@ class _FakeChatRepository implements ChatRepository {
   Future<void> markConversationRead({required String conversationId}) async {}
 
   @override
-  Future<String> createOrGetDm({required String venueId, required String targetUserId}) async =>
+  Future<String> createOrGetDm({
+    required String venueId,
+    required String targetUserId,
+  }) async =>
       'conv-dm-1';
 }
 
@@ -74,7 +80,8 @@ void main() {
     createdAt: DateTime.now(),
   );
 
-  testWidgets('renders empty state when no conversations exist', (tester) async {
+  testWidgets('renders empty state when no conversations exist',
+      (tester) async {
     final fakeRepo = _FakeChatRepository(initialConversations: []);
 
     await tester.pumpWidget(
@@ -93,7 +100,8 @@ void main() {
     expect(find.text('No conversations yet'), findsOneWidget);
   });
 
-  testWidgets('renders conversation list, opens thread and sends message', (tester) async {
+  testWidgets('renders conversation list, opens thread and sends message',
+      (tester) async {
     final fakeRepo = _FakeChatRepository(
       initialConversations: [
         Conversation(

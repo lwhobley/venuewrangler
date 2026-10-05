@@ -4,7 +4,10 @@ import '../domain/pos_connection.dart';
 
 abstract class PosRepository {
   Future<List<PosConnection>> getConnections({required String venueId});
-  Future<List<PosCheck>> getRecentChecks({required String venueId, int limit = 50});
+  Future<List<PosCheck>> getRecentChecks({
+    required String venueId,
+    int limit = 50,
+  });
   Future<void> push86Item({
     required String venueId,
     required String itemGuid,
@@ -31,7 +34,10 @@ class SupabasePosRepository implements PosRepository {
   }
 
   @override
-  Future<List<PosCheck>> getRecentChecks({required String venueId, int limit = 50}) async {
+  Future<List<PosCheck>> getRecentChecks({
+    required String venueId,
+    int limit = 50,
+  }) async {
     final response = await _client
         .from('pos_checks')
         .select()

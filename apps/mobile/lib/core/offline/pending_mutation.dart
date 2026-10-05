@@ -41,7 +41,8 @@ class PendingMutation {
         if (userId != null) 'user_id': userId,
       };
 
-  factory PendingMutation.fromJson(Map<String, dynamic> json) => PendingMutation(
+  factory PendingMutation.fromJson(Map<String, dynamic> json) =>
+      PendingMutation(
         id: json['id'] as String,
         kind: json['kind'] as String,
         payload: Map<String, dynamic>.from(json['payload'] as Map),
@@ -75,4 +76,6 @@ class MutationResult {
   final String? message;
 }
 
-typedef MutationHandler = Future<MutationResult> Function(Map<String, dynamic> payload);
+typedef MutationHandler = Future<MutationResult> Function(
+  Map<String, dynamic> payload,
+);

@@ -10,7 +10,8 @@ final floorRepositoryProvider = Provider<FloorRepository>((ref) {
   return SupabaseFloorRepository(client);
 });
 
-final floorPlansProvider = FutureProvider.autoDispose<List<FloorPlan>>((ref) async {
+final floorPlansProvider =
+    FutureProvider.autoDispose<List<FloorPlan>>((ref) async {
   final activeVenue = ref.watch(activeVenueProvider);
   if (activeVenue == null) return [];
 
@@ -18,9 +19,11 @@ final floorPlansProvider = FutureProvider.autoDispose<List<FloorPlan>>((ref) asy
   return repo.getFloorPlans(venueId: activeVenue.id);
 });
 
-final selectedFloorPlanIdProvider = StateProvider.autoDispose<String?>((ref) => null);
+final selectedFloorPlanIdProvider =
+    StateProvider.autoDispose<String?>((ref) => null);
 
-final floorTablesStreamProvider = StreamProvider.autoDispose<List<FloorTable>>((ref) {
+final floorTablesStreamProvider =
+    StreamProvider.autoDispose<List<FloorTable>>((ref) {
   final activeVenue = ref.watch(activeVenueProvider);
   if (activeVenue == null) return Stream.value([]);
 

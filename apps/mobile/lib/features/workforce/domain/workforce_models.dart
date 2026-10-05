@@ -44,7 +44,9 @@ class RosterMember {
     return RosterMember(
       userId: json['user_id'] as String,
       role: json['role'] as String,
-      displayName: profile is Map<String, dynamic> ? profile['display_name'] as String? : null,
+      displayName: profile is Map<String, dynamic>
+          ? profile['display_name'] as String?
+          : null,
     );
   }
 }

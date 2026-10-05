@@ -21,8 +21,8 @@ final crmNotesProvider =
   return ref.watch(crmRepositoryProvider).getNotes(leadId: leadId);
 });
 
-final crmActivityProvider =
-    FutureProvider.autoDispose.family<List<CrmActivityLogEntry>, String>((ref, leadId) {
+final crmActivityProvider = FutureProvider.autoDispose
+    .family<List<CrmActivityLogEntry>, String>((ref, leadId) {
   return ref.watch(crmRepositoryProvider).getActivity(leadId: leadId);
 });
 
@@ -31,17 +31,17 @@ final crmBeosProvider =
   return ref.watch(crmRepositoryProvider).getBeos(venueId: venueId);
 });
 
-final crmContractsProvider =
-    FutureProvider.autoDispose.family<List<CrmContract>, String>((ref, venueId) {
+final crmContractsProvider = FutureProvider.autoDispose
+    .family<List<CrmContract>, String>((ref, venueId) {
   return ref.watch(crmRepositoryProvider).getContracts(venueId: venueId);
 });
 
-final crmForecastProvider =
-    FutureProvider.autoDispose.family<List<CrmForecastRow>, String>((ref, venueId) {
+final crmForecastProvider = FutureProvider.autoDispose
+    .family<List<CrmForecastRow>, String>((ref, venueId) {
   return ref.watch(crmRepositoryProvider).getForecast(venueId: venueId);
 });
 
-final crmStaleLeadsProvider =
-    FutureProvider.autoDispose.family<List<CrmStaleLead>, String>((ref, venueId) {
+final crmStaleLeadsProvider = FutureProvider.autoDispose
+    .family<List<CrmStaleLead>, String>((ref, venueId) {
   return ref.watch(crmRepositoryProvider).getStaleLeads(venueId: venueId);
 });

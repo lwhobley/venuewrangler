@@ -38,5 +38,6 @@ class ChatMessage {
   final DateTime createdAt;
   final DateTime updatedAt;
 
-  bool get hasAttachment => attachmentPath != null && attachmentPath!.isNotEmpty;
+  bool get hasAttachment =>
+      attachmentPath != null && attachmentPath!.isNotEmpty;
 }

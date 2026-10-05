@@ -28,7 +28,7 @@ Future<void> bootstrap(AppFlavor flavor) async {
 
   await Supabase.initialize(
     url: env.supabaseUrl,
-    anonKey: env.supabaseAnonKey,
+    publishableKey: env.supabaseAnonKey,
     authOptions: FlutterAuthClientOptions(localStorage: SecureLocalStorage()),
   );
 
@@ -43,7 +43,8 @@ Future<void> bootstrap(AppFlavor flavor) async {
       await Firebase.initializeApp();
     } catch (error) {
       // ignore: avoid_print
-      print('Firebase.initializeApp() failed — Android push notifications will not work until '
+      print(
+          'Firebase.initializeApp() failed — Android push notifications will not work until '
           'android/app/google-services.json is replaced with the real config: $error');
     }
   }

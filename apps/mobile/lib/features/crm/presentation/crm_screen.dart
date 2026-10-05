@@ -26,12 +26,14 @@ class CrmScreen extends ConsumerWidget {
       child: Scaffold(
         appBar: AppBar(
           title: Text('CRM — ${venue.name}'),
-          bottom: const TabBar(tabs: [
-            Tab(text: 'Leads'),
-            Tab(text: 'BEOs'),
-            Tab(text: 'Contracts'),
-            Tab(text: 'Forecast'),
-          ]),
+          bottom: const TabBar(
+            tabs: [
+              Tab(text: 'Leads'),
+              Tab(text: 'BEOs'),
+              Tab(text: 'Contracts'),
+              Tab(text: 'Forecast'),
+            ],
+          ),
         ),
         body: TabBarView(
           children: [
@@ -94,15 +96,21 @@ class _LeadsTab extends ConsumerWidget {
                 for (final lead in leads)
                   ListTile(
                     title: Text(lead.fullName),
-                    subtitle: Text([
-                      lead.status,
-                      if (lead.company != null) lead.company!,
-                    ].join(' · ')),
+                    subtitle: Text(
+                      [
+                        lead.status,
+                        if (lead.company != null) lead.company!,
+                      ].join(' · '),
+                    ),
                     trailing: lead.estimatedValueCents != null
-                        ? Text('\$${(lead.estimatedValueCents! / 100).toStringAsFixed(0)}')
+                        ? Text(
+                            '\$${(lead.estimatedValueCents! / 100).toStringAsFixed(0)}',
+                          )
                         : null,
                     onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => CrmLeadDetailScreen(lead: lead)),
+                      MaterialPageRoute(
+                        builder: (_) => CrmLeadDetailScreen(lead: lead),
+                      ),
                     ),
                   ),
               ],
@@ -113,7 +121,10 @@ class _LeadsTab extends ConsumerWidget {
     );
   }
 
-  Future<void> _showCreateLeadDialog(BuildContext context, WidgetRef ref) async {
+  Future<void> _showCreateLeadDialog(
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
     final nameController = TextEditingController();
     final emailController = TextEditingController();
     final phoneController = TextEditingController();
@@ -126,34 +137,66 @@ class _LeadsTab extends ConsumerWidget {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TextField(controller: nameController, autofocus: true, decoration: const InputDecoration(labelText: 'Full name')),
-            TextField(controller: emailController, decoration: const InputDecoration(labelText: 'Email (optional)')),
-            TextField(controller: phoneController, decoration: const InputDecoration(labelText: 'Phone (optional)')),
-            TextField(controller: companyController, decoration: const InputDecoration(labelText: 'Company (optional)')),
+            TextField(
+              controller: nameController,
+              autofocus: true,
+              decoration: const InputDecoration(labelText: 'Full name'),
+            ),
+            TextField(
+              controller: emailController,
+              decoration: const InputDecoration(labelText: 'Email (optional)'),
+            ),
+            TextField(
+              controller: phoneController,
+              decoration: const InputDecoration(labelText: 'Phone (optional)'),
+            ),
+            TextField(
+              controller: companyController,
+              decoration:
+                  const InputDecoration(labelText: 'Company (optional)'),
+            ),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Create')),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Create'),
+          ),
         ],
       ),
     );
 
-    if (confirmed != true || nameController.text.trim().isEmpty || !context.mounted) return;
+    if (confirmed != true ||
+        nameController.text.trim().isEmpty ||
+        !context.mounted) {
+      return;
+    }
 
     try {
       await ref.read(crmRepositoryProvider).createLead(
             venueId: venueId,
             fullName: nameController.text.trim(),
-            email: emailController.text.trim().isEmpty ? null : emailController.text.trim(),
-            phone: phoneController.text.trim().isEmpty ? null : phoneController.text.trim(),
-            company: companyController.text.trim().isEmpty ? null : companyController.text.trim(),
+            email: emailController.text.trim().isEmpty
+                ? null
+                : emailController.text.trim(),
+            phone: phoneController.text.trim().isEmpty
+                ? null
+                : phoneController.text.trim(),
+            company: companyController.text.trim().isEmpty
+                ? null
+                : companyController.text.trim(),
           );
       ref.invalidate(crmLeadsProvider(venueId));
     } catch (_) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not create lead. Please try again.')),
+          const SnackBar(
+            content: Text('Could not create lead. Please try again.'),
+          ),
         );
       }
     }
@@ -184,12 +227,17 @@ class _BeosTab extends ConsumerWidget {
               return LayoutBuilder(
                 builder: (context, constraints) => SingleChildScrollView(
                   physics: const AlwaysScrollableScrollPhysics(),
-                  child: SizedBox(height: constraints.maxHeight, child: const Center(child: Text('No BEOs yet.'))),
+                  child: SizedBox(
+                    height: constraints.maxHeight,
+                    child: const Center(child: Text('No BEOs yet.')),
+                  ),
                 ),
               );
             }
             return ListView(
-              children: [for (final beo in beos) _BeoTile(beo: beo, venueId: venueId)],
+              children: [
+                for (final beo in beos) _BeoTile(beo: beo, venueId: venueId),
+              ],
             );
           },
         ),
@@ -210,15 +258,24 @@ class _BeosTab extends ConsumerWidget {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              TextField(controller: nameController, autofocus: true, decoration: const InputDecoration(labelText: 'Event name')),
+              TextField(
+                controller: nameController,
+                autofocus: true,
+                decoration: const InputDecoration(labelText: 'Event name'),
+              ),
               TextField(
                 controller: guestCountController,
                 keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Guest count (optional)'),
+                decoration:
+                    const InputDecoration(labelText: 'Guest count (optional)'),
               ),
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                title: Text(eventDate == null ? 'Event date (optional)' : eventDate.toString().split(' ').first),
+                title: Text(
+                  eventDate == null
+                      ? 'Event date (optional)'
+                      : eventDate.toString().split(' ').first,
+                ),
                 trailing: const Icon(Icons.calendar_today_outlined),
                 onTap: () async {
                   final picked = await showDatePicker(
@@ -233,14 +290,24 @@ class _BeosTab extends ConsumerWidget {
             ],
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
-            FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Create')),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Create'),
+            ),
           ],
         ),
       ),
     );
 
-    if (confirmed != true || nameController.text.trim().isEmpty || !context.mounted) return;
+    if (confirmed != true ||
+        nameController.text.trim().isEmpty ||
+        !context.mounted) {
+      return;
+    }
 
     try {
       await ref.read(crmRepositoryProvider).createBeo(
@@ -253,7 +320,9 @@ class _BeosTab extends ConsumerWidget {
     } catch (_) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not create BEO. Please try again.')),
+          const SnackBar(
+            content: Text('Could not create BEO. Please try again.'),
+          ),
         );
       }
     }
@@ -270,11 +339,14 @@ class _BeoTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return ExpansionTile(
       title: Text(beo.eventName),
-      subtitle: Text([
-        beo.status,
-        if (beo.eventDate != null) beo.eventDate!.toLocal().toString().split(' ').first,
-        if (beo.guestCount != null) '${beo.guestCount} guests',
-      ].join(' · ')),
+      subtitle: Text(
+        [
+          beo.status,
+          if (beo.eventDate != null)
+            beo.eventDate!.toLocal().toString().split(' ').first,
+          if (beo.guestCount != null) '${beo.guestCount} guests',
+        ].join(' · '),
+      ),
       children: [
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -285,7 +357,9 @@ class _BeoTile extends ConsumerWidget {
                 OutlinedButton(
                   onPressed: () async {
                     try {
-                      await ref.read(crmRepositoryProvider).updateBeoStatus(beoId: beo.id, status: 'confirmed');
+                      await ref
+                          .read(crmRepositoryProvider)
+                          .updateBeoStatus(beoId: beo.id, status: 'confirmed');
                       ref.invalidate(crmBeosProvider(venueId));
                     } catch (e) {
                       if (context.mounted) {
@@ -301,12 +375,16 @@ class _BeoTile extends ConsumerWidget {
                 OutlinedButton(
                   onPressed: () async {
                     try {
-                      await ref.read(crmRepositoryProvider).updateBeoStatus(beoId: beo.id, status: 'cancelled');
+                      await ref
+                          .read(crmRepositoryProvider)
+                          .updateBeoStatus(beoId: beo.id, status: 'cancelled');
                       ref.invalidate(crmBeosProvider(venueId));
                     } catch (_) {
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Could not cancel BEO.')),
+                          const SnackBar(
+                            content: Text('Could not cancel BEO.'),
+                          ),
                         );
                       }
                     }
@@ -316,7 +394,9 @@ class _BeoTile extends ConsumerWidget {
               FilledButton(
                 onPressed: () async {
                   try {
-                    final result = await ref.read(crmRepositoryProvider).convertBeoToContract(beoId: beo.id);
+                    final result = await ref
+                        .read(crmRepositoryProvider)
+                        .convertBeoToContract(beoId: beo.id);
                     ref.invalidate(crmContractsProvider(venueId));
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
@@ -331,7 +411,9 @@ class _BeoTile extends ConsumerWidget {
                     }
                   } catch (e) {
                     if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_friendlyError(e))));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(_friendlyError(e))),
+                      );
                     }
                   }
                 },
@@ -366,7 +448,8 @@ class _ContractsTab extends ConsumerWidget {
       onRefresh: () async => ref.invalidate(crmContractsProvider(venueId)),
       child: contractsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (_, __) => const Center(child: Text('Could not load contracts.')),
+        error: (_, __) =>
+            const Center(child: Text('Could not load contracts.')),
         data: (contracts) {
           if (contracts.isEmpty) {
             return LayoutBuilder(
@@ -374,13 +457,20 @@ class _ContractsTab extends ConsumerWidget {
                 physics: const AlwaysScrollableScrollPhysics(),
                 child: SizedBox(
                   height: constraints.maxHeight,
-                  child: const Center(child: Text('No contracts yet — convert a confirmed BEO to create one.')),
+                  child: const Center(
+                    child: Text(
+                      'No contracts yet — convert a confirmed BEO to create one.',
+                    ),
+                  ),
                 ),
               ),
             );
           }
           return ListView(
-            children: [for (final contract in contracts) _ContractTile(contract: contract, venueId: venueId)],
+            children: [
+              for (final contract in contracts)
+                _ContractTile(contract: contract, venueId: venueId),
+            ],
           );
         },
       ),
@@ -398,27 +488,36 @@ class _ContractTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return ListTile(
       title: Text(contract.contractNumber),
-      subtitle: Text([
-        contract.status,
-        if (contract.eventName != null) contract.eventName!,
-      ].join(' · ')),
-      trailing: contract.status != 'fully_signed' && contract.status != 'cancelled'
+      subtitle: Text(
+        [
+          contract.status,
+          if (contract.eventName != null) contract.eventName!,
+        ].join(' · '),
+      ),
+      trailing: contract.status != 'fully_signed' &&
+              contract.status != 'cancelled'
           ? PopupMenuButton<String>(
               onSelected: (status) async {
                 try {
-                  await ref.read(crmRepositoryProvider).updateContractStatus(contractId: contract.id, status: status);
+                  await ref.read(crmRepositoryProvider).updateContractStatus(
+                        contractId: contract.id,
+                        status: status,
+                      );
                   ref.invalidate(crmContractsProvider(venueId));
                 } catch (_) {
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Could not update contract status.')),
+                      const SnackBar(
+                        content: Text('Could not update contract status.'),
+                      ),
                     );
                   }
                 }
               },
               itemBuilder: (context) => [
                 for (final status in CrmContract.statuses)
-                  if (status != contract.status) PopupMenuItem(value: status, child: Text(status)),
+                  if (status != contract.status)
+                    PopupMenuItem(value: status, child: Text(status)),
               ],
             )
           : null,
@@ -444,7 +543,10 @@ class _ForecastTab extends ConsumerWidget {
       child: ListView(
         padding: const EdgeInsets.all(12),
         children: [
-          Text('Pipeline forecast', style: Theme.of(context).textTheme.titleMedium),
+          Text(
+            'Pipeline forecast',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
           const SizedBox(height: 8),
           forecastAsync.when(
             loading: () => const Center(child: CircularProgressIndicator()),
@@ -455,15 +557,22 @@ class _ForecastTab extends ConsumerWidget {
                   Card(
                     child: ListTile(
                       title: Text(row.status),
-                      subtitle: Text('${row.leadCount} lead${row.leadCount == 1 ? '' : 's'}'),
-                      trailing: Text('\$${(row.weightedValueCents / 100).toStringAsFixed(0)}'),
+                      subtitle: Text(
+                        '${row.leadCount} lead${row.leadCount == 1 ? '' : 's'}',
+                      ),
+                      trailing: Text(
+                        '\$${(row.weightedValueCents / 100).toStringAsFixed(0)}',
+                      ),
                     ),
                   ),
               ],
             ),
           ),
           const SizedBox(height: 24),
-          Text('Stale leads (no activity in 5+ days)', style: Theme.of(context).textTheme.titleMedium),
+          Text(
+            'Stale leads (no activity in 5+ days)',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
           const SizedBox(height: 8),
           staleAsync.when(
             loading: () => const Center(child: CircularProgressIndicator()),
@@ -475,7 +584,9 @@ class _ForecastTab extends ConsumerWidget {
                       for (final lead in leads)
                         ListTile(
                           title: Text(lead.fullName),
-                          subtitle: Text('${lead.status} · ${lead.daysSinceActivity} days since activity'),
+                          subtitle: Text(
+                            '${lead.status} · ${lead.daysSinceActivity} days since activity',
+                          ),
                         ),
                     ],
                   ),

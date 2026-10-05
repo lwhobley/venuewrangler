@@ -25,7 +25,9 @@ class TimeBreak {
   factory TimeBreak.fromJson(Map<String, dynamic> json) => TimeBreak(
         type: json['type'] as String? ?? 'unpaid',
         startAt: DateTime.parse(json['start_at'] as String),
-        endAt: json['end_at'] != null ? DateTime.parse(json['end_at'] as String) : null,
+        endAt: json['end_at'] != null
+            ? DateTime.parse(json['end_at'] as String)
+            : null,
       );
 
   Map<String, dynamic> toJson() => {
@@ -151,7 +153,8 @@ class TimeEntry {
         if (clockOutAt != null) 'clock_out_at': clockOutAt!.toIso8601String(),
         if (clockOutLat != null) 'clock_out_lat': clockOutLat,
         if (clockOutLng != null) 'clock_out_lng': clockOutLng,
-        if (clockOutAccuracyM != null) 'clock_out_accuracy_m': clockOutAccuracyM,
+        if (clockOutAccuracyM != null)
+          'clock_out_accuracy_m': clockOutAccuracyM,
         if (clockOutMocked != null) 'clock_out_mocked': clockOutMocked,
         'is_open': isOpen,
         'breaks': breaks.map((b) => b.toJson()).toList(),

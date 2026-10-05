@@ -10,7 +10,8 @@ final posRepositoryProvider = Provider<PosRepository>((ref) {
   return SupabasePosRepository(client);
 });
 
-final posConnectionsProvider = FutureProvider.autoDispose<List<PosConnection>>((ref) async {
+final posConnectionsProvider =
+    FutureProvider.autoDispose<List<PosConnection>>((ref) async {
   final activeVenue = ref.watch(activeVenueProvider);
   if (activeVenue == null) return [];
 
@@ -18,7 +19,8 @@ final posConnectionsProvider = FutureProvider.autoDispose<List<PosConnection>>((
   return repo.getConnections(venueId: activeVenue.id);
 });
 
-final recentPosChecksProvider = FutureProvider.autoDispose<List<PosCheck>>((ref) async {
+final recentPosChecksProvider =
+    FutureProvider.autoDispose<List<PosCheck>>((ref) async {
   final activeVenue = ref.watch(activeVenueProvider);
   if (activeVenue == null) return [];
 

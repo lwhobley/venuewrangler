@@ -66,5 +66,6 @@ String? _stripSensitiveQueryParams(String? url) {
 /// A correlation id attached to a privileged Edge Function request, carried into Sentry/audit
 /// context (never into the body of a log line that leaves the device). Phase 3 Edge Functions
 /// should expect and echo this header back so client- and server-side traces can be joined.
-String newCorrelationId() => DateTime.now().microsecondsSinceEpoch.toRadixString(36) +
+String newCorrelationId() =>
+    DateTime.now().microsecondsSinceEpoch.toRadixString(36) +
     (identityHashCode(DateTime.now()) % 0xFFFFFF).toRadixString(36);

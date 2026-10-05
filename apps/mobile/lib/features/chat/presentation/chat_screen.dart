@@ -54,7 +54,8 @@ class _ConversationListView extends ConsumerWidget {
           }
 
           return RefreshIndicator(
-            onRefresh: () async => ref.refresh(conversationsListProvider.future),
+            onRefresh: () async =>
+                ref.refresh(conversationsListProvider.future),
             child: ListView.separated(
               itemCount: conversations.length,
               separatorBuilder: (_, __) => const Divider(height: 1),
@@ -62,7 +63,8 @@ class _ConversationListView extends ConsumerWidget {
                 final conv = conversations[index];
                 return ListTile(
                   leading: CircleAvatar(
-                    backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+                    backgroundColor:
+                        Theme.of(context).colorScheme.primaryContainer,
                     child: Icon(
                       conv.type == 'all_staff' ? Icons.groups : Icons.person,
                       color: Theme.of(context).colorScheme.onPrimaryContainer,
@@ -79,7 +81,8 @@ class _ConversationListView extends ConsumerWidget {
                   ),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () {
-                    ref.read(activeConversationIdProvider.notifier).state = conv.id;
+                    ref.read(activeConversationIdProvider.notifier).state =
+                        conv.id;
                   },
                 );
               },
@@ -93,7 +96,10 @@ class _ConversationListView extends ConsumerWidget {
             children: [
               const Icon(Icons.error_outline, size: 48, color: Colors.red),
               const SizedBox(height: 8),
-              Text('Failed to load conversations: $err', textAlign: TextAlign.center),
+              Text(
+                'Failed to load conversations: $err',
+                textAlign: TextAlign.center,
+              ),
             ],
           ),
         ),
@@ -122,7 +128,8 @@ class _ChatThreadViewState extends ConsumerState<_ChatThreadView> {
 
   @override
   Widget build(BuildContext context) {
-    final messagesAsync = ref.watch(conversationMessagesProvider(widget.conversationId));
+    final messagesAsync =
+        ref.watch(conversationMessagesProvider(widget.conversationId));
 
     return Scaffold(
       appBar: AppBar(
@@ -153,7 +160,8 @@ class _ChatThreadViewState extends ConsumerState<_ChatThreadView> {
                 );
               },
               loading: () => const Center(child: CircularProgressIndicator()),
-              error: (err, _) => Center(child: Text('Error loading messages: $err')),
+              error: (err, _) =>
+                  Center(child: Text('Error loading messages: $err')),
             ),
           ),
           const Divider(height: 1),
@@ -169,7 +177,8 @@ class _ChatThreadViewState extends ConsumerState<_ChatThreadView> {
                       decoration: const InputDecoration(
                         hintText: 'Type a message...',
                         border: InputBorder.none,
-                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        contentPadding:
+                            EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       ),
                       onSubmitted: (_) => _sendMessage(),
                     ),
@@ -235,7 +244,8 @@ class _MessageBubble extends StatelessWidget {
                     const SizedBox(width: 4),
                     Text(
                       'Photo Attachment',
-                      style: TextStyle(fontSize: 12, color: Colors.blue.shade700),
+                      style:
+                          TextStyle(fontSize: 12, color: Colors.blue.shade700),
                     ),
                   ],
                 ),

@@ -45,16 +45,15 @@ class SupabaseInsightsRepository implements InsightsRepository {
     int limit = 20,
   }) async {
     try {
-      var query = _client
-          .from('shift_insights')
-          .select()
-          .eq('venue_id', venueId);
+      var query =
+          _client.from('shift_insights').select().eq('venue_id', venueId);
 
       if (shiftId != null) {
         query = query.eq('shift_id', shiftId);
       }
 
-      final rows = await query.order('created_at', ascending: false).limit(limit);
+      final rows =
+          await query.order('created_at', ascending: false).limit(limit);
       return (rows as List<dynamic>)
           .map((row) => ShiftInsight.fromJson(row as Map<String, dynamic>))
           .toList(growable: false);

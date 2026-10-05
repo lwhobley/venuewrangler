@@ -35,7 +35,8 @@ class EventListScreen extends ConsumerWidget {
                 const Text('Could not load events.'),
                 const SizedBox(height: 12),
                 OutlinedButton(
-                  onPressed: () => ref.invalidate(eventsForVenueProvider(venue.id)),
+                  onPressed: () =>
+                      ref.invalidate(eventsForVenueProvider(venue.id)),
                   child: const Text('Retry'),
                 ),
               ],
@@ -69,7 +70,11 @@ class EventListScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _showAddEventDialog(BuildContext context, WidgetRef ref, String venueId) async {
+  Future<void> _showAddEventDialog(
+    BuildContext context,
+    WidgetRef ref,
+    String venueId,
+  ) async {
     final nameController = TextEditingController();
     final notesController = TextEditingController();
     var start = DateTime.now();
@@ -91,7 +96,8 @@ class EventListScreen extends ConsumerWidget {
               const SizedBox(height: 12),
               TextField(
                 controller: notesController,
-                decoration: const InputDecoration(labelText: 'Notes (optional)'),
+                decoration:
+                    const InputDecoration(labelText: 'Notes (optional)'),
                 maxLines: 2,
               ),
               const SizedBox(height: 12),
@@ -131,7 +137,11 @@ class EventListScreen extends ConsumerWidget {
       ),
     );
 
-    if (confirmed != true || nameController.text.trim().isEmpty || !context.mounted) return;
+    if (confirmed != true ||
+        nameController.text.trim().isEmpty ||
+        !context.mounted) {
+      return;
+    }
 
     try {
       await ref.read(eventsRepositoryProvider).createEvent(
@@ -139,7 +149,9 @@ class EventListScreen extends ConsumerWidget {
             name: nameController.text.trim(),
             startTime: start,
             endTime: end,
-            notes: notesController.text.trim().isEmpty ? null : notesController.text.trim(),
+            notes: notesController.text.trim().isEmpty
+                ? null
+                : notesController.text.trim(),
           );
       ref.invalidate(eventsForVenueProvider(venueId));
     } on PostgrestException catch (error) {
@@ -149,11 +161,15 @@ class EventListScreen extends ConsumerWidget {
         '23514' => 'The event end time must be after its start time.',
         _ => 'Something went wrong. Please try again.',
       };
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
     }
   }
 
-  Future<DateTime?> _pickDateTime(BuildContext context, DateTime initial) async {
+  Future<DateTime?> _pickDateTime(
+    BuildContext context,
+    DateTime initial,
+  ) async {
     final date = await showDatePicker(
       context: context,
       initialDate: initial,
@@ -182,7 +198,8 @@ class _EventTile extends ConsumerWidget {
     return ListTile(
       leading: Icon(_iconForStatus(event.status)),
       title: Text(event.name),
-      subtitle: Text('${event.startTime} → ${event.endTime}\n${event.status.name}'),
+      subtitle:
+          Text('${event.startTime} → ${event.endTime}\n${event.status.name}'),
       isThreeLine: true,
       trailing: IconButton(
         icon: const Icon(Icons.delete_outline),
@@ -200,7 +217,8 @@ class _EventTile extends ConsumerWidget {
       final message = error.code == '42501'
           ? "You don't have permission to delete this event."
           : 'Something went wrong. Please try again.';
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
     }
   }
 

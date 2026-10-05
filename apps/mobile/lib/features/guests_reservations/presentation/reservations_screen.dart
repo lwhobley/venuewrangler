@@ -32,7 +32,8 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
       body: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: Row(
@@ -56,7 +57,9 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
               data: (reservations) {
                 final filtered = _statusFilter == 'all'
                     ? reservations
-                    : reservations.where((r) => r.status == _statusFilter).toList();
+                    : reservations
+                        .where((r) => r.status == _statusFilter)
+                        .toList();
 
                 if (filtered.isEmpty) {
                   return const Center(
@@ -75,7 +78,8 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
                 }
 
                 return RefreshIndicator(
-                  onRefresh: () async => ref.refresh(reservationsListProvider.future),
+                  onRefresh: () async =>
+                      ref.refresh(reservationsListProvider.future),
                   child: ListView.separated(
                     itemCount: filtered.length,
                     separatorBuilder: (_, __) => const Divider(height: 1),
@@ -102,9 +106,16 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.error_outline, size: 48, color: Colors.red),
+                    const Icon(
+                      Icons.error_outline,
+                      size: 48,
+                      color: Colors.red,
+                    ),
                     const SizedBox(height: 8),
-                    Text('Failed to load reservations: $err', textAlign: TextAlign.center),
+                    Text(
+                      'Failed to load reservations: $err',
+                      textAlign: TextAlign.center,
+                    ),
                     const SizedBox(height: 16),
                     ElevatedButton(
                       onPressed: () => ref.invalidate(reservationsListProvider),
@@ -119,7 +130,8 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
       ),
       floatingActionButton: activeVenue != null
           ? FloatingActionButton(
-              onPressed: () => _showCreateReservationDialog(context, activeVenue.id),
+              onPressed: () =>
+                  _showCreateReservationDialog(context, activeVenue.id),
               tooltip: 'New Reservation',
               child: const Icon(Icons.add),
             )
@@ -140,7 +152,10 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
     );
   }
 
-  Future<void> _showCreateReservationDialog(BuildContext context, String venueId) async {
+  Future<void> _showCreateReservationDialog(
+    BuildContext context,
+    String venueId,
+  ) async {
     final nameCtrl = TextEditingController();
     final partyCtrl = TextEditingController(text: '2');
     final phoneCtrl = TextEditingController();
@@ -176,7 +191,8 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
               ),
               TextField(
                 controller: requestsCtrl,
-                decoration: const InputDecoration(labelText: 'Special Requests'),
+                decoration:
+                    const InputDecoration(labelText: 'Special Requests'),
               ),
             ],
           ),
@@ -192,17 +208,25 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
               final party = int.tryParse(partyCtrl.text.trim()) ?? 2;
               if (name.isEmpty) return;
 
-              await ref.read(guestsReservationsRepositoryProvider).createReservation(
+              await ref
+                  .read(guestsReservationsRepositoryProvider)
+                  .createReservation(
                     venueId: venueId,
                     guestName: name,
                     partySize: party,
-                    guestPhone: phoneCtrl.text.trim().isEmpty ? null : phoneCtrl.text.trim(),
-                    guestEmail: emailCtrl.text.trim().isEmpty ? null : emailCtrl.text.trim(),
-                    specialRequests:
-                        requestsCtrl.text.trim().isEmpty ? null : requestsCtrl.text.trim(),
-                    reservationTime: DateTime.now().add(const Duration(hours: 1)),
+                    guestPhone: phoneCtrl.text.trim().isEmpty
+                        ? null
+                        : phoneCtrl.text.trim(),
+                    guestEmail: emailCtrl.text.trim().isEmpty
+                        ? null
+                        : emailCtrl.text.trim(),
+                    specialRequests: requestsCtrl.text.trim().isEmpty
+                        ? null
+                        : requestsCtrl.text.trim(),
+                    reservationTime:
+                        DateTime.now().add(const Duration(hours: 1)),
                   );
-              if (mounted) {
+              if (dialogCtx.mounted) {
                 Navigator.of(dialogCtx).pop();
                 ref.invalidate(reservationsListProvider);
               }
@@ -265,12 +289,14 @@ class _ReservationListTile extends StatelessWidget {
             'Time: ${_formatTime(reservation.reservationTime)} | Source: ${reservation.source}',
             style: Theme.of(context).textTheme.bodySmall,
           ),
-          if (reservation.specialRequests != null && reservation.specialRequests!.isNotEmpty)
+          if (reservation.specialRequests != null &&
+              reservation.specialRequests!.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 2.0),
               child: Text(
                 'Note: ${reservation.specialRequests}',
-                style: const TextStyle(fontStyle: FontStyle.italic, fontSize: 12),
+                style:
+                    const TextStyle(fontStyle: FontStyle.italic, fontSize: 12),
               ),
             ),
         ],
@@ -281,7 +307,11 @@ class _ReservationListTile extends StatelessWidget {
           Chip(
             label: Text(
               reservation.status.toUpperCase(),
-              style: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold),
+              style: const TextStyle(
+                fontSize: 10,
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
             ),
             backgroundColor: _statusColor(context, reservation.status),
             padding: EdgeInsets.zero,
@@ -295,7 +325,10 @@ class _ReservationListTile extends StatelessWidget {
               if (reservation.status != 'seated')
                 const PopupMenuItem(value: 'seated', child: Text('Seat')),
               if (reservation.status != 'completed')
-                const PopupMenuItem(value: 'completed', child: Text('Complete')),
+                const PopupMenuItem(
+                  value: 'completed',
+                  child: Text('Complete'),
+                ),
               if (reservation.status != 'cancelled')
                 const PopupMenuItem(value: 'cancelled', child: Text('Cancel')),
             ],

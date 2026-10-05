@@ -28,7 +28,7 @@ class EnvConfig {
     if (supabaseUrl.isEmpty || supabaseAnonKey.isEmpty) {
       throw StateError(
         'SUPABASE_URL and SUPABASE_ANON_KEY must be supplied via --dart-define '
-        '(see apps/mobile/.env.example). Refusing to start with an unconfigured backend.',
+        '(copy env/development.json.example to env/development.json and pass --dart-define-from-file; see README.md). Refusing to start with an unconfigured backend.',
       );
     }
 

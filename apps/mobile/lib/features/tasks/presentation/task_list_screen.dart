@@ -46,17 +46,21 @@ class TaskListScreen extends ConsumerWidget {
             _ConflictBanner(
               mutation: conflict,
               onDismiss: () {
-                ref.read(offlineQueueControllerProvider.notifier).dismissConflict(conflict.id);
+                ref
+                    .read(offlineQueueControllerProvider.notifier)
+                    .dismissConflict(conflict.id);
                 ref.invalidate(tasksForVenueProvider(venue.id));
               },
             ),
           Expanded(
             child: RefreshIndicator(
-              onRefresh: () async => ref.invalidate(tasksForVenueProvider(venue.id)),
+              onRefresh: () async =>
+                  ref.invalidate(tasksForVenueProvider(venue.id)),
               child: tasksAsync.when(
                 loading: () => const Center(child: CircularProgressIndicator()),
                 error: (error, _) => _ErrorState(
-                  onRetry: () => ref.invalidate(tasksForVenueProvider(venue.id)),
+                  onRetry: () =>
+                      ref.invalidate(tasksForVenueProvider(venue.id)),
                 ),
                 data: (tasks) {
                   if (tasks.isEmpty) {
@@ -125,7 +129,9 @@ class TaskListScreen extends ConsumerWidget {
     if (title == null || title.isEmpty || !context.mounted) return;
 
     try {
-      await ref.read(tasksRepositoryProvider).createTask(venueId: venueId, title: title);
+      await ref
+          .read(tasksRepositoryProvider)
+          .createTask(venueId: venueId, title: title);
       ref.invalidate(tasksForVenueProvider(venueId));
     } on PostgrestException catch (error) {
       if (!context.mounted) return;
@@ -147,7 +153,11 @@ Map<String, TaskStatus> _pendingStatusByTaskId(List<PendingMutation> pending) {
 }
 
 class _TaskTile extends ConsumerWidget {
-  const _TaskTile({required this.task, required this.venueId, this.pendingStatus});
+  const _TaskTile({
+    required this.task,
+    required this.venueId,
+    this.pendingStatus,
+  });
 
   final OperationalTask task;
   final String venueId;
@@ -166,16 +176,22 @@ class _TaskTile extends ConsumerWidget {
       value: isCompleted,
       title: Text(
         task.title,
-        style: isCompleted ? const TextStyle(decoration: TextDecoration.lineThrough) : null,
+        style: isCompleted
+            ? const TextStyle(decoration: TextDecoration.lineThrough)
+            : null,
       ),
       subtitle: Row(
         children: [
-          if (task.description != null) Flexible(child: Text(task.description!)),
+          if (task.description != null)
+            Flexible(child: Text(task.description!)),
           if (pendingStatus != null) ...[
             if (task.description != null) const SizedBox(width: 8),
             const Icon(Icons.sync, size: 14),
             const SizedBox(width: 4),
-            const Text('Syncing…', style: TextStyle(fontStyle: FontStyle.italic)),
+            const Text(
+              'Syncing…',
+              style: TextStyle(fontStyle: FontStyle.italic),
+            ),
           ],
         ],
       ),
@@ -183,7 +199,12 @@ class _TaskTile extends ConsumerWidget {
     );
   }
 
-  Future<void> _onToggled(BuildContext context, WidgetRef ref, bool checked) async {
+  Future<void> _onToggled(
+    BuildContext context,
+    WidgetRef ref,
+    bool checked,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
     final newStatus = checked ? TaskStatus.completed : TaskStatus.open;
 
     try {
@@ -191,27 +212,33 @@ class _TaskTile extends ConsumerWidget {
       ref.invalidate(tasksForVenueProvider(venueId));
     } on PostgrestException catch (error) {
       if (error.code == '42501') {
-        if (!context.mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           SnackBar(content: Text(_messageForPostgrestError(error))),
         );
         return;
       }
-      await _queueOffline(context, ref, newStatus);
+      await _queueOffline(messenger, ref, newStatus);
     } catch (_) {
       // Anything else (no connectivity, a timeout, a transient 5xx) is treated as "try again
       // later" rather than shown as an error.
-      await _queueOffline(context, ref, newStatus);
+      await _queueOffline(messenger, ref, newStatus);
     }
   }
 
-  Future<void> _queueOffline(BuildContext context, WidgetRef ref, TaskStatus newStatus) async {
-    final mutation = buildTaskStatusUpdateMutation(task: task, newStatus: newStatus);
+  Future<void> _queueOffline(
+    ScaffoldMessengerState messenger,
+    WidgetRef ref,
+    TaskStatus newStatus,
+  ) async {
+    final mutation =
+        buildTaskStatusUpdateMutation(task: task, newStatus: newStatus);
     await ref.read(offlineQueueControllerProvider.notifier).enqueue(mutation);
 
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Saved offline — this will sync once you're back online.")),
+    messenger.showSnackBar(
+      const SnackBar(
+        content:
+            Text("Saved offline — this will sync once you're back online."),
+      ),
     );
   }
 }

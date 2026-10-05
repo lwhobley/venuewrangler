@@ -21,7 +21,8 @@ class _FakeStaffRequestsRepository implements StaffRequestsRepository {
   String? lastResponseNotes;
 
   @override
-  Future<List<StaffRequest>> fetchRequestsForVenue(String venueId) async => requests;
+  Future<List<StaffRequest>> fetchRequestsForVenue(String venueId) async =>
+      requests;
 
   @override
   Future<void> createRequest({
@@ -126,7 +127,8 @@ void main() {
     expect(find.text('Time Off • Pending'), findsOneWidget);
   });
 
-  testWidgets('creating a staff request from dialog calls repository', (tester) async {
+  testWidgets('creating a staff request from dialog calls repository',
+      (tester) async {
     final fakeRepo = _FakeStaffRequestsRepository([]);
 
     await tester.pumpWidget(

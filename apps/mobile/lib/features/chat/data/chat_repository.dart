@@ -4,7 +4,10 @@ import '../domain/conversation.dart';
 
 abstract class ChatRepository {
   Future<List<Conversation>> getConversations({required String venueId});
-  Future<List<ChatMessage>> getMessages({required String conversationId, int limit = 50});
+  Future<List<ChatMessage>> getMessages({
+    required String conversationId,
+    int limit = 50,
+  });
   Future<ChatMessage> sendMessage({
     required String conversationId,
     required String text,
@@ -12,7 +15,10 @@ abstract class ChatRepository {
   });
   Future<void> deleteMessage({required String messageId});
   Future<void> markConversationRead({required String conversationId});
-  Future<String> createOrGetDm({required String venueId, required String targetUserId});
+  Future<String> createOrGetDm({
+    required String venueId,
+    required String targetUserId,
+  });
 }
 
 class SupabaseChatRepository implements ChatRepository {
@@ -34,7 +40,10 @@ class SupabaseChatRepository implements ChatRepository {
   }
 
   @override
-  Future<List<ChatMessage>> getMessages({required String conversationId, int limit = 50}) async {
+  Future<List<ChatMessage>> getMessages({
+    required String conversationId,
+    int limit = 50,
+  }) async {
     final response = await _client
         .from('messages')
         .select()
@@ -54,7 +63,11 @@ class SupabaseChatRepository implements ChatRepository {
     String? attachmentPath,
   }) async {
     final userId = _client.auth.currentUser?.id;
-    final conv = await _client.from('conversations').select('venue_id, organization_id').eq('id', conversationId).single();
+    final conv = await _client
+        .from('conversations')
+        .select('venue_id, organization_id')
+        .eq('id', conversationId)
+        .single();
 
     final response = await _client
         .from('messages')
@@ -82,23 +95,36 @@ class SupabaseChatRepository implements ChatRepository {
     final userId = _client.auth.currentUser?.id;
     if (userId == null) return;
 
-    final conv = await _client.from('conversations').select('venue_id, organization_id').eq('id', conversationId).single();
+    final conv = await _client
+        .from('conversations')
+        .select('venue_id, organization_id')
+        .eq('id', conversationId)
+        .single();
 
-    await _client.from('conversation_reads').upsert({
-      'conversation_id': conversationId,
-      'venue_id': conv['venue_id'],
-      'organization_id': conv['organization_id'],
-      'user_id': userId,
-      'read_at': DateTime.now().toIso8601String(),
-    }, onConflict: 'conversation_id,user_id');
+    await _client.from('conversation_reads').upsert(
+      {
+        'conversation_id': conversationId,
+        'venue_id': conv['venue_id'],
+        'organization_id': conv['organization_id'],
+        'user_id': userId,
+        'read_at': DateTime.now().toIso8601String(),
+      },
+      onConflict: 'conversation_id,user_id',
+    );
   }
 
   @override
-  Future<String> createOrGetDm({required String venueId, required String targetUserId}) async {
-    final result = await _client.rpc('create_or_get_dm', params: {
-      'p_venue_id': venueId,
-      'p_target_user_id': targetUserId,
-    });
+  Future<String> createOrGetDm({
+    required String venueId,
+    required String targetUserId,
+  }) async {
+    final result = await _client.rpc(
+      'create_or_get_dm',
+      params: {
+        'p_venue_id': venueId,
+        'p_target_user_id': targetUserId,
+      },
+    );
     return result as String;
   }
 }

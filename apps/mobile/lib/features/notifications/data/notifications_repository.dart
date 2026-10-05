@@ -43,7 +43,9 @@ class SupabaseNotificationsRepository implements NotificationsRepository {
       return res as String;
     } on PostgrestException catch (e) {
       if (e.code == '42501') {
-        throw const PermissionDeniedError('Unable to register push token: permission denied.');
+        throw const PermissionDeniedError(
+          'Unable to register push token: permission denied.',
+        );
       }
       throw UnknownError('Push token registration failed: ${e.message}');
     } catch (e) {
@@ -82,8 +84,10 @@ class SupabaseNotificationsRepository implements NotificationsRepository {
     try {
       await _client
           .from('notification_events')
-          .update({'read_at': DateTime.now().toUtc().toIso8601String()})
-          .eq('id', notificationId);
+          .update({'read_at': DateTime.now().toUtc().toIso8601String()}).eq(
+        'id',
+        notificationId,
+      );
     } on PostgrestException catch (e) {
       if (e.code == '42501') {
         throw const PermissionDeniedError();

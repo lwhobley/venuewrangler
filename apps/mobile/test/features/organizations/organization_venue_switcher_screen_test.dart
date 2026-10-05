@@ -29,7 +29,8 @@ class _FakeVenuesRepository implements VenuesRepository {
 }
 
 void main() {
-  final org = Organization(id: 'org-1', name: 'Org One', createdAt: DateTime(2026));
+  final org =
+      Organization(id: 'org-1', name: 'Org One', createdAt: DateTime(2026));
   final venue = Venue(
     id: 'venue-1',
     organizationId: 'org-1',
@@ -37,7 +38,8 @@ void main() {
     createdAt: DateTime(2026),
   );
 
-  testWidgets('shows an empty state when the user has no organizations', (tester) async {
+  testWidgets('shows an empty state when the user has no organizations',
+      (tester) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -49,10 +51,14 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.textContaining("don't belong to any organization"), findsOneWidget);
+    expect(
+      find.textContaining("don't belong to any organization"),
+      findsOneWidget,
+    );
   });
 
-  testWidgets('lists organizations and their venues, and selecting a venue sets '
+  testWidgets(
+      'lists organizations and their venues, and selecting a venue sets '
       'activeVenueProvider', (tester) async {
     late ProviderContainer container;
 

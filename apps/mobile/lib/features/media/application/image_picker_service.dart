@@ -14,7 +14,8 @@ class DeviceImagePickerService implements ImagePickerService {
 
   @override
   Future<String?> pickImage({required ImageSource source}) async {
-    final file = await ImagePicker().pickImage(source: source, imageQuality: 85);
+    final file =
+        await ImagePicker().pickImage(source: source, imageQuality: 85);
     return file?.path;
   }
 }

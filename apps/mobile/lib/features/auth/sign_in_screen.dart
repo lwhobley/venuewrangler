@@ -63,7 +63,10 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Text('Sign in', style: Theme.of(context).textTheme.headlineMedium),
+                    Text(
+                      'Sign in',
+                      style: Theme.of(context).textTheme.headlineMedium,
+                    ),
                     const SizedBox(height: 24),
                     TextFormField(
                       controller: _emailController,
@@ -71,7 +74,9 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                       autofillHints: const [AutofillHints.email],
                       decoration: const InputDecoration(labelText: 'Email'),
                       validator: (value) =>
-                          (value == null || !value.contains('@')) ? 'Enter a valid email' : null,
+                          (value == null || !value.contains('@'))
+                              ? 'Enter a valid email'
+                              : null,
                     ),
                     const SizedBox(height: 12),
                     TextFormField(
@@ -79,14 +84,17 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                       obscureText: true,
                       autofillHints: const [AutofillHints.password],
                       decoration: const InputDecoration(labelText: 'Password'),
-                      validator: (value) =>
-                          (value == null || value.isEmpty) ? 'Enter your password' : null,
+                      validator: (value) => (value == null || value.isEmpty)
+                          ? 'Enter your password'
+                          : null,
                     ),
                     if (_error != null) ...[
                       const SizedBox(height: 12),
                       Text(
                         _error!.message,
-                        style: TextStyle(color: Theme.of(context).colorScheme.error),
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
                       ),
                     ],
                     const SizedBox(height: 24),

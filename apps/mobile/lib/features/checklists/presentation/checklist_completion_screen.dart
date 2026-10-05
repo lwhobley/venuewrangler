@@ -15,22 +15,29 @@ const _uuid = Uuid();
 /// retry is idempotent (see ChecklistsRepository.submitCompletion) rather than risking a
 /// duplicate submission.
 class ChecklistCompletionScreen extends ConsumerStatefulWidget {
-  const ChecklistCompletionScreen({super.key, required this.templateId, this.title});
+  const ChecklistCompletionScreen({
+    super.key,
+    required this.templateId,
+    this.title,
+  });
 
   final String templateId;
   final String? title;
 
   @override
-  ConsumerState<ChecklistCompletionScreen> createState() => _ChecklistCompletionScreenState();
+  ConsumerState<ChecklistCompletionScreen> createState() =>
+      _ChecklistCompletionScreenState();
 }
 
-class _ChecklistCompletionScreenState extends ConsumerState<ChecklistCompletionScreen> {
+class _ChecklistCompletionScreenState
+    extends ConsumerState<ChecklistCompletionScreen> {
   final Map<String, bool> _checkedByItemId = {};
   bool _submitting = false;
 
   @override
   Widget build(BuildContext context) {
-    final itemsAsync = ref.watch(checklistItemsForTemplateProvider(widget.templateId));
+    final itemsAsync =
+        ref.watch(checklistItemsForTemplateProvider(widget.templateId));
 
     return Scaffold(
       appBar: AppBar(title: Text(widget.title ?? 'Checklist')),
@@ -43,8 +50,9 @@ class _ChecklistCompletionScreenState extends ConsumerState<ChecklistCompletionS
               const Text('Could not load this checklist.'),
               const SizedBox(height: 12),
               OutlinedButton(
-                onPressed: () =>
-                    ref.invalidate(checklistItemsForTemplateProvider(widget.templateId)),
+                onPressed: () => ref.invalidate(
+                  checklistItemsForTemplateProvider(widget.templateId),
+                ),
                 child: const Text('Retry'),
               ),
             ],
@@ -52,7 +60,9 @@ class _ChecklistCompletionScreenState extends ConsumerState<ChecklistCompletionS
         ),
         data: (items) {
           if (items.isEmpty) {
-            return const Center(child: Text('This checklist has no items yet.'));
+            return const Center(
+              child: Text('This checklist has no items yet.'),
+            );
           }
           return ListView(
             children: [
@@ -61,13 +71,17 @@ class _ChecklistCompletionScreenState extends ConsumerState<ChecklistCompletionS
                   title: Text(item.label),
                   value: _checkedByItemId[item.id] ?? false,
                   onChanged: (checked) {
-                    setState(() => _checkedByItemId[item.id] = checked ?? false);
+                    setState(
+                      () => _checkedByItemId[item.id] = checked ?? false,
+                    );
                   },
                 ),
               Padding(
                 padding: const EdgeInsets.all(16),
                 child: FilledButton(
-                  onPressed: _submitting ? null : () => _submit(items.map((i) => i.id)),
+                  onPressed: _submitting
+                      ? null
+                      : () => _submit(items.map((i) => i.id)),
                   child: _submitting
                       ? const SizedBox(
                           height: 20,
@@ -106,7 +120,10 @@ class _ChecklistCompletionScreenState extends ConsumerState<ChecklistCompletionS
         if (!mounted) return;
         setState(() => _submitting = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("You don't have permission to submit this checklist.")),
+          const SnackBar(
+            content:
+                Text("You don't have permission to submit this checklist."),
+          ),
         );
         return;
       }
@@ -116,7 +133,10 @@ class _ChecklistCompletionScreenState extends ConsumerState<ChecklistCompletionS
     }
   }
 
-  Future<void> _queueOffline(String completionId, List<ItemResult> itemResults) async {
+  Future<void> _queueOffline(
+    String completionId,
+    List<ItemResult> itemResults,
+  ) async {
     final mutation = buildChecklistCompletionMutation(
       completionId: completionId,
       templateId: widget.templateId,
@@ -127,7 +147,8 @@ class _ChecklistCompletionScreenState extends ConsumerState<ChecklistCompletionS
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text("Saved offline — this will sync once you're back online."),
+        content:
+            Text("Saved offline — this will sync once you're back online."),
       ),
     );
     context.pop();

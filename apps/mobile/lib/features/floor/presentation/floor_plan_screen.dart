@@ -111,7 +111,10 @@ class _FloorPlanScreenState extends ConsumerState<FloorPlanScreen> {
             children: [
               const Icon(Icons.error_outline, size: 48, color: Colors.red),
               const SizedBox(height: 8),
-              Text('Failed to load floor tables: $err', textAlign: TextAlign.center),
+              Text(
+                'Failed to load floor tables: $err',
+                textAlign: TextAlign.center,
+              ),
             ],
           ),
         ),
@@ -130,8 +133,13 @@ class _FloorPlanScreenState extends ConsumerState<FloorPlanScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              title: Text('Table ${table.label}', style: const TextStyle(fontWeight: FontWeight.bold)),
-              subtitle: Text('Status: ${table.status.toUpperCase()} | Capacity: ${table.capacity}p'),
+              title: Text(
+                'Table ${table.label}',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              subtitle: Text(
+                'Status: ${table.status.toUpperCase()} | Capacity: ${table.capacity}p',
+              ),
             ),
             const Divider(height: 1),
             ListTile(
@@ -147,7 +155,10 @@ class _FloorPlanScreenState extends ConsumerState<FloorPlanScreen> {
               },
             ),
             ListTile(
-              leading: const Icon(Icons.airline_seat_recline_normal, color: Colors.blue),
+              leading: const Icon(
+                Icons.airline_seat_recline_normal,
+                color: Colors.blue,
+              ),
               title: const Text('Mark Seated'),
               onTap: () async {
                 Navigator.of(sheetCtx).pop();
@@ -159,7 +170,8 @@ class _FloorPlanScreenState extends ConsumerState<FloorPlanScreen> {
               },
             ),
             ListTile(
-              leading: const Icon(Icons.cleaning_services, color: Colors.orange),
+              leading:
+                  const Icon(Icons.cleaning_services, color: Colors.orange),
               title: const Text('Mark Dirty (Needs Bussing)'),
               onTap: () async {
                 Navigator.of(sheetCtx).pop();
@@ -233,7 +245,9 @@ class _TableGridTile extends StatelessWidget {
           color: statusColor.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isSelected ? Theme.of(context).colorScheme.primary : statusColor,
+            color: isSelected
+                ? Theme.of(context).colorScheme.primary
+                : statusColor,
             width: isSelected ? 3.0 : 1.5,
           ),
         ),
@@ -278,7 +292,11 @@ class _TableGridTile extends StatelessWidget {
               Positioned(
                 top: 4,
                 left: 4,
-                child: Icon(Icons.check_circle, size: 18, color: Theme.of(context).colorScheme.primary),
+                child: Icon(
+                  Icons.check_circle,
+                  size: 18,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
               ),
           ],
         ),

@@ -19,12 +19,15 @@ class SupabaseSettingsRepository implements SettingsRepository {
 
   @override
   Future<Profile> fetchMyProfile(String userId) async {
-    final row = await _client.from('profiles').select().eq('id', userId).single();
+    final row =
+        await _client.from('profiles').select().eq('id', userId).single();
     return Profile.fromJson(row);
   }
 
   @override
   Future<void> updateDisplayName(String userId, String displayName) async {
-    await _client.from('profiles').update({'display_name': displayName}).eq('id', userId);
+    await _client
+        .from('profiles')
+        .update({'display_name': displayName}).eq('id', userId);
   }
 }

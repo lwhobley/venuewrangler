@@ -15,7 +15,8 @@ final offlineQueueConnectivityProvider = Provider<void>((ref) {
   controller.flush(onlyUserId: ref.read(currentUserIdProvider));
 
   final subscription = Connectivity().onConnectivityChanged.listen((results) {
-    final hasConnection = results.any((result) => result != ConnectivityResult.none);
+    final hasConnection =
+        results.any((result) => result != ConnectivityResult.none);
     if (hasConnection) {
       controller.flush(onlyUserId: ref.read(currentUserIdProvider));
     }

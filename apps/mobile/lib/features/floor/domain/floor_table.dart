@@ -44,7 +44,9 @@ class FloorTable {
       isReservable: json['is_reservable'] as bool? ?? true,
       status: json['status'] as String? ?? 'available',
       partySize: (json['party_size'] as num?)?.toInt(),
-      seatedAt: json['seated_at'] != null ? DateTime.parse(json['seated_at'] as String) : null,
+      seatedAt: json['seated_at'] != null
+          ? DateTime.parse(json['seated_at'] as String)
+          : null,
       lastActivityAt: DateTime.parse(json['last_activity_at'] as String),
       mergeGroupId: json['merge_group_id'] as String?,
       notes: json['notes'] as String?,

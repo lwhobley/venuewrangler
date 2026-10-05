@@ -59,7 +59,8 @@ class _OrganizationSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final venuesAsync = ref.watch(venuesForOrganizationProvider(organization.id));
+    final venuesAsync =
+        ref.watch(venuesForOrganizationProvider(organization.id));
 
     return ExpansionTile(
       title: Text(organization.name),
@@ -74,8 +75,8 @@ class _OrganizationSection extends ConsumerWidget {
             padding: const EdgeInsets.all(16),
             child: _ErrorState(
               message: 'Could not load venues for ${organization.name}.',
-              onRetry: () =>
-                  ref.invalidate(venuesForOrganizationProvider(organization.id)),
+              onRetry: () => ref
+                  .invalidate(venuesForOrganizationProvider(organization.id)),
             ),
           ),
           data: (venues) {

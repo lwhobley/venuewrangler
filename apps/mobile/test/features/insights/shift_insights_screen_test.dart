@@ -118,7 +118,8 @@ void main() {
     expect(find.text('Generate AI Insights'), findsOneWidget);
   });
 
-  testWidgets('renders list of shift insights with kind and title', (tester) async {
+  testWidgets('renders list of shift insights with kind and title',
+      (tester) async {
     final fakeRepo = _FakeInsightsRepository([
       _makeInsight(
         id: 'i1',
@@ -147,13 +148,17 @@ void main() {
 
     expect(find.text('Friday Peak Rush'), findsOneWidget);
     expect(find.text('Rush Prep'), findsOneWidget);
-    expect(find.text('Expect heavy bar orders between 7 and 9 PM.'), findsOneWidget);
+    expect(
+      find.text('Expect heavy bar orders between 7 and 9 PM.'),
+      findsOneWidget,
+    );
 
     expect(find.text('Bar Station Understaffed'), findsOneWidget);
     expect(find.text('Coverage Warning'), findsOneWidget);
   });
 
-  testWidgets('opens generate dialog and triggers insight generation', (tester) async {
+  testWidgets('opens generate dialog and triggers insight generation',
+      (tester) async {
     final fakeRepo = _FakeInsightsRepository([]);
 
     await tester.pumpWidget(
@@ -181,7 +186,10 @@ void main() {
     await tester.tap(find.text('Generate'));
     await tester.pumpAndSettle();
 
-    expect(fakeRepo.lastGeneratedContext, 'Friday 6pm rush, 200 covers expected');
+    expect(
+      fakeRepo.lastGeneratedContext,
+      'Friday 6pm rush, 200 covers expected',
+    );
     expect(find.text('Rush Prep Warning'), findsOneWidget);
   });
 

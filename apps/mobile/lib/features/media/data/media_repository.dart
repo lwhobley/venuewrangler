@@ -61,7 +61,9 @@ class SupabaseMediaRepository implements MediaRepository {
         'storage_path': objectPath,
       });
     } on PostgrestException catch (error) {
-      if (error.code == '23505') return; // already recorded by an earlier retry; done.
+      if (error.code == '23505') {
+        return; // already recorded by an earlier retry; done.
+      }
       rethrow;
     }
   }

@@ -45,7 +45,8 @@ PendingMutation buildIncidentReportMutation({
   );
 }
 
-final incidentMutationHandlersProvider = Provider<Map<String, MutationHandler>>((ref) {
+final incidentMutationHandlersProvider =
+    Provider<Map<String, MutationHandler>>((ref) {
   final repo = ref.watch(incidentsRepositoryProvider);
 
   Future<MutationResult> handleReport(Map<String, dynamic> payload) async {
@@ -62,7 +63,8 @@ final incidentMutationHandlersProvider = Provider<Map<String, MutationHandler>>(
       if (error.code == '42501') {
         return const MutationResult(
           MutationOutcome.conflict,
-          message: 'You no longer have permission to report incidents for this venue.',
+          message:
+              'You no longer have permission to report incidents for this venue.',
         );
       }
       rethrow; // network/5xx-shaped failures are retried by the queue controller.

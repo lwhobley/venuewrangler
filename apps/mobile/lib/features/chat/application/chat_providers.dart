@@ -10,7 +10,8 @@ final chatRepositoryProvider = Provider<ChatRepository>((ref) {
   return SupabaseChatRepository(client);
 });
 
-final conversationsListProvider = FutureProvider.autoDispose<List<Conversation>>((ref) async {
+final conversationsListProvider =
+    FutureProvider.autoDispose<List<Conversation>>((ref) async {
   final activeVenue = ref.watch(activeVenueProvider);
   if (activeVenue == null) return [];
 
@@ -18,10 +19,11 @@ final conversationsListProvider = FutureProvider.autoDispose<List<Conversation>>
   return repo.getConversations(venueId: activeVenue.id);
 });
 
-final activeConversationIdProvider = StateProvider.autoDispose<String?>((ref) => null);
+final activeConversationIdProvider =
+    StateProvider.autoDispose<String?>((ref) => null);
 
-final conversationMessagesProvider =
-    FutureProvider.autoDispose.family<List<ChatMessage>, String>((ref, conversationId) async {
+final conversationMessagesProvider = FutureProvider.autoDispose
+    .family<List<ChatMessage>, String>((ref, conversationId) async {
   final repo = ref.watch(chatRepositoryProvider);
   return repo.getMessages(conversationId: conversationId);
 });

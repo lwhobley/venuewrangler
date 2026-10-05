@@ -30,7 +30,10 @@ class CrmLead {
         company: json['company'] as String?,
         source: json['source'] as String?,
         status: json['status'] as String,
-        tags: (json['tags'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? const [],
+        tags: (json['tags'] as List<dynamic>?)
+                ?.map((e) => e.toString())
+                .toList() ??
+            const [],
         assignedTo: json['assigned_to'] as String?,
         marketingOptIn: json['marketing_opt_in'] as bool?,
         lastActivityAt: json['last_activity_at'] != null
@@ -59,8 +62,15 @@ class CrmLead {
   final DateTime updatedAt;
 
   static const statuses = [
-    'new', 'contacted', 'qualified', 'proposal_sent', 'negotiating',
-    'won', 'lost', 'unqualified', 'on_hold',
+    'new',
+    'contacted',
+    'qualified',
+    'proposal_sent',
+    'negotiating',
+    'won',
+    'lost',
+    'unqualified',
+    'on_hold',
   ];
 
   @override
@@ -104,7 +114,8 @@ class CrmActivityLogEntry {
     required this.createdAt,
   });
 
-  factory CrmActivityLogEntry.fromJson(Map<String, dynamic> json) => CrmActivityLogEntry(
+  factory CrmActivityLogEntry.fromJson(Map<String, dynamic> json) =>
+      CrmActivityLogEntry(
         id: json['id'] as String,
         leadId: json['lead_id'] as String?,
         actorId: json['actor_id'] as String?,

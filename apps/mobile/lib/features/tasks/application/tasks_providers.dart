@@ -11,8 +11,8 @@ final tasksRepositoryProvider = Provider<TasksRepository>((ref) {
   return SupabaseTasksRepository(client);
 });
 
-final tasksForVenueProvider =
-    FutureProvider.autoDispose.family<List<OperationalTask>, String>((ref, venueId) {
+final tasksForVenueProvider = FutureProvider.autoDispose
+    .family<List<OperationalTask>, String>((ref, venueId) {
   return ref.watch(tasksRepositoryProvider).fetchTasksForVenue(venueId);
 });
 
@@ -43,27 +43,33 @@ PendingMutation buildTaskStatusUpdateMutation({
 /// Registered into the app-wide offline-queue handler map by app/bootstrap.dart (see
 /// core/offline/offline_queue_providers.dart's offlineQueueHandlersProvider) so core/offline
 /// never has to import this feature directly.
-final taskMutationHandlersProvider = Provider<Map<String, MutationHandler>>((ref) {
+final taskMutationHandlersProvider =
+    Provider<Map<String, MutationHandler>>((ref) {
   final repo = ref.watch(tasksRepositoryProvider);
 
-  Future<MutationResult> handleStatusUpdate(Map<String, dynamic> payload) async {
+  Future<MutationResult> handleStatusUpdate(
+    Map<String, dynamic> payload,
+  ) async {
     final taskId = payload['taskId'] as String;
     final status = TaskStatus.fromDb(payload['status'] as String);
-    final expectedUpdatedAt = DateTime.parse(payload['expectedUpdatedAt'] as String);
+    final expectedUpdatedAt =
+        DateTime.parse(payload['expectedUpdatedAt'] as String);
 
     try {
-      final applied = await repo.updateStatusIfUnchanged(taskId, status, expectedUpdatedAt);
+      final applied =
+          await repo.updateStatusIfUnchanged(taskId, status, expectedUpdatedAt);
       return applied
           ? const MutationResult(MutationOutcome.applied)
           : const MutationResult(
               MutationOutcome.conflict,
-              message: 'This task was changed by someone else before your update synced.',
+              message:
+                  'This task was changed by someone else before your update synced.',
             );
     } on PostgrestException catch (error) {
       if (error.code == '42501') {
         return const MutationResult(
           MutationOutcome.conflict,
-          message: "You no longer have permission to update this task.",
+          message: 'You no longer have permission to update this task.',
         );
       }
       rethrow; // network/5xx-shaped failures are retried by the queue controller.

@@ -16,7 +16,12 @@ class _FakeCrmRepository implements CrmRepository {
   final List<CrmBeo> _beos;
 
   @override
-  Future<List<CrmLead>> getLeads({required String venueId, String? search, int limit = 100}) async => [];
+  Future<List<CrmLead>> getLeads({
+    required String venueId,
+    String? search,
+    int limit = 100,
+  }) async =>
+      [];
 
   @override
   Future<CrmLead> createLead({
@@ -31,19 +36,32 @@ class _FakeCrmRepository implements CrmRepository {
       throw UnimplementedError();
 
   @override
-  Future<void> updateLeadStatus({required String leadId, required String status}) => throw UnimplementedError();
+  Future<void> updateLeadStatus({
+    required String leadId,
+    required String status,
+  }) =>
+      throw UnimplementedError();
 
   @override
   Future<List<CrmNote>> getNotes({required String leadId}) async => [];
 
   @override
-  Future<void> addNote({required String leadId, required String text}) => throw UnimplementedError();
+  Future<void> addNote({required String leadId, required String text}) =>
+      throw UnimplementedError();
 
   @override
-  Future<List<CrmActivityLogEntry>> getActivity({required String leadId, int limit = 50}) async => [];
+  Future<List<CrmActivityLogEntry>> getActivity({
+    required String leadId,
+    int limit = 50,
+  }) async =>
+      [];
 
   @override
-  Future<List<CrmBeo>> getBeos({required String venueId, int limit = 100}) async => _beos;
+  Future<List<CrmBeo>> getBeos({
+    required String venueId,
+    int limit = 100,
+  }) async =>
+      _beos;
 
   @override
   Future<CrmBeo> createBeo({
@@ -57,24 +75,42 @@ class _FakeCrmRepository implements CrmRepository {
       throw UnimplementedError();
 
   @override
-  Future<void> updateBeoStatus({required String beoId, required String status}) => throw UnimplementedError();
-
-  @override
-  Future<({String contractId, bool alreadyExisted})> convertBeoToContract({required String beoId}) =>
+  Future<void> updateBeoStatus({
+    required String beoId,
+    required String status,
+  }) =>
       throw UnimplementedError();
 
   @override
-  Future<List<CrmContract>> getContracts({required String venueId, int limit = 100}) async => [];
-
-  @override
-  Future<void> updateContractStatus({required String contractId, required String status}) =>
+  Future<({String contractId, bool alreadyExisted})> convertBeoToContract({
+    required String beoId,
+  }) =>
       throw UnimplementedError();
 
   @override
-  Future<List<CrmForecastRow>> getForecast({required String venueId}) async => [];
+  Future<List<CrmContract>> getContracts({
+    required String venueId,
+    int limit = 100,
+  }) async =>
+      [];
 
   @override
-  Future<List<CrmStaleLead>> getStaleLeads({required String venueId, int days = 5}) async => [];
+  Future<void> updateContractStatus({
+    required String contractId,
+    required String status,
+  }) =>
+      throw UnimplementedError();
+
+  @override
+  Future<List<CrmForecastRow>> getForecast({required String venueId}) async =>
+      [];
+
+  @override
+  Future<List<CrmStaleLead>> getStaleLeads({
+    required String venueId,
+    int days = 5,
+  }) async =>
+      [];
 
   @override
   Future<void> sendTemplateEmail({
@@ -94,7 +130,8 @@ void main() {
     createdAt: DateTime.now(),
   );
 
-  testWidgets('shows an empty state when the venue has no BEOs', (tester) async {
+  testWidgets('shows an empty state when the venue has no BEOs',
+      (tester) async {
     final fakeRepo = _FakeCrmRepository(beos: []);
 
     await tester.pumpWidget(

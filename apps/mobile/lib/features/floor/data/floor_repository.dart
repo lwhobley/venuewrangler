@@ -75,11 +75,14 @@ class SupabaseFloorRepository implements FloorRepository {
     required String tableId,
     required String status,
   }) async {
-    await _client.rpc('update_floor_table_status', params: {
-      'p_venue_id': venueId,
-      'p_table_id': tableId,
-      'p_status': status,
-    });
+    await _client.rpc(
+      'update_floor_table_status',
+      params: {
+        'p_venue_id': venueId,
+        'p_table_id': tableId,
+        'p_status': status,
+      },
+    );
   }
 
   @override
@@ -88,11 +91,14 @@ class SupabaseFloorRepository implements FloorRepository {
     required List<String> tableIds,
     int? partySize,
   }) async {
-    final result = await _client.rpc('merge_floor_tables', params: {
-      'p_venue_id': venueId,
-      'p_table_ids': tableIds,
-      if (partySize != null) 'p_party_size': partySize,
-    });
+    final result = await _client.rpc(
+      'merge_floor_tables',
+      params: {
+        'p_venue_id': venueId,
+        'p_table_ids': tableIds,
+        if (partySize != null) 'p_party_size': partySize,
+      },
+    );
     return result as String;
   }
 
@@ -101,10 +107,13 @@ class SupabaseFloorRepository implements FloorRepository {
     required String venueId,
     required String mergeGroupId,
   }) async {
-    await _client.rpc('split_floor_tables', params: {
-      'p_venue_id': venueId,
-      'p_merge_group_id': mergeGroupId,
-    });
+    await _client.rpc(
+      'split_floor_tables',
+      params: {
+        'p_venue_id': venueId,
+        'p_merge_group_id': mergeGroupId,
+      },
+    );
   }
 
   @override
@@ -114,11 +123,14 @@ class SupabaseFloorRepository implements FloorRepository {
     required String reservationId,
     String holdType = 'seated',
   }) async {
-    await _client.rpc('assign_tables_to_reservation', params: {
-      'p_venue_id': venueId,
-      'p_table_ids': tableIds,
-      'p_reservation_id': reservationId,
-      'p_hold_type': holdType,
-    });
+    await _client.rpc(
+      'assign_tables_to_reservation',
+      params: {
+        'p_venue_id': venueId,
+        'p_table_ids': tableIds,
+        'p_reservation_id': reservationId,
+        'p_hold_type': holdType,
+      },
+    );
   }
 }

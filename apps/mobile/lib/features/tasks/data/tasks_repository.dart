@@ -11,7 +11,11 @@ import '../domain/operational_task.dart';
 abstract interface class TasksRepository {
   Future<List<OperationalTask>> fetchTasksForVenue(String venueId);
 
-  Future<void> createTask({required String venueId, required String title, String? assignedTo});
+  Future<void> createTask({
+    required String venueId,
+    required String title,
+    String? assignedTo,
+  });
 
   Future<void> updateStatus(String taskId, TaskStatus status);
 
@@ -63,8 +67,7 @@ class SupabaseTasksRepository implements TasksRepository {
   Future<void> updateStatus(String taskId, TaskStatus status) async {
     await _client
         .from('operational_tasks')
-        .update({'status': status.toDb()})
-        .eq('id', taskId);
+        .update({'status': status.toDb()}).eq('id', taskId);
   }
 
   @override

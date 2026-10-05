@@ -7,9 +7,15 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 abstract interface class AuthRepository {
   Session? get currentSession;
 
-  Future<void> signInWithPassword({required String email, required String password});
+  Future<void> signInWithPassword({
+    required String email,
+    required String password,
+  });
 
-  Future<void> signUpWithPassword({required String email, required String password});
+  Future<void> signUpWithPassword({
+    required String email,
+    required String password,
+  });
 
   Future<void> sendPasswordResetEmail(String email);
 

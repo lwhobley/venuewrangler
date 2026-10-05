@@ -15,10 +15,16 @@ class _FakeChecklistsRepository implements ChecklistsRepository {
   final List<ChecklistTemplate> templates;
 
   @override
-  Future<List<ChecklistTemplate>> fetchTemplatesForVenue(String venueId) async => templates;
+  Future<List<ChecklistTemplate>> fetchTemplatesForVenue(
+    String venueId,
+  ) async =>
+      templates;
 
   @override
-  Future<List<ChecklistTemplateItem>> fetchItemsForTemplate(String templateId) async => const [];
+  Future<List<ChecklistTemplateItem>> fetchItemsForTemplate(
+    String templateId,
+  ) async =>
+      const [];
 
   @override
   Future<void> submitCompletion({
@@ -37,12 +43,14 @@ void main() {
     createdAt: DateTime(2026),
   );
 
-  testWidgets('shows an empty state when the venue has no checklist templates', (tester) async {
+  testWidgets('shows an empty state when the venue has no checklist templates',
+      (tester) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           activeVenueProvider.overrideWith((ref) => venue),
-          checklistsRepositoryProvider.overrideWithValue(_FakeChecklistsRepository(const [])),
+          checklistsRepositoryProvider
+              .overrideWithValue(_FakeChecklistsRepository(const [])),
         ],
         child: const MaterialApp(home: ChecklistListScreen()),
       ),
@@ -53,13 +61,18 @@ void main() {
   });
 
   testWidgets('lists checklist templates for the active venue', (tester) async {
-    const template = ChecklistTemplate(id: 'template-1', venueId: 'venue-1', title: 'Opening checklist');
+    const template = ChecklistTemplate(
+      id: 'template-1',
+      venueId: 'venue-1',
+      title: 'Opening checklist',
+    );
 
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           activeVenueProvider.overrideWith((ref) => venue),
-          checklistsRepositoryProvider.overrideWithValue(_FakeChecklistsRepository([template])),
+          checklistsRepositoryProvider
+              .overrideWithValue(_FakeChecklistsRepository([template])),
         ],
         child: const MaterialApp(home: ChecklistListScreen()),
       ),

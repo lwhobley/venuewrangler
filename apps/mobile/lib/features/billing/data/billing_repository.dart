@@ -23,8 +23,10 @@ abstract interface class BillingRepository {
       fetchDepositAccountStatus(String organizationId);
 
   /// Starts or resumes Stripe-hosted onboarding for the organization's account.
-  Future<String> createDepositAccountOnboardingUrl(String organizationId,
-      {required String country});
+  Future<String> createDepositAccountOnboardingUrl(
+    String organizationId, {
+    required String country,
+  });
 }
 
 class SupabaseBillingRepository implements BillingRepository {
@@ -73,20 +75,23 @@ class SupabaseBillingRepository implements BillingRepository {
   }
 
   @override
-  Future<String> createDepositAccountOnboardingUrl(String organizationId,
-      {required String country}) async {
+  Future<String> createDepositAccountOnboardingUrl(
+    String organizationId, {
+    required String country,
+  }) async {
     try {
       final response = await _client.functions.invoke(
         'stripe-connect-account',
         body: {
           'organization_id': organizationId,
           'action': 'onboard',
-          'country': country
+          'country': country,
         },
       );
       final url = (response.data as Map?)?['url'] as String?;
-      if (url == null)
+      if (url == null) {
         throw const UnknownError('Could not start Stripe account setup.');
+      }
       return url;
     } on FunctionException catch (error) {
       throw _mapFunctionException(error);
@@ -94,7 +99,9 @@ class SupabaseBillingRepository implements BillingRepository {
   }
 
   Future<String> _invokeForUrl(
-      String functionName, String organizationId) async {
+    String functionName,
+    String organizationId,
+  ) async {
     try {
       final response = await _client.functions.invoke(
         functionName,

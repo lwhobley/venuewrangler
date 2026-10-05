@@ -23,10 +23,14 @@ class _FakePosRepository implements PosRepository {
   bool? pushedAvailability;
 
   @override
-  Future<List<PosConnection>> getConnections({required String venueId}) async => connections;
+  Future<List<PosConnection>> getConnections({required String venueId}) async =>
+      connections;
 
   @override
-  Future<List<PosCheck>> getRecentChecks({required String venueId, int limit = 50}) async =>
+  Future<List<PosCheck>> getRecentChecks({
+    required String venueId,
+    int limit = 50,
+  }) async =>
       checks;
 
   @override
@@ -49,8 +53,10 @@ void main() {
     createdAt: DateTime.now(),
   );
 
-  testWidgets('renders empty state when no POS connections or checks exist', (tester) async {
-    final fakeRepo = _FakePosRepository(initialConnections: [], initialChecks: []);
+  testWidgets('renders empty state when no POS connections or checks exist',
+      (tester) async {
+    final fakeRepo =
+        _FakePosRepository(initialConnections: [], initialChecks: []);
 
     await tester.pumpWidget(
       ProviderScope(
@@ -65,7 +71,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('POS Management'), findsOneWidget);
-    expect(find.text('No active POS connections found for this venue.'), findsOneWidget);
+    expect(
+      find.text('No active POS connections found for this venue.'),
+      findsOneWidget,
+    );
     expect(find.text('No recent checks received from POS.'), findsOneWidget);
   });
 

@@ -45,7 +45,9 @@ class Reservation {
       source: json['source'] as String? ?? 'direct',
       status: json['status'] as String? ?? 'confirmed',
       specialRequests: json['special_requests'] as String?,
-      tags: (json['tags'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? const [],
+      tags:
+          (json['tags'] as List<dynamic>?)?.map((e) => e.toString()).toList() ??
+              const [],
       estimatedValueCents: (json['estimated_value_cents'] as num?)?.toInt(),
       depositDueCents: (json['deposit_due_cents'] as num?)?.toInt(),
       depositStatus: json['deposit_status'] as String? ?? 'none',
@@ -58,11 +60,15 @@ class Reservation {
       lastExternalEventAt: json['last_external_event_at'] != null
           ? DateTime.parse(json['last_external_event_at'] as String)
           : null,
-      seatedAt: json['seated_at'] != null ? DateTime.parse(json['seated_at'] as String) : null,
-      completedAt:
-          json['completed_at'] != null ? DateTime.parse(json['completed_at'] as String) : null,
-      cancelledAt:
-          json['cancelled_at'] != null ? DateTime.parse(json['cancelled_at'] as String) : null,
+      seatedAt: json['seated_at'] != null
+          ? DateTime.parse(json['seated_at'] as String)
+          : null,
+      completedAt: json['completed_at'] != null
+          ? DateTime.parse(json['completed_at'] as String)
+          : null,
+      cancelledAt: json['cancelled_at'] != null
+          ? DateTime.parse(json['cancelled_at'] as String)
+          : null,
       notes: json['notes'] as String?,
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
@@ -118,13 +124,16 @@ class Reservation {
       'status': status,
       if (specialRequests != null) 'special_requests': specialRequests,
       'tags': tags,
-      if (estimatedValueCents != null) 'estimated_value_cents': estimatedValueCents,
+      if (estimatedValueCents != null)
+        'estimated_value_cents': estimatedValueCents,
       if (depositDueCents != null) 'deposit_due_cents': depositDueCents,
       'deposit_status': depositStatus,
       if (depositCheckoutSessionId != null)
         'deposit_checkout_session_id': depositCheckoutSessionId,
-      if (depositPaymentIntentId != null) 'deposit_payment_intent_id': depositPaymentIntentId,
-      if (depositPaidAt != null) 'deposit_paid_at': depositPaidAt!.toIso8601String(),
+      if (depositPaymentIntentId != null)
+        'deposit_payment_intent_id': depositPaymentIntentId,
+      if (depositPaidAt != null)
+        'deposit_paid_at': depositPaidAt!.toIso8601String(),
       if (externalId != null) 'external_id': externalId,
       if (lastExternalEventAt != null)
         'last_external_event_at': lastExternalEventAt!.toIso8601String(),

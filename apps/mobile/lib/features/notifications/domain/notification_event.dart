@@ -41,7 +41,9 @@ class NotificationEvent {
       title: map['title'] as String? ?? '',
       body: map['body'] as String? ?? '',
       data: (map['data'] as Map<String, dynamic>?) ?? const {},
-      readAt: map['read_at'] != null ? DateTime.parse(map['read_at'] as String) : null,
+      readAt: map['read_at'] != null
+          ? DateTime.parse(map['read_at'] as String)
+          : null,
       createdAt: DateTime.parse(map['created_at'] as String),
     );
   }

@@ -29,7 +29,8 @@ class StaffImportResult {
 
   final List<StaffImportRow> staff;
 
-  factory StaffImportResult.fromJson(Map<String, dynamic> json) => StaffImportResult(
+  factory StaffImportResult.fromJson(Map<String, dynamic> json) =>
+      StaffImportResult(
         (json['staff'] as List<dynamic>? ?? const [])
             .map((row) => StaffImportRow.fromJson(row as Map<String, dynamic>))
             .toList(growable: false),
@@ -49,7 +50,8 @@ class InventoryLineItem {
   final String? unit;
   final num? unitCostUsd;
 
-  factory InventoryLineItem.fromJson(Map<String, dynamic> json) => InventoryLineItem(
+  factory InventoryLineItem.fromJson(Map<String, dynamic> json) =>
+      InventoryLineItem(
         name: json['name'] as String,
         quantity: json['quantity'] as num?,
         unit: json['unit'] as String?,
@@ -62,9 +64,12 @@ class InventoryParseResult {
 
   final List<InventoryLineItem> items;
 
-  factory InventoryParseResult.fromJson(Map<String, dynamic> json) => InventoryParseResult(
+  factory InventoryParseResult.fromJson(Map<String, dynamic> json) =>
+      InventoryParseResult(
         (json['items'] as List<dynamic>? ?? const [])
-            .map((row) => InventoryLineItem.fromJson(row as Map<String, dynamic>))
+            .map(
+              (row) => InventoryLineItem.fromJson(row as Map<String, dynamic>),
+            )
             .toList(growable: false),
       );
 }
@@ -84,7 +89,8 @@ class ShiftSuggestion {
   final String? endTime;
   final String reason;
 
-  factory ShiftSuggestion.fromJson(Map<String, dynamic> json) => ShiftSuggestion(
+  factory ShiftSuggestion.fromJson(Map<String, dynamic> json) =>
+      ShiftSuggestion(
         staffId: json['staff_id'] as String,
         shiftId: json['shift_id'] as String?,
         startTime: json['start_time'] as String?,
@@ -112,7 +118,8 @@ class WranglerAskResult {
   final String answer;
   final bool needsMoreInfo;
 
-  factory WranglerAskResult.fromJson(Map<String, dynamic> json) => WranglerAskResult(
+  factory WranglerAskResult.fromJson(Map<String, dynamic> json) =>
+      WranglerAskResult(
         answer: json['answer'] as String,
         needsMoreInfo: json['needs_more_info'] as bool? ?? false,
       );
@@ -129,7 +136,8 @@ class ShiftInsightItem {
   final String title;
   final String body;
 
-  factory ShiftInsightItem.fromJson(Map<String, dynamic> json) => ShiftInsightItem(
+  factory ShiftInsightItem.fromJson(Map<String, dynamic> json) =>
+      ShiftInsightItem(
         kind: json['kind'] as String? ?? 'shift_summary',
         title: json['title'] as String? ?? 'Shift Insight',
         body: json['body'] as String? ?? '',
@@ -141,9 +149,12 @@ class ShiftInsightsResult {
 
   final List<ShiftInsightItem> insights;
 
-  factory ShiftInsightsResult.fromJson(Map<String, dynamic> json) => ShiftInsightsResult(
+  factory ShiftInsightsResult.fromJson(Map<String, dynamic> json) =>
+      ShiftInsightsResult(
         (json['insights'] as List<dynamic>? ?? const [])
-            .map((row) => ShiftInsightItem.fromJson(row as Map<String, dynamic>))
+            .map(
+              (row) => ShiftInsightItem.fromJson(row as Map<String, dynamic>),
+            )
             .toList(growable: false),
       );
 }

@@ -75,7 +75,8 @@ class ShiftInsight {
         organizationId: json['organization_id'] as String,
         venueId: json['venue_id'] as String,
         shiftId: json['shift_id'] as String?,
-        kind: ShiftInsightKind.fromDb(json['kind'] as String? ?? 'shift_summary'),
+        kind:
+            ShiftInsightKind.fromDb(json['kind'] as String? ?? 'shift_summary'),
         title: json['title'] as String,
         body: json['body'] as String,
         createdBy: json['created_by'] as String?,

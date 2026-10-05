@@ -5,12 +5,14 @@ import '../data/guests_reservations_repository.dart';
 import '../domain/guest.dart';
 import '../domain/reservation.dart';
 
-final guestsReservationsRepositoryProvider = Provider<GuestsReservationsRepository>((ref) {
+final guestsReservationsRepositoryProvider =
+    Provider<GuestsReservationsRepository>((ref) {
   final client = ref.watch(supabaseClientProvider);
   return SupabaseGuestsReservationsRepository(client);
 });
 
-final reservationsListProvider = FutureProvider.autoDispose<List<Reservation>>((ref) async {
+final reservationsListProvider =
+    FutureProvider.autoDispose<List<Reservation>>((ref) async {
   final activeVenue = ref.watch(activeVenueProvider);
   if (activeVenue == null) return [];
 

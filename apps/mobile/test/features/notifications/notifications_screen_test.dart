@@ -23,13 +23,15 @@ class _FakeNotificationsRepository implements NotificationsRepository {
     required String venueId,
     required String token,
     required String platform,
-  }) async => 'token-uuid';
+  }) async =>
+      'token-uuid';
 
   @override
   Future<List<NotificationEvent>> getNotifications({
     required String venueId,
     int limit = 50,
-  }) async => notifications;
+  }) async =>
+      notifications;
 
   @override
   Future<void> markAsRead({required String notificationId}) async {
@@ -85,7 +87,8 @@ void main() {
     createdAt: DateTime.now(),
   );
 
-  testWidgets('renders empty notification state when list is empty', (tester) async {
+  testWidgets('renders empty notification state when list is empty',
+      (tester) async {
     final fakeRepo = _FakeNotificationsRepository(initial: []);
 
     await tester.pumpWidget(
@@ -104,7 +107,8 @@ void main() {
     expect(find.text('No notifications yet'), findsOneWidget);
   });
 
-  testWidgets('renders notifications feed and marks item as read on tap', (tester) async {
+  testWidgets('renders notifications feed and marks item as read on tap',
+      (tester) async {
     final fakeRepo = _FakeNotificationsRepository(
       initial: [
         NotificationEvent(
@@ -143,7 +147,9 @@ void main() {
     expect(fakeRepo.lastReadId, 'n-1');
   });
 
-  testWidgets('tapping a notification with a mapped kind navigates to its route', (tester) async {
+  testWidgets(
+      'tapping a notification with a mapped kind navigates to its route',
+      (tester) async {
     final fakeRepo = _FakeNotificationsRepository(
       initial: [
         NotificationEvent(
@@ -163,8 +169,14 @@ void main() {
     final router = GoRouter(
       initialLocation: '/notifications',
       routes: [
-        GoRoute(path: '/notifications', builder: (context, state) => const NotificationsScreen()),
-        GoRoute(path: '/staff-requests', builder: (context, state) => const Text('Staff Requests Page')),
+        GoRoute(
+          path: '/notifications',
+          builder: (context, state) => const NotificationsScreen(),
+        ),
+        GoRoute(
+          path: '/staff-requests',
+          builder: (context, state) => const Text('Staff Requests Page'),
+        ),
       ],
     );
 

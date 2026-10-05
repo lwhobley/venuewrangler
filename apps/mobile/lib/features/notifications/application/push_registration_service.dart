@@ -26,7 +26,8 @@ class PushRegistrationService {
     bool Function()? isAndroid,
     FirebaseMessaging? firebaseMessaging,
   })  : _repository = repository,
-        _iosChannel = iosChannel ?? const MethodChannel('com.venuewrangler.app/push_notifications'),
+        _iosChannel = iosChannel ??
+            const MethodChannel('com.venuewrangler.app/push_notifications'),
         _isIOS = isIOS ?? (() => Platform.isIOS),
         _isAndroid = isAndroid ?? (() => Platform.isAndroid),
         _firebaseMessagingOverride = firebaseMessaging;
@@ -37,7 +38,8 @@ class PushRegistrationService {
   final bool Function() _isAndroid;
   final FirebaseMessaging? _firebaseMessagingOverride;
 
-  FirebaseMessaging get _firebaseMessaging => _firebaseMessagingOverride ?? FirebaseMessaging.instance;
+  FirebaseMessaging get _firebaseMessaging =>
+      _firebaseMessagingOverride ?? FirebaseMessaging.instance;
 
   /// Requests permission, obtains a token, and registers it for [venueId]. Returns `true` only
   /// if a token was actually sent to the server.
@@ -58,9 +60,14 @@ class PushRegistrationService {
 
   Future<bool> _registerIOS(String venueId) async {
     try {
-      final token = await _iosChannel.invokeMethod<String>('requestPermissionAndRegister');
+      final token = await _iosChannel
+          .invokeMethod<String>('requestPermissionAndRegister');
       if (token == null || token.isEmpty) return false;
-      await _repository.registerPushToken(venueId: venueId, token: token, platform: 'ios');
+      await _repository.registerPushToken(
+        venueId: venueId,
+        token: token,
+        platform: 'ios',
+      );
       return true;
     } on PlatformException {
       return false;
@@ -71,14 +78,19 @@ class PushRegistrationService {
 
   Future<bool> _registerAndroid(String venueId) async {
     final settings = await _firebaseMessaging.requestPermission();
-    final authorized = settings.authorizationStatus == AuthorizationStatus.authorized ||
-        settings.authorizationStatus == AuthorizationStatus.provisional;
+    final authorized =
+        settings.authorizationStatus == AuthorizationStatus.authorized ||
+            settings.authorizationStatus == AuthorizationStatus.provisional;
     if (!authorized) return false;
 
     final token = await _firebaseMessaging.getToken();
     if (token == null || token.isEmpty) return false;
 
-    await _repository.registerPushToken(venueId: venueId, token: token, platform: 'android');
+    await _repository.registerPushToken(
+      venueId: venueId,
+      token: token,
+      platform: 'android',
+    );
     return true;
   }
 }

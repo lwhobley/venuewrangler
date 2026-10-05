@@ -51,7 +51,8 @@ class NotificationsScreen extends ConsumerWidget {
           }
 
           return RefreshIndicator(
-            onRefresh: () async => ref.refresh(notificationsFeedProvider.future),
+            onRefresh: () async =>
+                ref.refresh(notificationsFeedProvider.future),
             child: ListView.separated(
               itemCount: notifications.length,
               separatorBuilder: (_, __) => const Divider(height: 1),
@@ -135,7 +136,10 @@ class _NotificationListTile extends ConsumerWidget {
           const SizedBox(height: 4),
           Text(
             _formatDate(item.createdAt),
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey),
+            style: Theme.of(context)
+                .textTheme
+                .bodySmall
+                ?.copyWith(color: Colors.grey),
           ),
         ],
       ),
@@ -151,7 +155,9 @@ class _NotificationListTile extends ConsumerWidget {
             ),
       onTap: () async {
         if (!item.isRead) {
-          await ref.read(notificationsRepositoryProvider).markAsRead(notificationId: item.id);
+          await ref
+              .read(notificationsRepositoryProvider)
+              .markAsRead(notificationId: item.id);
           ref.invalidate(notificationsFeedProvider);
         }
         final route = routeForNotificationKind(item.kind);

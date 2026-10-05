@@ -8,13 +8,17 @@ import '../domain/notification_event.dart';
 import 'notification_tap_service.dart';
 import 'push_registration_service.dart';
 
-final notificationsRepositoryProvider = Provider<NotificationsRepository>((ref) {
+final notificationsRepositoryProvider =
+    Provider<NotificationsRepository>((ref) {
   final client = ref.watch(supabaseClientProvider);
   return SupabaseNotificationsRepository(client);
 });
 
-final pushRegistrationServiceProvider = Provider<PushRegistrationService>((ref) {
-  return PushRegistrationService(repository: ref.watch(notificationsRepositoryProvider));
+final pushRegistrationServiceProvider =
+    Provider<PushRegistrationService>((ref) {
+  return PushRegistrationService(
+    repository: ref.watch(notificationsRepositoryProvider),
+  );
 });
 
 /// Stateless bridge to the tapped-notification payload — see its own doc comment. Routing the
@@ -35,14 +39,19 @@ final notificationTapServiceProvider = Provider<NotificationTapService>((ref) {
 /// here has no user-visible consequence beyond that venue not receiving push notifications
 /// until the next successful registration attempt (e.g. a later app launch).
 final pushRegistrationTriggerProvider = Provider<void>((ref) {
-  ref.listen<Venue?>(activeVenueProvider, (previous, next) {
-    if (next == null) return;
-    // ignore: unawaited_futures
-    ref.read(pushRegistrationServiceProvider).registerForVenue(next.id);
-  }, fireImmediately: true);
+  ref.listen<Venue?>(
+    activeVenueProvider,
+    (previous, next) {
+      if (next == null) return;
+      // ignore: unawaited_futures
+      ref.read(pushRegistrationServiceProvider).registerForVenue(next.id);
+    },
+    fireImmediately: true,
+  );
 });
 
-final notificationsFeedProvider = FutureProvider.autoDispose<List<NotificationEvent>>((ref) async {
+final notificationsFeedProvider =
+    FutureProvider.autoDispose<List<NotificationEvent>>((ref) async {
   final currentVenue = ref.watch(activeVenueProvider);
   if (currentVenue == null) return [];
 

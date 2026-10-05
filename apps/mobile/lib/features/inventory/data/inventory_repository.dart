@@ -56,7 +56,9 @@ class SupabaseInventoryRepository implements InventoryRepository {
 
   @override
   Future<void> updateQuantity(String itemId, num quantity) async {
-    await _client.from('inventory_items').update({'quantity': quantity}).eq('id', itemId);
+    await _client
+        .from('inventory_items')
+        .update({'quantity': quantity}).eq('id', itemId);
   }
 
   @override

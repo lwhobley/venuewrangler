@@ -21,7 +21,9 @@ class CrmContract {
         beoId: json['beo_id'] as String?,
         contractNumber: json['contract_number'] as String,
         eventName: json['event_name'] as String?,
-        eventDate: json['event_date'] != null ? DateTime.parse(json['event_date'] as String) : null,
+        eventDate: json['event_date'] != null
+            ? DateTime.parse(json['event_date'] as String)
+            : null,
         guestCount: json['guest_count'] as int?,
         venueSpace: json['venue_space'] as String?,
         status: json['status'] as String,
@@ -43,7 +45,14 @@ class CrmContract {
   final DateTime updatedAt;
 
   static const statuses = [
-    'draft', 'sent', 'viewed', 'partially_signed', 'fully_signed', 'expired', 'cancelled', 'disputed',
+    'draft',
+    'sent',
+    'viewed',
+    'partially_signed',
+    'fully_signed',
+    'expired',
+    'cancelled',
+    'disputed',
   ];
 
   @override

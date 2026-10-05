@@ -57,7 +57,8 @@ class OperationalTask {
 
   bool get isCompleted => status == TaskStatus.completed;
 
-  factory OperationalTask.fromJson(Map<String, dynamic> json) => OperationalTask(
+  factory OperationalTask.fromJson(Map<String, dynamic> json) =>
+      OperationalTask(
         id: json['id'] as String,
         venueId: json['venue_id'] as String,
         organizationId: json['organization_id'] as String,
@@ -65,7 +66,9 @@ class OperationalTask {
         description: json['description'] as String?,
         status: TaskStatus.fromDb(json['status'] as String),
         assignedTo: json['assigned_to'] as String?,
-        dueAt: json['due_at'] == null ? null : DateTime.parse(json['due_at'] as String),
+        dueAt: json['due_at'] == null
+            ? null
+            : DateTime.parse(json['due_at'] as String),
         completedAt: json['completed_at'] == null
             ? null
             : DateTime.parse(json['completed_at'] as String),

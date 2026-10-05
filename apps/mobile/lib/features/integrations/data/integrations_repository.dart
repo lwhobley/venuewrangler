@@ -22,7 +22,9 @@ class SupabaseIntegrationsRepository implements IntegrationsRepository {
   final SupabaseClient _client;
 
   @override
-  Future<List<PayrollConnection>> fetchConnectionsForVenue(String venueId) async {
+  Future<List<PayrollConnection>> fetchConnectionsForVenue(
+    String venueId,
+  ) async {
     final rows = await _client
         .from('payroll_connections')
         .select(
@@ -34,7 +36,10 @@ class SupabaseIntegrationsRepository implements IntegrationsRepository {
   }
 
   @override
-  Future<String> createConnectUrl(PayrollProvider provider, String venueId) async {
+  Future<String> createConnectUrl(
+    PayrollProvider provider,
+    String venueId,
+  ) async {
     try {
       final response = await _client.functions.invoke(
         '${provider.functionSlug}/connect',
@@ -42,7 +47,9 @@ class SupabaseIntegrationsRepository implements IntegrationsRepository {
       );
       final url = (response.data as Map?)?['url'] as String?;
       if (url == null) {
-        throw const UnknownError('Could not start the connection. Please try again.');
+        throw const UnknownError(
+          'Could not start the connection. Please try again.',
+        );
       }
       return url;
     } on FunctionException catch (error) {
@@ -70,7 +77,8 @@ class SupabaseIntegrationsRepository implements IntegrationsRepository {
       'not_a_venue_manager' => const PermissionDeniedError(
           'Only a venue manager or organization admin can manage integrations.',
         ),
-      'invalid_or_expired_session' => const AuthError('Your session has expired. Please sign in again.'),
+      'invalid_or_expired_session' =>
+        const AuthError('Your session has expired. Please sign in again.'),
       _ => error.status >= 500
           ? const UnknownError('This integration is temporarily unavailable.')
           : const UnknownError('Something went wrong. Please try again.'),

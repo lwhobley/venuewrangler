@@ -26,4 +26,3 @@ final currentUserIdProvider = Provider<String?>((ref) {
     orElse: () => ref.read(authRepositoryProvider).currentSession?.user.id,
   );
 });
-

@@ -58,7 +58,8 @@ class SupabaseStaffRequestsRepository implements StaffRequestsRepository {
       'title': title,
       'details': details,
       if (requestedForDate != null) 'requested_for_date': requestedForDate,
-      if (requestedRangeStart != null) 'requested_range_start': requestedRangeStart,
+      if (requestedRangeStart != null)
+        'requested_range_start': requestedRangeStart,
       if (requestedRangeEnd != null) 'requested_range_end': requestedRangeEnd,
       if (requestedShiftId != null) 'requested_shift_id': requestedShiftId,
     });
@@ -68,8 +69,7 @@ class SupabaseStaffRequestsRepository implements StaffRequestsRepository {
   Future<void> cancelRequest(String requestId) async {
     await _client
         .from('staff_requests')
-        .update({'status': 'cancelled'})
-        .eq('id', requestId);
+        .update({'status': 'cancelled'}).eq('id', requestId);
   }
 
   @override

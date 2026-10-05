@@ -43,7 +43,10 @@ class PosManagementScreen extends ConsumerWidget {
                     children: [
                       const Text(
                         'Outbound POS Controls',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                       ElevatedButton.icon(
                         icon: const Icon(Icons.block, size: 18),
@@ -77,12 +80,15 @@ class PosManagementScreen extends ConsumerWidget {
                 return const Card(
                   child: Padding(
                     padding: EdgeInsets.all(16.0),
-                    child: Text('No active POS connections found for this venue.'),
+                    child:
+                        Text('No active POS connections found for this venue.'),
                   ),
                 );
               }
               return Column(
-                children: connections.map((c) => _ConnectionTile(connection: c)).toList(),
+                children: connections
+                    .map((c) => _ConnectionTile(connection: c))
+                    .toList(),
               );
             },
             loading: () => const Center(child: CircularProgressIndicator()),
@@ -107,7 +113,8 @@ class PosManagementScreen extends ConsumerWidget {
                 );
               }
               return Column(
-                children: checks.map((chk) => _CheckListTile(check: chk)).toList(),
+                children:
+                    checks.map((chk) => _CheckListTile(check: chk)).toList(),
               );
             },
             loading: () => const Center(child: CircularProgressIndicator()),
@@ -118,7 +125,11 @@ class PosManagementScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _show86Dialog(BuildContext context, WidgetRef ref, String venueId) async {
+  Future<void> _show86Dialog(
+    BuildContext context,
+    WidgetRef ref,
+    String venueId,
+  ) async {
     final itemCtrl = TextEditingController();
     bool isAvailable = false;
 
@@ -140,7 +151,9 @@ class PosManagementScreen extends ConsumerWidget {
               const SizedBox(height: 16),
               SwitchListTile(
                 title: const Text('Available to Order'),
-                subtitle: Text(isAvailable ? 'Item in stock' : 'Item 86\'d (Out of stock)'),
+                subtitle: Text(
+                  isAvailable ? 'Item in stock' : 'Item 86\'d (Out of stock)',
+                ),
                 value: isAvailable,
                 onChanged: (val) => setState(() => isAvailable = val),
               ),
@@ -165,7 +178,9 @@ class PosManagementScreen extends ConsumerWidget {
                       );
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Outbound 86 command sent for $item')),
+                      SnackBar(
+                        content: Text('Outbound 86 command sent for $item'),
+                      ),
                     );
                   }
                 } catch (e) {

@@ -88,7 +88,9 @@ class SupabaseDocumentsRepository implements DocumentsRepository {
       final data = response.data;
       final id = (data is Map ? data['id'] : null) as String?;
       if (id == null) {
-        throw const UnknownError('The document could not be uploaded. Please try again.');
+        throw const UnknownError(
+          'The document could not be uploaded. Please try again.',
+        );
       }
       return id;
     } on FunctionException catch (error) {
@@ -126,9 +128,13 @@ class SupabaseDocumentsRepository implements DocumentsRepository {
   @override
   Future<String> getSignedUrl({required String storagePath}) async {
     try {
-      return await _client.storage.from('staff-documents').createSignedUrl(storagePath, 120);
+      return await _client.storage
+          .from('staff-documents')
+          .createSignedUrl(storagePath, 120);
     } on StorageException catch (error) {
-      if (error.statusCode == '404') throw const NotFoundError('That document is no longer available.');
+      if (error.statusCode == '404') {
+        throw const NotFoundError('That document is no longer available.');
+      }
       throw const NetworkError();
     }
   }
@@ -138,13 +144,17 @@ class SupabaseDocumentsRepository implements DocumentsRepository {
     final rawMessage = details is Map ? details['error'] as String? : null;
 
     if (error.status == 403) {
-      return const PermissionDeniedError('Only venue managers can upload documents.');
+      return const PermissionDeniedError(
+        'Only venue managers can upload documents.',
+      );
     }
     if (error.status == 503) {
       // documents-upload returns 503 on either a Storage upload failure or the ClamAV scan
       // being unreachable/unconfigured (fail-closed) — both are "try again shortly", not a
       // validation error, from the user's perspective.
-      return const UnknownError('Document storage is temporarily unavailable. Please try again shortly.');
+      return const UnknownError(
+        'Document storage is temporarily unavailable. Please try again shortly.',
+      );
     }
     if (error.status == 400 && rawMessage != null) {
       // documents-upload's 400 bodies are already user-facing validation messages (e.g.
@@ -155,6 +165,8 @@ class SupabaseDocumentsRepository implements DocumentsRepository {
     if (rawMessage == 'invalid_or_expired_session') {
       return const AuthError('Your session has expired. Please sign in again.');
     }
-    return const UnknownError('The document could not be uploaded. Please try again.');
+    return const UnknownError(
+      'The document could not be uploaded. Please try again.',
+    );
   }
 }

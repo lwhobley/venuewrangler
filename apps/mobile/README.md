@@ -17,7 +17,7 @@ flutter create --platforms=android,ios,web --org com.venuewrangler --project-nam
 
 run from this directory, which fills in those three folders without touching anything under
 `lib/`, `test/`, or `pubspec.yaml`. After that, `flutter pub get`, `dart run build_runner build`
-(for the `freezed`/`json_serializable` codegen once those models exist), and the three
+(`freezed`/`build_runner` were removed — no models use codegen; re-add them if that changes), and the three
 flavored entrypoints below should run normally.
 
 ## Flavors

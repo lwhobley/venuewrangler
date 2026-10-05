@@ -25,7 +25,9 @@ class Guest {
       email: json['email'] as String?,
       notes: json['notes'] as String?,
       dietaryNotes: json['dietary_notes'] as String?,
-      tags: (json['tags'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? const [],
+      tags:
+          (json['tags'] as List<dynamic>?)?.map((e) => e.toString()).toList() ??
+              const [],
       guestTier: json['guest_tier'] as String? ?? 'standard',
       lifecycleStage: json['lifecycle_stage'] as String? ?? 'lead',
       createdAt: DateTime.parse(json['created_at'] as String),

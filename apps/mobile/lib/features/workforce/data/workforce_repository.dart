@@ -60,6 +60,8 @@ class SupabaseWorkforceRepository implements WorkforceRepository {
 
   @override
   Future<void> revokeInvite(String inviteId) async {
-    await _client.from('invites').update({'status': 'revoked'}).eq('id', inviteId);
+    await _client
+        .from('invites')
+        .update({'status': 'revoked'}).eq('id', inviteId);
   }
 }

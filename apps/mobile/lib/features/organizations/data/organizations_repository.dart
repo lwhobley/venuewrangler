@@ -19,10 +19,7 @@ class SupabaseOrganizationsRepository implements OrganizationsRepository {
 
   @override
   Future<List<Organization>> fetchMyOrganizations() async {
-    final rows = await _client
-        .from('organizations')
-        .select()
-        .order('name');
+    final rows = await _client.from('organizations').select().order('name');
 
     return rows.map(Organization.fromJson).toList(growable: false);
   }

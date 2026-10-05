@@ -33,7 +33,8 @@ class AppAttestService {
     bool Function()? isIOS,
   })  : _client = client,
         _storage = storage,
-        _channel = channel ?? const MethodChannel('com.venuewrangler.app/app_attest'),
+        _channel =
+            channel ?? const MethodChannel('com.venuewrangler.app/app_attest'),
         _isIOS = isIOS ?? (() => Platform.isIOS);
 
   final SupabaseClient _client;
@@ -74,7 +75,8 @@ class AppAttestService {
         'device-attestation',
         body: {'action': 'challenge', 'platform': 'ios', 'device_id': deviceId},
       );
-      final challengeToken = (challengeResponse.data as Map?)?['challenge'] as String?;
+      final challengeToken =
+          (challengeResponse.data as Map?)?['challenge'] as String?;
       if (challengeToken == null) return false;
 
       final nonceBytes = _extractNonceBytes(challengeToken);
@@ -85,7 +87,8 @@ class AppAttestService {
 
       final Uint8List? attestationObject;
       try {
-        attestationObject = await _channel.invokeMethod<Uint8List>('attestKey', {
+        attestationObject =
+            await _channel.invokeMethod<Uint8List>('attestKey', {
           'keyId': keyId,
           'nonceBytes': nonceBytes,
         });

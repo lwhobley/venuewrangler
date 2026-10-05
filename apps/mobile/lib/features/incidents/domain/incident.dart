@@ -70,8 +70,9 @@ class Incident {
         severity: IncidentSeverity.fromDb(json['severity'] as String),
         status: IncidentStatus.fromDb(json['status'] as String),
         reportedBy: json['reported_by'] as String?,
-        resolvedAt:
-            json['resolved_at'] == null ? null : DateTime.parse(json['resolved_at'] as String),
+        resolvedAt: json['resolved_at'] == null
+            ? null
+            : DateTime.parse(json['resolved_at'] as String),
         createdAt: DateTime.parse(json['created_at'] as String),
       );
 

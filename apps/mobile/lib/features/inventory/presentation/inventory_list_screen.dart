@@ -27,7 +27,8 @@ class InventoryListScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: Text('Inventory — ${venue.name}')),
       body: RefreshIndicator(
-        onRefresh: () async => ref.invalidate(inventoryForVenueProvider(venue.id)),
+        onRefresh: () async =>
+            ref.invalidate(inventoryForVenueProvider(venue.id)),
         child: itemsAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (_, __) => Center(
@@ -37,7 +38,8 @@ class InventoryListScreen extends ConsumerWidget {
                 const Text('Could not load inventory.'),
                 const SizedBox(height: 12),
                 OutlinedButton(
-                  onPressed: () => ref.invalidate(inventoryForVenueProvider(venue.id)),
+                  onPressed: () =>
+                      ref.invalidate(inventoryForVenueProvider(venue.id)),
                   child: const Text('Retry'),
                 ),
               ],
@@ -115,18 +117,21 @@ class InventoryListScreen extends ConsumerWidget {
             const SizedBox(height: 12),
             TextField(
               controller: quantityController,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
               decoration: const InputDecoration(labelText: 'Quantity'),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: unitController,
-              decoration: const InputDecoration(labelText: 'Unit (e.g. bottle, case)'),
+              decoration:
+                  const InputDecoration(labelText: 'Unit (e.g. bottle, case)'),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: unitCostController,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
               decoration: const InputDecoration(labelText: 'Unit cost (USD)'),
             ),
           ],
@@ -144,14 +149,20 @@ class InventoryListScreen extends ConsumerWidget {
       ),
     );
 
-    if (confirmed != true || nameController.text.trim().isEmpty || !context.mounted) return;
+    if (confirmed != true ||
+        nameController.text.trim().isEmpty ||
+        !context.mounted) {
+      return;
+    }
 
     try {
       await ref.read(inventoryRepositoryProvider).createItem(
             venueId: venueId,
             name: nameController.text.trim(),
             quantity: num.tryParse(quantityController.text.trim()),
-            unit: unitController.text.trim().isEmpty ? null : unitController.text.trim(),
+            unit: unitController.text.trim().isEmpty
+                ? null
+                : unitController.text.trim(),
             unitCostUsd: num.tryParse(unitCostController.text.trim()),
           );
       ref.invalidate(inventoryForVenueProvider(venueId));
@@ -160,11 +171,16 @@ class InventoryListScreen extends ConsumerWidget {
       final message = error.code == '42501'
           ? "You don't have permission to add inventory here."
           : 'Something went wrong. Please try again.';
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
     }
   }
 
-  Future<void> _showParseDialog(BuildContext context, WidgetRef ref, String venueId) async {
+  Future<void> _showParseDialog(
+    BuildContext context,
+    WidgetRef ref,
+    String venueId,
+  ) async {
     final textController = TextEditingController();
 
     final pastedText = await showDialog<String>(
@@ -186,7 +202,8 @@ class InventoryListScreen extends ConsumerWidget {
             child: const Text('Cancel'),
           ),
           FilledButton(
-            onPressed: () => Navigator.of(context).pop(textController.text.trim()),
+            onPressed: () =>
+                Navigator.of(context).pop(textController.text.trim()),
             child: const Text('Parse'),
           ),
         ],
@@ -202,14 +219,17 @@ class InventoryListScreen extends ConsumerWidget {
           .parseInventory(venueId: venueId, pastedText: pastedText);
     } on AppError catch (error) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message)));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error.message)));
       return;
     }
 
     if (!context.mounted) return;
     if (result.items.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Nothing could be parsed from that text.')),
+        const SnackBar(
+          content: Text('Nothing could be parsed from that text.'),
+        ),
       );
       return;
     }
@@ -226,10 +246,14 @@ class InventoryListScreen extends ConsumerWidget {
               for (final line in result.items)
                 ListTile(
                   title: Text(line.name),
-                  subtitle: Text([
-                    if (line.quantity != null) '${line.quantity} ${line.unit ?? ''}'.trim(),
-                    if (line.unitCostUsd != null) '\$${line.unitCostUsd}/unit',
-                  ].join(' · ')),
+                  subtitle: Text(
+                    [
+                      if (line.quantity != null)
+                        '${line.quantity} ${line.unit ?? ''}'.trim(),
+                      if (line.unitCostUsd != null)
+                        '\$${line.unitCostUsd}/unit',
+                    ].join(' · '),
+                  ),
                   trailing: TextButton(
                     onPressed: () {
                       Navigator.of(context).pop();
@@ -270,10 +294,13 @@ class _InventoryTile extends ConsumerWidget {
     return ListTile(
       leading: const Icon(Icons.inventory_2_outlined),
       title: Text(item.name),
-      subtitle: Text([
-        if (item.quantity != null) '${item.quantity} ${item.unit ?? ''}'.trim(),
-        if (item.unitCostUsd != null) '\$${item.unitCostUsd}/unit',
-      ].join(' · ')),
+      subtitle: Text(
+        [
+          if (item.quantity != null)
+            '${item.quantity} ${item.unit ?? ''}'.trim(),
+          if (item.unitCostUsd != null) '\$${item.unitCostUsd}/unit',
+        ].join(' · '),
+      ),
       trailing: IconButton(
         icon: const Icon(Icons.delete_outline),
         onPressed: () => _delete(context, ref),
@@ -290,7 +317,8 @@ class _InventoryTile extends ConsumerWidget {
       final message = error.code == '42501'
           ? "You don't have permission to delete this item."
           : 'Something went wrong. Please try again.';
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
     }
   }
 }

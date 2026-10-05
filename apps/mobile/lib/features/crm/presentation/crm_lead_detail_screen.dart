@@ -22,7 +22,8 @@ class CrmLeadDetailScreen extends ConsumerWidget {
       child: Scaffold(
         appBar: AppBar(
           title: Text(lead.fullName),
-          bottom: const TabBar(tabs: [Tab(text: 'Notes'), Tab(text: 'Activity')]),
+          bottom:
+              const TabBar(tabs: [Tab(text: 'Notes'), Tab(text: 'Activity')]),
         ),
         floatingActionButton: FloatingActionButton(
           onPressed: () => _showAddNoteDialog(context, ref),
@@ -35,24 +36,30 @@ class CrmLeadDetailScreen extends ConsumerWidget {
               child: TabBarView(
                 children: [
                   notesAsync.when(
-                    loading: () => const Center(child: CircularProgressIndicator()),
-                    error: (_, __) => const Center(child: Text('Could not load notes.')),
+                    loading: () =>
+                        const Center(child: CircularProgressIndicator()),
+                    error: (_, __) =>
+                        const Center(child: Text('Could not load notes.')),
                     data: (notes) => notes.isEmpty
                         ? const Center(child: Text('No notes yet.'))
                         : ListView(
                             children: [
                               for (final note in notes)
                                 ListTile(
-                                  leading: const Icon(Icons.sticky_note_2_outlined),
+                                  leading:
+                                      const Icon(Icons.sticky_note_2_outlined),
                                   title: Text(note.text),
-                                  subtitle: Text(_formatDateTime(note.createdAt)),
+                                  subtitle:
+                                      Text(_formatDateTime(note.createdAt)),
                                 ),
                             ],
                           ),
                   ),
                   activityAsync.when(
-                    loading: () => const Center(child: CircularProgressIndicator()),
-                    error: (_, __) => const Center(child: Text('Could not load activity.')),
+                    loading: () =>
+                        const Center(child: CircularProgressIndicator()),
+                    error: (_, __) =>
+                        const Center(child: Text('Could not load activity.')),
                     data: (activity) => activity.isEmpty
                         ? const Center(child: Text('No activity recorded yet.'))
                         : ListView(
@@ -62,8 +69,10 @@ class CrmLeadDetailScreen extends ConsumerWidget {
                                   leading: Icon(_iconForKind(entry.kind)),
                                   title: Text(_labelForKind(entry.kind)),
                                   subtitle: Text(
-                                    [if (entry.detail != null) entry.detail!, _formatDateTime(entry.createdAt)]
-                                        .join(' · '),
+                                    [
+                                      if (entry.detail != null) entry.detail!,
+                                      _formatDateTime(entry.createdAt),
+                                    ].join(' · '),
                                   ),
                                 ),
                             ],
@@ -104,9 +113,13 @@ class CrmLeadDetailScreen extends ConsumerWidget {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Add note'),
-        content: TextField(controller: controller, autofocus: true, maxLines: 4),
+        content:
+            TextField(controller: controller, autofocus: true, maxLines: 4),
         actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(controller.text.trim()),
             child: const Text('Add'),
@@ -118,13 +131,17 @@ class CrmLeadDetailScreen extends ConsumerWidget {
     if (text == null || text.isEmpty || !context.mounted) return;
 
     try {
-      await ref.read(crmRepositoryProvider).addNote(leadId: lead.id, text: text);
+      await ref
+          .read(crmRepositoryProvider)
+          .addNote(leadId: lead.id, text: text);
       ref.invalidate(crmNotesProvider(lead.id));
       ref.invalidate(crmActivityProvider(lead.id));
     } catch (_) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not add note. Please try again.')),
+          const SnackBar(
+            content: Text('Could not add note. Please try again.'),
+          ),
         );
       }
     }
@@ -166,13 +183,17 @@ class _LeadSummaryCard extends ConsumerWidget {
                   onChanged: (value) async {
                     if (value == null || value == lead.status) return;
                     try {
-                      await ref.read(crmRepositoryProvider).updateLeadStatus(leadId: lead.id, status: value);
+                      await ref
+                          .read(crmRepositoryProvider)
+                          .updateLeadStatus(leadId: lead.id, status: value);
                       ref.invalidate(crmLeadsProvider(lead.venueId));
                       ref.invalidate(crmActivityProvider(lead.id));
                     } catch (_) {
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Could not update status.')),
+                          const SnackBar(
+                            content: Text('Could not update status.'),
+                          ),
                         );
                       }
                     }
@@ -183,7 +204,9 @@ class _LeadSummaryCard extends ConsumerWidget {
             if (lead.estimatedValueCents != null)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
-                child: Text('Estimated value: \$${(lead.estimatedValueCents! / 100).toStringAsFixed(2)}'),
+                child: Text(
+                  'Estimated value: \$${(lead.estimatedValueCents! / 100).toStringAsFixed(2)}',
+                ),
               ),
           ],
         ),

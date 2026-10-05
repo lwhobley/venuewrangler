@@ -35,7 +35,9 @@ class PosCheck {
       guestName: json['guest_name'] as String?,
       guestCount: (json['guest_count'] as num?)?.toInt() ?? 1,
       openedAt: DateTime.parse(json['opened_at'] as String),
-      closedAt: json['closed_at'] != null ? DateTime.parse(json['closed_at'] as String) : null,
+      closedAt: json['closed_at'] != null
+          ? DateTime.parse(json['closed_at'] as String)
+          : null,
       subtotalCents: (json['subtotal_cents'] as num?)?.toInt() ?? 0,
       taxCents: (json['tax_cents'] as num?)?.toInt() ?? 0,
       tipCents: (json['tip_cents'] as num?)?.toInt() ?? 0,

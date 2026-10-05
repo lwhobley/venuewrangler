@@ -36,13 +36,15 @@ class IncidentListScreen extends ConsumerWidget {
     final draftTitlesById = {
       for (final mutation in queueState.pending)
         if (mutation.kind == kIncidentReportMutationKind)
-          mutation.payload['incidentId'] as String: mutation.payload['title'] as String,
+          mutation.payload['incidentId'] as String:
+              mutation.payload['title'] as String,
     };
 
     return Scaffold(
       appBar: AppBar(title: Text('Incidents — ${venue.name}')),
       body: RefreshIndicator(
-        onRefresh: () async => ref.invalidate(incidentsForVenueProvider(venue.id)),
+        onRefresh: () async =>
+            ref.invalidate(incidentsForVenueProvider(venue.id)),
         child: incidentsAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (error, _) => Center(
@@ -52,7 +54,8 @@ class IncidentListScreen extends ConsumerWidget {
                 const Text('Could not load incidents.'),
                 const SizedBox(height: 12),
                 OutlinedButton(
-                  onPressed: () => ref.invalidate(incidentsForVenueProvider(venue.id)),
+                  onPressed: () =>
+                      ref.invalidate(incidentsForVenueProvider(venue.id)),
                   child: const Text('Retry'),
                 ),
               ],
@@ -73,7 +76,8 @@ class IncidentListScreen extends ConsumerWidget {
             }
             return ListView(
               children: [
-                for (final title in draftTitlesById.values) _DraftTile(title: title),
+                for (final title in draftTitlesById.values)
+                  _DraftTile(title: title),
                 for (final incident in incidents)
                   _IncidentTile(incident: incident, venueId: venue.id),
               ],
@@ -89,7 +93,11 @@ class IncidentListScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _showReportDialog(BuildContext context, WidgetRef ref, Venue venue) async {
+  Future<void> _showReportDialog(
+    BuildContext context,
+    WidgetRef ref,
+    Venue venue,
+  ) async {
     final titleController = TextEditingController();
     final descriptionController = TextEditingController();
     var severity = IncidentSeverity.medium;
@@ -111,18 +119,20 @@ class IncidentListScreen extends ConsumerWidget {
               const SizedBox(height: 12),
               TextField(
                 controller: descriptionController,
-                decoration: const InputDecoration(labelText: 'Details (optional)'),
+                decoration:
+                    const InputDecoration(labelText: 'Details (optional)'),
                 maxLines: 3,
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<IncidentSeverity>(
-                value: severity,
+                initialValue: severity,
                 decoration: const InputDecoration(labelText: 'Severity'),
                 items: [
                   for (final value in IncidentSeverity.values)
                     DropdownMenuItem(value: value, child: Text(value.name)),
                 ],
-                onChanged: (value) => setState(() => severity = value ?? severity),
+                onChanged: (value) =>
+                    setState(() => severity = value ?? severity),
               ),
               const SizedBox(height: 12),
               Align(
@@ -135,7 +145,9 @@ class IncidentListScreen extends ConsumerWidget {
                     if (path != null) setState(() => photoPath = path);
                   },
                   icon: const Icon(Icons.camera_alt_outlined),
-                  label: Text(photoPath == null ? 'Attach photo' : 'Photo attached'),
+                  label: Text(
+                    photoPath == null ? 'Attach photo' : 'Photo attached',
+                  ),
                 ),
               ),
             ],
@@ -154,15 +166,20 @@ class IncidentListScreen extends ConsumerWidget {
       ),
     );
 
-    if (confirmed != true || titleController.text.trim().isEmpty || !context.mounted) return;
+    if (confirmed != true ||
+        titleController.text.trim().isEmpty ||
+        !context.mounted) {
+      return;
+    }
 
     await _reportIncident(
       context,
       ref,
       venue: venue,
       title: titleController.text.trim(),
-      description:
-          descriptionController.text.trim().isEmpty ? null : descriptionController.text.trim(),
+      description: descriptionController.text.trim().isEmpty
+          ? null
+          : descriptionController.text.trim(),
       severity: severity,
       photoPath: photoPath,
     );
@@ -177,6 +194,7 @@ class IncidentListScreen extends ConsumerWidget {
     required IncidentSeverity severity,
     String? photoPath,
   }) async {
+    final messenger = ScaffoldMessenger.of(context);
     final incidentId = _uuid.v4();
 
     try {
@@ -190,40 +208,76 @@ class IncidentListScreen extends ConsumerWidget {
       ref.invalidate(incidentsForVenueProvider(venue.id));
     } on PostgrestException catch (error) {
       if (error.code == '42501') {
-        if (!context.mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("You don't have permission to report incidents here.")),
+        messenger.showSnackBar(
+          const SnackBar(
+            content:
+                Text("You don't have permission to report incidents here."),
+          ),
         );
         return; // the incident was never created; there is nothing to attach a photo to.
       }
-      await _queueIncidentOffline(context, ref, incidentId, venue, title, description, severity);
+      await _queueIncidentOffline(
+        messenger,
+        ref,
+        incidentId,
+        venue,
+        title,
+        description,
+        severity,
+      );
       if (photoPath != null) {
-        await _attachPhotoOffline(ref, incidentId: incidentId, venue: venue, photoPath: photoPath);
+        await _attachPhotoOffline(
+          ref,
+          incidentId: incidentId,
+          venue: venue,
+          photoPath: photoPath,
+        );
       }
       return;
     } catch (_) {
-      await _queueIncidentOffline(context, ref, incidentId, venue, title, description, severity);
+      await _queueIncidentOffline(
+        messenger,
+        ref,
+        incidentId,
+        venue,
+        title,
+        description,
+        severity,
+      );
       if (photoPath != null) {
-        await _attachPhotoOffline(ref, incidentId: incidentId, venue: venue, photoPath: photoPath);
+        await _attachPhotoOffline(
+          ref,
+          incidentId: incidentId,
+          venue: venue,
+          photoPath: photoPath,
+        );
       }
       return;
     }
 
     if (photoPath != null) {
-      await _attachPhoto(context, ref, incidentId: incidentId, venue: venue, photoPath: photoPath);
+      await _attachPhoto(
+        messenger,
+        ref,
+        incidentId: incidentId,
+        venue: venue,
+        photoPath: photoPath,
+      );
     }
   }
 
   Future<void> _attachPhoto(
-    BuildContext context,
+    ScaffoldMessengerState messenger,
     WidgetRef ref, {
     required String incidentId,
     required Venue venue,
     required String photoPath,
   }) async {
     final attachmentId = _uuid.v4();
-    final extension = photoPath.contains('.') ? photoPath.split('.').last : 'jpg';
-    final objectPath = '${venue.organizationId}/${venue.id}/$attachmentId.$extension';
+    final extension =
+        photoPath.contains('.') ? photoPath.split('.').last : 'jpg';
+    final objectPath =
+        '${venue.organizationId}/${venue.id}/$attachmentId.$extension';
 
     try {
       await ref.read(mediaRepositoryProvider).uploadIncidentEvidence(
@@ -234,8 +288,7 @@ class IncidentListScreen extends ConsumerWidget {
           );
     } on PostgrestException catch (error) {
       if (error.code == '42501') {
-        if (!context.mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           const SnackBar(
             content: Text(
               "Incident reported, but you don't have permission to attach evidence to it.",
@@ -252,10 +305,11 @@ class IncidentListScreen extends ConsumerWidget {
         attachmentId: attachmentId,
         objectPath: objectPath,
       );
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         const SnackBar(
-          content: Text("Incident reported. The photo will upload once you're back online."),
+          content: Text(
+            "Incident reported. The photo will upload once you're back online.",
+          ),
         ),
       );
     } catch (_) {
@@ -267,10 +321,11 @@ class IncidentListScreen extends ConsumerWidget {
         attachmentId: attachmentId,
         objectPath: objectPath,
       );
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         const SnackBar(
-          content: Text("Incident reported. The photo will upload once you're back online."),
+          content: Text(
+            "Incident reported. The photo will upload once you're back online.",
+          ),
         ),
       );
     }
@@ -285,9 +340,10 @@ class IncidentListScreen extends ConsumerWidget {
     String? objectPath,
   }) async {
     final resolvedAttachmentId = attachmentId ?? _uuid.v4();
-    final extension = photoPath.contains('.') ? photoPath.split('.').last : 'jpg';
-    final resolvedObjectPath =
-        objectPath ?? '${venue.organizationId}/${venue.id}/$resolvedAttachmentId.$extension';
+    final extension =
+        photoPath.contains('.') ? photoPath.split('.').last : 'jpg';
+    final resolvedObjectPath = objectPath ??
+        '${venue.organizationId}/${venue.id}/$resolvedAttachmentId.$extension';
 
     final mutation = buildIncidentEvidenceUploadMutation(
       attachmentId: resolvedAttachmentId,
@@ -299,7 +355,7 @@ class IncidentListScreen extends ConsumerWidget {
   }
 
   Future<void> _queueIncidentOffline(
-    BuildContext context,
+    ScaffoldMessengerState messenger,
     WidgetRef ref,
     String incidentId,
     Venue venue,
@@ -316,9 +372,11 @@ class IncidentListScreen extends ConsumerWidget {
     );
     await ref.read(offlineQueueControllerProvider.notifier).enqueue(mutation);
 
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Saved offline — this will sync once you're back online.")),
+    messenger.showSnackBar(
+      const SnackBar(
+        content:
+            Text("Saved offline — this will sync once you're back online."),
+      ),
     );
   }
 }
@@ -333,7 +391,8 @@ class _DraftTile extends StatelessWidget {
     return ListTile(
       leading: const Icon(Icons.sync, size: 20),
       title: Text(title),
-      subtitle: const Text('Syncing…', style: TextStyle(fontStyle: FontStyle.italic)),
+      subtitle:
+          const Text('Syncing…', style: TextStyle(fontStyle: FontStyle.italic)),
     );
   }
 }
@@ -370,7 +429,8 @@ class _IncidentTile extends ConsumerWidget {
       final message = error.code == '42501'
           ? "You don't have permission to resolve this incident."
           : 'Something went wrong. Please try again.';
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
     }
   }
 

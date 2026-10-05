@@ -15,7 +15,8 @@ class ChecklistListScreen extends ConsumerWidget {
       return const Scaffold(body: Center(child: Text('No venue selected.')));
     }
 
-    final templatesAsync = ref.watch(checklistTemplatesForVenueProvider(venue.id));
+    final templatesAsync =
+        ref.watch(checklistTemplatesForVenueProvider(venue.id));
 
     return Scaffold(
       appBar: AppBar(title: Text('Checklists — ${venue.name}')),
@@ -28,7 +29,8 @@ class ChecklistListScreen extends ConsumerWidget {
               const Text('Could not load checklists.'),
               const SizedBox(height: 12),
               OutlinedButton(
-                onPressed: () => ref.invalidate(checklistTemplatesForVenueProvider(venue.id)),
+                onPressed: () => ref
+                    .invalidate(checklistTemplatesForVenueProvider(venue.id)),
                 child: const Text('Retry'),
               ),
             ],
@@ -36,7 +38,9 @@ class ChecklistListScreen extends ConsumerWidget {
         ),
         data: (templates) {
           if (templates.isEmpty) {
-            return const Center(child: Text('No checklists set up for this venue yet.'));
+            return const Center(
+              child: Text('No checklists set up for this venue yet.'),
+            );
           }
           return ListView.builder(
             itemCount: templates.length,
@@ -46,7 +50,10 @@ class ChecklistListScreen extends ConsumerWidget {
                 leading: const Icon(Icons.checklist_outlined),
                 title: Text(template.title),
                 trailing: const Icon(Icons.chevron_right),
-                onTap: () => context.push('/checklists/${template.id}', extra: template.title),
+                onTap: () => context.push(
+                  '/checklists/${template.id}',
+                  extra: template.title,
+                ),
               );
             },
           );

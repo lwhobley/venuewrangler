@@ -19,7 +19,9 @@ class PosConnection {
       provider: json['provider'] as String,
       externalLocationId: json['external_location_id'] as String?,
       status: json['status'] as String? ?? 'active',
-      lastSyncAt: json['last_sync_at'] != null ? DateTime.parse(json['last_sync_at'] as String) : null,
+      lastSyncAt: json['last_sync_at'] != null
+          ? DateTime.parse(json['last_sync_at'] as String)
+          : null,
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
     );

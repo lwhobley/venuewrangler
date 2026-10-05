@@ -21,18 +21,22 @@ class IntegrationsScreen extends ConsumerWidget {
       return const Scaffold(body: Center(child: Text('No venue selected.')));
     }
 
-    final connectionsAsync = ref.watch(payrollConnectionsForVenueProvider(venue.id));
+    final connectionsAsync =
+        ref.watch(payrollConnectionsForVenueProvider(venue.id));
 
     return Scaffold(
       appBar: AppBar(title: const Text('Integrations')),
       body: RefreshIndicator(
-        onRefresh: () async => ref.invalidate(payrollConnectionsForVenueProvider(venue.id)),
+        onRefresh: () async =>
+            ref.invalidate(payrollConnectionsForVenueProvider(venue.id)),
         child: connectionsAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (_, __) => const Center(child: Text('Could not load integrations.')),
+          error: (_, __) =>
+              const Center(child: Text('Could not load integrations.')),
           data: (connections) {
             final byProvider = {
-              for (final connection in connections) connection.provider: connection,
+              for (final connection in connections)
+                connection.provider: connection,
             };
             return ListView(
               children: [
@@ -52,7 +56,11 @@ class IntegrationsScreen extends ConsumerWidget {
 }
 
 class _ProviderTile extends ConsumerWidget {
-  const _ProviderTile({required this.provider, required this.venueId, this.connection});
+  const _ProviderTile({
+    required this.provider,
+    required this.venueId,
+    this.connection,
+  });
 
   final PayrollProvider provider;
   final String venueId;
@@ -63,7 +71,9 @@ class _ProviderTile extends ConsumerWidget {
     final isConnected = connection?.isConnected ?? false;
 
     return ListTile(
-      leading: Icon(isConnected ? Icons.check_circle_outline : Icons.circle_outlined),
+      leading: Icon(
+        isConnected ? Icons.check_circle_outline : Icons.circle_outlined,
+      ),
       title: Text(provider.label),
       subtitle: Text(
         isConnected
@@ -84,8 +94,9 @@ class _ProviderTile extends ConsumerWidget {
 
   Future<void> _connect(BuildContext context, WidgetRef ref) async {
     try {
-      final url =
-          await ref.read(integrationsRepositoryProvider).createConnectUrl(provider, venueId);
+      final url = await ref
+          .read(integrationsRepositoryProvider)
+          .createConnectUrl(provider, venueId);
       final launched =
           await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
       if (!launched && context.mounted) {
@@ -95,17 +106,21 @@ class _ProviderTile extends ConsumerWidget {
       }
     } on AppError catch (error) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message)));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error.message)));
     }
   }
 
   Future<void> _disconnect(BuildContext context, WidgetRef ref) async {
     try {
-      await ref.read(integrationsRepositoryProvider).disconnect(provider, venueId);
+      await ref
+          .read(integrationsRepositoryProvider)
+          .disconnect(provider, venueId);
       ref.invalidate(payrollConnectionsForVenueProvider(venueId));
     } on AppError catch (error) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message)));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error.message)));
     }
   }
 }

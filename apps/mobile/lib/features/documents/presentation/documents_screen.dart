@@ -82,7 +82,11 @@ class DocumentsScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _upload(BuildContext context, WidgetRef ref, {required String venueId}) async {
+  Future<void> _upload(
+    BuildContext context,
+    WidgetRef ref, {
+    required String venueId,
+  }) async {
     final picked = await ref.read(documentPickerServiceProvider).pickDocument();
     if (picked == null || !context.mounted) return;
 
@@ -104,13 +108,17 @@ class DocumentsScreen extends ConsumerWidget {
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                value: category,
+                initialValue: category,
                 decoration: const InputDecoration(labelText: 'Category'),
                 items: [
                   for (final value in VenueDocument.categories)
-                    DropdownMenuItem(value: value, child: Text(_categoryLabels[value] ?? value)),
+                    DropdownMenuItem(
+                      value: value,
+                      child: Text(_categoryLabels[value] ?? value),
+                    ),
                 ],
-                onChanged: (value) => setState(() => category = value ?? category),
+                onChanged: (value) =>
+                    setState(() => category = value ?? category),
               ),
               if (VenueDocument.managerOnlyCategories.contains(category)) ...[
                 const SizedBox(height: 8),
@@ -135,7 +143,11 @@ class DocumentsScreen extends ConsumerWidget {
       ),
     );
 
-    if (confirmed != true || titleController.text.trim().isEmpty || !context.mounted) return;
+    if (confirmed != true ||
+        titleController.text.trim().isEmpty ||
+        !context.mounted) {
+      return;
+    }
 
     try {
       await ref.read(documentsRepositoryProvider).uploadDocument(
@@ -148,7 +160,8 @@ class DocumentsScreen extends ConsumerWidget {
       ref.invalidate(documentsProvider(venueId));
     } on AppError catch (error) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message)));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error.message)));
     }
   }
 }
@@ -162,7 +175,11 @@ class _DocumentTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return ListTile(
-      leading: Icon(document.isManagerOnly ? Icons.lock_outline : Icons.description_outlined),
+      leading: Icon(
+        document.isManagerOnly
+            ? Icons.lock_outline
+            : Icons.description_outlined,
+      ),
       title: Text(document.title),
       subtitle: Text(
         '${_categoryLabels[document.category] ?? document.category} · ${document.readableSize}',
@@ -184,7 +201,8 @@ class _DocumentTile extends ConsumerWidget {
       await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
     } on AppError catch (error) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message)));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error.message)));
     }
   }
 
@@ -195,19 +213,28 @@ class _DocumentTile extends ConsumerWidget {
         title: const Text('Delete document?'),
         content: Text('This removes "${document.title}" permanently.'),
         actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Delete')),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete'),
+          ),
         ],
       ),
     );
     if (confirmed != true || !context.mounted) return;
 
     try {
-      await ref.read(documentsRepositoryProvider).deleteDocument(documentId: document.id);
+      await ref
+          .read(documentsRepositoryProvider)
+          .deleteDocument(documentId: document.id);
       ref.invalidate(documentsProvider(venueId));
     } on AppError catch (error) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message)));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error.message)));
     }
   }
 }

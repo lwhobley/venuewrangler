@@ -11,7 +11,9 @@ final venuesRepositoryProvider = Provider<VenuesRepository>((ref) {
 
 final venuesForOrganizationProvider =
     FutureProvider.family<List<Venue>, String>((ref, organizationId) {
-  return ref.watch(venuesRepositoryProvider).fetchVenuesForOrganization(organizationId);
+  return ref
+      .watch(venuesRepositoryProvider)
+      .fetchVenuesForOrganization(organizationId);
 });
 
 /// The venue the user is currently acting within. `null` means "not chosen yet" and the

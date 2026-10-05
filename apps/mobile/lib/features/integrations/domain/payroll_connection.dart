@@ -36,7 +36,8 @@ class PayrollConnection {
 
   bool get isConnected => status == 'connected';
 
-  factory PayrollConnection.fromJson(Map<String, dynamic> json) => PayrollConnection(
+  factory PayrollConnection.fromJson(Map<String, dynamic> json) =>
+      PayrollConnection(
         venueId: json['venue_id'] as String,
         provider: json['provider'] as String,
         status: json['status'] as String,

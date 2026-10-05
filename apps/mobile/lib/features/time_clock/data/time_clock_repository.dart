@@ -6,9 +6,15 @@ import '../domain/time_entry.dart';
 abstract interface class TimeClockRepository {
   Future<TimeEntry?> getActiveEntry({required String venueId});
 
-  Future<List<TimeEntry>> getMyEntries({required String venueId, int limit = 20});
+  Future<List<TimeEntry>> getMyEntries({
+    required String venueId,
+    int limit = 20,
+  });
 
-  Future<List<TimeEntry>> getVenueEntries({required String venueId, int limit = 50});
+  Future<List<TimeEntry>> getVenueEntries({
+    required String venueId,
+    int limit = 50,
+  });
 
   Future<TimeEntry> clockIn({
     required String venueId,

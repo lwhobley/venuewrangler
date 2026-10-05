@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:venuewrangler_mobile/core/errors/app_error.dart';
+import 'package:venuewrangler_mobile/core/location/location_service.dart';
 import 'package:venuewrangler_mobile/features/time_clock/application/time_clock_providers.dart';
 import 'package:venuewrangler_mobile/features/time_clock/data/time_clock_repository.dart';
 import 'package:venuewrangler_mobile/features/time_clock/domain/time_entry.dart';
@@ -23,13 +25,21 @@ class _FakeTimeClockRepository implements TimeClockRepository {
   bool endBreakCalled = false;
 
   @override
-  Future<TimeEntry?> getActiveEntry({required String venueId}) async => activeEntry;
+  Future<TimeEntry?> getActiveEntry({required String venueId}) async =>
+      activeEntry;
 
   @override
-  Future<List<TimeEntry>> getMyEntries({required String venueId, int limit = 20}) async => entries;
+  Future<List<TimeEntry>> getMyEntries({
+    required String venueId,
+    int limit = 20,
+  }) async =>
+      entries;
 
   @override
-  Future<List<TimeEntry>> getVenueEntries({required String venueId, int limit = 50}) async =>
+  Future<List<TimeEntry>> getVenueEntries({
+    required String venueId,
+    int limit = 50,
+  }) async =>
       activeEntry != null ? [activeEntry!, ...entries] : entries;
 
   @override
@@ -98,7 +108,11 @@ class _FakeTimeClockRepository implements TimeClockRepository {
     endBreakCalled = true;
     final updatedBreaks = entry.breaks.map((b) {
       if (b.isOpen) {
-        return TimeBreak(type: b.type, startAt: b.startAt, endAt: DateTime.now());
+        return TimeBreak(
+          type: b.type,
+          startAt: b.startAt,
+          endAt: DateTime.now(),
+        );
       }
       return b;
     }).toList();
@@ -152,6 +166,19 @@ final _testVenue = Venue(
   createdAt: DateTime(2026),
 );
 
+class _FakeLocationService implements LocationService {
+  @override
+  Future<LocationFix> currentFix() async =>
+      const LocationFix(lat: 40.0, lng: -74.0, accuracyM: 8, mocked: false);
+}
+
+class _DeniedLocationService implements LocationService {
+  @override
+  Future<LocationFix> currentFix() async => throw const PermissionDeniedError(
+        'Location permission is required to clock in or out.',
+      );
+}
+
 void main() {
   testWidgets('renders CLOCKED OUT state and clocks in', (tester) async {
     final fakeRepo = _FakeTimeClockRepository();
@@ -161,6 +188,7 @@ void main() {
         overrides: [
           activeVenueProvider.overrideWith((ref) => _testVenue),
           timeClockRepositoryProvider.overrideWithValue(fakeRepo),
+          locationServiceProvider.overrideWithValue(_FakeLocationService()),
         ],
         child: const MaterialApp(home: TimeClockScreen()),
       ),
@@ -177,6 +205,33 @@ void main() {
     expect(find.text('CLOCKED IN'), findsOneWidget);
     expect(find.text('Take Break'), findsOneWidget);
     expect(find.text('Clock Out'), findsOneWidget);
+  });
+
+  testWidgets('clock in is blocked, not faked, when location is denied',
+      (tester) async {
+    final fakeRepo = _FakeTimeClockRepository();
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          activeVenueProvider.overrideWith((ref) => _testVenue),
+          timeClockRepositoryProvider.overrideWithValue(fakeRepo),
+          locationServiceProvider.overrideWithValue(_DeniedLocationService()),
+        ],
+        child: const MaterialApp(home: TimeClockScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Clock In'));
+    await tester.pumpAndSettle();
+
+    expect(fakeRepo.clockInCalled, false);
+    expect(
+      find.text('Location permission is required to clock in or out.'),
+      findsOneWidget,
+    );
+    expect(find.text('CLOCKED OUT'), findsOneWidget);
   });
 
   testWidgets('handles break workflow (start and end break)', (tester) async {
@@ -201,6 +256,7 @@ void main() {
         overrides: [
           activeVenueProvider.overrideWith((ref) => _testVenue),
           timeClockRepositoryProvider.overrideWithValue(fakeRepo),
+          locationServiceProvider.overrideWithValue(_FakeLocationService()),
         ],
         child: const MaterialApp(home: TimeClockScreen()),
       ),
@@ -251,6 +307,7 @@ void main() {
         overrides: [
           activeVenueProvider.overrideWith((ref) => _testVenue),
           timeClockRepositoryProvider.overrideWithValue(fakeRepo),
+          locationServiceProvider.overrideWithValue(_FakeLocationService()),
         ],
         child: const MaterialApp(home: TimeClockScreen()),
       ),
@@ -266,7 +323,8 @@ void main() {
     expect(find.text('CLOCKED OUT'), findsOneWidget);
   });
 
-  testWidgets('switches to Clock Board tab and renders active staff', (tester) async {
+  testWidgets('switches to Clock Board tab and renders active staff',
+      (tester) async {
     final activeStaffEntry = TimeEntry(
       id: 'e1',
       organizationId: 'o1',
@@ -288,6 +346,7 @@ void main() {
         overrides: [
           activeVenueProvider.overrideWith((ref) => _testVenue),
           timeClockRepositoryProvider.overrideWithValue(fakeRepo),
+          locationServiceProvider.overrideWithValue(_FakeLocationService()),
         ],
         child: const MaterialApp(home: TimeClockScreen()),
       ),

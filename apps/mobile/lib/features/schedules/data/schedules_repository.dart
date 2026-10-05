@@ -26,7 +26,10 @@ abstract interface class SchedulesRepository {
 
   /// Accepting reassigns the shift automatically via a database trigger — this call does not
   /// separately update the shift.
-  Future<void> acceptSwap({required String swapId, required String accepterUserId});
+  Future<void> acceptSwap({
+    required String swapId,
+    required String accepterUserId,
+  });
 
   Future<void> cancelSwap(String swapId);
 
@@ -91,20 +94,26 @@ class SupabaseSchedulesRepository implements SchedulesRepository {
   }
 
   @override
-  Future<void> acceptSwap({required String swapId, required String accepterUserId}) async {
-    await _client
-        .from('shift_swaps')
-        .update({'status': 'accepted', 'accepted_by': accepterUserId})
-        .eq('id', swapId);
+  Future<void> acceptSwap({
+    required String swapId,
+    required String accepterUserId,
+  }) async {
+    await _client.from('shift_swaps').update(
+      {'status': 'accepted', 'accepted_by': accepterUserId},
+    ).eq('id', swapId);
   }
 
   @override
   Future<void> cancelSwap(String swapId) async {
-    await _client.from('shift_swaps').update({'status': 'cancelled'}).eq('id', swapId);
+    await _client
+        .from('shift_swaps')
+        .update({'status': 'cancelled'}).eq('id', swapId);
   }
 
   @override
   Future<void> declineSwap(String swapId) async {
-    await _client.from('shift_swaps').update({'status': 'declined'}).eq('id', swapId);
+    await _client
+        .from('shift_swaps')
+        .update({'status': 'declined'}).eq('id', swapId);
   }
 }

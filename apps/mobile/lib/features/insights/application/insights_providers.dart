@@ -17,7 +17,8 @@ final shiftInsightsForVenueProvider = FutureProvider.autoDispose
 });
 
 final shiftInsightsForShiftProvider = FutureProvider.autoDispose
-    .family<List<ShiftInsight>, ({String venueId, String shiftId})>((ref, params) {
+    .family<List<ShiftInsight>, ({String venueId, String shiftId})>(
+        (ref, params) {
   return ref.watch(insightsRepositoryProvider).getInsights(
         venueId: params.venueId,
         shiftId: params.shiftId,

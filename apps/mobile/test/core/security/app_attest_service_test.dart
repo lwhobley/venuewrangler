@@ -16,27 +16,45 @@ class _FakeSecureStoragePlatform extends FlutterSecureStoragePlatform {
   final Map<String, String> _values = {};
 
   @override
-  Future<void> write({required String key, required String value, required Map<String, String> options}) async {
+  Future<void> write({
+    required String key,
+    required String value,
+    required Map<String, String> options,
+  }) async {
     _values[key] = value;
   }
 
   @override
-  Future<String?> read({required String key, required Map<String, String> options}) async => _values[key];
+  Future<String?> read({
+    required String key,
+    required Map<String, String> options,
+  }) async =>
+      _values[key];
 
   @override
-  Future<bool> containsKey({required String key, required Map<String, String> options}) async =>
+  Future<bool> containsKey({
+    required String key,
+    required Map<String, String> options,
+  }) async =>
       _values.containsKey(key);
 
   @override
-  Future<void> delete({required String key, required Map<String, String> options}) async {
+  Future<void> delete({
+    required String key,
+    required Map<String, String> options,
+  }) async {
     _values.remove(key);
   }
 
   @override
-  Future<Map<String, String>> readAll({required Map<String, String> options}) async => Map.of(_values);
+  Future<Map<String, String>> readAll({
+    required Map<String, String> options,
+  }) async =>
+      Map.of(_values);
 
   @override
-  Future<void> deleteAll({required Map<String, String> options}) async => _values.clear();
+  Future<void> deleteAll({required Map<String, String> options}) async =>
+      _values.clear();
 }
 
 /// A signed-challenge-token builder matching the server's own encoding in
@@ -44,7 +62,11 @@ class _FakeSecureStoragePlatform extends FlutterSecureStoragePlatform {
 /// signature isn't checked client-side; the client just needs to round-trip it and extract the
 /// nonce), but shaped identically so [AppAttestService] parses it the same way.
 http.Response _jsonResponse(Map<String, dynamic> body, [int status = 200]) {
-  return http.Response(jsonEncode(body), status, headers: {'content-type': 'application/json'});
+  return http.Response(
+    jsonEncode(body),
+    status,
+    headers: {'content-type': 'application/json'},
+  );
 }
 
 String _buildChallengeToken(Uint8List nonceBytes) {
@@ -76,7 +98,8 @@ void main() {
     attestKeyShouldFail = false;
     FlutterSecureStoragePlatform.instance = _FakeSecureStoragePlatform();
 
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
       channel,
       (call) async {
         methodCalls.add(call);
@@ -87,7 +110,10 @@ void main() {
             return methodResponse;
           case 'attestKey':
             if (attestKeyShouldFail) {
-              throw PlatformException(code: 'attest_key_failed', message: 'invalid key');
+              throw PlatformException(
+                code: 'attest_key_failed',
+                message: 'invalid key',
+              );
             }
             return attestationObjectResponse;
         }
@@ -101,13 +127,16 @@ void main() {
         .setMockMethodCallHandler(channel, null);
   });
 
-  SupabaseClient buildClient(Future<http.Response> Function(http.Request) handler) {
+  SupabaseClient buildClient(
+    Future<http.Response> Function(http.Request) handler,
+  ) {
     return SupabaseClient(
       'https://example.supabase.co',
       'test-anon-key',
       httpClient: MockClient.streaming((request, bodyStream) async {
         final bodyBytes = await bodyStream.toBytes();
-        final req = http.Request(request.method, request.url)..bodyBytes = bodyBytes;
+        final req = http.Request(request.method, request.url)
+          ..bodyBytes = bodyBytes;
         final response = await handler(req);
         return http.StreamedResponse(
           Stream.value(response.bodyBytes),
@@ -118,7 +147,9 @@ void main() {
     );
   }
 
-  test('isSupported is false on a non-iOS host even if the channel would say yes', () async {
+  test(
+      'isSupported is false on a non-iOS host even if the channel would say yes',
+      () async {
     final client = buildClient((req) async => http.Response('{}', 200));
     final service = AppAttestService(client: client, isIOS: () => false);
 
@@ -126,7 +157,9 @@ void main() {
     expect(methodCalls, isEmpty);
   });
 
-  test('attestDevice runs the full challenge -> attestKey -> verify round trip and returns true on a valid verdict', () async {
+  test(
+      'attestDevice runs the full challenge -> attestKey -> verify round trip and returns true on a valid verdict',
+      () async {
     late Uint8List nonceSentToAttestKey;
     final nonceBytes = Uint8List.fromList(List.generate(32, (i) => i));
     final challengeToken = _buildChallengeToken(nonceBytes);
@@ -135,7 +168,8 @@ void main() {
 
     final client = buildClient((req) async {
       if (req.url.path.endsWith('/functions/v1/device-attestation')) {
-        final body = jsonDecode(utf8.decode(req.bodyBytes)) as Map<String, dynamic>;
+        final body =
+            jsonDecode(utf8.decode(req.bodyBytes)) as Map<String, dynamic>;
         if (body['action'] == 'challenge') {
           return _jsonResponse({'challenge': challengeToken});
         }
@@ -143,8 +177,13 @@ void main() {
         // the base64 of whatever attestKey returned.
         expect(body['challenge'], challengeToken);
         expect(body['key_id'], 'generated-key-1');
-        expect(body['attestation_object'], base64Encode(attestationObjectResponse));
-        return _jsonResponse({'recorded': true, 'mode': 'observe', 'status': 'valid'});
+        expect(
+          body['attestation_object'],
+          base64Encode(attestationObjectResponse),
+        );
+        return _jsonResponse(
+          {'recorded': true, 'mode': 'observe', 'status': 'valid'},
+        );
       }
       return http.Response('not found', 404);
     });
@@ -155,22 +194,28 @@ void main() {
 
     expect(result, isTrue);
 
-    final attestKeyCall = methodCalls.firstWhere((c) => c.method == 'attestKey');
-    nonceSentToAttestKey = (attestKeyCall.arguments as Map)['nonceBytes'] as Uint8List;
+    final attestKeyCall =
+        methodCalls.firstWhere((c) => c.method == 'attestKey');
+    nonceSentToAttestKey =
+        (attestKeyCall.arguments as Map)['nonceBytes'] as Uint8List;
     expect(nonceSentToAttestKey, nonceBytes);
     expect((attestKeyCall.arguments as Map)['keyId'], 'generated-key-1');
   });
 
-  test('attestDevice returns false when the server records an invalid verdict', () async {
+  test('attestDevice returns false when the server records an invalid verdict',
+      () async {
     final nonceBytes = Uint8List.fromList(List.generate(32, (i) => i));
     final challengeToken = _buildChallengeToken(nonceBytes);
 
     final client = buildClient((req) async {
-      final body = jsonDecode(utf8.decode(req.bodyBytes)) as Map<String, dynamic>;
+      final body =
+          jsonDecode(utf8.decode(req.bodyBytes)) as Map<String, dynamic>;
       if (body['action'] == 'challenge') {
         return _jsonResponse({'challenge': challengeToken});
       }
-      return _jsonResponse({'recorded': true, 'mode': 'observe', 'status': 'invalid'});
+      return _jsonResponse(
+        {'recorded': true, 'mode': 'observe', 'status': 'invalid'},
+      );
     });
 
     final service = AppAttestService(client: client, isIOS: () => true);
@@ -178,20 +223,26 @@ void main() {
     expect(await service.attestDevice(), isFalse);
   });
 
-  test('attestDevice returns false (never throws) when the challenge call fails outright', () async {
-    final client = buildClient((req) async => http.Response('internal error', 500));
+  test(
+      'attestDevice returns false (never throws) when the challenge call fails outright',
+      () async {
+    final client =
+        buildClient((req) async => http.Response('internal error', 500));
     final service = AppAttestService(client: client, isIOS: () => true);
 
     expect(await service.attestDevice(), isFalse);
   });
 
-  test('a second attestDevice call reuses the cached key id instead of calling generateKey again', () async {
+  test(
+      'a second attestDevice call reuses the cached key id instead of calling generateKey again',
+      () async {
     final nonceBytes1 = Uint8List.fromList(List.generate(32, (i) => i));
     final nonceBytes2 = Uint8List.fromList(List.generate(32, (i) => 31 - i));
 
     var challengeCount = 0;
     final client = buildClient((req) async {
-      final body = jsonDecode(utf8.decode(req.bodyBytes)) as Map<String, dynamic>;
+      final body =
+          jsonDecode(utf8.decode(req.bodyBytes)) as Map<String, dynamic>;
       if (body['action'] == 'challenge') {
         challengeCount++;
         final nonce = challengeCount == 1 ? nonceBytes1 : nonceBytes2;
@@ -205,17 +256,25 @@ void main() {
     await service.attestDevice();
     await service.attestDevice();
 
-    final generateKeyCalls = methodCalls.where((c) => c.method == 'generateKey');
-    expect(generateKeyCalls.length, 1, reason: 'generateKey should only be called once per install');
+    final generateKeyCalls =
+        methodCalls.where((c) => c.method == 'generateKey');
+    expect(
+      generateKeyCalls.length,
+      1,
+      reason: 'generateKey should only be called once per install',
+    );
 
     final attestKeyCalls = methodCalls.where((c) => c.method == 'attestKey');
     expect(attestKeyCalls.length, 2);
   });
 
-  test('a failed attestKey drops the cached key so the next attempt generates a fresh one', () async {
+  test(
+      'a failed attestKey drops the cached key so the next attempt generates a fresh one',
+      () async {
     final nonceBytes = Uint8List.fromList(List.generate(32, (i) => i));
     final client = buildClient((req) async {
-      final body = jsonDecode(utf8.decode(req.bodyBytes)) as Map<String, dynamic>;
+      final body =
+          jsonDecode(utf8.decode(req.bodyBytes)) as Map<String, dynamic>;
       if (body['action'] == 'challenge') {
         return _jsonResponse({'challenge': _buildChallengeToken(nonceBytes)});
       }

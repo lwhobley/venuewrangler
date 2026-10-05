@@ -13,7 +13,8 @@ final offlineQueueStoreProvider = Provider<OfflineQueueStore>((ref) {
 /// Empty by default. The app composition root (app/bootstrap.dart) overrides this with the
 /// merged handler map from every feature that queues mutations, so core/offline never needs
 /// to import a feature package directly.
-final offlineQueueHandlersProvider = Provider<Map<String, MutationHandler>>((ref) {
+final offlineQueueHandlersProvider =
+    Provider<Map<String, MutationHandler>>((ref) {
   return const {};
 });
 

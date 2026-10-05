@@ -15,10 +15,12 @@ class WranglerAssistantScreen extends ConsumerStatefulWidget {
   const WranglerAssistantScreen({super.key});
 
   @override
-  ConsumerState<WranglerAssistantScreen> createState() => _WranglerAssistantScreenState();
+  ConsumerState<WranglerAssistantScreen> createState() =>
+      _WranglerAssistantScreenState();
 }
 
-class _WranglerAssistantScreenState extends ConsumerState<WranglerAssistantScreen> {
+class _WranglerAssistantScreenState
+    extends ConsumerState<WranglerAssistantScreen> {
   final _questionController = TextEditingController();
   bool _isAsking = false;
   WranglerAskResult? _result;
@@ -148,7 +150,8 @@ class _ErrorCard extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         child: Text(
           error.message,
-          style: TextStyle(color: Theme.of(context).colorScheme.onErrorContainer),
+          style:
+              TextStyle(color: Theme.of(context).colorScheme.onErrorContainer),
         ),
       ),
     );

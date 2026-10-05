@@ -34,7 +34,8 @@ class _FakeAuthRepository implements AuthRepository {
 }
 
 void main() {
-  testWidgets('shows a validation error and does not sign in with an empty form', (
+  testWidgets(
+      'shows a validation error and does not sign in with an empty form', (
     tester,
   ) async {
     final fakeAuth = _FakeAuthRepository();
@@ -53,7 +54,8 @@ void main() {
     expect(fakeAuth.signInCalled, isFalse);
   });
 
-  testWidgets('calls the auth repository with a valid email and password', (tester) async {
+  testWidgets('calls the auth repository with a valid email and password',
+      (tester) async {
     final fakeAuth = _FakeAuthRepository();
 
     await tester.pumpWidget(
@@ -63,8 +65,14 @@ void main() {
       ),
     );
 
-    await tester.enterText(find.widgetWithText(TextFormField, 'Email'), 'owner@example.com');
-    await tester.enterText(find.widgetWithText(TextFormField, 'Password'), 'correct horse');
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Email'),
+      'owner@example.com',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Password'),
+      'correct horse',
+    );
     await tester.tap(find.widgetWithText(FilledButton, 'Sign in'));
     await tester.pumpAndSettle();
 

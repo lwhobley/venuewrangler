@@ -9,7 +9,8 @@ import 'package:venuewrangler_mobile/features/guests_reservations/presentation/r
 import 'package:venuewrangler_mobile/features/venues/application/venues_providers.dart';
 import 'package:venuewrangler_mobile/features/venues/domain/venue.dart';
 
-class _FakeGuestsReservationsRepository implements GuestsReservationsRepository {
+class _FakeGuestsReservationsRepository
+    implements GuestsReservationsRepository {
   _FakeGuestsReservationsRepository({List<Reservation>? initialReservations})
       : reservations = initialReservations ?? [];
 
@@ -20,7 +21,11 @@ class _FakeGuestsReservationsRepository implements GuestsReservationsRepository 
   bool createReservationCalled = false;
 
   @override
-  Future<List<Guest>> getGuests({required String venueId, int limit = 50}) async => [];
+  Future<List<Guest>> getGuests({
+    required String venueId,
+    int limit = 50,
+  }) async =>
+      [];
 
   @override
   Future<Guest> createGuest({
@@ -41,7 +46,8 @@ class _FakeGuestsReservationsRepository implements GuestsReservationsRepository 
     DateTime? from,
     DateTime? to,
     int limit = 50,
-  }) async => reservations;
+  }) async =>
+      reservations;
 
   @override
   Future<Reservation> createReservation({
@@ -129,7 +135,8 @@ void main() {
     expect(find.text('No reservations found'), findsOneWidget);
   });
 
-  testWidgets('renders reservations list and filters by status', (tester) async {
+  testWidgets('renders reservations list and filters by status',
+      (tester) async {
     final fakeRepo = _FakeGuestsReservationsRepository(
       initialReservations: [
         Reservation(

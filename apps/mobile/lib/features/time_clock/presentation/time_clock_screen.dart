@@ -37,13 +37,13 @@ class _TimeClockScreenState extends ConsumerState<TimeClockScreen> {
     setState(() => _isProcessing = true);
     try {
       final repo = ref.read(timeClockRepositoryProvider);
-      // In mobile production, coordinates are acquired via Geolocator.
-      // Defaulting to 0.0, 0.0 or venue location if available.
+      final fix = await ref.read(locationServiceProvider).currentFix();
       await repo.clockIn(
         venueId: venueId,
-        lat: 29.7604,
-        lng: -95.3698,
-        accuracyM: 15.0,
+        lat: fix.lat,
+        lng: fix.lng,
+        accuracyM: fix.accuracyM,
+        mocked: fix.mocked,
       );
       _refresh(venueId);
       if (mounted) {
@@ -66,11 +66,13 @@ class _TimeClockScreenState extends ConsumerState<TimeClockScreen> {
     setState(() => _isProcessing = true);
     try {
       final repo = ref.read(timeClockRepositoryProvider);
+      final fix = await ref.read(locationServiceProvider).currentFix();
       await repo.clockOut(
         entryId: activeEntry.id,
-        lat: 29.7604,
-        lng: -95.3698,
-        accuracyM: 15.0,
+        lat: fix.lat,
+        lng: fix.lng,
+        accuracyM: fix.accuracyM,
+        mocked: fix.mocked,
       );
       _refresh(venueId);
       if (mounted) {
@@ -208,7 +210,8 @@ class _TimeClockScreenState extends ConsumerState<TimeClockScreen> {
                   ),
                 ],
                 selected: {_selectedTab},
-                onSelectionChanged: (val) => setState(() => _selectedTab = val.first),
+                onSelectionChanged: (val) =>
+                    setState(() => _selectedTab = val.first),
               ),
               const SizedBox(height: 16),
 
@@ -248,14 +251,23 @@ class _TimeClockScreenState extends ConsumerState<TimeClockScreen> {
                       elevation: 2,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(16),
-                        side: BorderSide(color: statusColor.withAlpha(80), width: 1.5),
+                        side: BorderSide(
+                          color: statusColor.withAlpha(80),
+                          width: 1.5,
+                        ),
                       ),
                       child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 20),
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 24,
+                          horizontal: 20,
+                        ),
                         child: Column(
                           children: [
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 6,
+                              ),
                               decoration: BoxDecoration(
                                 color: statusColor.withAlpha(25),
                                 borderRadius: BorderRadius.circular(20),
@@ -272,7 +284,9 @@ class _TimeClockScreenState extends ConsumerState<TimeClockScreen> {
                             ),
                             const SizedBox(height: 16),
                             Text(
-                              isClockedIn ? _formatDuration(activeEntry.workedDuration) : '00:00:00',
+                              isClockedIn
+                                  ? _formatDuration(activeEntry.workedDuration)
+                                  : '00:00:00',
                               style: const TextStyle(
                                 fontSize: 48,
                                 fontWeight: FontWeight.w800,
@@ -283,9 +297,13 @@ class _TimeClockScreenState extends ConsumerState<TimeClockScreen> {
                               const SizedBox(height: 4),
                               Text(
                                 'Shift elapsed: ${_formatDuration(activeEntry.totalElapsed)}',
-                                style: const TextStyle(fontSize: 13, color: Colors.grey),
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.grey,
+                                ),
                               ),
-                              if (isOnBreak && activeEntry.activeBreak != null) ...[
+                              if (isOnBreak &&
+                                  activeEntry.activeBreak != null) ...[
                                 const SizedBox(height: 2),
                                 Text(
                                   'Current ${activeEntry.activeBreak!.type} break: ${_formatDuration(activeEntry.activeBreak!.duration)}',
@@ -301,7 +319,9 @@ class _TimeClockScreenState extends ConsumerState<TimeClockScreen> {
                             // Action Buttons
                             if (!isClockedIn) ...[
                               FilledButton.icon(
-                                onPressed: _isProcessing ? null : () => _handleClockIn(venue.id),
+                                onPressed: _isProcessing
+                                    ? null
+                                    : () => _handleClockIn(venue.id),
                                 icon: const Icon(Icons.login),
                                 label: const Text('Clock In'),
                                 style: FilledButton.styleFrom(
@@ -317,10 +337,22 @@ class _TimeClockScreenState extends ConsumerState<TimeClockScreen> {
                                       onPressed: _isProcessing
                                           ? null
                                           : () => isOnBreak
-                                              ? _handleEndBreak(activeEntry, venue.id)
-                                              : _handleStartBreak(activeEntry, venue.id),
-                                      icon: Icon(isOnBreak ? Icons.play_arrow : Icons.pause),
-                                      label: Text(isOnBreak ? 'End Break' : 'Take Break'),
+                                              ? _handleEndBreak(
+                                                  activeEntry,
+                                                  venue.id,
+                                                )
+                                              : _handleStartBreak(
+                                                  activeEntry,
+                                                  venue.id,
+                                                ),
+                                      icon: Icon(
+                                        isOnBreak
+                                            ? Icons.play_arrow
+                                            : Icons.pause,
+                                      ),
+                                      label: Text(
+                                        isOnBreak ? 'End Break' : 'Take Break',
+                                      ),
                                       style: OutlinedButton.styleFrom(
                                         minimumSize: const Size.fromHeight(48),
                                       ),
@@ -331,7 +363,10 @@ class _TimeClockScreenState extends ConsumerState<TimeClockScreen> {
                                     child: FilledButton.icon(
                                       onPressed: _isProcessing
                                           ? null
-                                          : () => _handleClockOut(activeEntry, venue.id),
+                                          : () => _handleClockOut(
+                                                activeEntry,
+                                                venue.id,
+                                              ),
                                       icon: const Icon(Icons.logout),
                                       label: const Text('Clock Out'),
                                       style: FilledButton.styleFrom(
@@ -370,7 +405,9 @@ class _TimeClockScreenState extends ConsumerState<TimeClockScreen> {
                       return const Card(
                         child: Padding(
                           padding: EdgeInsets.all(24),
-                          child: Center(child: Text('No punch history recorded yet.')),
+                          child: Center(
+                            child: Text('No punch history recorded yet.'),
+                          ),
                         ),
                       );
                     }
@@ -389,22 +426,30 @@ class _TimeClockScreenState extends ConsumerState<TimeClockScreen> {
                           elevation: 1,
                           child: ListTile(
                             leading: CircleAvatar(
-                              backgroundColor: entry.isOpen ? Colors.green.shade100 : Colors.grey.shade200,
+                              backgroundColor: entry.isOpen
+                                  ? Colors.green.shade100
+                                  : Colors.grey.shade200,
                               child: Icon(
                                 entry.isOpen ? Icons.timer : Icons.done,
-                                color: entry.isOpen ? Colors.green : Colors.grey.shade700,
+                                color: entry.isOpen
+                                    ? Colors.green
+                                    : Colors.grey.shade700,
                               ),
                             ),
                             title: Text(
                               '${inTime.month}/${inTime.day} — ${_formatDuration(entry.workedDuration)}',
-                              style: const TextStyle(fontWeight: FontWeight.bold),
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.bold),
                             ),
                             subtitle: Text(
                               'In: ${_formatTime(inTime)} • Out: ${outTime != null ? _formatTime(outTime) : 'Active'}',
                             ),
                             trailing: entry.locationAnomaly != null
                                 ? Chip(
-                                    label: const Text('Flagged Fix', style: TextStyle(fontSize: 10)),
+                                    label: const Text(
+                                      'Flagged Fix',
+                                      style: TextStyle(fontSize: 10),
+                                    ),
                                     backgroundColor: Colors.amber.shade100,
                                   )
                                 : null,
@@ -428,14 +473,17 @@ class _TimeClockScreenState extends ConsumerState<TimeClockScreen> {
                       child: CircularProgressIndicator(),
                     ),
                   ),
-                  error: (error, _) => Text('Could not load clock board: $error'),
+                  error: (error, _) =>
+                      Text('Could not load clock board: $error'),
                   data: (entries) {
                     final openEntries = entries.where((e) => e.isOpen).toList();
                     if (openEntries.isEmpty) {
                       return const Card(
                         child: Padding(
                           padding: EdgeInsets.all(24),
-                          child: Center(child: Text('No staff currently clocked in.')),
+                          child: Center(
+                            child: Text('No staff currently clocked in.'),
+                          ),
                         ),
                       );
                     }
@@ -451,15 +499,20 @@ class _TimeClockScreenState extends ConsumerState<TimeClockScreen> {
                           elevation: 1,
                           child: ListTile(
                             leading: CircleAvatar(
-                              backgroundColor: entry.isOnBreak ? Colors.orange.shade100 : Colors.green.shade100,
+                              backgroundColor: entry.isOnBreak
+                                  ? Colors.orange.shade100
+                                  : Colors.green.shade100,
                               child: Icon(
                                 entry.isOnBreak ? Icons.coffee : Icons.person,
-                                color: entry.isOnBreak ? Colors.orange : Colors.green,
+                                color: entry.isOnBreak
+                                    ? Colors.orange
+                                    : Colors.green,
                               ),
                             ),
                             title: Text(
                               'Staff ID: ${entry.userId.substring(0, 8)}...',
-                              style: const TextStyle(fontWeight: FontWeight.bold),
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.bold),
                             ),
                             subtitle: Text(
                               entry.isOnBreak

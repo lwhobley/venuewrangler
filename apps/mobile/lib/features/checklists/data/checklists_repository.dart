@@ -44,7 +44,9 @@ class SupabaseChecklistsRepository implements ChecklistsRepository {
   }
 
   @override
-  Future<List<ChecklistTemplateItem>> fetchItemsForTemplate(String templateId) async {
+  Future<List<ChecklistTemplateItem>> fetchItemsForTemplate(
+    String templateId,
+  ) async {
     final rows = await _client
         .from('checklist_template_items')
         .select()
@@ -69,7 +71,9 @@ class SupabaseChecklistsRepository implements ChecklistsRepository {
         if (notes != null) 'notes': notes,
       });
     } on PostgrestException catch (error) {
-      if (error.code == '23505') return; // already submitted by an earlier retry; done.
+      if (error.code == '23505') {
+        return; // already submitted by an earlier retry; done.
+      }
       rethrow;
     }
   }

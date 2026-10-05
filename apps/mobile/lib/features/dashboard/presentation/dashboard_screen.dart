@@ -38,10 +38,12 @@ class DashboardScreen extends ConsumerWidget {
     final now = DateTime.now();
     final todayShiftCount = shiftsAsync.maybeWhen(
       data: (shifts) => shifts
-          .where((s) =>
-              s.startTime.year == now.year &&
-              s.startTime.month == now.month &&
-              s.startTime.day == now.day)
+          .where(
+            (s) =>
+                s.startTime.year == now.year &&
+                s.startTime.month == now.month &&
+                s.startTime.day == now.day,
+          )
           .length,
       orElse: () => null,
     );
@@ -61,7 +63,8 @@ class DashboardScreen extends ConsumerWidget {
           IconButton(
             icon: const Icon(Icons.swap_horiz),
             tooltip: 'Switch venue',
-            onPressed: () => ref.read(activeVenueProvider.notifier).state = null,
+            onPressed: () =>
+                ref.read(activeVenueProvider.notifier).state = null,
           ),
           IconButton(
             icon: const Icon(Icons.logout),
@@ -117,18 +120,66 @@ class DashboardScreen extends ConsumerWidget {
             const SizedBox(height: 24),
             Text('More', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
-            _NavTile(icon: Icons.handshake_outlined, label: 'CRM', route: '/crm'),
-            _NavTile(icon: Icons.folder_outlined, label: 'Documents', route: '/documents'),
-            _NavTile(icon: Icons.fact_check_outlined, label: 'Checklists', route: '/checklists'),
-            _NavTile(icon: Icons.report_outlined, label: 'Incidents', route: '/incidents'),
-            _NavTile(icon: Icons.auto_awesome_outlined, label: 'Ask Wrangler', route: '/wrangler'),
-            _NavTile(icon: Icons.groups_outlined, label: 'Staff', route: '/workforce'),
-            _NavTile(icon: Icons.timer_outlined, label: 'Time Clock', route: '/time-clock'),
-            _NavTile(icon: Icons.assignment_outlined, label: 'Staff Requests', route: '/staff-requests'),
-            _NavTile(icon: Icons.lightbulb_outlined, label: 'Shift Insights', route: '/shift-insights'),
-            _NavTile(icon: Icons.credit_card_outlined, label: 'Billing', route: '/billing'),
-            _NavTile(icon: Icons.extension_outlined, label: 'Integrations', route: '/integrations'),
-            _NavTile(icon: Icons.settings_outlined, label: 'Settings', route: '/settings'),
+            _NavTile(
+              icon: Icons.handshake_outlined,
+              label: 'CRM',
+              route: '/crm',
+            ),
+            _NavTile(
+              icon: Icons.folder_outlined,
+              label: 'Documents',
+              route: '/documents',
+            ),
+            _NavTile(
+              icon: Icons.fact_check_outlined,
+              label: 'Checklists',
+              route: '/checklists',
+            ),
+            _NavTile(
+              icon: Icons.report_outlined,
+              label: 'Incidents',
+              route: '/incidents',
+            ),
+            _NavTile(
+              icon: Icons.auto_awesome_outlined,
+              label: 'Ask Wrangler',
+              route: '/wrangler',
+            ),
+            _NavTile(
+              icon: Icons.groups_outlined,
+              label: 'Staff',
+              route: '/workforce',
+            ),
+            _NavTile(
+              icon: Icons.timer_outlined,
+              label: 'Time Clock',
+              route: '/time-clock',
+            ),
+            _NavTile(
+              icon: Icons.assignment_outlined,
+              label: 'Staff Requests',
+              route: '/staff-requests',
+            ),
+            _NavTile(
+              icon: Icons.lightbulb_outlined,
+              label: 'Shift Insights',
+              route: '/shift-insights',
+            ),
+            _NavTile(
+              icon: Icons.credit_card_outlined,
+              label: 'Billing',
+              route: '/billing',
+            ),
+            _NavTile(
+              icon: Icons.extension_outlined,
+              label: 'Integrations',
+              route: '/integrations',
+            ),
+            _NavTile(
+              icon: Icons.settings_outlined,
+              label: 'Settings',
+              route: '/settings',
+            ),
           ],
         ),
       ),
@@ -175,7 +226,11 @@ class _StatTile extends StatelessWidget {
 }
 
 class _NavTile extends StatelessWidget {
-  const _NavTile({required this.icon, required this.label, required this.route});
+  const _NavTile({
+    required this.icon,
+    required this.label,
+    required this.route,
+  });
 
   final IconData icon;
   final String label;

@@ -12,14 +12,18 @@ final checklistsRepositoryProvider = Provider<ChecklistsRepository>((ref) {
   return SupabaseChecklistsRepository(client);
 });
 
-final checklistTemplatesForVenueProvider =
-    FutureProvider.autoDispose.family<List<ChecklistTemplate>, String>((ref, venueId) {
-  return ref.watch(checklistsRepositoryProvider).fetchTemplatesForVenue(venueId);
+final checklistTemplatesForVenueProvider = FutureProvider.autoDispose
+    .family<List<ChecklistTemplate>, String>((ref, venueId) {
+  return ref
+      .watch(checklistsRepositoryProvider)
+      .fetchTemplatesForVenue(venueId);
 });
 
-final checklistItemsForTemplateProvider =
-    FutureProvider.autoDispose.family<List<ChecklistTemplateItem>, String>((ref, templateId) {
-  return ref.watch(checklistsRepositoryProvider).fetchItemsForTemplate(templateId);
+final checklistItemsForTemplateProvider = FutureProvider.autoDispose
+    .family<List<ChecklistTemplateItem>, String>((ref, templateId) {
+  return ref
+      .watch(checklistsRepositoryProvider)
+      .fetchItemsForTemplate(templateId);
 });
 
 /// Mutation kind for a checklist completion submitted while offline. Payload: `completionId`
@@ -31,7 +35,8 @@ final checklistItemsForTemplateProvider =
 /// nothing to conflict with — the handler just retries until it succeeds (or is denied
 /// outright, e.g. the user lost venue membership in the meantime, which surfaces as a
 /// conflict since no retry would ever let it succeed).
-const String kChecklistCompletionSubmitMutationKind = 'checklist_completion_submit';
+const String kChecklistCompletionSubmitMutationKind =
+    'checklist_completion_submit';
 
 PendingMutation buildChecklistCompletionMutation({
   required String completionId,
@@ -54,10 +59,13 @@ PendingMutation buildChecklistCompletionMutation({
   );
 }
 
-final checklistMutationHandlersProvider = Provider<Map<String, MutationHandler>>((ref) {
+final checklistMutationHandlersProvider =
+    Provider<Map<String, MutationHandler>>((ref) {
   final repo = ref.watch(checklistsRepositoryProvider);
 
-  Future<MutationResult> handleCompletionSubmit(Map<String, dynamic> payload) async {
+  Future<MutationResult> handleCompletionSubmit(
+    Map<String, dynamic> payload,
+  ) async {
     final itemResultsJson = payload['itemResults'] as List<dynamic>;
     try {
       await repo.submitCompletion(
@@ -73,7 +81,7 @@ final checklistMutationHandlersProvider = Provider<Map<String, MutationHandler>>
       if (error.code == '42501') {
         return const MutationResult(
           MutationOutcome.conflict,
-          message: "You no longer have permission to submit this checklist.",
+          message: 'You no longer have permission to submit this checklist.',
         );
       }
       rethrow; // network/5xx-shaped failures are retried by the queue controller.

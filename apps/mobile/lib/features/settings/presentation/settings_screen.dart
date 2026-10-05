@@ -22,7 +22,8 @@ class SettingsScreen extends ConsumerWidget {
       appBar: AppBar(title: const Text('Settings')),
       body: profileAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (_, __) => const Center(child: Text('Could not load your profile.')),
+        error: (_, __) =>
+            const Center(child: Text('Could not load your profile.')),
         data: (profile) => ListView(
           padding: const EdgeInsets.all(16),
           children: [
@@ -33,11 +34,14 @@ class SettingsScreen extends ConsumerWidget {
               const SizedBox(height: 24),
             ],
             FilledButton.icon(
-              onPressed: () => _editDisplayName(context, ref, profile.displayName),
+              onPressed: () =>
+                  _editDisplayName(context, ref, profile.displayName),
               icon: const Icon(Icons.edit_outlined),
-              label: Text(profile.displayName == null
-                  ? 'Set display name'
-                  : 'Display name: ${profile.displayName}'),
+              label: Text(
+                profile.displayName == null
+                    ? 'Set display name'
+                    : 'Display name: ${profile.displayName}',
+              ),
             ),
             const SizedBox(height: 24),
             OutlinedButton.icon(
@@ -76,16 +80,24 @@ class SettingsScreen extends ConsumerWidget {
       ),
     );
 
-    if (confirmed != true || controller.text.trim().isEmpty || !context.mounted) return;
+    if (confirmed != true ||
+        controller.text.trim().isEmpty ||
+        !context.mounted) {
+      return;
+    }
 
     try {
       final userId = ref.read(supabaseClientProvider).auth.currentUser!.id;
-      await ref.read(settingsRepositoryProvider).updateDisplayName(userId, controller.text.trim());
+      await ref
+          .read(settingsRepositoryProvider)
+          .updateDisplayName(userId, controller.text.trim());
       ref.invalidate(myProfileProvider);
     } on PostgrestException catch (_) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Something went wrong. Please try again.')),
+        const SnackBar(
+          content: Text('Something went wrong. Please try again.'),
+        ),
       );
     }
   }

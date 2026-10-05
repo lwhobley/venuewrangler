@@ -9,7 +9,7 @@ final inventoryRepositoryProvider = Provider<InventoryRepository>((ref) {
   return SupabaseInventoryRepository(client);
 });
 
-final inventoryForVenueProvider =
-    FutureProvider.autoDispose.family<List<InventoryItem>, String>((ref, venueId) {
+final inventoryForVenueProvider = FutureProvider.autoDispose
+    .family<List<InventoryItem>, String>((ref, venueId) {
   return ref.watch(inventoryRepositoryProvider).fetchItemsForVenue(venueId);
 });

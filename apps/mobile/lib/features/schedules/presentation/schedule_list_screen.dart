@@ -26,7 +26,8 @@ class ScheduleListScreen extends ConsumerWidget {
 
     final shiftsAsync = ref.watch(shiftsForVenueProvider(venue.id));
     final swapsAsync = ref.watch(shiftSwapsForVenueProvider(venue.id));
-    final currentUserId = ref.watch(supabaseClientProvider).auth.currentUser?.id;
+    final currentUserId =
+        ref.watch(supabaseClientProvider).auth.currentUser?.id;
 
     return Scaffold(
       appBar: AppBar(title: Text('Schedule — ${venue.name}')),
@@ -44,7 +45,8 @@ class ScheduleListScreen extends ConsumerWidget {
                 const Text('Could not load the schedule.'),
                 const SizedBox(height: 12),
                 OutlinedButton(
-                  onPressed: () => ref.invalidate(shiftsForVenueProvider(venue.id)),
+                  onPressed: () =>
+                      ref.invalidate(shiftsForVenueProvider(venue.id)),
                   child: const Text('Retry'),
                 ),
               ],
@@ -52,7 +54,9 @@ class ScheduleListScreen extends ConsumerWidget {
           ),
           data: (shifts) {
             final pendingSwaps = swapsAsync.maybeWhen(
-              data: (swaps) => swaps.where((s) => s.status == ShiftSwapStatus.pending).toList(),
+              data: (swaps) => swaps
+                  .where((s) => s.status == ShiftSwapStatus.pending)
+                  .toList(),
               orElse: () => const <ShiftSwap>[],
             );
             if (shifts.isEmpty && pendingSwaps.isEmpty) {
@@ -61,7 +65,8 @@ class ScheduleListScreen extends ConsumerWidget {
                   physics: const AlwaysScrollableScrollPhysics(),
                   child: SizedBox(
                     height: constraints.maxHeight,
-                    child: const Center(child: Text('No shifts scheduled yet.')),
+                    child:
+                        const Center(child: Text('No shifts scheduled yet.')),
                   ),
                 ),
               );
@@ -71,7 +76,10 @@ class ScheduleListScreen extends ConsumerWidget {
                 if (pendingSwaps.isNotEmpty) ...[
                   const Padding(
                     padding: EdgeInsets.fromLTRB(16, 16, 16, 4),
-                    child: Text('Open swap requests', style: TextStyle(fontWeight: FontWeight.bold)),
+                    child: Text(
+                      'Open swap requests',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
                   ),
                   for (final swap in pendingSwaps)
                     _SwapTile(swap: swap, currentUserId: currentUserId),
@@ -130,13 +138,15 @@ class ScheduleListScreen extends ConsumerWidget {
               TextField(
                 controller: staffIdController,
                 decoration: const InputDecoration(
-                  labelText: 'Staff user ID (optional — leave blank for an open shift)',
+                  labelText:
+                      'Staff user ID (optional — leave blank for an open shift)',
                 ),
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: roleLabelController,
-                decoration: const InputDecoration(labelText: 'Role (e.g. bartender)'),
+                decoration:
+                    const InputDecoration(labelText: 'Role (e.g. bartender)'),
               ),
               const SizedBox(height: 12),
               ListTile(
@@ -180,10 +190,12 @@ class ScheduleListScreen extends ConsumerWidget {
     try {
       await ref.read(schedulesRepositoryProvider).createShift(
             venueId: venueId,
-            staffId:
-                staffIdController.text.trim().isEmpty ? null : staffIdController.text.trim(),
-            roleLabel:
-                roleLabelController.text.trim().isEmpty ? null : roleLabelController.text.trim(),
+            staffId: staffIdController.text.trim().isEmpty
+                ? null
+                : staffIdController.text.trim(),
+            roleLabel: roleLabelController.text.trim().isEmpty
+                ? null
+                : roleLabelController.text.trim(),
             startTime: start,
             endTime: end,
           );
@@ -195,11 +207,15 @@ class ScheduleListScreen extends ConsumerWidget {
         '23514' => 'The shift end time must be after its start time.',
         _ => 'Something went wrong. Please try again.',
       };
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
     }
   }
 
-  Future<DateTime?> _pickDateTime(BuildContext context, DateTime initial) async {
+  Future<DateTime?> _pickDateTime(
+    BuildContext context,
+    DateTime initial,
+  ) async {
     final date = await showDatePicker(
       context: context,
       initialDate: initial,
@@ -217,7 +233,11 @@ class ScheduleListScreen extends ConsumerWidget {
     return DateTime(date.year, date.month, date.day, time.hour, time.minute);
   }
 
-  Future<void> _showSuggestDialog(BuildContext context, WidgetRef ref, String venueId) async {
+  Future<void> _showSuggestDialog(
+    BuildContext context,
+    WidgetRef ref,
+    String venueId,
+  ) async {
     final textController = TextEditingController();
 
     final context_ = await showDialog<String>(
@@ -229,7 +249,8 @@ class ScheduleListScreen extends ConsumerWidget {
           autofocus: true,
           maxLines: 8,
           decoration: const InputDecoration(
-            hintText: 'Describe the roster, target headcount, and any constraints '
+            hintText:
+                'Describe the roster, target headcount, and any constraints '
                 '(time-off requests, required roles)…',
             border: OutlineInputBorder(),
           ),
@@ -240,7 +261,8 @@ class ScheduleListScreen extends ConsumerWidget {
             child: const Text('Cancel'),
           ),
           FilledButton(
-            onPressed: () => Navigator.of(context).pop(textController.text.trim()),
+            onPressed: () =>
+                Navigator.of(context).pop(textController.text.trim()),
             child: const Text('Suggest'),
           ),
         ],
@@ -256,14 +278,17 @@ class ScheduleListScreen extends ConsumerWidget {
           .suggestScheduling(venueId: venueId, context: context_);
     } on AppError catch (error) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message)));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error.message)));
       return;
     }
 
     if (!context.mounted) return;
     if (result.suggestions.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No suggestions could be made from that description.')),
+        const SnackBar(
+          content: Text('No suggestions could be made from that description.'),
+        ),
       );
       return;
     }
@@ -282,7 +307,8 @@ class ScheduleListScreen extends ConsumerWidget {
                   title: Text('Staff: ${suggestion.staffId}'),
                   subtitle: Text(
                     [
-                      if (suggestion.startTime != null && suggestion.endTime != null)
+                      if (suggestion.startTime != null &&
+                          suggestion.endTime != null)
                         '${suggestion.startTime} → ${suggestion.endTime}',
                       suggestion.reason,
                     ].join('\n'),
@@ -296,7 +322,8 @@ class ScheduleListScreen extends ConsumerWidget {
                         ref,
                         venueId,
                         prefillStaffId: suggestion.staffId,
-                        prefillStart: DateTime.tryParse(suggestion.startTime ?? ''),
+                        prefillStart:
+                            DateTime.tryParse(suggestion.startTime ?? ''),
                         prefillEnd: DateTime.tryParse(suggestion.endTime ?? ''),
                       );
                     },
@@ -355,18 +382,23 @@ class _ShiftTile extends ConsumerWidget {
 
   Future<void> _requestSwap(BuildContext context, WidgetRef ref) async {
     try {
-      await ref.read(schedulesRepositoryProvider).requestSwap(shiftId: shift.id);
+      await ref
+          .read(schedulesRepositoryProvider)
+          .requestSwap(shiftId: shift.id);
       ref.invalidate(shiftSwapsForVenueProvider(shift.venueId));
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Swap requested — any teammate can now accept it.')),
+        const SnackBar(
+          content: Text('Swap requested — any teammate can now accept it.'),
+        ),
       );
     } on PostgrestException catch (error) {
       if (!context.mounted) return;
       final message = error.code == '42501'
-          ? "You can only request a swap for your own shift."
+          ? 'You can only request a swap for your own shift.'
           : 'Something went wrong. Please try again.';
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
     }
   }
 
@@ -379,7 +411,8 @@ class _ShiftTile extends ConsumerWidget {
       final message = error.code == '42501'
           ? "You don't have permission to delete this shift."
           : 'Something went wrong. Please try again.';
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
     }
   }
 }
@@ -392,7 +425,8 @@ class _SwapTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isRequester = currentUserId != null && swap.requestedBy == currentUserId;
+    final isRequester =
+        currentUserId != null && swap.requestedBy == currentUserId;
     final canAccept = !isRequester &&
         currentUserId != null &&
         (swap.offeredTo == null || swap.offeredTo == currentUserId);
@@ -431,7 +465,8 @@ class _SwapTile extends ConsumerWidget {
       final message = error.code == '42501'
           ? 'This swap is no longer available to you.'
           : 'Something went wrong. Please try again.';
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
     }
   }
 
@@ -442,7 +477,9 @@ class _SwapTile extends ConsumerWidget {
     } on PostgrestException catch (_) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Something went wrong. Please try again.')),
+        const SnackBar(
+          content: Text('Something went wrong. Please try again.'),
+        ),
       );
     }
   }

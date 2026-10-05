@@ -36,7 +36,8 @@ class _FakeTasksRepository implements TasksRepository {
   bool simulateOffline = false;
 
   @override
-  Future<List<OperationalTask>> fetchTasksForVenue(String venueId) async => tasks;
+  Future<List<OperationalTask>> fetchTasksForVenue(String venueId) async =>
+      tasks;
 
   @override
   Future<void> createTask({
@@ -92,7 +93,8 @@ void main() {
   List<Override> baseOverrides(_FakeTasksRepository fakeRepo) => [
         activeVenueProvider.overrideWith((ref) => venue),
         tasksRepositoryProvider.overrideWithValue(fakeRepo),
-        offlineQueueStoreProvider.overrideWithValue(_InMemoryOfflineQueueStore()),
+        offlineQueueStoreProvider
+            .overrideWithValue(_InMemoryOfflineQueueStore()),
       ];
 
   testWidgets('shows an empty state when there are no tasks', (tester) async {
@@ -107,7 +109,8 @@ void main() {
     expect(find.text('No tasks yet.'), findsOneWidget);
   });
 
-  testWidgets('lists tasks and toggling the checkbox updates status online', (tester) async {
+  testWidgets('lists tasks and toggling the checkbox updates status online',
+      (tester) async {
     final fakeRepo = _FakeTasksRepository([openTask]);
 
     await tester.pumpWidget(
@@ -127,7 +130,8 @@ void main() {
     expect(fakeRepo.lastStatusUpdateValue, TaskStatus.completed);
   });
 
-  testWidgets('toggling while offline queues the change and shows a syncing badge',
+  testWidgets(
+      'toggling while offline queues the change and shows a syncing badge',
       (tester) async {
     final fakeRepo = _FakeTasksRepository([openTask])..simulateOffline = true;
 
@@ -146,11 +150,13 @@ void main() {
     expect(find.text('Syncing…'), findsOneWidget);
     // The checkbox reflects the queued change optimistically even though the repository
     // call itself failed.
-    final checkbox = tester.widget<CheckboxListTile>(find.byType(CheckboxListTile));
+    final checkbox =
+        tester.widget<CheckboxListTile>(find.byType(CheckboxListTile));
     expect(checkbox.value, isTrue);
   });
 
-  testWidgets('creating a task from the dialog calls the repository', (tester) async {
+  testWidgets('creating a task from the dialog calls the repository',
+      (tester) async {
     final fakeRepo = _FakeTasksRepository([]);
 
     await tester.pumpWidget(

@@ -23,7 +23,10 @@ class _FakeFloorRepository implements FloorRepository {
   Future<List<FloorPlan>> getFloorPlans({required String venueId}) async => [];
 
   @override
-  Future<List<FloorTable>> getFloorTables({required String floorPlanId}) async => _tables;
+  Future<List<FloorTable>> getFloorTables({
+    required String floorPlanId,
+  }) async =>
+      _tables;
 
   @override
   Stream<List<FloorTable>> streamFloorTables({required String venueId}) async* {
@@ -109,7 +112,8 @@ void main() {
     expect(find.text('No tables found for this venue'), findsOneWidget);
   });
 
-  testWidgets('renders tables and allows updating status via action sheet', (tester) async {
+  testWidgets('renders tables and allows updating status via action sheet',
+      (tester) async {
     final fakeRepo = _FakeFloorRepository(
       initialTables: [
         FloorTable(

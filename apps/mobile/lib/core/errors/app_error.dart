@@ -9,7 +9,9 @@ sealed class AppError {
 }
 
 final class NetworkError extends AppError {
-  const NetworkError([super.message = 'Could not reach the server. Check your connection.']);
+  const NetworkError([
+    super.message = 'Could not reach the server. Check your connection.',
+  ]);
 }
 
 final class AuthError extends AppError {

@@ -56,7 +56,9 @@ class SupabaseEventsRepository implements EventsRepository {
 
   @override
   Future<void> updateStatus(String eventId, EventStatus status) async {
-    await _client.from('events').update({'status': status.toDb()}).eq('id', eventId);
+    await _client
+        .from('events')
+        .update({'status': status.toDb()}).eq('id', eventId);
   }
 
   @override

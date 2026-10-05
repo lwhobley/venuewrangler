@@ -34,17 +34,28 @@ class VenueDocument {
   final String storagePath;
   final DateTime createdAt;
 
-  static const categories = ['sop', 'manual', 'recipe', 'menu', 'training', 'form', 'other'];
+  static const categories = [
+    'sop',
+    'manual',
+    'recipe',
+    'menu',
+    'training',
+    'form',
+    'other',
+  ];
   static const managerOnlyCategories = {'form', 'other'};
 
   bool get isManagerOnly => managerOnlyCategories.contains(category);
 
   bool get isInlineViewable =>
-      mimeType == 'application/pdf' || (mimeType.startsWith('image/') && mimeType != 'image/svg+xml');
+      mimeType == 'application/pdf' ||
+      (mimeType.startsWith('image/') && mimeType != 'image/svg+xml');
 
   String get readableSize {
     if (sizeBytes < 1024) return '$sizeBytes B';
-    if (sizeBytes < 1024 * 1024) return '${(sizeBytes / 1024).toStringAsFixed(1)} KB';
+    if (sizeBytes < 1024 * 1024) {
+      return '${(sizeBytes / 1024).toStringAsFixed(1)} KB';
+    }
     return '${(sizeBytes / (1024 * 1024)).toStringAsFixed(1)} MB';
   }
 }

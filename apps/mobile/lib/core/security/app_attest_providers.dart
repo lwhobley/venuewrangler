@@ -22,7 +22,8 @@ final appAttestServiceProvider = Provider<AppAttestService>((ref) {
 final appAttestTriggerProvider = Provider<void>((ref) {
   final service = ref.read(appAttestServiceProvider);
 
-  final subscription = ref.read(supabaseClientProvider).auth.onAuthStateChange.listen((state) {
+  final subscription =
+      ref.read(supabaseClientProvider).auth.onAuthStateChange.listen((state) {
     if (state.event == AuthChangeEvent.signedIn) {
       // ignore: unawaited_futures
       service.attestDevice();

@@ -43,10 +43,13 @@ PendingMutation buildIncidentEvidenceUploadMutation({
   );
 }
 
-final mediaMutationHandlersProvider = Provider<Map<String, MutationHandler>>((ref) {
+final mediaMutationHandlersProvider =
+    Provider<Map<String, MutationHandler>>((ref) {
   final repo = ref.watch(mediaRepositoryProvider);
 
-  Future<MutationResult> handleEvidenceUpload(Map<String, dynamic> payload) async {
+  Future<MutationResult> handleEvidenceUpload(
+    Map<String, dynamic> payload,
+  ) async {
     try {
       await repo.uploadIncidentEvidence(
         attachmentId: payload['attachmentId'] as String,
@@ -58,13 +61,15 @@ final mediaMutationHandlersProvider = Provider<Map<String, MutationHandler>>((re
     } on LocalFileMissingException {
       return const MutationResult(
         MutationOutcome.conflict,
-        message: 'The photo is no longer available on this device and could not be uploaded.',
+        message:
+            'The photo is no longer available on this device and could not be uploaded.',
       );
     } on PostgrestException catch (error) {
       if (error.code == '42501') {
         return const MutationResult(
           MutationOutcome.conflict,
-          message: 'You no longer have permission to attach evidence to this incident.',
+          message:
+              'You no longer have permission to attach evidence to this incident.',
         );
       }
       rethrow; // network/5xx-shaped failures are retried by the queue controller.

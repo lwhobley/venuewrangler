@@ -36,7 +36,8 @@ class _FakeIncidentsRepository implements IncidentsRepository {
   String? lastResolvedId;
 
   @override
-  Future<List<Incident>> fetchIncidentsForVenue(String venueId) async => incidents;
+  Future<List<Incident>> fetchIncidentsForVenue(String venueId) async =>
+      incidents;
 
   @override
   Future<void> reportIncident({
@@ -62,7 +63,8 @@ class _FakeImagePickerService implements ImagePickerService {
   final String? pathToReturn;
 
   @override
-  Future<String?> pickImage({required ImageSource source}) async => pathToReturn;
+  Future<String?> pickImage({required ImageSource source}) async =>
+      pathToReturn;
 }
 
 class _FakeMediaRepository implements MediaRepository {
@@ -102,10 +104,12 @@ void main() {
   List<Override> baseOverrides(_FakeIncidentsRepository fakeRepo) => [
         activeVenueProvider.overrideWith((ref) => venue),
         incidentsRepositoryProvider.overrideWithValue(fakeRepo),
-        offlineQueueStoreProvider.overrideWithValue(_InMemoryOfflineQueueStore()),
+        offlineQueueStoreProvider
+            .overrideWithValue(_InMemoryOfflineQueueStore()),
       ];
 
-  testWidgets('shows an empty state when there are no incidents', (tester) async {
+  testWidgets('shows an empty state when there are no incidents',
+      (tester) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: baseOverrides(_FakeIncidentsRepository(const [])),
@@ -117,7 +121,8 @@ void main() {
     expect(find.text('No incidents reported.'), findsOneWidget);
   });
 
-  testWidgets('lists incidents and resolving one calls the repository', (tester) async {
+  testWidgets('lists incidents and resolving one calls the repository',
+      (tester) async {
     final fakeRepo = _FakeIncidentsRepository([openIncident]);
 
     await tester.pumpWidget(
@@ -136,7 +141,8 @@ void main() {
     expect(fakeRepo.lastResolvedId, 'incident-1');
   });
 
-  testWidgets('reporting an incident online calls the repository', (tester) async {
+  testWidgets('reporting an incident online calls the repository',
+      (tester) async {
     final fakeRepo = _FakeIncidentsRepository([]);
 
     await tester.pumpWidget(
@@ -147,17 +153,22 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.widgetWithText(FloatingActionButton, 'Report incident'));
+    await tester
+        .tap(find.widgetWithText(FloatingActionButton, 'Report incident'));
     await tester.pumpAndSettle();
 
-    await tester.enterText(find.widgetWithText(TextField, 'What happened?'), 'Broken glass');
+    await tester.enterText(
+      find.widgetWithText(TextField, 'What happened?'),
+      'Broken glass',
+    );
     await tester.tap(find.widgetWithText(FilledButton, 'Report'));
     await tester.pumpAndSettle();
 
     expect(fakeRepo.lastReportedTitle, 'Broken glass');
   });
 
-  testWidgets('reporting while offline queues the mutation and shows a syncing draft',
+  testWidgets(
+      'reporting while offline queues the mutation and shows a syncing draft',
       (tester) async {
     final fakeRepo = _FakeIncidentsRepository([])..simulateOffline = true;
 
@@ -169,10 +180,14 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.widgetWithText(FloatingActionButton, 'Report incident'));
+    await tester
+        .tap(find.widgetWithText(FloatingActionButton, 'Report incident'));
     await tester.pumpAndSettle();
 
-    await tester.enterText(find.widgetWithText(TextField, 'What happened?'), 'Broken glass');
+    await tester.enterText(
+      find.widgetWithText(TextField, 'What happened?'),
+      'Broken glass',
+    );
     await tester.tap(find.widgetWithText(FilledButton, 'Report'));
     await tester.pumpAndSettle();
 
@@ -182,7 +197,8 @@ void main() {
     expect(find.text('Syncing…'), findsOneWidget);
   });
 
-  testWidgets('attaching a photo and reporting online uploads the evidence afterward',
+  testWidgets(
+      'attaching a photo and reporting online uploads the evidence afterward',
       (tester) async {
     final fakeIncidents = _FakeIncidentsRepository([]);
     final fakeMedia = _FakeMediaRepository();
@@ -200,10 +216,14 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.widgetWithText(FloatingActionButton, 'Report incident'));
+    await tester
+        .tap(find.widgetWithText(FloatingActionButton, 'Report incident'));
     await tester.pumpAndSettle();
 
-    await tester.enterText(find.widgetWithText(TextField, 'What happened?'), 'Broken glass');
+    await tester.enterText(
+      find.widgetWithText(TextField, 'What happened?'),
+      'Broken glass',
+    );
     await tester.tap(find.widgetWithText(TextButton, 'Attach photo'));
     await tester.pumpAndSettle();
     expect(find.text('Photo attached'), findsOneWidget);

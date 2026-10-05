@@ -36,8 +36,10 @@ class BillingScreen extends ConsumerWidget {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            Text('App subscription',
-                style: Theme.of(context).textTheme.titleLarge),
+            Text(
+              'App subscription',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
             const SizedBox(height: 8),
             subscriptionAsync.when(
               loading: () => const Center(child: CircularProgressIndicator()),
@@ -55,43 +57,57 @@ class BillingScreen extends ConsumerWidget {
               ),
             ),
             const SizedBox(height: 32),
-            Text('Event deposit payments',
-                style: Theme.of(context).textTheme.titleLarge),
+            Text(
+              'Event deposit payments',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
             const SizedBox(height: 8),
             const Text(
-                'Deposits are paid to your organization’s Stripe account. App subscription payments are separate.'),
+              'Deposits are paid to your organization’s Stripe account. App subscription payments are separate.',
+            ),
             const SizedBox(height: 12),
             depositAccountAsync.when(
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (_, __) => const Text(
-                  'Could not load deposit account status. Pull down to retry.'),
+                'Could not load deposit account status. Pull down to retry.',
+              ),
               data: (account) => Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Card(
-                      child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Text(!account.connected
-                        ? 'Account setup needed'
-                        : account.ready && account.payoutsReady
-                            ? 'Ready to collect deposits and receive payouts'
-                            : account.ready
-                                ? 'Card payments are enabled; payouts are still being verified'
-                                : 'Stripe is verifying your account'),
-                  )),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Text(
+                        !account.connected
+                            ? 'Account setup needed'
+                            : account.ready && account.payoutsReady
+                                ? 'Ready to collect deposits and receive payouts'
+                                : account.ready
+                                    ? 'Card payments are enabled; payouts are still being verified'
+                                    : 'Stripe is verifying your account',
+                      ),
+                    ),
+                  ),
                   const SizedBox(height: 12),
                   if (!account.ready || !account.payoutsReady)
                     FilledButton.icon(
                       onPressed: () => _setupDepositAccount(
-                          context, ref, organizationId, account.connected),
+                        context,
+                        ref,
+                        organizationId,
+                        account.connected,
+                      ),
                       icon: const Icon(Icons.account_balance_outlined),
-                      label: Text(account.connected
-                          ? 'Continue Stripe setup'
-                          : 'Set up deposit account'),
+                      label: Text(
+                        account.connected
+                            ? 'Continue Stripe setup'
+                            : 'Set up deposit account',
+                      ),
                     ),
                   TextButton(
                     onPressed: () => ref.invalidate(
-                        depositAccountForOrgProvider(organizationId)),
+                      depositAccountForOrgProvider(organizationId),
+                    ),
                     child: const Text('Refresh account status'),
                   ),
                 ],
@@ -103,8 +119,12 @@ class BillingScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _setupDepositAccount(BuildContext context, WidgetRef ref,
-      String organizationId, bool connected) async {
+  Future<void> _setupDepositAccount(
+    BuildContext context,
+    WidgetRef ref,
+    String organizationId,
+    bool connected,
+  ) async {
     String country = '';
     if (!connected) {
       final selected = await showDialog<String>(
@@ -125,11 +145,14 @@ class BillingScreen extends ConsumerWidget {
             ),
             actions: [
               TextButton(
-                  onPressed: () => Navigator.pop(dialogContext),
-                  child: const Text('Cancel')),
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Cancel'),
+              ),
               FilledButton(
                 onPressed: () => Navigator.pop(
-                    dialogContext, country.trim().toUpperCase()),
+                  dialogContext,
+                  country.trim().toUpperCase(),
+                ),
                 child: const Text('Continue'),
               ),
             ],

@@ -32,8 +32,11 @@ class OfflineQueueState {
 /// queues (see TasksRepository/TaskListScreen for the first consumer) rather than this class
 /// knowing about tasks, checklists, or incidents itself.
 class OfflineQueueController extends StateNotifier<OfflineQueueState> {
-  OfflineQueueController(this._store, this._handlers, {String? Function()? currentUserId})
-      : _currentUserId = currentUserId,
+  OfflineQueueController(
+    this._store,
+    this._handlers, {
+    String? Function()? currentUserId,
+  })  : _currentUserId = currentUserId,
         super(const OfflineQueueState()) {
     _loaded = _load();
   }
@@ -75,7 +78,9 @@ class OfflineQueueController extends StateNotifier<OfflineQueueState> {
 
   void dismissConflict(String mutationId) {
     state = state.copyWith(
-      conflicts: state.conflicts.where((m) => m.id != mutationId).toList(growable: false),
+      conflicts: state.conflicts
+          .where((m) => m.id != mutationId)
+          .toList(growable: false),
     );
   }
 
@@ -138,7 +143,10 @@ class OfflineQueueController extends StateNotifier<OfflineQueueState> {
     }
   }
 
-  Future<MutationResult> _tryApply(MutationHandler handler, PendingMutation mutation) async {
+  Future<MutationResult> _tryApply(
+    MutationHandler handler,
+    PendingMutation mutation,
+  ) async {
     try {
       return await handler(mutation.payload);
     } catch (_) {

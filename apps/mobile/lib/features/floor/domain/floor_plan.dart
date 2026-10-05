@@ -46,7 +46,8 @@ class FloorPlan {
       'name': name,
       'width': width,
       'height': height,
-      if (backgroundImageUrl != null) 'background_image_url': backgroundImageUrl,
+      if (backgroundImageUrl != null)
+        'background_image_url': backgroundImageUrl,
       'is_active': isActive,
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),

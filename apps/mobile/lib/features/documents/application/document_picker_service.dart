@@ -20,7 +20,17 @@ class DeviceDocumentPickerService implements DocumentPickerService {
   const DeviceDocumentPickerService();
 
   static const _allowedExtensions = [
-    'pdf', 'jpg', 'jpeg', 'png', 'webp', 'txt', 'csv', 'rtf', 'docx', 'xlsx', 'pptx',
+    'pdf',
+    'jpg',
+    'jpeg',
+    'png',
+    'webp',
+    'txt',
+    'csv',
+    'rtf',
+    'docx',
+    'xlsx',
+    'pptx',
   ];
 
   @override

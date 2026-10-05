@@ -9,7 +9,9 @@ final integrationsRepositoryProvider = Provider<IntegrationsRepository>((ref) {
   return SupabaseIntegrationsRepository(client);
 });
 
-final payrollConnectionsForVenueProvider =
-    FutureProvider.autoDispose.family<List<PayrollConnection>, String>((ref, venueId) {
-  return ref.watch(integrationsRepositoryProvider).fetchConnectionsForVenue(venueId);
+final payrollConnectionsForVenueProvider = FutureProvider.autoDispose
+    .family<List<PayrollConnection>, String>((ref, venueId) {
+  return ref
+      .watch(integrationsRepositoryProvider)
+      .fetchConnectionsForVenue(venueId);
 });

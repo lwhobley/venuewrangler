@@ -41,13 +41,17 @@ abstract class GuestsReservationsRepository {
   });
 }
 
-class SupabaseGuestsReservationsRepository implements GuestsReservationsRepository {
+class SupabaseGuestsReservationsRepository
+    implements GuestsReservationsRepository {
   SupabaseGuestsReservationsRepository(this._client);
 
   final SupabaseClient _client;
 
   @override
-  Future<List<Guest>> getGuests({required String venueId, int limit = 50}) async {
+  Future<List<Guest>> getGuests({
+    required String venueId,
+    int limit = 50,
+  }) async {
     final response = await _client
         .from('guests')
         .select()
@@ -72,7 +76,11 @@ class SupabaseGuestsReservationsRepository implements GuestsReservationsReposito
   }) async {
     // Note: organization_id is derived by DB trigger from venue_id, but supabase client requires non-null column
     // or placeholder that trigger overrides. Passing dummy uuid or querying venue org.
-    final venueRow = await _client.from('venues').select('organization_id').eq('id', venueId).single();
+    final venueRow = await _client
+        .from('venues')
+        .select('organization_id')
+        .eq('id', venueId)
+        .single();
     final orgId = venueRow['organization_id'] as String;
 
     final response = await _client
@@ -109,7 +117,8 @@ class SupabaseGuestsReservationsRepository implements GuestsReservationsReposito
       query = query.lte('reservation_time', to.toIso8601String());
     }
 
-    final response = await query.order('reservation_time', ascending: true).limit(limit);
+    final response =
+        await query.order('reservation_time', ascending: true).limit(limit);
 
     return (response as List<dynamic>)
         .map((row) => Reservation.fromJson(row as Map<String, dynamic>))
@@ -130,7 +139,11 @@ class SupabaseGuestsReservationsRepository implements GuestsReservationsReposito
     String? specialRequests,
     int? depositDueCents,
   }) async {
-    final venueRow = await _client.from('venues').select('organization_id').eq('id', venueId).single();
+    final venueRow = await _client
+        .from('venues')
+        .select('organization_id')
+        .eq('id', venueId)
+        .single();
     final orgId = venueRow['organization_id'] as String;
 
     final response = await _client
@@ -148,7 +161,8 @@ class SupabaseGuestsReservationsRepository implements GuestsReservationsReposito
           'source': source,
           if (specialRequests != null) 'special_requests': specialRequests,
           if (depositDueCents != null) 'deposit_due_cents': depositDueCents,
-          if (depositDueCents != null && depositDueCents > 0) 'deposit_status': 'required',
+          if (depositDueCents != null && depositDueCents > 0)
+            'deposit_status': 'required',
         })
         .select()
         .single();

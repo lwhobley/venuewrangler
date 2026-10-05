@@ -9,8 +9,8 @@ final workforceRepositoryProvider = Provider<WorkforceRepository>((ref) {
   return SupabaseWorkforceRepository(client);
 });
 
-final rosterForVenueProvider =
-    FutureProvider.autoDispose.family<List<RosterMember>, String>((ref, venueId) {
+final rosterForVenueProvider = FutureProvider.autoDispose
+    .family<List<RosterMember>, String>((ref, venueId) {
   return ref.watch(workforceRepositoryProvider).fetchRosterForVenue(venueId);
 });
 

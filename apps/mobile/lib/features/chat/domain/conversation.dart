@@ -40,5 +40,6 @@ class Conversation {
   final DateTime createdAt;
   final DateTime updatedAt;
 
-  String get displayName => name ?? (type == 'all_staff' ? 'All Staff' : 'Direct Message');
+  String get displayName =>
+      name ?? (type == 'all_staff' ? 'All Staff' : 'Direct Message');
 }

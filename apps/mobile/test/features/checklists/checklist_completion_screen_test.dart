@@ -31,10 +31,16 @@ class _FakeChecklistsRepository implements ChecklistsRepository {
   bool simulateOffline = false;
 
   @override
-  Future<List<ChecklistTemplate>> fetchTemplatesForVenue(String venueId) async => const [];
+  Future<List<ChecklistTemplate>> fetchTemplatesForVenue(
+    String venueId,
+  ) async =>
+      const [];
 
   @override
-  Future<List<ChecklistTemplateItem>> fetchItemsForTemplate(String templateId) async => items;
+  Future<List<ChecklistTemplateItem>> fetchItemsForTemplate(
+    String templateId,
+  ) async =>
+      items;
 
   @override
   Future<void> submitCompletion({
@@ -50,18 +56,33 @@ class _FakeChecklistsRepository implements ChecklistsRepository {
 
 void main() {
   final items = [
-    const ChecklistTemplateItem(id: 'item-1', templateId: 'template-1', label: 'Unlock door', position: 1),
-    const ChecklistTemplateItem(id: 'item-2', templateId: 'template-1', label: 'Turn on lights', position: 2),
+    const ChecklistTemplateItem(
+      id: 'item-1',
+      templateId: 'template-1',
+      label: 'Unlock door',
+      position: 1,
+    ),
+    const ChecklistTemplateItem(
+      id: 'item-2',
+      templateId: 'template-1',
+      label: 'Turn on lights',
+      position: 2,
+    ),
   ];
 
   Widget buildHarness(_FakeChecklistsRepository fakeRepo) {
     final router = GoRouter(
       initialLocation: '/list',
       routes: [
-        GoRoute(path: '/list', builder: (context, state) => const Scaffold(body: Text('Back on list'))),
+        GoRoute(
+          path: '/list',
+          builder: (context, state) =>
+              const Scaffold(body: Text('Back on list')),
+        ),
         GoRoute(
           path: '/detail',
-          builder: (context, state) => const ChecklistCompletionScreen(templateId: 'template-1'),
+          builder: (context, state) =>
+              const ChecklistCompletionScreen(templateId: 'template-1'),
         ),
       ],
     );
@@ -69,13 +90,15 @@ void main() {
     return ProviderScope(
       overrides: [
         checklistsRepositoryProvider.overrideWithValue(fakeRepo),
-        offlineQueueStoreProvider.overrideWithValue(_InMemoryOfflineQueueStore()),
+        offlineQueueStoreProvider
+            .overrideWithValue(_InMemoryOfflineQueueStore()),
       ],
       child: MaterialApp.router(routerConfig: router),
     );
   }
 
-  testWidgets('submitting online calls the repository with checked item results and pops back',
+  testWidgets(
+      'submitting online calls the repository with checked item results and pops back',
       (tester) async {
     final fakeRepo = _FakeChecklistsRepository(items);
 
@@ -96,17 +119,22 @@ void main() {
 
     expect(fakeRepo.lastSubmittedResults, isNotNull);
     expect(
-      fakeRepo.lastSubmittedResults!.firstWhere((r) => r.itemId == 'item-1').checked,
+      fakeRepo.lastSubmittedResults!
+          .firstWhere((r) => r.itemId == 'item-1')
+          .checked,
       isTrue,
     );
     expect(
-      fakeRepo.lastSubmittedResults!.firstWhere((r) => r.itemId == 'item-2').checked,
+      fakeRepo.lastSubmittedResults!
+          .firstWhere((r) => r.itemId == 'item-2')
+          .checked,
       isFalse,
     );
     expect(find.text('Back on list'), findsOneWidget);
   });
 
-  testWidgets('submitting while offline queues the mutation and pops back', (tester) async {
+  testWidgets('submitting while offline queues the mutation and pops back',
+      (tester) async {
     final fakeRepo = _FakeChecklistsRepository(items)..simulateOffline = true;
 
     await tester.pumpWidget(buildHarness(fakeRepo));

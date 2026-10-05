@@ -49,7 +49,11 @@ class SupabaseAiRepository implements AiRepository {
     required String venueId,
     required String pastedText,
   }) async {
-    final result = await _invoke(task: 'staff_import_parse', venueId: venueId, input: pastedText);
+    final result = await _invoke(
+      task: 'staff_import_parse',
+      venueId: venueId,
+      input: pastedText,
+    );
     return StaffImportResult.fromJson(result);
   }
 
@@ -58,7 +62,11 @@ class SupabaseAiRepository implements AiRepository {
     required String venueId,
     required String pastedText,
   }) async {
-    final result = await _invoke(task: 'inventory_parse', venueId: venueId, input: pastedText);
+    final result = await _invoke(
+      task: 'inventory_parse',
+      venueId: venueId,
+      input: pastedText,
+    );
     return InventoryParseResult.fromJson(result);
   }
 
@@ -67,8 +75,11 @@ class SupabaseAiRepository implements AiRepository {
     required String venueId,
     required String context,
   }) async {
-    final result =
-        await _invoke(task: 'scheduling_suggestion', venueId: venueId, input: context);
+    final result = await _invoke(
+      task: 'scheduling_suggestion',
+      venueId: venueId,
+      input: context,
+    );
     return SchedulingSuggestionResult.fromJson(result);
   }
 
@@ -77,7 +88,8 @@ class SupabaseAiRepository implements AiRepository {
     required String venueId,
     required String question,
   }) async {
-    final result = await _invoke(task: 'wrangler_ask', venueId: venueId, input: question);
+    final result =
+        await _invoke(task: 'wrangler_ask', venueId: venueId, input: question);
     return WranglerAskResult.fromJson(result);
   }
 
@@ -110,11 +122,15 @@ class SupabaseAiRepository implements AiRepository {
 
       final data = response.data;
       if (data is! Map) {
-        throw const UnknownError('The AI assistant returned an unexpected response.');
+        throw const UnknownError(
+          'The AI assistant returned an unexpected response.',
+        );
       }
       final result = data['result'];
       if (result is! Map<String, dynamic>) {
-        throw const UnknownError('The AI assistant returned an unexpected response.');
+        throw const UnknownError(
+          'The AI assistant returned an unexpected response.',
+        );
       }
       return result;
     } on FunctionException catch (error) {
@@ -147,10 +163,15 @@ class SupabaseAiRepository implements AiRepository {
         const AiUnavailableError(
           'The AI assistant is temporarily unavailable. Please try again shortly.',
         ),
-      'invalid_or_expired_session' => const AuthError('Your session has expired. Please sign in again.'),
+      'invalid_or_expired_session' =>
+        const AuthError('Your session has expired. Please sign in again.'),
       _ => error.status >= 500
-          ? const AiUnavailableError('The AI assistant is temporarily unavailable.')
-          : const UnknownError('The AI assistant could not process that request.'),
+          ? const AiUnavailableError(
+              'The AI assistant is temporarily unavailable.',
+            )
+          : const UnknownError(
+              'The AI assistant could not process that request.',
+            ),
     };
   }
 }

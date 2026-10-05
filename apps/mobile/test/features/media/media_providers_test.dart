@@ -36,15 +36,17 @@ void main() {
     );
     addTearDown(container.dispose);
 
-    final handler =
-        container.read(mediaMutationHandlersProvider)[kIncidentEvidenceUploadMutationKind]!;
+    final handler = container.read(
+      mediaMutationHandlersProvider,
+    )[kIncidentEvidenceUploadMutationKind]!;
     final result = await handler(_payload());
 
     expect(result.outcome, MutationOutcome.applied);
     expect(fakeRepo.uploaded, isTrue);
   });
 
-  test('a missing local file is reported as a non-retryable conflict', () async {
+  test('a missing local file is reported as a non-retryable conflict',
+      () async {
     final fakeRepo = _FakeMediaRepository()
       ..throwOnUpload = const LocalFileMissingException('/tmp/photo.jpg');
     final container = ProviderContainer(
@@ -52,14 +54,16 @@ void main() {
     );
     addTearDown(container.dispose);
 
-    final handler =
-        container.read(mediaMutationHandlersProvider)[kIncidentEvidenceUploadMutationKind]!;
+    final handler = container.read(
+      mediaMutationHandlersProvider,
+    )[kIncidentEvidenceUploadMutationKind]!;
     final result = await handler(_payload());
 
     expect(result.outcome, MutationOutcome.conflict);
   });
 
-  test('a permission-denied failure is reported as a conflict, not retried', () async {
+  test('a permission-denied failure is reported as a conflict, not retried',
+      () async {
     final fakeRepo = _FakeMediaRepository()
       ..throwOnUpload = PostgrestException(message: 'denied', code: '42501');
     final container = ProviderContainer(
@@ -67,22 +71,26 @@ void main() {
     );
     addTearDown(container.dispose);
 
-    final handler =
-        container.read(mediaMutationHandlersProvider)[kIncidentEvidenceUploadMutationKind]!;
+    final handler = container.read(
+      mediaMutationHandlersProvider,
+    )[kIncidentEvidenceUploadMutationKind]!;
     final result = await handler(_payload());
 
     expect(result.outcome, MutationOutcome.conflict);
   });
 
-  test('a network-shaped failure propagates so the queue controller retries it', () async {
-    final fakeRepo = _FakeMediaRepository()..throwOnUpload = Exception('network unreachable');
+  test('a network-shaped failure propagates so the queue controller retries it',
+      () async {
+    final fakeRepo = _FakeMediaRepository()
+      ..throwOnUpload = Exception('network unreachable');
     final container = ProviderContainer(
       overrides: [mediaRepositoryProvider.overrideWithValue(fakeRepo)],
     );
     addTearDown(container.dispose);
 
-    final handler =
-        container.read(mediaMutationHandlersProvider)[kIncidentEvidenceUploadMutationKind]!;
+    final handler = container.read(
+      mediaMutationHandlersProvider,
+    )[kIncidentEvidenceUploadMutationKind]!;
 
     expect(() => handler(_payload()), throwsException);
   });

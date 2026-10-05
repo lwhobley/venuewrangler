@@ -79,7 +79,8 @@ class ShiftInsightsScreen extends ConsumerWidget {
                 builder: (context, constraints) => SingleChildScrollView(
                   physics: const AlwaysScrollableScrollPhysics(),
                   child: ConstrainedBox(
-                    constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                    constraints:
+                        BoxConstraints(minHeight: constraints.maxHeight),
                     child: Center(
                       child: Padding(
                         padding: const EdgeInsets.all(24),
@@ -237,9 +238,18 @@ class _ShiftInsightCard extends ConsumerWidget {
   }
 
   (IconData, Color) _kindMeta(ShiftInsightKind kind) => switch (kind) {
-        ShiftInsightKind.rushPrep => (Icons.local_fire_department, Colors.amber.shade800),
-        ShiftInsightKind.coverageWarning => (Icons.warning_amber_rounded, Colors.red.shade700),
-        ShiftInsightKind.laborEfficiency => (Icons.trending_up, Colors.green.shade700),
+        ShiftInsightKind.rushPrep => (
+            Icons.local_fire_department,
+            Colors.amber.shade800
+          ),
+        ShiftInsightKind.coverageWarning => (
+            Icons.warning_amber_rounded,
+            Colors.red.shade700
+          ),
+        ShiftInsightKind.laborEfficiency => (
+            Icons.trending_up,
+            Colors.green.shade700
+          ),
         ShiftInsightKind.fatigueRisk => (Icons.bedtime, Colors.deepOrange),
         ShiftInsightKind.stationBalance => (Icons.balance, Colors.teal),
         ShiftInsightKind.complianceNote => (Icons.gavel, Colors.purple),
@@ -258,7 +268,8 @@ class _ShiftInsightCard extends ConsumerWidget {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete Insight?'),
-        content: const Text('Are you sure you want to remove this shift insight?'),
+        content:
+            const Text('Are you sure you want to remove this shift insight?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -275,7 +286,9 @@ class _ShiftInsightCard extends ConsumerWidget {
     if (confirmed != true) return;
 
     try {
-      await ref.read(insightsRepositoryProvider).deleteInsight(insightId: insight.id);
+      await ref
+          .read(insightsRepositoryProvider)
+          .deleteInsight(insightId: insight.id);
       if (shiftId != null) {
         ref.invalidate(
           shiftInsightsForShiftProvider((venueId: venueId, shiftId: shiftId!)),
@@ -307,7 +320,8 @@ class _GenerateInsightsDialog extends ConsumerStatefulWidget {
       _GenerateInsightsDialogState();
 }
 
-class _GenerateInsightsDialogState extends ConsumerState<_GenerateInsightsDialog> {
+class _GenerateInsightsDialogState
+    extends ConsumerState<_GenerateInsightsDialog> {
   final _contextController = TextEditingController();
   bool _isGenerating = false;
   String? _errorMessage;
@@ -321,7 +335,9 @@ class _GenerateInsightsDialogState extends ConsumerState<_GenerateInsightsDialog
   Future<void> _generate() async {
     final text = _contextController.text.trim();
     if (text.isEmpty) {
-      setState(() => _errorMessage = 'Please provide shift or operational context.');
+      setState(
+        () => _errorMessage = 'Please provide shift or operational context.',
+      );
       return;
     }
 
@@ -351,7 +367,9 @@ class _GenerateInsightsDialogState extends ConsumerState<_GenerateInsightsDialog
       if (mounted) {
         Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Shift insights generated successfully.')),
+          const SnackBar(
+            content: Text('Shift insights generated successfully.'),
+          ),
         );
       }
     } on AppError catch (e) {

@@ -24,7 +24,9 @@ class CrmBeo {
         venueId: json['venue_id'] as String,
         leadId: json['lead_id'] as String?,
         eventName: json['event_name'] as String,
-        eventDate: json['event_date'] != null ? DateTime.parse(json['event_date'] as String) : null,
+        eventDate: json['event_date'] != null
+            ? DateTime.parse(json['event_date'] as String)
+            : null,
         eventType: json['event_type'] as String?,
         guestCount: json['guest_count'] as int?,
         venueSpace: json['venue_space'] as String?,
@@ -57,7 +59,14 @@ class CrmBeo {
   final DateTime createdAt;
   final DateTime updatedAt;
 
-  static const statuses = ['draft', 'sent', 'reviewed', 'confirmed', 'amended', 'cancelled'];
+  static const statuses = [
+    'draft',
+    'sent',
+    'reviewed',
+    'confirmed',
+    'amended',
+    'cancelled',
+  ];
 
   @override
   bool operator ==(Object other) => other is CrmBeo && other.id == id;
