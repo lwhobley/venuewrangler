@@ -52,9 +52,11 @@ dependencies:
   cupertino_icons: ^1.0.8
 
   # Android push token acquisition only — iOS uses native APNs directly (see
-  # ios/Runner/PushNotificationsPlugin.swift), matching the APNS_KEY/APNS_KEY_ID/APNS_TEAM_ID/
-  # APNS_BUNDLE_ID secrets already set on notifications-send, rather than bridging iOS through
-  # Firebase too. firebase_core is required by firebase_messaging regardless of platform, but
+  # ios/Runner/PushNotificationsPlugin.swift) via notifications-send's APNS_KEY/APNS_KEY_ID/
+  # APNS_TEAM_ID/APNS_BUNDLE_ID secrets, rather than bridging iOS through Firebase too. As of
+  # 2026-10-05 those secrets are NOT yet set on the live project — notifications-send will error
+  # on iOS push until they are (see supabase/.env.example). firebase_core is required by
+  # firebase_messaging regardless of platform, but
   # Firebase.initializeApp() itself is only ever called when running on Android (see
   # app/bootstrap.dart) — iOS has no google-services equivalent file and doesn't need one here.
   firebase_core: ^3.8.0
