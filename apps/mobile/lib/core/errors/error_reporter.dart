@@ -43,9 +43,10 @@ SentryEvent? _scrubEvent(SentryEvent event, Hint hint) {
 
   final scrubbedUrl = _stripSensitiveQueryParams(request.url);
 
-  return event.copyWith(
-    request: request.copyWith(headers: scrubbedHeaders, url: scrubbedUrl),
-  );
+  request
+    ..headers = scrubbedHeaders
+    ..url = scrubbedUrl;
+  return event;
 }
 
 String? _stripSensitiveQueryParams(String? url) {

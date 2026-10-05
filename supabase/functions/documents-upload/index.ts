@@ -1,11 +1,11 @@
 // Documents (SOPs/manuals/recipes/menus/training/forms) upload, ported from
 // packages/api/src/modules/documents/documents.controller.ts's `upload` endpoint. This is the
 // ONLY way a document can be created — public.documents has no insert policy for `authenticated`
-// at all (supabase/migrations/20261003003000) — because RLS cannot verify a ClamAV scan
+// at all (supabase/migrations/20261003003000) — because RLS cannot verify a malware scan
 // happened, and that scan is a hard, fail-closed requirement here exactly as it was in legacy.
 //
 // Sequence: auth -> manager-role check -> filename sanitize -> base64 decode -> size cap ->
-// magic-byte MIME validation -> ClamAV scan -> Storage upload -> DB row insert (rolling back
+// magic-byte MIME validation -> malware scan (Cloudmersive, or clamd as a fallback) -> Storage upload -> DB row insert (rolling back
 // the Storage object if the DB insert fails).
 //
 // NOT live-tested end to end: this sandbox has no reachable ClamAV instance, so the scan step
@@ -19,7 +19,7 @@ import {
   assertAllowedDocumentBytes,
   safeDocumentFileName,
 } from "../_shared/document-bytes.ts";
-import { assertDocumentClean, DocumentScanRejectedError, DocumentScanUnavailableError } from "../_shared/clamav.ts";
+import { assertDocumentClean, DocumentScanRejectedError, DocumentScanUnavailableError } from "../_shared/malware-scan.ts";
 import { initObservability, captureException, flushObservability } from "../_shared/observability.ts";
 
 initObservability();
@@ -123,7 +123,7 @@ async function handleRequest(req: Request): Promise<Response> {
   }
 
   try {
-    await assertDocumentClean(data);
+    await assertDocumentClean(data, safeFileName);
   } catch (error) {
     if (error instanceof DocumentScanRejectedError) {
       return jsonResponse({ error: error.message }, 400);
