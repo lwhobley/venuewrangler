@@ -688,9 +688,9 @@ function FloorEditorScreen() {
               height: canvasH,
               alignSelf: 'center',
               borderRadius: 16,
-              backgroundColor: '#0F2C3C',
+              backgroundColor: '#11141f',
               borderWidth: 2,
-              borderColor: '#335466',
+              borderColor: '#2a2f42',
               overflow: 'hidden',
             }}
           >

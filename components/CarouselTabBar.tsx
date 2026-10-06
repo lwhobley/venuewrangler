@@ -23,8 +23,9 @@ const DESKTOP_GROUPS: Array<{ label: string; routes: string[] }> = [
   { label: 'Administration', routes: ['documents', 'profile'] },
 ];
 
-// The persistent navigation uses the same deep blue and clear selected state
-// as the operational headers in the rest of the app.
+// Editorial tab bar: no filled pill indicator — the active tab is marked by
+// a hairline underline and the accent color, like a masthead nav rather than
+// a row of chips. Separated from content by a single top rule, not a shadow.
 //
 // At desktop-web widths the same items render as a persistent left rail
 // instead. A fourteen-item horizontally-scrolling strip pinned to the bottom
@@ -37,8 +38,6 @@ export function CarouselTabBar({ state, descriptors, navigation }: ExpoTabBarPro
   const { t } = useI18n();
   const isDesktop = useIsDesktop();
   const [moreOpen, setMoreOpen] = useState(false);
-  const navBackground = '#143E54';
-  const navText = '#DCEAF0';
 
   const visible = state.routes.filter((route: TabRoute) => {
     const opts = descriptors[route.key].options as { href?: string | null };
@@ -70,10 +69,10 @@ export function CarouselTabBar({ state, descriptors, navigation }: ExpoTabBarPro
 
   const wordmark = (
     <View style={{ paddingHorizontal: 16, alignItems: 'flex-start', justifyContent: 'center', minHeight: 54 }}>
-      <Text style={{ color: '#FFFFFF', fontWeight: '700', fontSize: 13 }}>
+      <Text style={{ color: palette.charcoal, fontWeight: '700', fontSize: 13 }}>
         {t('common.venueWrangler')}
       </Text>
-      <Text style={{ color: navText, fontSize: 9 }}>{t('common.loungeability')}</Text>
+      <Text style={{ color: palette.muted, fontSize: 9, fontStyle: 'italic' }}>{t('common.loungeability')}</Text>
     </View>
   );
 
@@ -90,9 +89,9 @@ export function CarouselTabBar({ state, descriptors, navigation }: ExpoTabBarPro
           bottom: 0,
           left: 0,
           width: DESKTOP_NAV_WIDTH,
-          backgroundColor: navBackground,
+          backgroundColor: palette.backgroundAlt,
           borderRightWidth: StyleSheet.hairlineWidth,
-          borderRightColor: navBackground,
+          borderRightColor: palette.divider,
           zIndex: 10,
         }}
       >
@@ -106,7 +105,7 @@ export function CarouselTabBar({ state, descriptors, navigation }: ExpoTabBarPro
             if (!groupItems.length) return null;
             return (
               <View key={group.label} style={{ gap: 2, marginBottom: 14 }}>
-                <Text style={{ color: navText, fontSize: 10, fontWeight: '700', letterSpacing: 0.8, textTransform: 'uppercase', paddingHorizontal: 12, paddingBottom: 4 }}>
+                <Text style={{ color: palette.muted, fontSize: 10, fontWeight: '700', letterSpacing: 0.8, textTransform: 'uppercase', paddingHorizontal: 12, paddingBottom: 4 }}>
                   {group.label}
                 </Text>
                 {groupItems.map((item) => (
@@ -119,11 +118,12 @@ export function CarouselTabBar({ state, descriptors, navigation }: ExpoTabBarPro
                     style={({ pressed }) => ({
                       flexDirection: 'row', alignItems: 'center', gap: 12,
                       paddingVertical: 10, paddingHorizontal: 12, borderRadius: 8,
-                      backgroundColor: item.isFocused ? '#FFFFFF' : pressed ? '#24556D' : 'transparent',
+                      backgroundColor: item.isFocused ? palette.cream : 'transparent',
+                      opacity: pressed ? 0.66 : 1,
                     })}
                   >
-                    {item.icon?.({ focused: item.isFocused, color: item.isFocused ? navBackground : navText, size: 19 })}
-                    <Text numberOfLines={1} style={{ flex: 1, color: item.isFocused ? navBackground : navText, fontSize: 13.5, fontWeight: item.isFocused ? '700' : '500' }}>
+                    {item.icon?.({ focused: item.isFocused, color: item.isFocused ? palette.primary : palette.muted, size: 19 })}
+                    <Text numberOfLines={1} style={{ flex: 1, color: item.isFocused ? palette.primary : palette.charcoal, fontSize: 13.5, fontWeight: item.isFocused ? '700' : '500' }}>
                       {item.label}
                     </Text>
                   </Pressable>
@@ -139,14 +139,14 @@ export function CarouselTabBar({ state, descriptors, navigation }: ExpoTabBarPro
   return (
     <View
       style={{
-        backgroundColor: navBackground,
+        backgroundColor: palette.backgroundAlt,
         borderTopWidth: StyleSheet.hairlineWidth,
-        borderTopColor: navBackground,
+        borderTopColor: palette.divider,
         paddingBottom: insets.bottom,
       }}
     >
       {moreOpen ? (
-        <View style={{ backgroundColor: palette.surface, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: palette.divider, padding: 16 }}>
+        <View style={{ borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: palette.divider, padding: 16 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
             <Text style={{ fontSize: 20, fontWeight: '700', color: palette.charcoal }}>More tools</Text>
             <Pressable accessibilityRole="button" accessibilityLabel="Close more tools" onPress={() => setMoreOpen(false)} style={{ minHeight: 44, justifyContent: 'center', paddingHorizontal: 12 }}>
@@ -165,7 +165,7 @@ export function CarouselTabBar({ state, descriptors, navigation }: ExpoTabBarPro
       ) : null}
       <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8 }}>
         {items.filter((item) => mobilePrimaryRoutes.has(item.name)).map((item) => {
-          const color = item.isFocused ? navBackground : navText;
+          const color = item.isFocused ? palette.primary : palette.muted;
           return (
             <Pressable
               key={item.key}
@@ -175,14 +175,13 @@ export function CarouselTabBar({ state, descriptors, navigation }: ExpoTabBarPro
               accessibilityState={item.isFocused ? { selected: true } : {}}
               style={{
                 flex: 1,
-                paddingTop: 8,
-                paddingBottom: 8,
+                paddingTop: 9,
+                paddingBottom: 7,
                 paddingHorizontal: 8,
                 alignItems: 'center',
                 gap: 3,
-                borderRadius: 12,
-                marginVertical: 5,
-                backgroundColor: item.isFocused ? '#FFFFFF' : 'transparent',
+                borderBottomWidth: 2,
+                borderBottomColor: item.isFocused ? palette.primary : 'transparent',
               }}
             >
               {item.icon?.({ focused: item.isFocused, color, size: 21 })}
@@ -195,9 +194,9 @@ export function CarouselTabBar({ state, descriptors, navigation }: ExpoTabBarPro
             </Pressable>
           );
         })}
-        {secondaryItems.length ? <Pressable accessibilityRole="button" accessibilityLabel="More tools" accessibilityState={{ expanded: moreOpen }} onPress={() => setMoreOpen((open) => !open)} style={{ flex: 1, minHeight: 54, alignItems: 'center', justifyContent: 'center', gap: 3, borderRadius: 12, marginVertical: 5, backgroundColor: moreOpen || secondaryItems.some((item) => item.isFocused) ? '#FFFFFF' : 'transparent' }}>
-          <Text style={{ color: moreOpen || secondaryItems.some((item) => item.isFocused) ? navBackground : navText, fontSize: 21, lineHeight: 24, fontWeight: '700' }}>···</Text>
-          <Text style={{ color: moreOpen || secondaryItems.some((item) => item.isFocused) ? navBackground : navText, fontSize: 10.5, fontWeight: '600' }}>More</Text>
+        {secondaryItems.length ? <Pressable accessibilityRole="button" accessibilityLabel="More tools" accessibilityState={{ expanded: moreOpen }} onPress={() => setMoreOpen((open) => !open)} style={{ flex: 1, minHeight: 54, alignItems: 'center', justifyContent: 'center', gap: 3, borderBottomWidth: 2, borderBottomColor: moreOpen || secondaryItems.some((item) => item.isFocused) ? palette.primary : 'transparent' }}>
+          <Text style={{ color: palette.primary, fontSize: 21, lineHeight: 24, fontWeight: '700' }}>···</Text>
+          <Text style={{ color: palette.muted, fontSize: 10.5, fontWeight: '600' }}>More</Text>
         </Pressable> : null}
       </View>
     </View>

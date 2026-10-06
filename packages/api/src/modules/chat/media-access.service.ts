@@ -2,7 +2,7 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHmac, timingSafeEqual } from 'crypto';
 
-export type MediaKind = 'chat-image' | 'checklist-photo' | 'profile-photo';
+export type MediaKind = 'chat-image' | 'checklist-photo';
 
 /** Duration of one time bucket in seconds (1 minute). */
 const BUCKET_SECONDS = 60;

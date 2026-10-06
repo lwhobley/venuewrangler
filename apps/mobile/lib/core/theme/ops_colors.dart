@@ -79,7 +79,7 @@ class OpsColors extends ThemeExtension<OpsColors> {
     danger: ToneColors(fg: AppColors.redOnDark, bg: Color(0x26FF8585)),
     info: ToneColors(fg: AppColors.cobaltOnDark, bg: Color(0x264D7CFE)),
     neutral: ToneColors(fg: AppColors.mutedOnDark, bg: Color(0x1FA3AFBF)),
-    primaryStrong: AppColors.coral,
+    primaryStrong: AppColors.tealLight,
     gridLine: Color(0x14FFFFFF),
     panelBorder: AppColors.charcoalLine,
   );
@@ -91,7 +91,7 @@ class OpsColors extends ThemeExtension<OpsColors> {
     danger: ToneColors(fg: AppColors.redOnLight, bg: Color(0x1FB3261E)),
     info: ToneColors(fg: AppColors.cobaltStrongOnLight, bg: Color(0x242450CC)),
     neutral: ToneColors(fg: AppColors.mutedOnLight, bg: Color(0x1F566173)),
-    primaryStrong: AppColors.coralStrongOnLight,
+    primaryStrong: AppColors.teal,
     gridLine: Color(0x14141A22),
     panelBorder: AppColors.ivoryLine,
   );

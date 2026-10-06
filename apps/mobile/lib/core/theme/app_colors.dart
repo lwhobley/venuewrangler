@@ -10,9 +10,9 @@ class AppColors {
   static const charcoalRaised = Color(0xFF1B2330);
   static const charcoalPanel = Color(0xFF222C3B);
   static const charcoalLine = Color(0xFF2F3B4D);
-  static const ivory = Color(0xFFF5F1EA);
-  static const ivoryDeep = Color(0xFFEBE5DA);
-  static const ivoryLine = Color(0xFFD9D2C4);
+  static const ivory = Color(0xFFF3F5F7);
+  static const ivoryDeep = Color(0xFFEDF1F4);
+  static const ivoryLine = Color(0xFFDDE4E9);
   static const white = Color(0xFFFFFFFF);
 
   // Text
@@ -20,6 +20,10 @@ class AppColors {
   static const mutedOnLight = Color(0xFF566173);
   static const inkOnDark = Color(0xFFF1EDE5);
   static const mutedOnDark = Color(0xFFA3AFBF);
+
+  static const teal = Color(0xFF194A62);
+  static const tealLight = Color(0xFF9ACEDD);
+  static const tealContainer = Color(0xFFDDEDF2);
 
   // Interactive accent (primary) and selection/edit accent (secondary)
   static const coral = Color(0xFFFF5A5F);

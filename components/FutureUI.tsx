@@ -6,7 +6,7 @@ import { DesignPalette, radius, spacing } from '../lib/theme';
 type IconName = keyof typeof MaterialCommunityIcons.glyphMap;
 type CommandTextVariant = 'hero' | 'title' | 'label' | 'body' | 'caption' | 'metric';
 
-// White operational panels stay distinct against the cool canvas.
+// Filled surfaces provide separation without a thin outline around each block.
 export function CommandSurface({
   palette,
   children,
@@ -25,7 +25,7 @@ export function CommandSurface({
       style={[
         {
           backgroundColor: strong ? palette.surfaceStrong : inset ? palette.surfaceSoft : palette.surface,
-          borderWidth: inset ? 0 : 1,
+          borderWidth: 0,
           borderColor: palette.border,
           borderRadius: strong ? radius.soft : radius.sharp,
           padding: inset ? spacing.md : spacing.lg,
@@ -60,7 +60,7 @@ export function CommandText({
   style?: StyleProp<TextStyle>;
 }) {
   const styles: Record<CommandTextVariant, TextStyle> = {
-    hero: { color: palette.charcoal, fontSize: 30, lineHeight: 36, letterSpacing: -0.7, fontWeight: '700' },
+    hero: { color: palette.charcoal, fontFamily: 'Fraunces_600SemiBold', fontSize: 30, lineHeight: 36, letterSpacing: -0.7, fontWeight: '600' },
     title: { color: palette.charcoal, fontSize: 19, lineHeight: 25, letterSpacing: -0.2, fontWeight: '700' },
     label: { color: palette.muted, fontSize: 11, lineHeight: 15, fontWeight: '700', letterSpacing: 0.6, textTransform: 'uppercase' },
     body: { color: palette.charcoal, fontSize: 14, lineHeight: 20, fontWeight: '500' },
@@ -71,7 +71,7 @@ export function CommandText({
   return <Text style={[styles[variant], style]}>{children}</Text>;
 }
 
-// Raised pill controls carry the same clear action language across screens.
+// Compact, raised controls share the Olive Ledger selection color.
 export function CommandButton({
   palette,
   children,
@@ -100,23 +100,23 @@ export function CommandButton({
       onPress={onPress}
       style={({ pressed }) => [
         {
-          minHeight: 48,
-          paddingHorizontal: 18,
+          minHeight: 44,
+          paddingHorizontal: 12,
           paddingVertical: 7,
-          borderRadius: radius.pill,
+          borderRadius: radius.sharp,
           borderWidth: 0,
           borderColor: palette.border,
           backgroundColor: selected ? palette.primary : palette.surfaceSoft,
-          shadowColor: pressed ? palette.glow : palette.shadow,
-          shadowOpacity: disabled ? 0 : pressed ? 0.32 : 0.1,
-          shadowRadius: pressed ? 13 : 4,
+          shadowColor: palette.shadow,
+          shadowOpacity: pressed || disabled ? 0 : 0.1,
+          shadowRadius: 4,
           shadowOffset: { width: 0, height: 2 },
-          elevation: disabled ? 0 : pressed ? 5 : 2,
+          elevation: pressed || disabled ? 0 : 2,
           flexDirection: 'row',
           alignItems: 'center',
           justifyContent: 'center',
           gap: 8,
-          opacity: disabled ? 0.5 : 1,
+          opacity: disabled ? 0.5 : pressed ? 0.7 : 1,
         },
         style,
       ]}

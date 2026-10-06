@@ -5,7 +5,6 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { PaperProvider } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { StatusBar } from 'expo-status-bar';
 import * as Sentry from '@sentry/react-native';
 import { useFonts } from 'expo-font';
 import {
@@ -137,13 +136,12 @@ export function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <StatusBar style="light" />
         <QueryClientProvider client={queryClient}>
           <PaperProvider theme={makePaperTheme(themeMode)}>
             <A0PurchaseProvider config={{ appUserId: userId ?? undefined, debug }}>
               {/* Top inset keeps content below the status bar / notch; the tab
                   bar and screens handle the bottom inset. */}
-              <SafeAreaView style={{ flex: 1, backgroundColor: '#194A62' }} edges={['top', 'left', 'right']}>
+              <SafeAreaView style={{ flex: 1, backgroundColor: palette.background }} edges={['top', 'left', 'right']}>
                 <ErrorBoundary>
                   <SubscriptionGate>
                     <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: palette.background } }} />

@@ -124,7 +124,6 @@ function ReservationsScreen() {
   const deleteHold = useMutation(api.reservations.deleteHold);
 
   // Waitlist form/state
-  const [showWaitlistForm, setShowWaitlistForm] = useState(false);
   const [wlName, setWlName] = useState('');
   const [wlParty, setWlParty] = useState(2);
   const [wlPhone, setWlPhone] = useState('');
@@ -487,6 +486,144 @@ function ReservationsScreen() {
         }
       />
 
+      {/* Stats */}
+      <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+        {statCards.map((s) => (
+          <Card key={s.label} style={{ flex: 1, backgroundColor: s.a.bg, borderRadius: radius.sharp }}>
+            <Card.Content style={{ gap: 2 }}>
+              <Text style={{ color: s.a.fg, fontSize: 24, fontWeight: '800' }}>{s.value}</Text>
+              <Text style={{ color: colors.charcoal }}>{s.label}</Text>
+            </Card.Content>
+          </Card>
+        ))}
+      </View>
+
+      <AppCard>
+        <SectionHeader title="Resolve next" subtitle="Reservations that need a decision before service gets busier." />
+        {actionReservations.length === 0 ? (
+          <Text style={{ color: colors.muted }}>No unassigned or imminent reservations right now.</Text>
+        ) : actionReservations.map((item) => (
+          <View key={item.id} style={{ flexDirection: 'row', gap: spacing.sm, alignItems: 'center', paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+            <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: unassignedIds.has(item.id) ? colors.warning : colors.primary }} />
+            <View style={{ flex: 1, gap: 1 }}>
+              <Text style={{ fontWeight: '700' }}>{item.guestName} · {item.partySize}</Text>
+              <Text style={{ color: colors.muted, fontSize: 12 }}>{formatTime(item.reservationTime)} · {unassignedIds.has(item.id) ? 'Needs a table' : 'Arriving soon'}</Text>
+            </View>
+            <Button compact mode="text" textColor={colors.primary} onPress={() => setAssigningId(item.id)}>Seat</Button>
+          </View>
+        ))}
+      </AppCard>
+
+      {/* Cover pacing */}
+      {pacing && pacing.buckets.length > 0 ? (
+        <AppCard>
+            <SectionHeader title={t('reservations.pacing.title', { date: pacing.date })} subtitle={t('reservations.pacing.subtitle', { peak: pacing.peakCovers, total: pacing.totalReservations, capacity: pacing.seatingCapacity || '—' })} />
+            <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 2, height: 100 }}>
+              {pacing.buckets.map((b, i) => {
+                const ratio = pacing.peakCovers > 0 ? b.covers / pacing.peakCovers : 0;
+                const overCapacity = pacing.seatingCapacity > 0 && b.covers > pacing.seatingCapacity;
+                return (
+                  <View key={i} style={{ flex: 1, height: '100%', justifyContent: 'flex-end' }}>
+                    <View style={{ height: `${Math.max(2, ratio * 100)}%`, backgroundColor: overCapacity ? colors.danger : colors.primary, borderRadius: radius.sharp }} />
+                  </View>
+                );
+              })}
+            </View>
+            {pacing.seatingCapacity > 0 && pacing.peakCovers > pacing.seatingCapacity ? (
+              <Text style={{ color: colors.danger, fontSize: 12, fontWeight: '700', marginTop: spacing.sm }}>
+                {t('reservations.pacing.warning')}
+              </Text>
+            ) : null}
+        </AppCard>
+      ) : null}
+
+      {/* Reservation holds */}
+      <AppCard>
+          <SectionHeader title={t('reservations.holds.title')} subtitle={t('reservations.holds.subtitle')} />
+          <View style={{ gap: spacing.sm }}>
+          <View style={{ flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' }}>
+            <TextInput label={t('reservations.holds.dateLabel')} value={holdDate} onChangeText={setHoldDate} mode="outlined" dense placeholder="YYYY-MM-DD" style={{ width: 150, backgroundColor: colors.surface }} />
+            <TextInput label={t('reservations.holds.startLabel')} value={holdStart} onChangeText={setHoldStart} mode="outlined" dense style={{ width: 90, backgroundColor: colors.surface }} />
+            <TextInput label={t('reservations.holds.endLabel')} value={holdEnd} onChangeText={setHoldEnd} mode="outlined" dense style={{ width: 90, backgroundColor: colors.surface }} />
+            <TextInput label={t('reservations.holds.reasonLabel')} value={holdReason} onChangeText={setHoldReason} mode="outlined" dense style={{ flex: 1, minWidth: 160, backgroundColor: colors.surface }} />
+            <Button mode="contained" buttonColor={colors.primary} onPress={() => void submitHold()} accessibilityLabel={t('reservations.holds.addButton')}>{t('reservations.holds.addButton')}</Button>
+          </View>
+          {holdError ? <Text style={{ color: colors.danger, fontSize: 12 }}>{holdError}</Text> : null}
+          {(holds ?? []).length === 0 ? (
+            <Text style={{ color: colors.muted }}>{t('reservations.holds.empty')}</Text>
+          ) : (
+            (holds ?? []).map((h) => (
+              <View key={h.id} style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: colors.charcoal, fontWeight: '700' }}>{h.reason}</Text>
+                  <Text style={{ color: colors.muted, fontSize: 12 }}>
+                    {new Date(h.startsAt).toLocaleString()} → {new Date(h.endsAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                  </Text>
+                </View>
+                <Button compact mode="text" textColor={colors.danger} onPress={() => void (venue?.id && deleteHold({ venueId: venue.id, holdId: h.id }))}>
+                  {t('reservations.holds.remove')}
+                </Button>
+              </View>
+            ))
+          )}
+          </View>
+      </AppCard>
+
+      {/* Waitlist */}
+      <AppCard>
+          <SectionHeader title={t('reservations.waitlist.title')} />
+          <View style={{ gap: spacing.sm }}>
+          <View style={{ flexDirection: 'row', gap: spacing.sm, alignItems: 'center' }}>
+            <TextInput label={t('reservations.waitlist.nameLabel')} value={wlName} onChangeText={setWlName} mode="outlined" dense style={{ flex: 1, backgroundColor: colors.surface }} />
+            <IconButton icon="minus" mode="outlined" size={16} onPress={() => setWlParty((p) => Math.max(1, p - 1))} />
+            <Text style={{ minWidth: 20, textAlign: 'center' }}>{wlParty}</Text>
+            <IconButton icon="plus" mode="outlined" size={16} onPress={() => setWlParty((p) => Math.min(30, p + 1))} />
+          </View>
+          <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+            <TextInput label={t('reservations.waitlist.phoneLabel')} value={wlPhone} onChangeText={setWlPhone} mode="outlined" dense keyboardType="phone-pad" style={{ flex: 1, backgroundColor: colors.surface }} />
+            <TextInput label={t('reservations.waitlist.emailLabel')} value={wlEmail} onChangeText={setWlEmail} mode="outlined" dense autoCapitalize="none" keyboardType="email-address" style={{ flex: 1, backgroundColor: colors.surface }} />
+            <Button mode="contained" buttonColor={colors.primary} onPress={() => void addWalkIn()} accessibilityLabel={t('reservations.waitlist.addButton')}>{t('reservations.waitlist.addButton')}</Button>
+          </View>
+          <Text style={{ color: colors.muted, fontSize: 11 }}>
+            {t('reservations.waitlist.hint')}
+          </Text>
+          {waitlistError ? <Text style={{ color: colors.danger }}>{waitlistError}</Text> : null}
+          {waitlist.length === 0 ? (
+            <Text style={{ color: colors.muted }}>{t('reservations.waitlist.empty')}</Text>
+          ) : (
+            waitlist.map((w) => {
+              const waitMins = Math.max(0, Math.round((Date.now() - w.requestedAt) / 60000));
+              return (
+                <View key={w.id} style={{ paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border, gap: 6 }}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Text style={{ fontWeight: '700' }}>{t('reservations.waitlist.entryLine', { name: w.guestName, size: w.partySize })}</Text>
+                    {w.readyAt ? <Chip compact style={{ backgroundColor: accents[2].bg }} textStyle={{ color: accents[2].fg }}>{t('reservations.waitlist.ready')}</Chip> : <Text style={{ color: colors.muted }}>{t('reservations.waitlist.waitingMinutes', { minutes: waitMins })}</Text>}
+                  </View>
+                  <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+                    {!w.readyAt ? <Button compact mode="outlined" textColor={accents[2].fg} onPress={() => void handleMarkWaitlistReady(w.id)}>{t('reservations.waitlist.markReady')}</Button> : null}
+                    <Button compact mode={seatingWaitlistId === w.id ? 'contained' : 'outlined'} buttonColor={seatingWaitlistId === w.id ? colors.primary : undefined} textColor={seatingWaitlistId === w.id ? '#fff' : colors.primary} onPress={() => setSeatingWaitlistId(seatingWaitlistId === w.id ? null : w.id)}>
+                      {seatingWaitlistId === w.id ? t('reservations.waitlist.pickTable') : t('reservations.waitlist.seat')}
+                    </Button>
+                    <Button compact mode="text" textColor={colors.danger} onPress={() => void handleRemoveFromWaitlist(w.id)}>{t('reservations.waitlist.remove')}</Button>
+                  </View>
+                  {seatingWaitlistId === w.id ? (
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, backgroundColor: colors.background, borderRadius: radius.sharp, padding: 10 }}>
+                      {openTables.length === 0 ? (
+                        <Text style={{ color: colors.danger }}>{t('reservations.waitlist.noOpenTables')}</Text>
+                      ) : (
+                        recommendedTables(w.partySize).map((t) => (
+                          <Chip key={t.table._id} onPress={() => void seatWaitlist(w.id, t.table._id)}>{t.table.label} · {t.table.seats}</Chip>
+                        ))
+                      )}
+                    </View>
+                  ) : null}
+                </View>
+              );
+            })
+          )}
+          </View>
+      </AppCard>
+
       {/* New reservation */}
       {canManage ? (
         <AppCard>
@@ -647,96 +784,6 @@ function ReservationsScreen() {
         </AppCard>
       ) : null}
 
-      {/* Waitlist */}
-      <AppCard>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: spacing.sm }}>
-            <Text style={{ ...type.heading, color: colors.charcoal }}>{t('reservations.waitlist.title')} · {waitlist.length}</Text>
-            <Button compact mode={showWaitlistForm ? 'text' : 'outlined'} icon={showWaitlistForm ? 'close' : 'plus'} onPress={() => setShowWaitlistForm((value) => !value)}>
-              {showWaitlistForm ? 'Close' : 'Add walk-in'}
-            </Button>
-          </View>
-          <View style={{ gap: spacing.sm }}>
-          {showWaitlistForm ? <>
-          <View style={{ flexDirection: 'row', gap: spacing.sm, alignItems: 'center' }}>
-            <TextInput label={t('reservations.waitlist.nameLabel')} value={wlName} onChangeText={setWlName} mode="outlined" dense style={{ flex: 1, backgroundColor: colors.surface }} />
-            <IconButton icon="minus" mode="outlined" size={16} onPress={() => setWlParty((p) => Math.max(1, p - 1))} />
-            <Text style={{ minWidth: 20, textAlign: 'center' }}>{wlParty}</Text>
-            <IconButton icon="plus" mode="outlined" size={16} onPress={() => setWlParty((p) => Math.min(30, p + 1))} />
-          </View>
-          <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-            <TextInput label={t('reservations.waitlist.phoneLabel')} value={wlPhone} onChangeText={setWlPhone} mode="outlined" dense keyboardType="phone-pad" style={{ flex: 1, backgroundColor: colors.surface }} />
-            <TextInput label={t('reservations.waitlist.emailLabel')} value={wlEmail} onChangeText={setWlEmail} mode="outlined" dense autoCapitalize="none" keyboardType="email-address" style={{ flex: 1, backgroundColor: colors.surface }} />
-            <Button mode="contained" buttonColor={colors.primary} onPress={() => void addWalkIn()} accessibilityLabel={t('reservations.waitlist.addButton')}>{t('reservations.waitlist.addButton')}</Button>
-          </View>
-          <Text style={{ color: colors.muted, fontSize: 11 }}>
-            {t('reservations.waitlist.hint')}
-          </Text>
-          {waitlistError ? <Text style={{ color: colors.danger }}>{waitlistError}</Text> : null}
-          </> : null}
-          {waitlist.length === 0 ? (
-            <Text style={{ color: colors.muted }}>{t('reservations.waitlist.empty')}</Text>
-          ) : (
-            waitlist.map((w) => {
-              const waitMins = Math.max(0, Math.round((Date.now() - w.requestedAt) / 60000));
-              return (
-                <View key={w.id} style={{ paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border, gap: 6 }}>
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Text style={{ fontWeight: '700' }}>{t('reservations.waitlist.entryLine', { name: w.guestName, size: w.partySize })}</Text>
-                    {w.readyAt ? <Chip compact style={{ backgroundColor: accents[2].bg }} textStyle={{ color: accents[2].fg }}>{t('reservations.waitlist.ready')}</Chip> : <Text style={{ color: colors.muted }}>{t('reservations.waitlist.waitingMinutes', { minutes: waitMins })}</Text>}
-                  </View>
-                  <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
-                    {!w.readyAt ? <Button compact mode="outlined" textColor={accents[2].fg} onPress={() => void handleMarkWaitlistReady(w.id)}>{t('reservations.waitlist.markReady')}</Button> : null}
-                    <Button compact mode={seatingWaitlistId === w.id ? 'contained' : 'outlined'} buttonColor={seatingWaitlistId === w.id ? colors.primary : undefined} textColor={seatingWaitlistId === w.id ? '#fff' : colors.primary} onPress={() => setSeatingWaitlistId(seatingWaitlistId === w.id ? null : w.id)}>
-                      {seatingWaitlistId === w.id ? t('reservations.waitlist.pickTable') : t('reservations.waitlist.seat')}
-                    </Button>
-                    <Button compact mode="text" textColor={colors.danger} onPress={() => void handleRemoveFromWaitlist(w.id)}>{t('reservations.waitlist.remove')}</Button>
-                  </View>
-                  {seatingWaitlistId === w.id ? (
-                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, backgroundColor: colors.background, borderRadius: radius.sharp, padding: 10 }}>
-                      {openTables.length === 0 ? (
-                        <Text style={{ color: colors.danger }}>{t('reservations.waitlist.noOpenTables')}</Text>
-                      ) : (
-                        recommendedTables(w.partySize).map((t) => (
-                          <Chip key={t.table._id} onPress={() => void seatWaitlist(w.id, t.table._id)}>{t.table.label} · {t.table.seats}</Chip>
-                        ))
-                      )}
-                    </View>
-                  ) : null}
-                </View>
-              );
-            })
-          )}
-          </View>
-      </AppCard>
-
-      {/* Stats */}
-      <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-        {statCards.map((s) => (
-          <Card key={s.label} style={{ flex: 1, backgroundColor: s.a.bg, borderRadius: radius.sharp }}>
-            <Card.Content style={{ gap: 2 }}>
-              <Text style={{ color: s.a.fg, fontSize: 24, fontWeight: '800' }}>{s.value}</Text>
-              <Text style={{ color: colors.charcoal }}>{s.label}</Text>
-            </Card.Content>
-          </Card>
-        ))}
-      </View>
-
-      <AppCard>
-        <SectionHeader title="Resolve next" subtitle="Reservations that need a decision before service gets busier." />
-        {actionReservations.length === 0 ? (
-          <Text style={{ color: colors.muted }}>No unassigned or imminent reservations right now.</Text>
-        ) : actionReservations.map((item) => (
-          <View key={item.id} style={{ flexDirection: 'row', gap: spacing.sm, alignItems: 'center', paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border }}>
-            <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: unassignedIds.has(item.id) ? colors.warning : colors.primary }} />
-            <View style={{ flex: 1, gap: 1 }}>
-              <Text style={{ fontWeight: '700' }}>{item.guestName} · {item.partySize}</Text>
-              <Text style={{ color: colors.muted, fontSize: 12 }}>{formatTime(item.reservationTime)} · {unassignedIds.has(item.id) ? 'Needs a table' : 'Arriving soon'}</Text>
-            </View>
-            <Button compact mode="text" textColor={colors.primary} onPress={() => setAssigningId(item.id)}>Seat</Button>
-          </View>
-        ))}
-      </AppCard>
-
       {/* Reservation list */}
       <AppCard>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm }}>
@@ -764,65 +811,6 @@ function ReservationsScreen() {
       </AppCard>
         </>
       )}
-        ListFooterComponent={(
-          <View style={{ gap: spacing.md, paddingTop: spacing.md }}>
-      {/* Cover pacing */}
-      {pacing && pacing.buckets.length > 0 ? (
-        <AppCard>
-            <SectionHeader title={t('reservations.pacing.title', { date: pacing.date })} subtitle={t('reservations.pacing.subtitle', { peak: pacing.peakCovers, total: pacing.totalReservations, capacity: pacing.seatingCapacity || '—' })} />
-            <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 2, height: 100 }}>
-              {pacing.buckets.map((b, i) => {
-                const ratio = pacing.peakCovers > 0 ? b.covers / pacing.peakCovers : 0;
-                const overCapacity = pacing.seatingCapacity > 0 && b.covers > pacing.seatingCapacity;
-                return (
-                  <View key={i} style={{ flex: 1, height: '100%', justifyContent: 'flex-end' }}>
-                    <View style={{ height: `${Math.max(2, ratio * 100)}%`, backgroundColor: overCapacity ? colors.danger : colors.primary, borderRadius: radius.sharp }} />
-                  </View>
-                );
-              })}
-            </View>
-            {pacing.seatingCapacity > 0 && pacing.peakCovers > pacing.seatingCapacity ? (
-              <Text style={{ color: colors.danger, fontSize: 12, fontWeight: '700', marginTop: spacing.sm }}>
-                {t('reservations.pacing.warning')}
-              </Text>
-            ) : null}
-        </AppCard>
-      ) : null}
-
-      {/* Reservation holds */}
-      <AppCard>
-          <SectionHeader title={t('reservations.holds.title')} subtitle={t('reservations.holds.subtitle')} />
-          <View style={{ gap: spacing.sm }}>
-          <View style={{ flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' }}>
-            <TextInput label={t('reservations.holds.dateLabel')} value={holdDate} onChangeText={setHoldDate} mode="outlined" dense placeholder="YYYY-MM-DD" style={{ width: 150, backgroundColor: colors.surface }} />
-            <TextInput label={t('reservations.holds.startLabel')} value={holdStart} onChangeText={setHoldStart} mode="outlined" dense style={{ width: 90, backgroundColor: colors.surface }} />
-            <TextInput label={t('reservations.holds.endLabel')} value={holdEnd} onChangeText={setHoldEnd} mode="outlined" dense style={{ width: 90, backgroundColor: colors.surface }} />
-            <TextInput label={t('reservations.holds.reasonLabel')} value={holdReason} onChangeText={setHoldReason} mode="outlined" dense style={{ flex: 1, minWidth: 160, backgroundColor: colors.surface }} />
-            <Button mode="contained" buttonColor={colors.primary} onPress={() => void submitHold()} accessibilityLabel={t('reservations.holds.addButton')}>{t('reservations.holds.addButton')}</Button>
-          </View>
-          {holdError ? <Text style={{ color: colors.danger, fontSize: 12 }}>{holdError}</Text> : null}
-          {(holds ?? []).length === 0 ? (
-            <Text style={{ color: colors.muted }}>{t('reservations.holds.empty')}</Text>
-          ) : (
-            (holds ?? []).map((h) => (
-              <View key={h.id} style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: colors.border }}>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ color: colors.charcoal, fontWeight: '700' }}>{h.reason}</Text>
-                  <Text style={{ color: colors.muted, fontSize: 12 }}>
-                    {new Date(h.startsAt).toLocaleString()} → {new Date(h.endsAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
-                  </Text>
-                </View>
-                <Button compact mode="text" textColor={colors.danger} onPress={() => void (venue?.id && deleteHold({ venueId: venue.id, holdId: h.id }))}>
-                  {t('reservations.holds.remove')}
-                </Button>
-              </View>
-            ))
-          )}
-          </View>
-      </AppCard>
-
-          </View>
-        )}
         renderItem={({ item: res }) => {
           const sc = statusColor[res.status] ?? { bg: colors.cream, fg: colors.muted };
           const seated = res.status === 'seated';

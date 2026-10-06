@@ -169,8 +169,7 @@ describe('Bar stock screen', () => {
     state.stock = { items: [item({ onHand: 2, parLevel: 6 })], lowStockCount: 1, totalValueCents: 3000 };
     const r = render();
     await act(async () => r.render(<BarStockScreenWrapper />));
-    expect(output(r)).toContain('Needs attention');
-    expect(output(r)).toContain('"width":"33%"');
+    expect(output(r)).toContain('barStock.list.reorderListTitle');
   });
 
   it('separates beverage and food items by tab', async () => {

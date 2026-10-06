@@ -440,7 +440,6 @@ model Profile {
   tokenIdentifier            String?
   email                      String
   fullName                   String
-  preferredName              String?
   role                       Role
   jobTitle                   String
   hourlyRateCents            Int?
@@ -448,13 +447,6 @@ model Profile {
   altPhone                   String?
   address                    String?
   dateOfBirth                DateTime?
-  hireDate                   DateTime?
-  employmentType             String?
-  emergencyContactName       String?
-  emergencyContactRelationship String?
-  emergencyContactPhone      String?
-  photoKey                   String?
-  photoMimeType              String?
   certifications             String[]             @default([])
   venueId                    String?
   membershipStatus           MembershipStatus?

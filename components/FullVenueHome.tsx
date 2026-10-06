@@ -102,23 +102,23 @@ function HomeScreen() {
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: palette.background }} contentContainerStyle={{ paddingBottom: spacing.xxl }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
-      <View style={{ backgroundColor: '#194A62', paddingHorizontal: spacing.lg, paddingTop: spacing.xl, paddingBottom: spacing.lg, gap: spacing.md, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#143E54' }}>
+      <View style={{ backgroundColor: palette.backgroundAlt, paddingHorizontal: spacing.lg, paddingTop: spacing.xl, paddingBottom: spacing.lg, gap: spacing.md, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: palette.divider }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md }}>
           <View style={{ flex: 1 }}>
             <Pressable
               accessibilityRole="button" onPress={() => router.push('/venue/settings')} style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1, flexDirection: 'row', alignItems: 'center', gap: 4 })}>
-              <CommandText palette={palette} variant="label" style={{ color: '#B8D3DE' }}>{venueName}</CommandText>
-              {venues.length > 1 ? <MaterialCommunityIcons name="swap-horizontal" size={16} color="#B8D3DE" /> : null}
+              <CommandText palette={palette} variant="label" style={{ color: palette.primary }}>{venueName}</CommandText>
+              {venues.length > 1 ? <MaterialCommunityIcons name="swap-horizontal" size={16} color={palette.primary} /> : null}
             </Pressable>
-            <CommandText palette={palette} variant="hero" style={{ color: '#FFFFFF' }}>Tonight</CommandText>
+            <CommandText palette={palette} variant="hero">Tonight</CommandText>
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
-            <Pressable onPress={() => router.push('/profile')} accessibilityRole="button" accessibilityLabel="Open settings" style={({ pressed }) => [styles.headerIcon, { backgroundColor: pressed ? '#30718D' : '#285F77' }]}>
-              <MaterialCommunityIcons name="account-outline" size={21} color="#FFFFFF" />
+            <Pressable onPress={() => router.push('/profile')} accessibilityRole="button" accessibilityLabel="Open settings" style={({ pressed }) => [styles.headerIcon, { backgroundColor: palette.surfaceSoft, opacity: pressed ? 0.65 : 1 }]}>
+              <MaterialCommunityIcons name="account-outline" size={21} color={palette.charcoal} />
             </Pressable>
-            <Pressable onPress={() => setShowNotifications((value) => !value)} accessibilityRole="button" accessibilityLabel="Open notifications" style={({ pressed }) => [styles.headerIcon, { backgroundColor: pressed || showNotifications ? '#30718D' : '#285F77' }]}>
+            <Pressable onPress={() => setShowNotifications((value) => !value)} accessibilityRole="button" accessibilityLabel="Open notifications" style={({ pressed }) => [styles.headerIcon, { backgroundColor: showNotifications ? palette.cream : palette.surfaceSoft, opacity: pressed ? 0.65 : 1 }]}>
               <View>
-                <MaterialCommunityIcons name={unreadCount ? 'bell-ring-outline' : 'bell-outline'} size={21} color="#FFFFFF" />
+                <MaterialCommunityIcons name={unreadCount ? 'bell-ring-outline' : 'bell-outline'} size={21} color={palette.charcoal} />
                 {unreadCount ? <View style={[styles.notificationBadge, { backgroundColor: palette.secondary }]}><CommandText palette={palette} variant="caption" style={{ color: palette.buttonText, fontSize: 9 }}>{unreadCount}</CommandText></View> : null}
               </View>
             </Pressable>
@@ -126,12 +126,12 @@ function HomeScreen() {
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <MaterialCommunityIcons name="calendar-blank-outline" size={15} color="#DCEAF0" />
-            <CommandText palette={palette} variant="caption" style={{ color: '#DCEAF0' }}>{currentDate}</CommandText>
+            <MaterialCommunityIcons name="calendar-blank-outline" size={15} color={palette.muted} />
+            <CommandText palette={palette} variant="caption">{currentDate}</CommandText>
           </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#FFFFFF', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: palette.cream, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999 }}>
             <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: !readiness || commandCenterLoadFailed ? palette.muted : readiness.status === 'blocked' ? palette.danger : readiness.status === 'at-risk' ? palette.warning : palette.success }} />
-            <CommandText palette={palette} variant="caption" style={{ color: '#194A62', fontWeight: '700' }}>
+            <CommandText palette={palette} variant="caption" style={{ color: palette.charcoal, fontWeight: '700' }}>
               {commandCenterLoadFailed ? 'Status unavailable' : !readiness ? 'Checking service' : readiness.status === 'blocked' ? 'Needs attention' : readiness.status === 'at-risk' ? 'Watch service' : 'Service ready'}
             </CommandText>
           </View>

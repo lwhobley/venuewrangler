@@ -1,5 +1,5 @@
 import { memo, type ComponentProps, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Image, Pressable, ScrollView, View } from 'react-native';
+import { Alert, Pressable, ScrollView, View } from 'react-native';
 import { router } from 'expo-router';
 import { Button, HelperText, IconButton, Text, TextInput } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -12,7 +12,6 @@ import { useVenueAuth } from '../../lib/useVenueAuth';
 import { formatRelativeTime, errorMessage } from '../../lib/format';
 import { PageHeader } from '../../components/design-system';
 import { useI18n } from '../../lib/i18n';
-import { resolveMediaUrl } from '../../lib/api-client';
 
 type MaterialIconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
 type FilterKey = 'all' | 'direct' | 'groups' | 'shifts';
@@ -23,9 +22,8 @@ type ConversationRow = {
   lastMessageText?: string | null;
   lastMessageAt?: number | null;
   unread?: boolean;
-  photoUrl?: string | null;
 };
-type DirectoryEntry = { _id: string; fullName: string; role: string; jobTitle: string; photoUrl: string | null };
+type DirectoryEntry = { _id: string; fullName: string; role: string; jobTitle: string };
 
 const FILTERS: Array<{ key: FilterKey; labelKey: 'chat.filterAll' | 'chat.filterDirect' | 'chat.filterGroups' | 'chat.filterShifts' }> = [
   { key: 'all', labelKey: 'chat.filterAll' },
@@ -81,13 +79,13 @@ const ConversationListRow = memo(function ConversationListRow({
           opacity: pressed ? 0.78 : 1,
         })}
       >
-        {row.photoUrl ? <Image source={{ uri: resolveMediaUrl(row.photoUrl) }} style={{ width: 44, height: 44, borderRadius: 22 }} /> : <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: accent, alignItems: 'center', justifyContent: 'center' }}>
+        <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: accent, alignItems: 'center', justifyContent: 'center' }}>
           {icon ? (
             <MaterialCommunityIcons name={icon} size={22} color="#000000" />
           ) : (
             <Text style={{ color: '#000000', fontWeight: '900' }}>{initials(row.title)}</Text>
           )}
-        </View>}
+        </View>
         <View style={{ flex: 1, minWidth: 0, borderBottomWidth: 1, borderBottomColor: colors.divider, paddingBottom: spacing.md }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
             <Text numberOfLines={1} style={{ flex: 1, color: colors.charcoal, fontSize: 15, fontWeight: row.unread ? '900' : '700' }}>
@@ -392,7 +390,7 @@ function ChatScreen() {
                   return (
                     <ConversationListRow
                       key={person._id}
-                      row={{ _id: person._id, title: person.fullName, lastMessageText: person.role, photoUrl: person.photoUrl }}
+                      row={{ _id: person._id, title: person.fullName, lastMessageText: person.role }}
                       index={groupIndex + index + 2}
                       onPress={() => (existingDm ? router.push(`/chat/${existingDm._id}`) : void startDm(person._id))}
                     />

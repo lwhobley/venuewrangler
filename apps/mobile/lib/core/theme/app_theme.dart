@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 import 'app_colors.dart';
 import 'ops_colors.dart';
 
-/// Venue Wrangler's operations design system: a charcoal command-centre workspace with warm
-/// ivory surfaces, a coral primary, a cobalt selection/edit accent, and semantic status tones
+/// Venue Wrangler's shared design system: teal headers and actions, calm gray backgrounds,
+/// white cards, compact readable rows, and semantic status tones
 /// (see [OpsColors]). Feature screens must read colours and text styles from
 /// `Theme.of(context)` / `context.ops` rather than hardcoding values.
 class AppTheme {
@@ -43,14 +43,15 @@ class AppTheme {
       dividerTheme:
           DividerThemeData(color: ops.panelBorder, thickness: 1, space: 1),
       appBarTheme: AppBarTheme(
-        backgroundColor: scheme.surface,
-        foregroundColor: scheme.onSurface,
+        backgroundColor: AppColors.teal,
+        foregroundColor: AppColors.white,
         elevation: 0,
         scrolledUnderElevation: 0,
         centerTitle: false,
-        titleTextStyle:
-            textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
-        shape: Border(bottom: border),
+        titleTextStyle: textTheme.titleLarge
+            ?.copyWith(fontWeight: FontWeight.w600, color: AppColors.white),
+        iconTheme: const IconThemeData(color: AppColors.white),
+        actionsIconTheme: const IconThemeData(color: AppColors.white),
       ),
       cardTheme: CardThemeData(
         color: scheme.surfaceContainerLow,
@@ -114,7 +115,7 @@ class AppTheme {
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           minimumSize: const Size(64, _touchHeight),
-          foregroundColor: scheme.onSurface,
+          foregroundColor: ops.primaryStrong,
           side: border,
           shape: const StadiumBorder(),
         ),
@@ -237,11 +238,11 @@ class AppTheme {
   }
 
   static final ColorScheme _darkScheme = const ColorScheme.dark().copyWith(
-    primary: AppColors.coral,
+    primary: AppColors.tealLight,
     onPrimary: AppColors.charcoal,
-    primaryContainer: const Color(0xFF4A2326),
-    onPrimaryContainer: const Color(0xFFFFD9DA),
-    secondary: AppColors.cobalt,
+    primaryContainer: AppColors.teal,
+    onPrimaryContainer: AppColors.white,
+    secondary: AppColors.tealLight,
     onSecondary: AppColors.charcoal,
     secondaryContainer: const Color(0xFF1F3470),
     onSecondaryContainer: const Color(0xFFD8E2FF),
@@ -262,11 +263,11 @@ class AppTheme {
   );
 
   static final ColorScheme _lightScheme = const ColorScheme.light().copyWith(
-    primary: AppColors.coral,
-    onPrimary: AppColors.charcoal,
-    primaryContainer: const Color(0xFFFFDAD9),
-    onPrimaryContainer: const Color(0xFF5C1115),
-    secondary: AppColors.cobaltStrongOnLight,
+    primary: AppColors.teal,
+    onPrimary: AppColors.white,
+    primaryContainer: AppColors.tealContainer,
+    onPrimaryContainer: AppColors.teal,
+    secondary: AppColors.teal,
     onSecondary: AppColors.white,
     secondaryContainer: const Color(0xFFDCE4FF),
     onSecondaryContainer: const Color(0xFF0B2468),
@@ -279,9 +280,9 @@ class AppTheme {
     onSurfaceVariant: AppColors.mutedOnLight,
     surfaceContainerLowest: AppColors.white,
     surfaceContainerLow: AppColors.white,
-    surfaceContainer: const Color(0xFFFAF7F1),
+    surfaceContainer: const Color(0xFFF5F7F9),
     surfaceContainerHigh: AppColors.ivoryDeep,
-    surfaceContainerHighest: const Color(0xFFE0D9CB),
+    surfaceContainerHighest: const Color(0xFFE5EBEF),
     outline: const Color(0xFF7C8696),
     outlineVariant: AppColors.ivoryLine,
   );

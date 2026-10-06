@@ -14,8 +14,6 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { runWithoutTenant } from '../../prisma/tenant-context';
 import { mapProfile } from './app-mappers';
 import { ProfileService } from './profile.service';
-import { MediaAccessService } from '../chat/media-access.service';
-import { profilePhotoUrl } from './profile-photo';
 import { StaffImportParserService } from './staff-import-parser.service';
 import { rosterInvitedTemplate, rosterProfileUpdatedTemplate } from '../../email/templates/roster';
 
@@ -41,8 +39,6 @@ class StaffDto {
   @MaxLength(120)
   fullName!: string;
 
-  @IsString() @IsOptional() @MaxLength(120) preferredName?: string;
-
   @IsIn(['admin', 'owner', 'manager', 'server', 'staff'])
   role!: Role;
 
@@ -67,13 +63,7 @@ class StaffDto {
 
   @IsDateString()
   @IsOptional()
-  dateOfBirth?: string | null;
-
-  @IsDateString() @IsOptional() hireDate?: string | null;
-  @IsIn(['full_time', 'part_time', 'seasonal', 'contractor', 'temporary']) @IsOptional() employmentType?: string | null;
-  @IsString() @IsOptional() @MaxLength(120) emergencyContactName?: string;
-  @IsString() @IsOptional() @MaxLength(80) emergencyContactRelationship?: string;
-  @IsString() @IsOptional() @MaxLength(50) emergencyContactPhone?: string;
+  dateOfBirth?: string;
 
   @IsOptional()
   @IsArray()
@@ -162,7 +152,6 @@ export class AppStaffController {
     private readonly email: EmailService,
     private readonly profiles: ProfileService,
     private readonly staffImportParser: StaffImportParserService,
-    private readonly mediaAccess: MediaAccessService,
   ) {}
 
   @UseGuards(AuthGuard)
@@ -174,7 +163,7 @@ export class AppStaffController {
         where: { venueId: profile.venueId!, OR: [{ membershipStatus: null }, { membershipStatus: 'active' }] },
         orderBy: { fullName: 'asc' },
       })
-      .then((rows) => rows.map((row) => ({ ...mapProfile(row), photoUrl: profilePhotoUrl(row, this.mediaAccess) })));
+      .then((rows) => rows.map((row) => mapProfile(row)));
   }
 
   @UseGuards(AuthGuard)
@@ -276,7 +265,7 @@ export class AppStaffController {
     const viewer = await this.profiles.requireManagerProfile(user);
     if (viewer.venueId !== body.venueId) throw new ForbiddenException('Not authorized');
     const row = await this.upsertOneStaffMember(viewer, body);
-    return { ...mapProfile(row), photoUrl: profilePhotoUrl(row, this.mediaAccess) };
+    return mapProfile(row);
   }
 
   @UseGuards(AuthGuard)
@@ -327,7 +316,7 @@ export class AppStaffController {
   /** Core create-or-update logic for a single roster row, shared by the single-staff endpoint and bulk import. */
   private async upsertOneStaffMember(
     viewer: { id: string; role: Role; allAccess: boolean; venueId: string | null; fullName: string; venue?: { name: string } | null },
-    body: Pick<StaffDto, 'venueId' | 'staffId' | 'email' | 'fullName' | 'preferredName' | 'role' | 'jobTitle' | 'phone' | 'altPhone' | 'address' | 'dateOfBirth' | 'hireDate' | 'employmentType' | 'emergencyContactName' | 'emergencyContactRelationship' | 'emergencyContactPhone' | 'certifications' | 'hourlyRateCents'>,
+    body: Pick<StaffDto, 'venueId' | 'staffId' | 'email' | 'fullName' | 'role' | 'jobTitle' | 'phone' | 'altPhone' | 'address' | 'dateOfBirth' | 'certifications' | 'hourlyRateCents'>,
   ) {
     let existing;
     if (body.staffId) {
@@ -345,20 +334,12 @@ export class AppStaffController {
     if (!viewerIsOwnerOrAdmin && roleChanged && ['admin', 'owner', 'manager'].includes(body.role)) {
       throw new ForbiddenException('Managers cannot assign admin, owner, or manager roles');
     }
-    // Imports provide only a subset of HR fields. Omitted values must leave an
-    // existing employee's private details intact; explicit blanks clear them.
     const employeeFields = {
-      ...(body.phone !== undefined ? { phone: body.phone.trim() || null } : {}),
-      ...(body.altPhone !== undefined ? { altPhone: body.altPhone.trim() || null } : {}),
-      ...(body.address !== undefined ? { address: body.address.trim() || null } : {}),
-      ...(body.dateOfBirth !== undefined ? { dateOfBirth: body.dateOfBirth ? parseDateOfBirth(body.dateOfBirth) : null } : {}),
-      ...(body.preferredName !== undefined ? { preferredName: body.preferredName.trim() || null } : {}),
-      ...(body.hireDate !== undefined ? { hireDate: body.hireDate ? parseDateOfBirth(body.hireDate) : null } : {}),
-      ...(body.employmentType !== undefined ? { employmentType: body.employmentType } : {}),
-      ...(body.emergencyContactName !== undefined ? { emergencyContactName: body.emergencyContactName.trim() || null } : {}),
-      ...(body.emergencyContactRelationship !== undefined ? { emergencyContactRelationship: body.emergencyContactRelationship.trim() || null } : {}),
-      ...(body.emergencyContactPhone !== undefined ? { emergencyContactPhone: body.emergencyContactPhone.trim() || null } : {}),
-      ...(body.certifications !== undefined ? { certifications: body.certifications } : {}),
+      phone: body.phone?.trim() || null,
+      altPhone: body.altPhone?.trim() || null,
+      address: body.address?.trim() || null,
+      dateOfBirth: body.dateOfBirth ? parseDateOfBirth(body.dateOfBirth) : null,
+      certifications: body.certifications ?? [],
     };
     const row = await this.prisma.$transaction(async (tx) => {
       let created;

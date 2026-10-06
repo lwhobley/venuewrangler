@@ -18,51 +18,51 @@ export const useAppearanceStore = create<AppearanceState>((set) => ({
 export const designPalettes = {
   dark: {
     mode: 'dark' as const,
-    background: '#0D2430',
-    backgroundAlt: '#112D3C',
-    surface: '#173545',
-    surfaceStrong: '#1D4052',
-    surfaceSoft: '#23495A',
-    glass: '#173545',
-    primary: '#79C1D4',
-    secondary: '#E4B976',
-    charcoal: '#F5F9FA',
-    muted: '#BACBD3',
-    border: '#335466',
-    divider: '#2B4A5B',
-    success: '#82D2AB',
-    danger: '#F08F8D',
-    warning: '#E4B976',
-    info: '#79C1D4',
-    cream: '#23495A',
-    glow: '#285C70',
+    background: '#1C2118',
+    backgroundAlt: '#252C20',
+    surface: '#252C20',
+    surfaceStrong: '#303929',
+    surfaceSoft: '#35402D',
+    glass: '#252C20',
+    primary: '#B3C796',
+    secondary: '#E1A853',
+    charcoal: '#FFF8EC',
+    muted: '#C3C9B7',
+    border: '#4A543D',
+    divider: '#3D4734',
+    success: '#7ECA98',
+    danger: '#F09A90',
+    warning: '#E1A853',
+    info: '#9FC8DB',
+    cream: '#35402D',
+    glow: '#35402D',
     shadow: '#000000',
     // Text/icons drawn on top of `primary` fills (light-green in dark mode).
-    buttonText: '#0D2430',
+    buttonText: '#1C2118',
   },
   light: {
     mode: 'light' as const,
-    background: '#F3F6F7',
-    backgroundAlt: '#FFFFFF',
-    surface: '#FFFFFF',
-    surfaceStrong: '#FFFFFF',
-    surfaceSoft: '#E9F0F3',
-    glass: 'rgba(255, 255, 255, 0.94)',
-    primary: '#194A62',
-    secondary: '#9B6638',
-    charcoal: '#18313E',
-    muted: '#607582',
-    border: '#D8E2E7',
-    divider: '#E4EBEF',
-    success: '#258060',
-    danger: '#BA4C49',
-    warning: '#A86B32',
-    info: '#287995',
-    cream: '#E9F0F3',
-    glow: '#C9E9F2',
-    shadow: '#173747',
+    background: '#FBF7E9',
+    backgroundAlt: '#FFFDF2',
+    surface: '#FFFDF2',
+    surfaceStrong: '#FFFDF2',
+    surfaceSoft: '#EEF0DD',
+    glass: 'rgba(255, 253, 242, 0.92)',
+    primary: '#587246',
+    secondary: '#8A6B2D',
+    charcoal: '#20221D',
+    muted: '#64685C',
+    border: '#E6DFC8',
+    divider: '#EEE8D4',
+    success: '#17643B',
+    danger: '#BA4439',
+    warning: '#8A6B2D',
+    info: '#3B6B82',
+    cream: '#EEF0DD',
+    glow: '#E5E9D2',
+    shadow: '#3F4B34',
     // Text/icons drawn on top of `primary` fills (dark-green in light mode).
-    buttonText: '#FFFFFF',
+    buttonText: '#FFFDF2',
   },
 } as const;
 
@@ -98,11 +98,11 @@ export const authInputProps = {
 
 export const accents = [
   { bg: colors.cream, fg: colors.charcoal, icon: colors.primary },
-  { bg: '#FFF3E4', fg: '#7D501F', icon: '#A86B32' },
-  { bg: '#E9F6F0', fg: '#1B704F', icon: '#258060' },
-  { bg: '#EAF3F8', fg: '#245F78', icon: '#287995' },
-  { bg: '#FFF0E7', fg: '#8A522B', icon: '#B8773C' },
-  { bg: '#FCEDEC', fg: '#9E3D3C', icon: '#BA4C49' },
+  { bg: '#FFF7E6', fg: '#1A201C', icon: '#C59B27' },
+  { bg: '#EEF3F7', fg: '#1A201C', icon: '#3B6B82' },
+  { bg: '#F8EEE8', fg: '#1A201C', icon: '#A35E35' },
+  { bg: '#F0F1E9', fg: '#1A201C', icon: '#63705A' },
+  { bg: '#FBEDEC', fg: '#1A201C', icon: '#BA4439' },
 ] as const;
 
 export const spacing = {
@@ -116,7 +116,7 @@ export const spacing = {
   huge: 64,
 };
 
-// Compact controls and clean panels keep operational lists easy to scan.
+// Olive Ledger uses compact rounded controls and gently rounded panels.
 export const radius = {
   sharp: 12,
   soft: 8,
@@ -127,8 +127,7 @@ export const radius = {
   pill: 9999,
 };
 
-// Legacy display font remains available for brand artwork; app screens use
-// the same legible sans hierarchy as operational data.
+// Editorial page titles paired with native sans for operational data.
 export const fontFamily = {
   // Loaded once in app/_layout.tsx. Fraunces is intentionally reserved for
   // identity moments and page titles; operational data stays in the native
@@ -145,8 +144,8 @@ export const type = {
   body: { fontSize: 15, lineHeight: 22, letterSpacing: 0 },
   bodyLarge: { fontSize: 17, lineHeight: 24, letterSpacing: 0 },
   heading: { fontSize: 20, lineHeight: 26, letterSpacing: -0.2, fontWeight: '700' },
-  title: { fontSize: 30, lineHeight: 36, letterSpacing: -0.6, fontWeight: '700' },
-  display: { fontSize: 42, lineHeight: 46, letterSpacing: -0.9, fontWeight: '700' },
+  title: { fontFamily: fontFamily.display, fontSize: 30, lineHeight: 36, letterSpacing: -0.6, fontWeight: '600' },
+  display: { fontFamily: fontFamily.display, fontSize: 42, lineHeight: 46, letterSpacing: -0.9, fontWeight: '600' },
 } as const;
 
 // Contemporary ambient diffusion shadow for elevated cards and floating sheets.

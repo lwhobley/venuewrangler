@@ -668,49 +668,6 @@ function BarStockScreen() {
       <PageHeader kicker={t('barStock.header.kicker')} title={t('barStock.header.title')} detail={t('barStock.header.managerSubtitle')} />
       {canManage ? <Button compact mode="outlined" icon="book-edit-outline" onPress={() => router.push('/inventory-recipes')}>Recipes & unit conversions</Button> : null}
 
-      {lowItems.length > 0 ? (
-        <Card style={{ backgroundColor: colors.surface, borderRadius: radius.sharp, borderWidth: 1, borderColor: colors.border }}>
-          <Card.Content style={{ gap: spacing.sm }}>
-            <Text variant="titleMedium" style={{ color: colors.charcoal, fontWeight: '700' }}>Needs attention · {lowItems.length}</Text>
-            {lowItems.slice(0, 5).map((item) => {
-              const critical = item.onHand <= 0;
-              const level = item.parLevel > 0 ? Math.max(0, Math.min(100, Math.round((item.onHand / item.parLevel) * 100))) : 0;
-              return <View key={item._id} style={{ gap: 5, paddingVertical: spacing.xs, borderTopWidth: 1, borderTopColor: colors.divider }}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: spacing.sm }}>
-                  <Text style={{ color: colors.charcoal, fontWeight: '700', flex: 1 }}>{item.name}</Text>
-                  <Text style={{ color: critical ? colors.danger : colors.warning, fontWeight: '700' }}>{critical ? 'Critical' : 'Low'} · {item.onHand}/{item.parLevel} {item.unit}</Text>
-                </View>
-                <View style={{ height: 7, borderRadius: 4, backgroundColor: colors.surfaceSoft, overflow: 'hidden' }}>
-                  <View style={{ height: 7, width: `${level}%`, backgroundColor: critical ? colors.danger : colors.warning }} />
-                </View>
-              </View>;
-            })}
-            <Button mode="contained" buttonColor={colors.primary} icon="cart-outline" onPress={() => setShowPurchaseOrder((value) => !value)} style={{ borderRadius: radius.pill }}>
-              {showPurchaseOrder ? 'Hide purchase order' : 'Review purchase order'}
-            </Button>
-          </Card.Content>
-        </Card>
-      ) : null}
-
-      {/* Purchase order */}
-      {showPurchaseOrder && (
-        <PurchaseOrderCard
-          purchaseOrder={purchaseOrder}
-          csv={purchaseOrderCsv}
-          showCsv={showPurchaseOrderCsv}
-          busy={busy}
-          onToggleCsv={() => setShowPurchaseOrderCsv((v) => !v)}
-          onEmail={async () => {
-            setBusy(true); setMessage(null);
-            try {
-              const r = await sendPoEmail({});
-              setMessage(r.sent ? t('barStock.messages.poEmailed', { count: r.itemCount }) : r.reason ?? t('barStock.messages.notSent'));
-            } catch (e) { setMessage(errorMessage(e, t('barStock.messages.errorSendPoEmail'))); }
-            finally { setBusy(false); }
-          }}
-        />
-      )}
-
       {canManage && (countReviews?.totalCount ?? 0) > 0 ? <Card style={{ backgroundColor: accents[4].bg, borderRadius: radius.sharp }}>
         <Card.Content style={{ gap: spacing.sm }}>
           <Text variant="titleMedium" style={{ color: accents[4].fg, fontWeight: '800' }}>Count variances to review · {countReviews?.totalCount}</Text>
@@ -966,6 +923,25 @@ function BarStockScreen() {
       {/* Shrinkage / variance report */}
       {showShrinkage && <ShrinkageCard data={shrinkageData} />}
 
+      {/* Purchase order */}
+      {showPurchaseOrder && (
+        <PurchaseOrderCard
+          purchaseOrder={purchaseOrder}
+          csv={purchaseOrderCsv}
+          showCsv={showPurchaseOrderCsv}
+          busy={busy}
+          onToggleCsv={() => setShowPurchaseOrderCsv((v) => !v)}
+          onEmail={async () => {
+            setBusy(true); setMessage(null);
+            try {
+              const r = await sendPoEmail({});
+              setMessage(r.sent ? t('barStock.messages.poEmailed', { count: r.itemCount }) : r.reason ?? t('barStock.messages.notSent'));
+            } catch (e) { setMessage(errorMessage(e, t('barStock.messages.errorSendPoEmail'))); }
+            finally { setBusy(false); }
+          }}
+        />
+      )}
+
       {/* Aging report */}
       {showAgingReport && <AgingCard report={agingReport} />}
 
@@ -1046,6 +1022,17 @@ function BarStockScreen() {
           <Button mode="contained" buttonColor={colors.primary} loading={busy} disabled={busy} onPress={() => void saveManualItem()}>{t('barStock.form.saveItem')}</Button>
         </Card.Content>
       </Card>
+
+      {lowItems.length > 0 ? (
+        <Card style={{ backgroundColor: accents[4].bg, borderRadius: radius.sharp }}>
+          <Card.Content style={{ gap: spacing.sm }}>
+            <Text variant="titleMedium" style={{ color: accents[4].fg, fontWeight: '700' }}>{t('barStock.list.reorderListTitle')}</Text>
+            {lowItems.slice(0, 8).map((item) => (
+              <Text key={item._id} style={{ color: colors.charcoal }}>{t('barStock.list.reorderLine', { name: item.name, onHand: item.onHand, unit: item.unit, parLevel: item.parLevel })}</Text>
+            ))}
+          </Card.Content>
+        </Card>
+      ) : null}
 
       <Card style={{ backgroundColor: colors.surface, borderRadius: radius.sharp }}>
         <Card.Content style={{ gap: spacing.sm }}>

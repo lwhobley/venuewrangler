@@ -34,12 +34,10 @@ vi.mock('react-native', () => ({
       ...(data ?? []).map((item: any, index: number) =>
         React.createElement(React.Fragment, { key: keyExtractor ? keyExtractor(item) : index }, renderItem({ item, index }))),
     ),
-  ScrollView: 'ScrollView', Share: { share: state.share }, View: 'View', Image: 'Image',
+  ScrollView: 'ScrollView', Share: { share: state.share }, View: 'View',
 }));
 vi.mock('expo-router', () => ({ router: { push: state.push } }));
 vi.mock('expo-document-picker', () => ({}));
-vi.mock('expo-image-picker', () => ({ launchImageLibraryAsync: vi.fn() }));
-vi.mock('../../lib/api-client', () => ({ resolveMediaUrl: (path: string) => path }));
 vi.mock('react-native-paper', async () => {
   const R = await import('react');
   const element = (type: string) => ({ children, ...props }: any) => R.createElement(type, props, children);
@@ -138,8 +136,9 @@ describe('Staff screen', () => {
     await act(async () => inputByPlaceholder(r, 'staff.fullNamePlaceholder')?.props.onChangeText('Jordan Lee'));
     await act(async () => inputByPlaceholder(r, 'staff.emailPlaceholder')?.props.onChangeText('jordan@example.com'));
     await act(async () => inputByPlaceholder(r, 'staff.phonePlaceholder')?.props.onChangeText('  555-0100  '));
-    // The add-by-email form is the first action in the expanded team tools.
-    await act(async () => menuItemsByTitle(r, 'staff.roleManager')[0]?.props.onPress());
+    // Two dropdowns share the "staff.roleManager" option (invite link, then
+    // the add-by-email access level) — the second is the one bound to `role`.
+    await act(async () => menuItemsByTitle(r, 'staff.roleManager')[1]?.props.onPress());
 
     await act(async () => buttonByLabel(r, 'staff.addStaffMember')?.props.onPress());
 
@@ -201,7 +200,6 @@ describe('Staff screen', () => {
     state.deactivateStaff.mockResolvedValueOnce({});
     const r = render();
     await act(async () => r.render(<StaffScreen />));
-    await act(async () => buttonByLabel(r, 'staff.edit')?.props.onPress());
     await act(async () => buttonByLabel(r, 'staff.deactivate')?.props.onPress());
 
     expect(state.alert).toHaveBeenCalled();

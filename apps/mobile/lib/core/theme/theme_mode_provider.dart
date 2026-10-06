@@ -4,14 +4,14 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 const _key = 'theme_mode';
 
-/// User's light/dark/system choice, persisted on-device. Defaults to following the system.
+/// User's light/dark/system choice, persisted on-device. Defaults to the reference's light UI.
 final themeModeProvider =
     StateNotifierProvider<ThemeModeNotifier, ThemeMode>((ref) {
   return ThemeModeNotifier()..load();
 });
 
 class ThemeModeNotifier extends StateNotifier<ThemeMode> {
-  ThemeModeNotifier() : super(ThemeMode.system);
+  ThemeModeNotifier() : super(ThemeMode.light);
 
   static const _storage = FlutterSecureStorage();
   bool _chosen = false;
@@ -22,7 +22,7 @@ class ThemeModeNotifier extends StateNotifier<ThemeMode> {
       final mode = ThemeMode.values.where((m) => m.name == saved);
       if (mode.isNotEmpty && !_chosen && mounted) state = mode.first;
     } catch (_) {
-      // Storage unavailable (e.g. in tests): keep following the system.
+      // Storage unavailable (e.g. in tests): keep the default light theme.
     }
   }
 

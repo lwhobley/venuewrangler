@@ -33,14 +33,6 @@ export class S3ImageService {
     return key;
   }
 
-  async uploadProfilePhoto(buffer: Buffer, mimeType: string, scopeId: string): Promise<string> {
-    const key = `profiles/${scopeId}/${randomBytes(16).toString('hex')}`;
-    await this.s3.send(new PutObjectCommand({
-      Bucket: this.bucket, Key: key, Body: buffer, ContentType: mimeType, ServerSideEncryption: 'AES256',
-    }));
-    return key;
-  }
-
   /**
    * Generate a pre-signed GET URL. Short-lived by default: this URL requires
    * no auth at all once issued, so keep the window tight — it's only meant to

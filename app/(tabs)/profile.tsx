@@ -1,13 +1,12 @@
-import { Alert, Image, Platform, ScrollView, View } from 'react-native';
-import * as ImagePicker from 'expo-image-picker';
+import { Alert, Platform, ScrollView, View } from 'react-native';
 import { useRef, useState } from 'react';
 import { router } from 'expo-router';
-import { Avatar, Button, Card, Text, TextInput as PaperTextInput } from 'react-native-paper';
+import { Button, Card, Text } from 'react-native-paper';
 import { ScreenErrorBoundary } from '../../components/ErrorBoundary';
 import { PageHeader } from '../../components/design-system';
 import { useMutation, useQuery } from '../../lib/railway-hooks';
 import { useAuthActions } from '../../lib/railway-hooks';
-import { ApiError, resolveMediaUrl } from '../../lib/api-client';
+import { ApiError } from '../../lib/api-client';
 import { api } from '../../lib/railway-api';
 import { colors, radius, spacing } from '../../lib/theme';
 import { useAuthStore, type AuthState } from '../../lib/auth-store';
@@ -22,19 +21,6 @@ function ProfileScreen() {
   const clearSession = useAuthStore((state: AuthState) => state.clearSession);
   const { isReady } = useAuthenticatedSession();
   const me = useQuery(api.app.getMe, isReady ? {} : 'skip');
-  const hrProfile = useQuery(api.app.getMyHrProfile, isReady ? {} : 'skip') as {
-    fullName: string; preferredName: string | null; phone: string | null; altPhone: string | null;
-    address: string | null; dateOfBirth: string | null; hireDate: string | null;
-    employmentType: string | null; hourlyRateCents: number | null; certifications: string[];
-    sickHoursAccrued: number; ptoHoursAccrued: number; emergencyContactName: string | null;
-    emergencyContactRelationship: string | null; emergencyContactPhone: string | null; photoUrl: string | null;
-  } | null | undefined;
-  const updateHrProfile = useMutation(api.app.updateMyHrProfile);
-  const uploadMyPhoto = useMutation(api.app.uploadMyPhoto);
-  const [editingHr, setEditingHr] = useState(false);
-  const [savingHr, setSavingHr] = useState(false);
-  const [uploadingPhoto, setUploadingPhoto] = useState(false);
-  const [hrForm, setHrForm] = useState({ preferredName: '', phone: '', altPhone: '', address: '', dateOfBirth: '', emergencyContactName: '', emergencyContactRelationship: '', emergencyContactPhone: '' });
   const serverRole = me?.profile.role ?? null;
   const allAccess = me?.profile.allAccess ?? false;
   const canManage = Boolean(serverRole && canManageVenue(serverRole, allAccess));
@@ -64,44 +50,6 @@ function ProfileScreen() {
 
   const onOpenBilling = () => {
     router.push(Platform.OS === 'web' ? '/billing' : '/billing/paywall');
-  };
-
-  const editHrProfile = () => {
-    if (!hrProfile) return;
-    setHrForm({
-      preferredName: hrProfile.preferredName ?? '', phone: hrProfile.phone ?? '', altPhone: hrProfile.altPhone ?? '',
-      address: hrProfile.address ?? '', dateOfBirth: hrProfile.dateOfBirth?.slice(0, 10) ?? '',
-      emergencyContactName: hrProfile.emergencyContactName ?? '',
-      emergencyContactRelationship: hrProfile.emergencyContactRelationship ?? '',
-      emergencyContactPhone: hrProfile.emergencyContactPhone ?? '',
-    });
-    setEditingHr(true);
-  };
-
-  const pickMyPhoto = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, quality: 0.7, base64: true });
-    const asset = result.canceled ? null : result.assets[0];
-    if (!asset?.base64) return;
-    setUploadingPhoto(true);
-    try {
-      await uploadMyPhoto({ dataBase64: asset.base64, mimeType: asset.mimeType ?? 'image/jpeg' });
-    } catch (error) {
-      Alert.alert('Photo upload failed', error instanceof Error ? error.message : 'Please try again.');
-    } finally {
-      setUploadingPhoto(false);
-    }
-  };
-
-  const saveHrProfile = async () => {
-    setSavingHr(true);
-    try {
-      await updateHrProfile(hrForm);
-      setEditingHr(false);
-    } catch (error) {
-      Alert.alert('Profile update failed', error instanceof Error ? error.message : 'Please try again.');
-    } finally {
-      setSavingHr(false);
-    }
   };
 
   // Two-step by design. Sending deleteOwnedVenues:true up front pre-authorises
@@ -136,40 +84,10 @@ function ProfileScreen() {
       <PageHeader title={t('profile.title')} detail={venue?.name ?? t('profile.individualAccount')} />
       <Card style={{ backgroundColor: colors.surface, marginBottom: spacing.md, borderRadius: radius.soft }}>
         <Card.Content style={{ gap: 6 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
-            {hrProfile?.photoUrl ? <Image source={{ uri: resolveMediaUrl(hrProfile.photoUrl) }} style={{ width: 68, height: 68, borderRadius: 34 }} /> : <Avatar.Text size={68} label={(hrProfile?.preferredName || user?.full_name || 'U').slice(0, 1).toUpperCase()} />}
-            <View style={{ flex: 1 }}><Text variant="titleMedium">{hrProfile?.preferredName || user?.full_name}</Text><Text style={{ color: colors.muted }}>{user?.job_title}</Text></View>
-          </View>
+          <Text>{user?.full_name}</Text>
           <Text style={{ color: colors.muted }}>{user?.email}</Text>
+          <Text style={{ color: colors.muted }}>{user?.job_title}</Text>
           <Text style={{ color: colors.muted }}>{venue?.name ?? t('profile.individualAccount')}</Text>
-          <Button mode="outlined" icon="camera-outline" loading={uploadingPhoto} disabled={uploadingPhoto} onPress={() => void pickMyPhoto()}>Upload my photo</Button>
-        </Card.Content>
-      </Card>
-
-      <Card style={{ backgroundColor: colors.surface, marginBottom: spacing.md, borderRadius: radius.soft }}>
-        <Card.Content style={{ gap: spacing.sm }}>
-          <Text variant="titleMedium" style={{ fontWeight: '700' }}>My HR profile</Text>
-          <Text style={{ color: colors.muted }}>Contact and emergency details are available to you and authorized managers.</Text>
-          {editingHr ? <>
-            {([
-              ['preferredName', 'Preferred name'], ['phone', 'Phone'], ['altPhone', 'Alternate phone'],
-              ['address', 'Address'], ['dateOfBirth', 'Date of birth (YYYY-MM-DD)'],
-              ['emergencyContactName', 'Emergency contact name'], ['emergencyContactRelationship', 'Relationship'],
-              ['emergencyContactPhone', 'Emergency contact phone'],
-            ] as const).map(([key, label]) => <PaperTextInput key={key} label={label} value={hrForm[key]} onChangeText={(value) => setHrForm((current) => ({ ...current, [key]: value }))} mode="outlined" style={{ backgroundColor: colors.surface }} />)}
-            <Button mode="contained" buttonColor={colors.primary} loading={savingHr} disabled={savingHr} onPress={() => void saveHrProfile()}>Save details</Button>
-            <Button mode="text" onPress={() => setEditingHr(false)}>Cancel</Button>
-          </> : <>
-            <Text>Phone: {hrProfile?.phone || 'Not added'}</Text>
-            <Text>Address: {hrProfile?.address || 'Not added'}</Text>
-            <Text>Hire date: {hrProfile?.hireDate?.slice(0, 10) || 'Not added'}</Text>
-            <Text>Employment: {hrProfile?.employmentType?.replace('_', ' ') || 'Not added'}</Text>
-            <Text>Hourly rate: {hrProfile?.hourlyRateCents == null ? 'Not added' : `$${(hrProfile.hourlyRateCents / 100).toFixed(2)}`}</Text>
-            <Text>Certifications: {hrProfile?.certifications?.join(', ') || 'Not added'}</Text>
-            <Text>Leave balance: {hrProfile?.ptoHoursAccrued ?? 0} PTO hours · {hrProfile?.sickHoursAccrued ?? 0} sick hours</Text>
-            <Text>Emergency contact: {hrProfile?.emergencyContactName || 'Not added'}{hrProfile?.emergencyContactPhone ? ` · ${hrProfile.emergencyContactPhone}` : ''}</Text>
-            <Button mode="outlined" icon="pencil-outline" onPress={editHrProfile} disabled={!hrProfile}>Edit my details</Button>
-          </>}
         </Card.Content>
       </Card>
 
