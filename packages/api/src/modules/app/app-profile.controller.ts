@@ -2,7 +2,6 @@ import { BadRequestException, Body, ConflictException, Controller, ForbiddenExce
 import { IsDateString, IsOptional, IsString, MaxLength } from 'class-validator';
 import type { Response } from 'express';
 import { AuthGuard } from '../../auth/auth.guard';
-import { canManageRole } from '../../auth/roles';
 import type { AuthUser } from '../../auth/auth.guard';
 import { CurrentUser } from '../../auth/current-user.decorator';
 import { Public } from '../../auth/public.decorator';
@@ -17,21 +16,15 @@ import { mapProfile } from './app-mappers';
 import { profilePhotoUrl } from './profile-photo';
 import { ProfileService } from './profile.service';
 
-// A field left out of the request body is unchanged; an explicit `null` clears it. (A
-// previous version of this DTO typed these as `?: string`, which `@IsOptional()` accepted
-// as a request body `null` would too — class-validator's `@IsOptional()` skips every
-// validator on `null` the same as on `undefined` — but the handler then called
-// `.trim()` on it directly and crashed. The `| null` here documents the contract the
-// handler below actually implements.)
 class UpdateMyProfileDto {
-  @IsOptional() @IsString() @MaxLength(120) preferredName?: string | null;
-  @IsOptional() @IsString() @MaxLength(50) phone?: string | null;
-  @IsOptional() @IsString() @MaxLength(50) altPhone?: string | null;
-  @IsOptional() @IsString() @MaxLength(255) address?: string | null;
+  @IsOptional() @IsString() @MaxLength(120) preferredName?: string;
+  @IsOptional() @IsString() @MaxLength(50) phone?: string;
+  @IsOptional() @IsString() @MaxLength(50) altPhone?: string;
+  @IsOptional() @IsString() @MaxLength(255) address?: string;
   @IsOptional() @IsDateString() dateOfBirth?: string | null;
-  @IsOptional() @IsString() @MaxLength(120) emergencyContactName?: string | null;
-  @IsOptional() @IsString() @MaxLength(80) emergencyContactRelationship?: string | null;
-  @IsOptional() @IsString() @MaxLength(50) emergencyContactPhone?: string | null;
+  @IsOptional() @IsString() @MaxLength(120) emergencyContactName?: string;
+  @IsOptional() @IsString() @MaxLength(80) emergencyContactRelationship?: string;
+  @IsOptional() @IsString() @MaxLength(50) emergencyContactPhone?: string;
 }
 
 class UploadProfilePhotoDto {
@@ -69,14 +62,14 @@ export class AppProfileController {
     const updated = await this.prisma.profile.update({
       where: { id: profile.id },
       data: {
-        ...(body.preferredName !== undefined ? { preferredName: body.preferredName?.trim() || null } : {}),
-        ...(body.phone !== undefined ? { phone: body.phone?.trim() || null } : {}),
-        ...(body.altPhone !== undefined ? { altPhone: body.altPhone?.trim() || null } : {}),
-        ...(body.address !== undefined ? { address: body.address?.trim() || null } : {}),
+        ...(body.preferredName !== undefined ? { preferredName: body.preferredName.trim() || null } : {}),
+        ...(body.phone !== undefined ? { phone: body.phone.trim() || null } : {}),
+        ...(body.altPhone !== undefined ? { altPhone: body.altPhone.trim() || null } : {}),
+        ...(body.address !== undefined ? { address: body.address.trim() || null } : {}),
         ...(body.dateOfBirth !== undefined ? { dateOfBirth: body.dateOfBirth ? new Date(body.dateOfBirth) : null } : {}),
-        ...(body.emergencyContactName !== undefined ? { emergencyContactName: body.emergencyContactName?.trim() || null } : {}),
-        ...(body.emergencyContactRelationship !== undefined ? { emergencyContactRelationship: body.emergencyContactRelationship?.trim() || null } : {}),
-        ...(body.emergencyContactPhone !== undefined ? { emergencyContactPhone: body.emergencyContactPhone?.trim() || null } : {}),
+        ...(body.emergencyContactName !== undefined ? { emergencyContactName: body.emergencyContactName.trim() || null } : {}),
+        ...(body.emergencyContactRelationship !== undefined ? { emergencyContactRelationship: body.emergencyContactRelationship.trim() || null } : {}),
+        ...(body.emergencyContactPhone !== undefined ? { emergencyContactPhone: body.emergencyContactPhone.trim() || null } : {}),
       },
     });
     return { ...mapProfile(updated), photoUrl: profilePhotoUrl(updated, this.mediaAccess) };
@@ -100,11 +93,7 @@ export class AppProfileController {
       where: { id, venueId: viewer.venueId!, OR: [{ membershipStatus: null }, { membershipStatus: 'active' }] },
     });
     if (!target) throw new NotFoundException('Staff member not found');
-    // Same rule the rest of profile management uses (canManageRole): a manager may not
-    // touch another manager's — or anyone equal-or-higher-ranked's — photo, only an
-    // owner/admin may manage a peer. This used to be a weaker inline check that let a
-    // manager overwrite another manager's photo.
-    if (target.id !== viewer.id && !canManageRole(viewer.role, target.role, viewer.allAccess)) {
+    if (target.id !== viewer.id && ['owner', 'admin'].includes(target.role) && !['owner', 'admin'].includes(viewer.role) && !viewer.allAccess) {
       throw new ForbiddenException('Not authorized');
     }
     return this.uploadPhoto(target, body);

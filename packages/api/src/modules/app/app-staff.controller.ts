@@ -41,7 +41,7 @@ class StaffDto {
   @MaxLength(120)
   fullName!: string;
 
-  @IsString() @IsOptional() @MaxLength(120) preferredName?: string | null;
+  @IsString() @IsOptional() @MaxLength(120) preferredName?: string;
 
   @IsIn(['admin', 'owner', 'manager', 'server', 'staff'])
   role!: Role;
@@ -53,17 +53,17 @@ class StaffDto {
   @IsString()
   @IsOptional()
   @MaxLength(50)
-  phone?: string | null;
+  phone?: string;
 
   @IsString()
   @IsOptional()
   @MaxLength(50)
-  altPhone?: string | null;
+  altPhone?: string;
 
   @IsString()
   @IsOptional()
   @MaxLength(255)
-  address?: string | null;
+  address?: string;
 
   @IsDateString()
   @IsOptional()
@@ -71,9 +71,9 @@ class StaffDto {
 
   @IsDateString() @IsOptional() hireDate?: string | null;
   @IsIn(['full_time', 'part_time', 'seasonal', 'contractor', 'temporary']) @IsOptional() employmentType?: string | null;
-  @IsString() @IsOptional() @MaxLength(120) emergencyContactName?: string | null;
-  @IsString() @IsOptional() @MaxLength(80) emergencyContactRelationship?: string | null;
-  @IsString() @IsOptional() @MaxLength(50) emergencyContactPhone?: string | null;
+  @IsString() @IsOptional() @MaxLength(120) emergencyContactName?: string;
+  @IsString() @IsOptional() @MaxLength(80) emergencyContactRelationship?: string;
+  @IsString() @IsOptional() @MaxLength(50) emergencyContactPhone?: string;
 
   @IsOptional()
   @IsArray()
@@ -86,7 +86,7 @@ class StaffDto {
   @Min(0)
   @Max(1000000)
   @IsOptional()
-  hourlyRateCents?: number | null;
+  hourlyRateCents?: number;
 }
 
 class ParseStaffImportDto {
@@ -120,7 +120,7 @@ class StaffImportRowDto {
   @Min(0)
   @Max(1000000)
   @IsOptional()
-  hourlyRateCents?: number | null;
+  hourlyRateCents?: number;
 }
 
 class CommitStaffImportDto {
@@ -348,16 +348,16 @@ export class AppStaffController {
     // Imports provide only a subset of HR fields. Omitted values must leave an
     // existing employee's private details intact; explicit blanks clear them.
     const employeeFields = {
-      ...(body.phone !== undefined ? { phone: body.phone?.trim() || null } : {}),
-      ...(body.altPhone !== undefined ? { altPhone: body.altPhone?.trim() || null } : {}),
-      ...(body.address !== undefined ? { address: body.address?.trim() || null } : {}),
+      ...(body.phone !== undefined ? { phone: body.phone.trim() || null } : {}),
+      ...(body.altPhone !== undefined ? { altPhone: body.altPhone.trim() || null } : {}),
+      ...(body.address !== undefined ? { address: body.address.trim() || null } : {}),
       ...(body.dateOfBirth !== undefined ? { dateOfBirth: body.dateOfBirth ? parseDateOfBirth(body.dateOfBirth) : null } : {}),
-      ...(body.preferredName !== undefined ? { preferredName: body.preferredName?.trim() || null } : {}),
+      ...(body.preferredName !== undefined ? { preferredName: body.preferredName.trim() || null } : {}),
       ...(body.hireDate !== undefined ? { hireDate: body.hireDate ? parseDateOfBirth(body.hireDate) : null } : {}),
       ...(body.employmentType !== undefined ? { employmentType: body.employmentType } : {}),
-      ...(body.emergencyContactName !== undefined ? { emergencyContactName: body.emergencyContactName?.trim() || null } : {}),
-      ...(body.emergencyContactRelationship !== undefined ? { emergencyContactRelationship: body.emergencyContactRelationship?.trim() || null } : {}),
-      ...(body.emergencyContactPhone !== undefined ? { emergencyContactPhone: body.emergencyContactPhone?.trim() || null } : {}),
+      ...(body.emergencyContactName !== undefined ? { emergencyContactName: body.emergencyContactName.trim() || null } : {}),
+      ...(body.emergencyContactRelationship !== undefined ? { emergencyContactRelationship: body.emergencyContactRelationship.trim() || null } : {}),
+      ...(body.emergencyContactPhone !== undefined ? { emergencyContactPhone: body.emergencyContactPhone.trim() || null } : {}),
       ...(body.certifications !== undefined ? { certifications: body.certifications } : {}),
     };
     const row = await this.prisma.$transaction(async (tx) => {
@@ -367,7 +367,7 @@ export class AppStaffController {
         await this.assertCanManageLegacyStaffTarget(viewer, existing, isDemoting, tx);
         created = await tx.profile.update({
           where: { id: existing.id },
-          data: { email: body.email.toLowerCase(), fullName: body.fullName, role: body.role, jobTitle: body.jobTitle, venueId: body.venueId, hourlyRateCents: body.hourlyRateCents !== undefined ? body.hourlyRateCents : existing.hourlyRateCents, ...employeeFields },
+          data: { email: body.email.toLowerCase(), fullName: body.fullName, role: body.role, jobTitle: body.jobTitle, venueId: body.venueId, hourlyRateCents: body.hourlyRateCents ?? existing.hourlyRateCents, ...employeeFields },
         });
         if (roleChanged && existing.userId) {
           await tx.session.deleteMany({ where: { userId: existing.userId } });
