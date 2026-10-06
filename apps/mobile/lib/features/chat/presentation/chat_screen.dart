@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../application/chat_providers.dart';
 import '../domain/chat_message.dart';
+import '../../../core/theme/ops_colors.dart';
+import '../../../core/widgets/state_views.dart';
 
 class ChatScreen extends ConsumerWidget {
   const ChatScreen({super.key});
@@ -38,18 +40,9 @@ class _ConversationListView extends ConsumerWidget {
       body: conversationsAsync.when(
         data: (conversations) {
           if (conversations.isEmpty) {
-            return const Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.chat_bubble_outline, size: 64, color: Colors.grey),
-                  SizedBox(height: 16),
-                  Text(
-                    'No conversations yet',
-                    style: TextStyle(fontSize: 16, color: Colors.grey),
-                  ),
-                ],
-              ),
+            return const EmptyState(
+              icon: Icons.chat_bubble_outline,
+              message: 'No conversations yet',
             );
           }
 
@@ -90,19 +83,8 @@ class _ConversationListView extends ConsumerWidget {
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, _) => Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.error_outline, size: 48, color: Colors.red),
-              const SizedBox(height: 8),
-              Text(
-                'Failed to load conversations: $err',
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ),
-        ),
+        error: (err, _) =>
+            ErrorState(message: 'Failed to load conversations: $err'),
       ),
     );
   }
@@ -240,12 +222,12 @@ class _MessageBubble extends StatelessWidget {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.image, size: 16, color: Colors.blue),
+                    Icon(Icons.image, size: 16, color: context.ops.info.fg),
                     const SizedBox(width: 4),
                     Text(
                       'Photo Attachment',
                       style:
-                          TextStyle(fontSize: 12, color: Colors.blue.shade700),
+                          TextStyle(fontSize: 12, color: context.ops.info.fg),
                     ),
                   ],
                 ),

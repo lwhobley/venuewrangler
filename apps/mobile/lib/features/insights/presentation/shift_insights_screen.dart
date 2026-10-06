@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/theme/ops_colors.dart';
 
 import '../../../core/errors/app_error.dart';
 import '../../venues/application/venues_providers.dart';
@@ -168,7 +169,7 @@ class _ShiftInsightCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final (icon, color) = _kindMeta(insight.kind);
+    final (icon, color) = _kindMeta(context, insight.kind);
 
     return Card(
       elevation: 1,
@@ -228,7 +229,9 @@ class _ShiftInsightCard extends ConsumerWidget {
               alignment: Alignment.centerRight,
               child: Text(
                 _formatTimestamp(insight.createdAt),
-                style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
               ),
             ),
           ],
@@ -237,24 +240,27 @@ class _ShiftInsightCard extends ConsumerWidget {
     );
   }
 
-  (IconData, Color) _kindMeta(ShiftInsightKind kind) => switch (kind) {
-        ShiftInsightKind.rushPrep => (
-            Icons.local_fire_department,
-            Colors.amber.shade800
-          ),
-        ShiftInsightKind.coverageWarning => (
-            Icons.warning_amber_rounded,
-            Colors.red.shade700
-          ),
-        ShiftInsightKind.laborEfficiency => (
-            Icons.trending_up,
-            Colors.green.shade700
-          ),
-        ShiftInsightKind.fatigueRisk => (Icons.bedtime, Colors.deepOrange),
-        ShiftInsightKind.stationBalance => (Icons.balance, Colors.teal),
-        ShiftInsightKind.complianceNote => (Icons.gavel, Colors.purple),
-        ShiftInsightKind.shiftSummary => (Icons.insights, Colors.blue),
-      };
+  (IconData, Color) _kindMeta(BuildContext context, ShiftInsightKind kind) {
+    final ops = context.ops;
+    return switch (kind) {
+      ShiftInsightKind.rushPrep => (
+          Icons.local_fire_department,
+          ops.warning.fg,
+        ),
+      ShiftInsightKind.coverageWarning => (
+          Icons.warning_amber_rounded,
+          ops.danger.fg,
+        ),
+      ShiftInsightKind.laborEfficiency => (
+          Icons.trending_up,
+          ops.success.fg,
+        ),
+      ShiftInsightKind.fatigueRisk => (Icons.bedtime, ops.warning.fg),
+      ShiftInsightKind.stationBalance => (Icons.balance, ops.info.fg),
+      ShiftInsightKind.complianceNote => (Icons.gavel, ops.vip.fg),
+      ShiftInsightKind.shiftSummary => (Icons.insights, ops.info.fg),
+    };
+  }
 
   String _formatTimestamp(DateTime dt) {
     final local = dt.toLocal();
@@ -388,11 +394,11 @@ class _GenerateInsightsDialogState
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Row(
+      title: Row(
         children: [
-          Icon(Icons.auto_awesome, color: Colors.blue),
-          SizedBox(width: 8),
-          Text('Generate Shift Insights'),
+          Icon(Icons.auto_awesome, color: context.ops.info.fg),
+          const SizedBox(width: 8),
+          const Text('Generate Shift Insights'),
         ],
       ),
       content: SingleChildScrollView(
@@ -418,7 +424,7 @@ class _GenerateInsightsDialogState
               const SizedBox(height: 12),
               Text(
                 _errorMessage!,
-                style: const TextStyle(color: Colors.red, fontSize: 13),
+                style: TextStyle(color: context.ops.danger.fg, fontSize: 13),
               ),
             ],
           ],

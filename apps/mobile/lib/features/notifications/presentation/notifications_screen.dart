@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../core/widgets/state_views.dart';
 
 import '../../venues/application/venues_providers.dart';
 import '../application/notification_routing.dart';
@@ -35,18 +36,9 @@ class NotificationsScreen extends ConsumerWidget {
       body: notificationsAsync.when(
         data: (notifications) {
           if (notifications.isEmpty) {
-            return const Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.notifications_none, size: 64, color: Colors.grey),
-                  SizedBox(height: 16),
-                  Text(
-                    'No notifications yet',
-                    style: TextStyle(fontSize: 16, color: Colors.grey),
-                  ),
-                ],
-              ),
+            return const EmptyState(
+              icon: Icons.notifications_none,
+              message: 'No notifications yet',
             );
           }
 
@@ -64,23 +56,9 @@ class NotificationsScreen extends ConsumerWidget {
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, _) => Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.error_outline, size: 48, color: Colors.red),
-              const SizedBox(height: 8),
-              Text(
-                'Failed to load notifications: $err',
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: () => ref.invalidate(notificationsFeedProvider),
-                child: const Text('Retry'),
-              ),
-            ],
-          ),
+        error: (err, _) => ErrorState(
+          message: 'Failed to load notifications: $err',
+          onRetry: () => ref.invalidate(notificationsFeedProvider),
         ),
       ),
     );
@@ -113,12 +91,12 @@ class _NotificationListTile extends ConsumerWidget {
     return ListTile(
       leading: CircleAvatar(
         backgroundColor: item.isRead
-            ? Colors.grey.shade200
+            ? Theme.of(context).colorScheme.surfaceContainerHighest
             : Theme.of(context).colorScheme.primaryContainer,
         child: Icon(
           _iconForKind(item.kind),
           color: item.isRead
-              ? Colors.grey.shade600
+              ? Theme.of(context).colorScheme.onSurfaceVariant
               : Theme.of(context).colorScheme.primary,
         ),
       ),
@@ -136,10 +114,9 @@ class _NotificationListTile extends ConsumerWidget {
           const SizedBox(height: 4),
           Text(
             _formatDate(item.createdAt),
-            style: Theme.of(context)
-                .textTheme
-                .bodySmall
-                ?.copyWith(color: Colors.grey),
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
           ),
         ],
       ),

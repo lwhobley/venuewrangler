@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/theme/ops_colors.dart';
+import '../../../core/widgets/status_chip.dart';
 
 import '../../../core/errors/app_error.dart';
 import '../../venues/application/venues_providers.dart';
@@ -54,7 +56,13 @@ class _TimeClockScreenState extends ConsumerState<TimeClockScreen> {
     } on AppError catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.message), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text(
+              e.message,
+              style: TextStyle(color: Theme.of(context).colorScheme.onError),
+            ),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
         );
       }
     } finally {
@@ -83,7 +91,13 @@ class _TimeClockScreenState extends ConsumerState<TimeClockScreen> {
     } on AppError catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.message), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text(
+              e.message,
+              style: TextStyle(color: Theme.of(context).colorScheme.onError),
+            ),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
         );
       }
     } finally {
@@ -99,16 +113,16 @@ class _TimeClockScreenState extends ConsumerState<TimeClockScreen> {
         children: [
           SimpleDialogOption(
             onPressed: () => Navigator.of(context).pop('paid'),
-            child: const ListTile(
-              leading: Icon(Icons.coffee, color: Colors.blue),
-              title: Text('Paid Break (15 min)'),
+            child: ListTile(
+              leading: Icon(Icons.coffee, color: context.ops.info.fg),
+              title: const Text('Paid Break (15 min)'),
             ),
           ),
           SimpleDialogOption(
             onPressed: () => Navigator.of(context).pop('unpaid'),
-            child: const ListTile(
-              leading: Icon(Icons.restaurant, color: Colors.orange),
-              title: Text('Unpaid Meal Break (30+ min)'),
+            child: ListTile(
+              leading: Icon(Icons.restaurant, color: context.ops.warning.fg),
+              title: const Text('Unpaid Meal Break (30+ min)'),
             ),
           ),
         ],
@@ -125,7 +139,13 @@ class _TimeClockScreenState extends ConsumerState<TimeClockScreen> {
     } on AppError catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.message), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text(
+              e.message,
+              style: TextStyle(color: Theme.of(context).colorScheme.onError),
+            ),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
         );
       }
     } finally {
@@ -142,7 +162,13 @@ class _TimeClockScreenState extends ConsumerState<TimeClockScreen> {
     } on AppError catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.message), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text(
+              e.message,
+              style: TextStyle(color: Theme.of(context).colorScheme.onError),
+            ),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
         );
       }
     } finally {
@@ -225,7 +251,7 @@ class _TimeClockScreenState extends ConsumerState<TimeClockScreen> {
                     ),
                   ),
                   error: (error, _) => Card(
-                    color: Colors.red.shade50,
+                    color: context.ops.danger.bg,
                     child: Padding(
                       padding: const EdgeInsets.all(16),
                       child: Text('Error loading clock status: $error'),
@@ -236,10 +262,10 @@ class _TimeClockScreenState extends ConsumerState<TimeClockScreen> {
                     final isOnBreak = activeEntry?.isOnBreak ?? false;
 
                     final statusColor = isOnBreak
-                        ? Colors.orange
+                        ? context.ops.warning.fg
                         : isClockedIn
-                            ? Colors.green
-                            : Colors.grey.shade700;
+                            ? context.ops.success.fg
+                            : context.ops.neutral.fg;
 
                     final statusText = isOnBreak
                         ? 'ON BREAK'
@@ -297,9 +323,11 @@ class _TimeClockScreenState extends ConsumerState<TimeClockScreen> {
                               const SizedBox(height: 4),
                               Text(
                                 'Shift elapsed: ${_formatDuration(activeEntry.totalElapsed)}',
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 13,
-                                  color: Colors.grey,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant,
                                 ),
                               ),
                               if (isOnBreak &&
@@ -310,7 +338,7 @@ class _TimeClockScreenState extends ConsumerState<TimeClockScreen> {
                                   style: TextStyle(
                                     fontSize: 13,
                                     fontWeight: FontWeight.w600,
-                                    color: Colors.orange.shade800,
+                                    color: context.ops.warning.fg,
                                   ),
                                 ),
                               ],
@@ -325,7 +353,9 @@ class _TimeClockScreenState extends ConsumerState<TimeClockScreen> {
                                 icon: const Icon(Icons.login),
                                 label: const Text('Clock In'),
                                 style: FilledButton.styleFrom(
-                                  backgroundColor: Colors.green,
+                                  backgroundColor: context.ops.success.fg,
+                                  foregroundColor:
+                                      Theme.of(context).colorScheme.surface,
                                   minimumSize: const Size.fromHeight(50),
                                 ),
                               ),
@@ -370,7 +400,11 @@ class _TimeClockScreenState extends ConsumerState<TimeClockScreen> {
                                       icon: const Icon(Icons.logout),
                                       label: const Text('Clock Out'),
                                       style: FilledButton.styleFrom(
-                                        backgroundColor: Colors.redAccent,
+                                        backgroundColor:
+                                            Theme.of(context).colorScheme.error,
+                                        foregroundColor: Theme.of(context)
+                                            .colorScheme
+                                            .onError,
                                         minimumSize: const Size.fromHeight(48),
                                       ),
                                     ),
@@ -427,13 +461,13 @@ class _TimeClockScreenState extends ConsumerState<TimeClockScreen> {
                           child: ListTile(
                             leading: CircleAvatar(
                               backgroundColor: entry.isOpen
-                                  ? Colors.green.shade100
-                                  : Colors.grey.shade200,
+                                  ? context.ops.success.bg
+                                  : context.ops.neutral.bg,
                               child: Icon(
                                 entry.isOpen ? Icons.timer : Icons.done,
                                 color: entry.isOpen
-                                    ? Colors.green
-                                    : Colors.grey.shade700,
+                                    ? context.ops.success.fg
+                                    : context.ops.neutral.fg,
                               ),
                             ),
                             title: Text(
@@ -445,12 +479,10 @@ class _TimeClockScreenState extends ConsumerState<TimeClockScreen> {
                               'In: ${_formatTime(inTime)} • Out: ${outTime != null ? _formatTime(outTime) : 'Active'}',
                             ),
                             trailing: entry.locationAnomaly != null
-                                ? Chip(
-                                    label: const Text(
-                                      'Flagged Fix',
-                                      style: TextStyle(fontSize: 10),
-                                    ),
-                                    backgroundColor: Colors.amber.shade100,
+                                ? const StatusChip(
+                                    label: 'Flagged Fix',
+                                    tone: Tone.warning,
+                                    dense: true,
                                   )
                                 : null,
                           ),
@@ -500,13 +532,13 @@ class _TimeClockScreenState extends ConsumerState<TimeClockScreen> {
                           child: ListTile(
                             leading: CircleAvatar(
                               backgroundColor: entry.isOnBreak
-                                  ? Colors.orange.shade100
-                                  : Colors.green.shade100,
+                                  ? context.ops.warning.bg
+                                  : context.ops.success.bg,
                               child: Icon(
                                 entry.isOnBreak ? Icons.coffee : Icons.person,
                                 color: entry.isOnBreak
-                                    ? Colors.orange
-                                    : Colors.green,
+                                    ? context.ops.warning.fg
+                                    : context.ops.success.fg,
                               ),
                             ),
                             title: Text(

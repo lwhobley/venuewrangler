@@ -4,6 +4,8 @@ import '../../venues/application/venues_providers.dart';
 import '../application/pos_providers.dart';
 import '../domain/pos_check.dart';
 import '../domain/pos_connection.dart';
+import '../../../core/theme/ops_colors.dart';
+import '../../../core/widgets/status_chip.dart';
 
 class PosManagementScreen extends ConsumerWidget {
   const PosManagementScreen({super.key});
@@ -58,9 +60,12 @@ class PosManagementScreen extends ConsumerWidget {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  const Text(
+                  Text(
                     'Push out-of-stock items (86) directly to connected Toast terminals in real-time.',
-                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ],
               ),
@@ -218,12 +223,10 @@ class _ConnectionTile extends StatelessWidget {
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
         subtitle: Text('Status: ${connection.status.toUpperCase()}'),
-        trailing: Chip(
-          label: Text(
-            connection.isActive ? 'CONNECTED' : 'DISCONNECTED',
-            style: const TextStyle(fontSize: 10, color: Colors.white),
-          ),
-          backgroundColor: connection.isActive ? Colors.green : Colors.red,
+        trailing: StatusChip(
+          label: connection.isActive ? 'CONNECTED' : 'DISCONNECTED',
+          tone: connection.isActive ? Tone.success : Tone.danger,
+          dense: true,
         ),
       ),
     );
