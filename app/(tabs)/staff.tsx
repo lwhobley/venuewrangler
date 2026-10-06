@@ -392,10 +392,13 @@ function StaffScreen() {
         email,
         role,
         jobTitle,
-        hourlyRateCents: hourlyRate.trim() ? Math.round(Number(hourlyRate.trim()) * 100) : undefined,
-        phone: phone.trim() || undefined,
-        altPhone: altPhone.trim() || undefined,
-        address: address.trim() || undefined,
+        // `null` clears a previously-saved value; `undefined` would omit the key entirely
+        // and the API preserves whatever was already saved — so a blank field here must be
+        // sent as null, not undefined, or clearing it in the UI silently does nothing.
+        hourlyRateCents: hourlyRate.trim() ? Math.round(Number(hourlyRate.trim()) * 100) : null,
+        phone: phone.trim() || null,
+        altPhone: altPhone.trim() || null,
+        address: address.trim() || null,
         dateOfBirth: dateOfBirth.trim() || null,
         hireDate: hireDate.trim() || null,
         employmentType: employmentType || null,

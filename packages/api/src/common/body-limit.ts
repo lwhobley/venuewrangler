@@ -16,6 +16,12 @@ const LARGE_JSON_BODY_PATHS = [
   /^\/api\/v1\/documents$/,
   /^\/api\/v1\/pos\/ingest\/[^/]+$/,
   /^\/api\/v1\/reservations\/ingest\/[^/]+$/,
+  // Profile-photo routes accept up to 5 MB of decoded image bytes
+  // (UploadProfilePhotoDto.dataBase64, app-profile.controller.ts), which base64-encoded is
+  // ~6.7 MB of JSON — well past the 1 MB default, so a normal phone photo was rejected by
+  // Express before the controller ever ran.
+  /^\/api\/v1\/app\/me\/photo$/,
+  /^\/api\/v1\/app\/staff\/[^/]+\/photo$/,
 ];
 
 export function jsonBodyLimitForPath(path: string, largeBodyLimit: string): string {

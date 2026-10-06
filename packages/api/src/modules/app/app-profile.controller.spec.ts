@@ -33,6 +33,22 @@ describe('AppProfileController', () => {
     expect(prisma.profile.update).toHaveBeenCalledWith({ where: { id: target.id }, data: { dateOfBirth: null } });
   });
 
+  it('accepts an explicit null for a string field without crashing, and clears it', async () => {
+    const { controller, prisma, profiles } = setup();
+    profiles.getProfile.mockResolvedValue({ ...target, phone: '555-0100' });
+    prisma.profile.update.mockResolvedValue({ ...target, phone: null });
+    await controller.updateMyProfile(user, { phone: null });
+    expect(prisma.profile.update).toHaveBeenCalledWith({ where: { id: target.id }, data: { phone: null } });
+  });
+
+  it('treats a blank string the same as null: clears the field rather than leaving it', async () => {
+    const { controller, prisma, profiles } = setup();
+    profiles.getProfile.mockResolvedValue({ ...target, address: '123 Main St' });
+    prisma.profile.update.mockResolvedValue({ ...target, address: null });
+    await controller.updateMyProfile(user, { address: '   ' });
+    expect(prisma.profile.update).toHaveBeenCalledWith({ where: { id: target.id }, data: { address: null } });
+  });
+
   it('rejects manager photo upload outside the active venue', async () => {
     const { controller, prisma, images } = setup();
     prisma.profile.findFirst.mockResolvedValue(null);
@@ -44,6 +60,13 @@ describe('AppProfileController', () => {
   it('does not allow a manager to replace an owner photo', async () => {
     const { controller, prisma, images } = setup();
     prisma.profile.findFirst.mockResolvedValue({ ...target, role: 'owner' });
+    await expect(controller.uploadStaffPhoto(user, target.id, { dataBase64: 'AA==' })).rejects.toThrow(ForbiddenException);
+    expect(images.uploadProfilePhoto).not.toHaveBeenCalled();
+  });
+
+  it("does not allow a manager to replace another manager's photo (equal rank)", async () => {
+    const { controller, prisma, images } = setup();
+    prisma.profile.findFirst.mockResolvedValue({ ...target, role: 'manager' });
     await expect(controller.uploadStaffPhoto(user, target.id, { dataBase64: 'AA==' })).rejects.toThrow(ForbiddenException);
     expect(images.uploadProfilePhoto).not.toHaveBeenCalled();
   });

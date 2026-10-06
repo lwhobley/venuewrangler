@@ -329,6 +329,38 @@ describe('AppStaffController', () => {
       } as any)).rejects.toThrow('You cannot modify this staff member');
     });
 
+    it('clears an existing phone number when sent as null, instead of preserving it', async () => {
+      const { controller, prisma, profiles } = makeController();
+      profiles.requireManagerProfile.mockResolvedValue(ownerViewer);
+      prisma.profile.findFirst.mockResolvedValue(profileRow({ phone: '555-0100', hourlyRateCents: 2500 }));
+      prisma.profile.update.mockResolvedValue(profileRow({ phone: null, hourlyRateCents: null }));
+
+      await controller.upsertVenueStaff(user, {
+        venueId: 'venue-1', staffId: 'staff-2', email: 'staff@example.com', fullName: 'Staff Person',
+        role: 'staff', jobTitle: 'Server', phone: null, hourlyRateCents: null,
+      } as any);
+
+      expect(prisma.profile.update).toHaveBeenCalledWith(expect.objectContaining({
+        data: expect.objectContaining({ phone: null, hourlyRateCents: null }),
+      }));
+    });
+
+    it('leaves phone and hourlyRateCents untouched when omitted from the request', async () => {
+      const { controller, prisma, profiles } = makeController();
+      profiles.requireManagerProfile.mockResolvedValue(ownerViewer);
+      prisma.profile.findFirst.mockResolvedValue(profileRow({ phone: '555-0100', hourlyRateCents: 2500 }));
+      prisma.profile.update.mockResolvedValue(profileRow({ phone: '555-0100', hourlyRateCents: 2500 }));
+
+      await controller.upsertVenueStaff(user, {
+        venueId: 'venue-1', staffId: 'staff-2', email: 'staff@example.com', fullName: 'Staff Person',
+        role: 'staff', jobTitle: 'Server',
+      } as any);
+
+      const data = prisma.profile.update.mock.calls[0][0].data;
+      expect(data.hourlyRateCents).toBe(2500);
+      expect('phone' in data).toBe(false);
+    });
+
     it('blocks demoting the last owner/admin in the venue', async () => {
       const { controller, prisma, profiles } = makeController();
       profiles.requireManagerProfile.mockResolvedValue(ownerViewer);
