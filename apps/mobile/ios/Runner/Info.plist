@@ -55,6 +55,8 @@
 	<string>Venue Wrangler uses the camera to attach photos to incident reports and inventory items.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Venue Wrangler uses your location to verify you are at the venue when you clock in or out.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Venue Wrangler uses your location to verify you are at the venue when you clock in or out.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Venue Wrangler lets managers upload bar inventory photos from the photo library.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
