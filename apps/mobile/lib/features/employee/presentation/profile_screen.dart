@@ -73,11 +73,7 @@ class ProfileScreen extends ConsumerWidget {
         userId == null ? 0.0 : scheduledHours(shifts, userId, weekFrom, weekTo);
     var workedMinutes = 0;
     for (final e in entries ?? const <TimeEntry>[]) {
-      final start = e.clockInAt.toLocal();
-      final end = (e.clockOutAt ?? now).toLocal();
-      final a = start.isAfter(weekFrom) ? start : weekFrom;
-      final b = end.isBefore(weekTo) ? end : weekTo;
-      if (b.isAfter(a)) workedMinutes += b.difference(a).inMinutes;
+      workedMinutes += e.netWorkedMinutesWithin(weekFrom, weekTo);
     }
     final upcoming = [
       for (final s in shifts)

@@ -84,6 +84,29 @@ class TimeEntry {
 
   bool get isOnBreak => breaks.any((b) => b.isOpen);
 
+  /// Minutes actually worked within [from, to), clipping this entry's clock-in/out to the
+  /// window and subtracting any unpaid break time that overlaps it. Paid breaks are not
+  /// subtracted. [to] defaults to now, for an entry that's still open.
+  int netWorkedMinutesWithin(DateTime from, DateTime to) {
+    final start = clockInAt.isAfter(from) ? clockInAt : from;
+    final end = (clockOutAt ?? DateTime.now());
+    final clippedEnd = end.isBefore(to) ? end : to;
+    if (!clippedEnd.isAfter(start)) return 0;
+
+    var minutes = clippedEnd.difference(start).inMinutes;
+    for (final b in breaks) {
+      if (b.type != 'unpaid') continue;
+      final bStart = b.startAt;
+      final bEnd = b.endAt ?? DateTime.now();
+      final overlapStart = bStart.isAfter(start) ? bStart : start;
+      final overlapEnd = bEnd.isBefore(clippedEnd) ? bEnd : clippedEnd;
+      if (overlapEnd.isAfter(overlapStart)) {
+        minutes -= overlapEnd.difference(overlapStart).inMinutes;
+      }
+    }
+    return minutes < 0 ? 0 : minutes;
+  }
+
   TimeBreak? get activeBreak => breaks.cast<TimeBreak?>().firstWhere(
         (b) => b != null && b.isOpen,
         orElse: () => null,
