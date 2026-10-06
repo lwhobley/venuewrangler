@@ -29,13 +29,14 @@ const state = vi.hoisted(() => ({
 
 vi.mock('react-native', () => ({
   View: 'View',
-  FlatList: ({ ListHeaderComponent, data, renderItem, keyExtractor }: any) =>
+  FlatList: ({ ListHeaderComponent, ListFooterComponent, data, renderItem, keyExtractor }: any) =>
     React.createElement(
       React.Fragment,
       null,
       ListHeaderComponent,
       ...(data ?? []).map((item: any, index: number) =>
         React.createElement(React.Fragment, { key: keyExtractor ? keyExtractor(item) : index }, renderItem({ item, index }))),
+      ListFooterComponent,
     ),
 }));
 vi.mock('react-native-paper', async () => {
@@ -218,6 +219,7 @@ describe('Reservations screen', () => {
     state.addToWaitlist.mockResolvedValueOnce({});
     const r = render();
     await act(async () => r.render(<ReservationsScreen />));
+    await act(async () => buttonByLabel(r, 'Add walk-in')?.props.onPress());
     await act(async () => inputByLabel(r, 'reservations.waitlist.nameLabel')?.props.onChangeText('Jordan Lee'));
     await act(async () => buttonByLabel(r, 'reservations.waitlist.addButton')?.props.onPress());
     expect(state.addToWaitlist).toHaveBeenCalledWith(expect.objectContaining({ venueId: 'venue-1', guestName: 'Jordan Lee', partySize: 2 }));
@@ -227,6 +229,7 @@ describe('Reservations screen', () => {
   it('does not add a blank walk-in name to the waitlist', async () => {
     const r = render();
     await act(async () => r.render(<ReservationsScreen />));
+    await act(async () => buttonByLabel(r, 'Add walk-in')?.props.onPress());
     await act(async () => buttonByLabel(r, 'reservations.waitlist.addButton')?.props.onPress());
     expect(state.addToWaitlist).not.toHaveBeenCalled();
   });

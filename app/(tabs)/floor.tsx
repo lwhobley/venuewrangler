@@ -351,7 +351,7 @@ function FloorScreen() {
       </Card>
 
       {floorExceptions.length ? (
-        <Card style={{ backgroundColor: '#FFF4DE', borderLeftWidth: 3, borderLeftColor: colors.warning }}>
+        <Card style={{ backgroundColor: '#FFF3E4', borderLeftWidth: 3, borderLeftColor: colors.warning }}>
           <Card.Content style={{ gap: spacing.xs }}>
             <Text variant="titleMedium">Floor exceptions</Text>
             {floorExceptions.map((item) => <Text key={item} style={{ color: colors.charcoal }}>• {item}</Text>)}
@@ -421,9 +421,9 @@ function FloorScreen() {
               style={{
                 height: 560,
                 borderRadius: radius.soft,
-                backgroundColor: '#18120E',
+                backgroundColor: '#0F2C3C',
                 borderWidth: 1,
-                borderColor: '#2C241D',
+                borderColor: '#335466',
                 overflow: 'hidden',
               }}
             >
@@ -602,7 +602,7 @@ function FloorScreen() {
             {selectedAssignments.length > 0 ? (
               <View style={{ gap: 8 }}>
                 {selectedAssignments.map((assignment: AssignmentRow) => (
-                  <Card key={assignment.assignmentId} style={{ backgroundColor: '#201812' }}>
+                  <Card key={assignment.assignmentId} style={{ backgroundColor: '#194A62' }}>
                     <Card.Content style={{ gap: 6 }}>
                       <Text style={{ color: colors.cream, fontWeight: '700' }}>{assignment.guestName}</Text>
                       <Text style={{ color: colors.cream, fontSize: 12 }}>

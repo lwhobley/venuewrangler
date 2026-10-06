@@ -350,6 +350,7 @@ export class ChatController {
       _id: s.id,
       id: s.id,
       fullName: s.fullName,
+      photoUrl: s.photoKey ? this.mediaAccess.createPath('profile-photo', `${s.id}:${s.photoKey}`, scope.venueId, `/v1/app/profile-photos/${encodeURIComponent(s.id)}`) : null,
       role: s.role,
       jobTitle: s.jobTitle,
     }));

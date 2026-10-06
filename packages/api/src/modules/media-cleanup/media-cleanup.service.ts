@@ -22,7 +22,7 @@ const MAX_ATTEMPTS = 10;
  * otherwise become bucket-wide deletion, since the IAM credential is shared
  * with the upload path.
  */
-const OBJECT_KEY_PATTERN = /^(chat|documents)\/[A-Za-z0-9_-]+\/[a-f0-9]{32}$/;
+const OBJECT_KEY_PATTERN = /^(chat|documents|profiles)\/[A-Za-z0-9_-]+\/[a-f0-9]{32}$/;
 
 @Injectable()
 export class MediaCleanupService {

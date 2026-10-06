@@ -16,8 +16,9 @@ const state = vi.hoisted(() => ({
 }));
 
 vi.mock('react-native', () => ({
-  Alert: { alert: state.alert }, Pressable: 'Pressable', ScrollView: 'ScrollView', View: 'View',
+  Alert: { alert: state.alert }, Pressable: 'Pressable', ScrollView: 'ScrollView', View: 'View', Image: 'Image',
 }));
+vi.mock('../../lib/api-client', () => ({ resolveMediaUrl: (path: string) => path }));
 vi.mock('expo-router', () => ({ router: { push: state.push } }));
 vi.mock('react-native-paper', async () => {
   const R = await import('react');
@@ -156,6 +157,13 @@ describe('Chat screen', () => {
     await act(async () => teammateRow?.props.onPress());
     expect(state.openDm).toHaveBeenCalledWith({ venueId: 'venue-1', targetProfileId: 'p2' });
     expect(state.push).toHaveBeenCalledWith('/chat/dm-new');
+  });
+
+  it('shows a teammate photo in the directory when available', async () => {
+    state.directory = [{ _id: 'p2', fullName: 'Jordan Lee', role: 'bartender', jobTitle: 'Bartender', photoUrl: '/v1/app/profile-photos/p2?token=signed' }];
+    const r = render();
+    await act(async () => r.render(<ChatScreenWrapper />));
+    expect(r.container.queryAll((n) => n.type === 'Image').some((n) => n.props.source?.uri === '/v1/app/profile-photos/p2?token=signed')).toBe(true);
   });
 
   it('filters the group-chats section out when the direct filter is active', async () => {

@@ -18,6 +18,7 @@ const state = vi.hoisted(() => ({
 
 vi.mock('expo-router', () => ({ router: { replace: state.replace, push: state.push } }));
 vi.mock('../../lib/api-client', () => ({
+  resolveMediaUrl: (path: string) => path,
   ApiError: class ApiError extends Error {
     constructor(message: string, public status: number) {
       super(message);
@@ -25,6 +26,7 @@ vi.mock('../../lib/api-client', () => ({
     }
   },
 }));
+vi.mock('expo-image-picker', () => ({ launchImageLibraryAsync: vi.fn() }));
 vi.mock('react-native', () => ({
   Alert: { alert: vi.fn() },
   Platform: { OS: 'ios' },
@@ -32,6 +34,7 @@ vi.mock('react-native', () => ({
   // Phone-sized so these specs keep exercising the mobile layout.
   useWindowDimensions: () => ({ width: 390, height: 844 }),
   ScrollView: 'ScrollView',
+  Image: 'Image',
   View: 'View',
 }));
 vi.mock('react-native-paper', async () => {
@@ -39,7 +42,8 @@ vi.mock('react-native-paper', async () => {
   const element = (type: string) => ({ children, ...props }: any) =>
     ReactModule.createElement(type, props, children);
   const Card = Object.assign(element('Card'), { Content: element('Card.Content') });
-  return { Button: element('Button'), Card, Text: element('Text') };
+  const Avatar = { Text: element('Avatar.Text') };
+  return { Avatar, Button: element('Button'), Card, Text: element('Text'), TextInput: element('TextInput') };
 });
 vi.mock('../../lib/railway-hooks', () => ({
   useMutation: () => state.deleteAccount,

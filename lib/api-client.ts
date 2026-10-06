@@ -22,6 +22,7 @@ export type ApiProfile = {
   _id: string;
   email: string;
   fullName: string;
+  preferredName?: string | null;
   emailVerified: boolean;
   role: Role;
   jobTitle: string;
@@ -121,12 +122,20 @@ export type ApiStaffMember = {
   _id: string;
   email: string;
   fullName: string;
+  preferredName: string | null;
   role: Role;
   jobTitle: string;
+  hourlyRateCents: number | null;
   phone: string | null;
   altPhone: string | null;
   address: string | null;
   dateOfBirth: string | null;
+  hireDate: string | null;
+  employmentType: string | null;
+  emergencyContactName: string | null;
+  emergencyContactRelationship: string | null;
+  emergencyContactPhone: string | null;
+  photoUrl: string | null;
   certifications: string[];
   venueId: string | null;
   allAccess: boolean;

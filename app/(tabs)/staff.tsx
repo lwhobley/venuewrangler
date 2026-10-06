@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { Alert, FlatList, ScrollView, Share, View } from 'react-native';
+import { Alert, FlatList, Image, ScrollView, Share, View } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
 import { Button, Card, Chip, Menu, Text, TextInput as PaperTextInput } from 'react-native-paper';
@@ -14,6 +15,7 @@ import type { Role } from '../../lib/types';
 import { PageHeader } from '../../components/design-system';
 import { useI18n } from '../../lib/i18n';
 import { readPickedFileText } from '../../lib/picked-file';
+import { resolveMediaUrl } from '../../lib/api-client';
 
 type VenueRole = { _id: string; name: string };
 type ParsedStaffImportRow = { fullName: string; email: string; phone?: string; jobTitle: string; role: 'manager' | 'staff' };
@@ -88,13 +90,21 @@ function Dropdown({
 type StaffMember = {
   _id: string;
   fullName: string;
+  preferredName: string | null;
   email: string;
   role: Exclude<Role, 'host'>;
   jobTitle: string;
+  hourlyRateCents: number | null;
   phone: string | null;
   altPhone: string | null;
   address: string | null;
   dateOfBirth: string | null;
+  hireDate: string | null;
+  employmentType: string | null;
+  emergencyContactName: string | null;
+  emergencyContactRelationship: string | null;
+  emergencyContactPhone: string | null;
+  photoUrl: string | null;
   certifications: string[];
   venueId: string | null;
 };
@@ -151,13 +161,21 @@ function StaffScreen() {
   const [toolsOpen, setToolsOpen] = useState(false);
   const rosterRef = useRef<FlatList<StaffMember>>(null);
   const [fullName, setFullName] = useState('');
+  const [preferredName, setPreferredName] = useState('');
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<Role>('staff');
   const [jobTitle, setJobTitle] = useState('Team Member');
+  const [hourlyRate, setHourlyRate] = useState('');
   const [phone, setPhone] = useState('');
   const [altPhone, setAltPhone] = useState('');
   const [address, setAddress] = useState('');
   const [dateOfBirth, setDateOfBirth] = useState('');
+  const [hireDate, setHireDate] = useState('');
+  const [employmentType, setEmploymentType] = useState('');
+  const [emergencyContactName, setEmergencyContactName] = useState('');
+  const [emergencyContactRelationship, setEmergencyContactRelationship] = useState('');
+  const [emergencyContactPhone, setEmergencyContactPhone] = useState('');
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [certifications, setCertifications] = useState<string[]>([]);
 
   const staffQuery = useQuery(api.app.listVenueStaff, isReady && venue?.id && canManage ? { venueId: venue.id } : 'skip');
@@ -165,6 +183,7 @@ function StaffScreen() {
   const onboardingQuery = useQuery(api.app.listStaffOnboarding, isReady && venue?.id && canManage ? { venueId: venue.id } : 'skip') as OnboardingResponse | null | undefined;
   const auditLogQuery = useQuery(api.app.listStaffAuditLog, isReady && venue?.id && canManage ? { venueId: venue.id } : 'skip') as { entries: AuditEntry[] } | null | undefined;
   const upsertStaff = useMutation(api.app.upsertVenueStaff);
+  const uploadStaffPhoto = useMutation(api.app.uploadStaffPhoto);
   const deactivateStaff = useMutation(api.app.deactivateVenueStaff);
   const updateOnboardingTask = useMutation(api.app.updateStaffOnboardingTask);
 
@@ -318,26 +337,40 @@ function StaffScreen() {
     rosterRef.current?.scrollToOffset({ offset: 0, animated: true });
     setSelectedStaffId(member._id);
     setFullName(member.fullName);
+    setPreferredName(member.preferredName ?? '');
     setEmail(member.email);
     setRole(member.role);
     setJobTitle(member.jobTitle);
+    setHourlyRate(member.hourlyRateCents == null ? '' : (member.hourlyRateCents / 100).toFixed(2));
     setPhone(member.phone ?? '');
     setAltPhone(member.altPhone ?? '');
     setAddress(member.address ?? '');
-    setDateOfBirth(member.dateOfBirth ?? '');
+    setDateOfBirth(member.dateOfBirth?.slice(0, 10) ?? '');
+    setHireDate(member.hireDate?.slice(0, 10) ?? '');
+    setEmploymentType(member.employmentType ?? '');
+    setEmergencyContactName(member.emergencyContactName ?? '');
+    setEmergencyContactRelationship(member.emergencyContactRelationship ?? '');
+    setEmergencyContactPhone(member.emergencyContactPhone ?? '');
     setCertifications(member.certifications ?? []);
   };
 
   const clearForm = () => {
     setSelectedStaffId(null);
     setFullName('');
+    setPreferredName('');
     setEmail('');
     setRole('staff');
     setJobTitle('Team Member');
+    setHourlyRate('');
     setPhone('');
     setAltPhone('');
     setAddress('');
     setDateOfBirth('');
+    setHireDate('');
+    setEmploymentType('');
+    setEmergencyContactName('');
+    setEmergencyContactRelationship('');
+    setEmergencyContactPhone('');
     setCertifications([]);
   };
 
@@ -345,26 +378,51 @@ function StaffScreen() {
     // Without a synchronous guard a double-tap created two profiles with the
     // same name and email (staffId is undefined on the create path).
     if (submitRef.current || !venue?.id || !canManage) return;
+    if (hourlyRate.trim() && (!/^\d+(\.\d{1,2})?$/.test(hourlyRate.trim()) || Number(hourlyRate) > 10000)) {
+      Alert.alert('Invalid hourly rate', 'Enter an amount such as 18.50.');
+      return;
+    }
     submitRef.current = true;
     try {
       await upsertStaff({
         venueId: venue.id,
         staffId: selectedStaffId ?? undefined,
         fullName,
+        preferredName: preferredName.trim(),
         email,
         role,
         jobTitle,
+        hourlyRateCents: hourlyRate.trim() ? Math.round(Number(hourlyRate.trim()) * 100) : undefined,
         phone: phone.trim() || undefined,
         altPhone: altPhone.trim() || undefined,
         address: address.trim() || undefined,
-        dateOfBirth: dateOfBirth.trim() || undefined,
-        certifications: certifications.length > 0 ? certifications : undefined,
+        dateOfBirth: dateOfBirth.trim() || null,
+        hireDate: hireDate.trim() || null,
+        employmentType: employmentType || null,
+        emergencyContactName: emergencyContactName.trim(),
+        emergencyContactRelationship: emergencyContactRelationship.trim(),
+        emergencyContactPhone: emergencyContactPhone.trim(),
+        certifications,
       });
       clearForm();
     } catch (e) {
       Alert.alert(t('staff.errorTitle'), errorMessage(e, t('staff.saveFailed')));
     } finally {
       submitRef.current = false;
+    }
+  };
+
+  const pickStaffPhoto = async (member: StaffMember) => {
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, quality: 0.7, base64: true });
+    const asset = result.canceled ? null : result.assets[0];
+    if (!asset?.base64) return;
+    setUploadingPhoto(true);
+    try {
+      await uploadStaffPhoto({ staffId: member._id, dataBase64: asset.base64, mimeType: asset.mimeType ?? 'image/jpeg' });
+    } catch (error) {
+      Alert.alert('Photo upload failed', errorMessage(error, 'Please try again.'));
+    } finally {
+      setUploadingPhoto(false);
     }
   };
 
@@ -451,10 +509,76 @@ function StaffScreen() {
         }
       />
 
-      <Button mode="outlined" icon={toolsOpen ? 'chevron-up' : 'plus'} accessibilityState={{ expanded: toolsOpen }} onPress={() => setToolsOpen((open) => !open)} style={{ marginBottom: spacing.md }}>
-        {toolsOpen ? t('staff.toolsOpen') : t('staff.toolsClosed')}
+      <Button mode="contained" buttonColor={colors.primary} icon={toolsOpen ? 'chevron-up' : 'account-plus-outline'} accessibilityState={{ expanded: toolsOpen }} onPress={() => setToolsOpen((open) => !open)} style={{ borderRadius: radius.pill, marginBottom: spacing.sm }} contentStyle={{ minHeight: 48 }}>
+        {toolsOpen ? 'Close team tools' : 'Add New Staff'}
       </Button>
       <View style={{ display: toolsOpen ? 'flex' : 'none', gap: spacing.md }}>
+      <Card style={{ backgroundColor: colors.surface }}>
+        <Card.Content style={{ gap: spacing.sm }}>
+          <Text variant="titleMedium">{t('staff.addByEmailTitle')}</Text>
+          <Text style={{ color: colors.muted }}>
+            {t('staff.addByEmailSubtitle', { venue: venue?.name ?? t('common.yourVenue') })}
+          </Text>
+          <PaperTextInput placeholder={t('staff.fullNamePlaceholder')} value={fullName} onChangeText={setFullName} mode="outlined" style={{ backgroundColor: colors.surface }} />
+          <PaperTextInput label="Preferred name" value={preferredName} onChangeText={setPreferredName} mode="outlined" style={{ backgroundColor: colors.surface }} />
+          <PaperTextInput placeholder={t('staff.emailPlaceholder')} value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" mode="outlined" style={{ backgroundColor: colors.surface }} />
+          <Dropdown
+            label={t('staff.accessLevel')}
+            value={role}
+            options={ACCESS_LEVELS}
+            onSelect={(v) => setRole(v as Role)}
+          />
+          <Dropdown
+            label={t('staff.roleLabel')}
+            value={jobTitle}
+            placeholder={t('staff.selectRole')}
+            options={jobRoleOptions}
+            onSelect={setJobTitle}
+          />
+          <PaperTextInput label="Hourly rate ($)" value={hourlyRate} onChangeText={setHourlyRate} keyboardType="decimal-pad" mode="outlined" style={{ backgroundColor: colors.surface }} />
+          <PaperTextInput placeholder={t('staff.phonePlaceholder')} value={phone} onChangeText={setPhone} keyboardType="phone-pad" mode="outlined" style={{ backgroundColor: colors.surface }} />
+          <PaperTextInput placeholder={t('staff.altPhonePlaceholder')} value={altPhone} onChangeText={setAltPhone} keyboardType="phone-pad" mode="outlined" style={{ backgroundColor: colors.surface }} />
+          <PaperTextInput placeholder={t('staff.addressPlaceholder')} value={address} onChangeText={setAddress} mode="outlined" style={{ backgroundColor: colors.surface }} />
+          <PaperTextInput placeholder={t('staff.dobPlaceholder')} value={dateOfBirth} onChangeText={setDateOfBirth} mode="outlined" style={{ backgroundColor: colors.surface }} />
+          <PaperTextInput label="Hire date (YYYY-MM-DD)" value={hireDate} onChangeText={setHireDate} mode="outlined" style={{ backgroundColor: colors.surface }} />
+          <Dropdown label="Employment type" value={employmentType} placeholder="Select employment type" options={[
+            { value: 'full_time', label: 'Full time' }, { value: 'part_time', label: 'Part time' },
+            { value: 'seasonal', label: 'Seasonal' }, { value: 'contractor', label: 'Contractor' },
+            { value: 'temporary', label: 'Temporary' },
+          ]} onSelect={setEmploymentType} />
+          <PaperTextInput label="Emergency contact name" value={emergencyContactName} onChangeText={setEmergencyContactName} mode="outlined" style={{ backgroundColor: colors.surface }} />
+          <PaperTextInput label="Emergency contact relationship" value={emergencyContactRelationship} onChangeText={setEmergencyContactRelationship} mode="outlined" style={{ backgroundColor: colors.surface }} />
+          <PaperTextInput label="Emergency contact phone" value={emergencyContactPhone} onChangeText={setEmergencyContactPhone} keyboardType="phone-pad" mode="outlined" style={{ backgroundColor: colors.surface }} />
+          {selectedStaff ? <Button mode="outlined" icon="camera-outline" loading={uploadingPhoto} disabled={uploadingPhoto} onPress={() => void pickStaffPhoto(selectedStaff)}>Upload {selectedStaff.preferredName || selectedStaff.fullName}'s photo</Button> : null}
+          <View style={{ gap: 4 }}>
+            <Text style={{ color: colors.muted }}>{t('staff.certifications')}</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+              {CERTIFICATIONS.map((cert) => (
+                <Chip
+                  key={cert}
+                  selected={certifications.includes(cert)}
+                  onPress={() =>
+                    setCertifications((prev) =>
+                      prev.includes(cert) ? prev.filter((c) => c !== cert) : [...prev, cert],
+                    )
+                  }
+                >
+                  {cert}
+                </Chip>
+              ))}
+            </View>
+          </View>
+          <Button mode="contained" buttonColor={colors.primary} onPress={() => void onSubmit()} accessibilityLabel={selectedStaff ? t('staff.updateStaffMember') : t('staff.addStaffMember')}>
+            {selectedStaff ? t('staff.updateStaffMember') : t('staff.addStaffMember')}
+          </Button>
+          {selectedStaff ? (
+            <Button mode="text" textColor={colors.primary} onPress={clearForm}>
+              {t('staff.clearSelection')}
+            </Button>
+          ) : null}
+        </Card.Content>
+      </Card>
+
       {/* Roles / positions */}
       <Card style={{ backgroundColor: colors.surface, borderRadius: radius.sharp }}>
         <Card.Content style={{ gap: spacing.sm }}>
@@ -501,60 +625,6 @@ function StaffScreen() {
           <Button mode="contained" buttonColor={colors.primary} icon="link-variant" loading={generatingLink} disabled={generatingLink} onPress={() => void onGenerateInviteLink()} accessibilityLabel={t('staff.generateShareLink')}>
             {t('staff.generateShareLink')}
           </Button>
-        </Card.Content>
-      </Card>
-
-      <Card style={{ backgroundColor: colors.surface }}>
-        <Card.Content style={{ gap: spacing.sm }}>
-          <Text variant="titleMedium">{t('staff.addByEmailTitle')}</Text>
-          <Text style={{ color: colors.muted }}>
-            {t('staff.addByEmailSubtitle', { venue: venue?.name ?? t('common.yourVenue') })}
-          </Text>
-          <PaperTextInput placeholder={t('staff.fullNamePlaceholder')} value={fullName} onChangeText={setFullName} mode="outlined" style={{ backgroundColor: colors.surface }} />
-          <PaperTextInput placeholder={t('staff.emailPlaceholder')} value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" mode="outlined" style={{ backgroundColor: colors.surface }} />
-          <Dropdown
-            label={t('staff.accessLevel')}
-            value={role}
-            options={ACCESS_LEVELS}
-            onSelect={(v) => setRole(v as Role)}
-          />
-          <Dropdown
-            label={t('staff.roleLabel')}
-            value={jobTitle}
-            placeholder={t('staff.selectRole')}
-            options={jobRoleOptions}
-            onSelect={setJobTitle}
-          />
-          <PaperTextInput placeholder={t('staff.phonePlaceholder')} value={phone} onChangeText={setPhone} keyboardType="phone-pad" mode="outlined" style={{ backgroundColor: colors.surface }} />
-          <PaperTextInput placeholder={t('staff.altPhonePlaceholder')} value={altPhone} onChangeText={setAltPhone} keyboardType="phone-pad" mode="outlined" style={{ backgroundColor: colors.surface }} />
-          <PaperTextInput placeholder={t('staff.addressPlaceholder')} value={address} onChangeText={setAddress} mode="outlined" style={{ backgroundColor: colors.surface }} />
-          <PaperTextInput placeholder={t('staff.dobPlaceholder')} value={dateOfBirth} onChangeText={setDateOfBirth} mode="outlined" style={{ backgroundColor: colors.surface }} />
-          <View style={{ gap: 4 }}>
-            <Text style={{ color: colors.muted }}>{t('staff.certifications')}</Text>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-              {CERTIFICATIONS.map((cert) => (
-                <Chip
-                  key={cert}
-                  selected={certifications.includes(cert)}
-                  onPress={() =>
-                    setCertifications((prev) =>
-                      prev.includes(cert) ? prev.filter((c) => c !== cert) : [...prev, cert],
-                    )
-                  }
-                >
-                  {cert}
-                </Chip>
-              ))}
-            </View>
-          </View>
-          <Button mode="contained" buttonColor={colors.primary} onPress={() => void onSubmit()} accessibilityLabel={selectedStaff ? t('staff.updateStaffMember') : t('staff.addStaffMember')}>
-            {selectedStaff ? t('staff.updateStaffMember') : t('staff.addStaffMember')}
-          </Button>
-          {selectedStaff ? (
-            <Button mode="text" textColor={colors.primary} onPress={clearForm}>
-              {t('staff.clearSelection')}
-            </Button>
-          ) : null}
         </Card.Content>
       </Card>
 
@@ -713,7 +783,7 @@ function StaffScreen() {
       </View>
       <Card style={{ backgroundColor: colors.surface }}>
         <Card.Content style={{ gap: spacing.sm }}>
-          <Text variant="titleMedium">{t('staff.venueStaffTitle')}</Text>
+          <Text variant="titleMedium" style={{ fontWeight: '700', color: colors.charcoal }}>Team roster · {staff.length}</Text>
           {staff.length === 0 ? (
             <Text style={{ color: colors.muted }}>{t('staff.noStaffYet')}</Text>
           ) : null}
@@ -724,23 +794,26 @@ function StaffScreen() {
         renderItem={({ item: member }) => (
           <View
             style={{
-              gap: 6,
-              paddingVertical: spacing.sm,
-              paddingHorizontal: member._id === selectedStaffId ? spacing.sm : 0,
-              backgroundColor: member._id === selectedStaffId ? colors.cream : 'transparent',
-              borderBottomWidth: member._id === selectedStaffId ? 0 : 1,
-              borderBottomColor: colors.divider,
-              marginBottom: spacing.sm,
+              gap: 8,
+              padding: spacing.md,
+              backgroundColor: member._id === selectedStaffId ? colors.cream : colors.surface,
+              borderWidth: 1,
+              borderColor: member._id === selectedStaffId ? colors.primary : colors.border,
+              borderRadius: radius.lg,
+              marginBottom: 4,
             }}
           >
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontWeight: '700' }}>{member.fullName}</Text>
-                <Text style={{ color: colors.muted }}>{member.email}</Text>
+              {member.photoUrl ? <Image source={{ uri: resolveMediaUrl(member.photoUrl) }} style={{ width: 42, height: 42, borderRadius: 21 }} /> : <View style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: colors.surfaceSoft, alignItems: 'center', justifyContent: 'center' }}>
+                <Text style={{ color: colors.primary, fontWeight: '800' }}>{member.fullName.split(/\s+/).slice(0, 2).map((part) => part[0] ?? '').join('').toUpperCase()}</Text>
+              </View>}
+              <View style={{ flex: 1, gap: 1 }}>
+                <Text style={{ fontWeight: '700', color: colors.charcoal }}>{member.preferredName || member.fullName}</Text>
+                <Text style={{ color: colors.muted, fontSize: 12 }}>{member.jobTitle} · {member.email}</Text>
               </View>
-              <Chip compact>{member.role}</Chip>
+              <Button compact mode="text" icon="pencil-outline" textColor={colors.primary} onPress={() => { fillFromStaff(member); setToolsOpen(true); rosterRef.current?.scrollToOffset({ offset: 0, animated: true }); }}>{t('staff.edit')}</Button>
             </View>
-            <Text style={{ color: colors.muted }}>{member.jobTitle}</Text>
+            <Chip compact style={{ alignSelf: 'flex-start', backgroundColor: colors.surfaceSoft }} textStyle={{ color: colors.primary }}>{member.role}</Chip>
             {member.phone ? <Text style={{ color: colors.muted, fontSize: 12 }}>{t('staff.phoneLabelValue', { phone: member.phone })}</Text> : null}
             {member.dateOfBirth ? <Text style={{ color: colors.muted, fontSize: 12 }}>{t('staff.dobLabelValue', { dob: member.dateOfBirth })}</Text> : null}
             {member.certifications?.length > 0 ? (
@@ -748,19 +821,14 @@ function StaffScreen() {
                 {member.certifications.map((c) => <Chip key={c} compact>{c}</Chip>)}
               </View>
             ) : null}
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-              <Button mode="outlined" onPress={() => fillFromStaff(member)}>
-                {t('staff.edit')}
-              </Button>
+            {selectedStaffId === member._id ? <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
               <Button mode="outlined" onPress={() => void onDeactivate(member)}>
                 {t('staff.deactivate')}
               </Button>
-              {selectedStaffId === member._id ? (
-                <Button mode="text" textColor={colors.primary} onPress={clearForm}>
-                  {t('staff.deselect')}
-                </Button>
-              ) : null}
-            </View>
+              <Button mode="text" textColor={colors.primary} onPress={clearForm}>
+                {t('staff.deselect')}
+              </Button>
+            </View> : null}
           </View>
         )}
     />

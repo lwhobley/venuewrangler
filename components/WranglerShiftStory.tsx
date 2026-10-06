@@ -49,7 +49,7 @@ export function WranglerShiftStory({ snapshot }: Props) {
       <View style={{ borderLeftWidth: 1, borderColor: palette.divider, marginLeft: 11 }}>
         {story.map((priority, index) => {
           const urgent = priority.severity === 'critical' || priority.severity === 'warning';
-          const accent = urgent ? palette.warning : priority.severity === 'watch' ? '#8A6B2D' : palette.success;
+          const accent = urgent || priority.severity === 'watch' ? palette.warning : palette.success;
           return (
             <View key={priority.id} style={{ marginLeft: -11, paddingBottom: index === story.length - 1 ? 0 : spacing.lg, flexDirection: 'row', gap: spacing.md }}>
               <View style={{ width: 23, height: 23, borderRadius: 12, backgroundColor: palette.surfaceSoft, borderWidth: 1, borderColor: accent, alignItems: 'center', justifyContent: 'center' }}>

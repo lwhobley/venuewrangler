@@ -42,8 +42,9 @@ function makeController() {
     requireManagerProfile: vi.fn(),
   };
   const staffImportParser = { parse: vi.fn() };
+  const mediaAccess = { createPath: vi.fn().mockReturnValue('/v1/app/profile-photos/staff-2?token=test') };
 
-  const controller = new AppStaffController(prisma, email as any, profiles as any, staffImportParser as any);
+  const controller = new AppStaffController(prisma, email as any, profiles as any, staffImportParser as any, mediaAccess as any);
   return { controller, prisma, email, profiles, staffImportParser };
 }
 
@@ -377,6 +378,20 @@ describe('AppStaffController', () => {
       } as any);
 
       expect(prisma.session.deleteMany).not.toHaveBeenCalled();
+    });
+
+    it('preserves omitted HR fields during a partial roster update', async () => {
+      const { controller, prisma, profiles } = makeController();
+      profiles.requireManagerProfile.mockResolvedValue(ownerViewer);
+      prisma.profile.findFirst.mockResolvedValue(profileRow({ emergencyContactName: 'Robin', hireDate: new Date('2025-01-02'), phone: '555-1000' }));
+      prisma.profile.update.mockResolvedValue(profileRow({ emergencyContactName: 'Robin', hireDate: new Date('2025-01-02'), phone: '555-1000' }));
+      await controller.upsertVenueStaff(user, {
+        venueId: 'venue-1', staffId: 'staff-2', email: 'staff@example.com', fullName: 'Staff Person', role: 'staff', jobTitle: 'Server',
+      } as any);
+      const update = prisma.profile.update.mock.calls[0][0];
+      expect(update.data).not.toHaveProperty('phone');
+      expect(update.data).not.toHaveProperty('hireDate');
+      expect(update.data).not.toHaveProperty('emergencyContactName');
     });
 
     it('sends a "profile updated" email (not an invite) when editing an existing staff member', async () => {

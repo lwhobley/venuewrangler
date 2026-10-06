@@ -21,7 +21,7 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 
 type CardTone = 'default' | 'soft' | 'inset';
 
-// Panels match the design system: 12px radius, hairline border, no shadow.
+// Operational panels use a restrained edge and lift against the cool canvas.
 // `inset` is a flush recessed panel for nesting inside another surface.
 export function AppCard({
   children,
@@ -42,11 +42,16 @@ export function AppCard({
       style={[
         {
           backgroundColor: background,
-          borderRadius: 12,
+          borderRadius: 14,
           borderWidth: tone === 'inset' ? 0 : 1,
           borderColor: palette.border,
           padding: padded ? spacing.lg : 0,
           overflow: 'hidden',
+          shadowColor: palette.shadow,
+          shadowOpacity: tone === 'inset' ? 0 : 0.06,
+          shadowRadius: 8,
+          shadowOffset: { width: 0, height: 3 },
+          elevation: tone === 'inset' ? 0 : 2,
         },
         style,
       ]}

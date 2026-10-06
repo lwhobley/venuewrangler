@@ -1293,7 +1293,7 @@ export class AppController {
         tx.user.findUnique({ where: { id: user.sub }, select: { email: true } }),
         tx.profile.findMany({
           where: { userId: user.sub },
-          select: { id: true, email: true, fullName: true, role: true, venueId: true, membershipStatus: true },
+          select: { id: true, email: true, fullName: true, role: true, venueId: true, membershipStatus: true, photoKey: true },
           orderBy: { createdAt: 'asc' },
         }),
       ]);
@@ -1350,6 +1350,14 @@ export class AppController {
       }
 
       const mediaJobIds: string[] = [];
+      const ownPhotoKeys = Array.from(new Set(profiles.map((profile) => profile.photoKey).filter((key): key is string => Boolean(key))));
+      if (ownPhotoKeys.length) {
+        const photoJob = await tx.objectDeletionJob.create({
+          data: { id: `account-photo-delete-${deletionRunId}`, objectKeys: ownPhotoKeys, status: 'pending', attempts: 0 },
+          select: { id: true },
+        });
+        mediaJobIds.push(photoJob.id);
+      }
       if (venuesToDelete.length > 0) {
         const venueList = Prisma.join(venuesToDelete);
         // Child inserts take a foreign-key KEY SHARE lock on Venue. Holding an
@@ -1369,6 +1377,9 @@ export class AppController {
             SELECT "s3Key" AS "objectKey" FROM "VenueDocument" WHERE "venueId" IN (${venueList})
             UNION
             SELECT "photoKey" AS "objectKey" FROM "ChecklistCompletion"
+              WHERE "venueId" IN (${venueList}) AND "photoKey" IS NOT NULL
+            UNION
+            SELECT "photoKey" AS "objectKey" FROM "Profile"
               WHERE "venueId" IN (${venueList}) AND "photoKey" IS NOT NULL
           ), numbered AS (
             SELECT "objectKey", ((row_number() OVER (ORDER BY "objectKey") - 1) / 500)::integer AS batch

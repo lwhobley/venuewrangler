@@ -67,15 +67,15 @@ export function ScreenShell({ children }: { children: ReactNode }) {
 }
 
 export function PageHeader({ kicker, title, detail, action }: { kicker?: string; title: string; detail?: string; action?: ReactNode }) {
-  const { colors, spacing, display } = tokens();
+  const { colors, spacing } = tokens();
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: spacing.md }}>
-      <View style={{ flex: 1, gap: 4 }}>
-        {kicker ? <Text style={{ color: colors.muted, fontSize: 12, fontWeight: '600', letterSpacing: 0.6 }}>{kicker}</Text> : null}
-        <Text style={{ color: colors.charcoal, fontFamily: display, fontSize: 34, lineHeight: 40 }}>{title}</Text>
-        {detail ? <Text style={{ color: colors.muted, fontSize: 15, lineHeight: 22 }}>{detail}</Text> : null}
+    <View style={{ backgroundColor: colors.surface, borderRadius: 14, borderWidth: 1, borderColor: colors.border, overflow: 'hidden' }}>
+      <View style={{ backgroundColor: '#194A62', paddingHorizontal: spacing.lg, paddingVertical: spacing.lg, gap: 4 }}>
+        {kicker ? <Text style={{ color: '#B8D3DE', fontSize: 11, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase' }}>{kicker}</Text> : null}
+        <Text style={{ color: '#FFFFFF', fontSize: 25, lineHeight: 31, fontWeight: '700' }}>{title}</Text>
+        {detail ? <Text style={{ color: '#DCEAF0', fontSize: 13, lineHeight: 19 }}>{detail}</Text> : null}
       </View>
-      {action}
+      {action ? <View style={{ paddingHorizontal: spacing.md, paddingVertical: spacing.sm, alignItems: 'flex-start' }}>{action}</View> : null}
     </View>
   );
 }
@@ -130,12 +130,15 @@ export function ActionButton({ label, onPress, tone = 'primary' }: { label: stri
       onPress={() => { tap(); onPress(); }}
       style={({ pressed }) => ({
         alignSelf: 'flex-start',
-        minHeight: 44,
+        minHeight: 48,
         justifyContent: 'center',
-        paddingHorizontal: 14,
-        borderRadius: 8,
-        backgroundColor: filled ? colors.primary : colors.surfaceSoft,
-        opacity: pressed ? 0.7 : 1,
+        paddingHorizontal: 20,
+        borderRadius: 999,
+        backgroundColor: pressed && filled ? '#246985' : filled ? colors.primary : colors.surfaceSoft,
+        shadowColor: pressed ? colors.glow ?? colors.primary : colors.primary,
+        shadowOpacity: pressed ? 0.3 : 0.1,
+        shadowRadius: pressed ? 12 : 3,
+        elevation: pressed ? 5 : 2,
       })}
     >
       <Text style={{ color: filled ? colors.buttonText : colors.primary, fontSize: 14, fontWeight: '700' }}>{label}</Text>

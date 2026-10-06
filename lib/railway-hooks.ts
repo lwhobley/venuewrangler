@@ -20,6 +20,7 @@ type Route = {
 
 const queryRoutes: Record<string, Route> = {
   'app.getMe': { path: '/v1/app/me' },
+  'app.getMyHrProfile': { path: '/v1/app/me/hr-profile' },
   'app.getVenueJoinCode': { path: '/v1/app/venue/join-code' },
   'app.getDashboard': { path: '/v1/app/dashboard' },
   'app.getNotifications': { path: (args) => `/v1/app/notifications${args?.limit ? `?limit=${args.limit}` : ''}` },
@@ -122,6 +123,21 @@ const queryRoutes: Record<string, Route> = {
 };
 
 const mutationRoutes: Record<string, Route> = {
+  'app.updateMyHrProfile': {
+    path: '/v1/app/me/hr-profile', method: 'PATCH',
+    body: ({ preferredName, phone, altPhone, address, dateOfBirth, emergencyContactName, emergencyContactRelationship, emergencyContactPhone }) => ({ preferredName, phone, altPhone, address, dateOfBirth: dateOfBirth?.trim() || null, emergencyContactName, emergencyContactRelationship, emergencyContactPhone }),
+    invalidate: [['app', 'getMyHrProfile'], ['app', 'getMe'], ['app', 'listVenueStaff']],
+  },
+  'app.uploadMyPhoto': {
+    path: '/v1/app/me/photo', method: 'POST',
+    body: ({ dataBase64, mimeType }) => ({ dataBase64, mimeType }),
+    invalidate: [['app', 'getMyHrProfile'], ['app', 'listVenueStaff'], ['chat', 'listDirectory']],
+  },
+  'app.uploadStaffPhoto': {
+    path: (args) => `/v1/app/staff/${enc(args.staffId)}/photo`, method: 'POST',
+    body: ({ dataBase64, mimeType }) => ({ dataBase64, mimeType }),
+    invalidate: [['app', 'listVenueStaff'], ['app', 'getMyHrProfile'], ['chat', 'listDirectory']],
+  },
   'app.markNotificationRead': {
     path: (args) => `/v1/app/notifications/${enc(args.notificationId ?? args.id ?? args)}/read`,
     method: 'POST',
@@ -163,7 +179,7 @@ const mutationRoutes: Record<string, Route> = {
   'app.upsertVenueStaff': {
     path: '/v1/app/staff',
     method: 'POST',
-    body: ({ venueId, staffId, email, fullName, role, jobTitle, phone, altPhone, address, dateOfBirth, certifications }) => ({ venueId, staffId, email, fullName, role, jobTitle, phone, altPhone, address, dateOfBirth, certifications }),
+    body: ({ venueId, staffId, email, fullName, preferredName, role, jobTitle, phone, altPhone, address, dateOfBirth, hireDate, employmentType, emergencyContactName, emergencyContactRelationship, emergencyContactPhone, certifications, hourlyRateCents }) => ({ venueId, staffId, email, fullName, preferredName, role, jobTitle, phone, altPhone, address, dateOfBirth, hireDate, employmentType, emergencyContactName, emergencyContactRelationship, emergencyContactPhone, certifications, hourlyRateCents }),
     invalidate: [['app', 'listVenueStaff'], ['app', 'listStaffOnboarding'], ['app', 'listStaffAuditLog'], ['app', 'getDashboard']],
   },
   'app.deactivateVenueStaff': {

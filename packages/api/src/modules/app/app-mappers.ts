@@ -40,7 +40,7 @@ export function mapVenue(venue: { id: string; name: string; latitude: number; lo
 }
 
 export function mapProfile(
-  profile: { id: string; email: string; fullName: string; role: Role; jobTitle: string; venueId: string | null; allAccess: boolean; membershipStatus?: string | null; trialEndsAt?: Date | null; phone?: string | null; altPhone?: string | null; address?: string | null; dateOfBirth?: Date | null; certifications?: string[]; sickHoursAccrued?: number; ptoHoursAccrued?: number },
+  profile: { id: string; email: string; fullName: string; role: Role; jobTitle: string; venueId: string | null; allAccess: boolean; membershipStatus?: string | null; trialEndsAt?: Date | null; phone?: string | null; altPhone?: string | null; address?: string | null; dateOfBirth?: Date | null; certifications?: string[]; sickHoursAccrued?: number; ptoHoursAccrued?: number; preferredName?: string | null; hireDate?: Date | null; employmentType?: string | null; emergencyContactName?: string | null; emergencyContactRelationship?: string | null; emergencyContactPhone?: string | null; hourlyRateCents?: number | null },
   emailVerified = false,
 ) {
   return {
@@ -49,11 +49,13 @@ export function mapProfile(
     email: profile.email,
     fullName: profile.fullName,
     full_name: profile.fullName,
+    preferredName: profile.preferredName ?? null,
     emailVerified,
     email_verified: emailVerified,
     role: profile.role,
     jobTitle: profile.jobTitle,
     job_title: profile.jobTitle,
+    hourlyRateCents: profile.hourlyRateCents ?? null,
     venueId: profile.venueId,
     venue_id: profile.venueId,
     membershipStatus: profile.membershipStatus ?? null,
@@ -64,6 +66,11 @@ export function mapProfile(
     altPhone: profile.altPhone ?? null,
     address: profile.address ?? null,
     dateOfBirth: profile.dateOfBirth?.toISOString() ?? null,
+    hireDate: profile.hireDate?.toISOString() ?? null,
+    employmentType: profile.employmentType ?? null,
+    emergencyContactName: profile.emergencyContactName ?? null,
+    emergencyContactRelationship: profile.emergencyContactRelationship ?? null,
+    emergencyContactPhone: profile.emergencyContactPhone ?? null,
     certifications: profile.certifications ?? [],
     sickHoursAccrued: profile.sickHoursAccrued ?? 0,
     ptoHoursAccrued: profile.ptoHoursAccrued ?? 0,

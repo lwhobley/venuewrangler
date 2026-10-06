@@ -18,6 +18,7 @@ import { VenueScopeInterceptor } from './venue/venue-scope.interceptor';
 import { AppController } from './modules/app/app.controller';
 import { AppBillingController } from './modules/app/app-billing.controller';
 import { AppStaffController } from './modules/app/app-staff.controller';
+import { AppProfileController } from './modules/app/app-profile.controller';
 import { ProfileService } from './modules/app/profile.service';
 import { StaffImportParserService } from './modules/app/staff-import-parser.service';
 import { StaffController } from './modules/staff/staff.controller';
@@ -104,6 +105,7 @@ import { MediaCleanupModule } from './modules/media-cleanup/media-cleanup.module
     AppController,
     AppBillingController,
     AppStaffController,
+    AppProfileController,
     SchedulingController,
     TimeClockController,
     AttestationController,

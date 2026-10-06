@@ -104,11 +104,11 @@ export default function EventCommandCenterScreen() {
   const { event, readiness } = workspace;
   return (
     <ScrollView style={{ flex: 1, backgroundColor: palette.background }} contentContainerStyle={{ padding: spacing.lg, gap: spacing.md, paddingBottom: spacing.xxl }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm, backgroundColor: '#194A62', borderRadius: 14, padding: spacing.md }}>
         <CommandButton palette={palette} icon="arrow-left" onPress={() => router.back()}>Back</CommandButton>
-        <View style={{ flex: 1 }}>
-          <CommandText palette={palette} variant="label">Event command center</CommandText>
-          <CommandText palette={palette} variant="hero">{event.title}</CommandText>
+        <View style={{ flexGrow: 1, flexShrink: 1, minWidth: 150 }}>
+          <CommandText palette={palette} variant="label" style={{ color: '#B8D3DE' }}>Event command center</CommandText>
+          <CommandText palette={palette} variant="hero" style={{ color: '#FFFFFF', fontSize: 25, lineHeight: 30 }}>{event.title}</CommandText>
         </View>
         <StatusPill palette={palette} tone={readiness?.status === 'blocked' ? 'warn' : 'good'}>{`${readiness?.score ?? 0}% ready`}</StatusPill>
       </View>
