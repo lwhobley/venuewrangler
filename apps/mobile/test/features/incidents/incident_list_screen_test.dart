@@ -11,6 +11,7 @@ import 'package:venuewrangler_mobile/features/incidents/domain/incident.dart';
 import 'package:venuewrangler_mobile/features/incidents/presentation/incident_list_screen.dart';
 import 'package:venuewrangler_mobile/features/media/application/image_picker_service.dart';
 import 'package:venuewrangler_mobile/features/media/application/media_providers.dart';
+import 'package:venuewrangler_mobile/features/media/application/photo_annotator.dart';
 import 'package:venuewrangler_mobile/features/media/data/media_repository.dart';
 import 'package:venuewrangler_mobile/features/venues/application/venues_providers.dart';
 import 'package:venuewrangler_mobile/features/venues/domain/venue.dart';
@@ -210,6 +211,8 @@ void main() {
           imagePickerServiceProvider
               .overrideWithValue(_FakeImagePickerService('/tmp/evidence.jpg')),
           mediaRepositoryProvider.overrideWithValue(fakeMedia),
+          photoAnnotatorProvider
+              .overrideWithValue((context, path) async => path),
         ],
         child: const MaterialApp(home: IncidentListScreen()),
       ),

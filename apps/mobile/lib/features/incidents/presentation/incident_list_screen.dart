@@ -8,6 +8,7 @@ import 'package:uuid/uuid.dart';
 import '../../../core/offline/offline_queue_providers.dart';
 import '../../media/application/image_picker_service.dart';
 import '../../media/application/media_providers.dart';
+import '../../media/application/photo_annotator.dart';
 import '../../venues/application/venues_providers.dart';
 import '../../venues/domain/venue.dart';
 import '../application/incidents_providers.dart';
@@ -143,10 +144,15 @@ class IncidentListScreen extends ConsumerWidget {
                 alignment: Alignment.centerLeft,
                 child: TextButton.icon(
                   onPressed: () async {
-                    final path = await ref
+                    final picked = await ref
                         .read(imagePickerServiceProvider)
                         .pickImage(source: ImageSource.camera);
-                    if (path != null) setState(() => photoPath = path);
+                    if (picked == null || !context.mounted) return;
+                    // Let the reporter mark up the photo (circle the damage, add a label…)
+                    // before it's attached; backing out keeps the original.
+                    final annotated =
+                        await ref.read(photoAnnotatorProvider)(context, picked);
+                    setState(() => photoPath = annotated ?? picked);
                   },
                   icon: const Icon(Icons.camera_alt_outlined),
                   label: Text(
