@@ -16,6 +16,17 @@ abstract interface class SchedulesRepository {
     required DateTime endTime,
   });
 
+  /// Moves/reassigns/edits a shift. [staffId] null with [clearStaff] makes it an open shift.
+  Future<void> updateShift({
+    required String shiftId,
+    String? staffId,
+    bool clearStaff = false,
+    String? roleLabel,
+    DateTime? startTime,
+    DateTime? endTime,
+    ShiftStatus? status,
+  });
+
   Future<void> deleteShift(String shiftId);
 
   Future<List<ShiftSwap>> fetchSwapsForVenue(String venueId);
@@ -67,6 +78,30 @@ class SupabaseSchedulesRepository implements SchedulesRepository {
       'start_time': startTime.toUtc().toIso8601String(),
       'end_time': endTime.toUtc().toIso8601String(),
     });
+  }
+
+  @override
+  Future<void> updateShift({
+    required String shiftId,
+    String? staffId,
+    bool clearStaff = false,
+    String? roleLabel,
+    DateTime? startTime,
+    DateTime? endTime,
+    ShiftStatus? status,
+  }) async {
+    final patch = <String, dynamic>{
+      if (clearStaff)
+        'staff_id': null
+      else if (staffId != null)
+        'staff_id': staffId,
+      if (roleLabel != null) 'role_label': roleLabel,
+      if (startTime != null) 'start_time': startTime.toUtc().toIso8601String(),
+      if (endTime != null) 'end_time': endTime.toUtc().toIso8601String(),
+      if (status != null) 'status': status.toDb(),
+    };
+    if (patch.isEmpty) return;
+    await _client.from('shifts').update(patch).eq('id', shiftId);
   }
 
   @override

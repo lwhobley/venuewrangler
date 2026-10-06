@@ -34,6 +34,24 @@ class Shift {
   final DateTime endTime;
   final ShiftStatus status;
 
+  Shift copyWith({
+    String? staffId,
+    bool clearStaff = false,
+    String? roleLabel,
+    DateTime? startTime,
+    DateTime? endTime,
+    ShiftStatus? status,
+  }) =>
+      Shift(
+        id: id,
+        venueId: venueId,
+        staffId: clearStaff ? null : (staffId ?? this.staffId),
+        roleLabel: roleLabel ?? this.roleLabel,
+        startTime: startTime ?? this.startTime,
+        endTime: endTime ?? this.endTime,
+        status: status ?? this.status,
+      );
+
   factory Shift.fromJson(Map<String, dynamic> json) => Shift(
         id: json['id'] as String,
         venueId: json['venue_id'] as String,

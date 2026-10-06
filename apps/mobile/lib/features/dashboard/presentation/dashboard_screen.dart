@@ -101,7 +101,7 @@ class DashboardScreen extends ConsumerWidget {
                   label: "Today's shifts",
                   value: todayShiftCount,
                   icon: Icons.calendar_month_outlined,
-                  onTap: () => context.go('/schedules'),
+                  onTap: () => context.go('/schedules/timeline'),
                 ),
                 _StatTile(
                   label: 'Upcoming events',
