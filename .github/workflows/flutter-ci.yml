@@ -29,7 +29,7 @@ jobs:
 
       - uses: subosito/flutter-action@e938fdf56512cc96ef2f93601a5a40bde3801046 # v2.19.0
         with:
-          flutter-version-file: ../../flutter-version.txt
+          flutter-version-file: flutter-version.txt
           channel: stable
 
       - name: Install dependencies
