@@ -126,25 +126,28 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
                   onRefresh: () async =>
                       ref.refresh(reservationsListProvider.future),
                   child: ListView.separated(
+                    padding: const EdgeInsets.all(12),
                     itemCount: filtered.length,
-                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    separatorBuilder: (_, __) => const SizedBox(height: 8),
                     itemBuilder: (context, index) {
                       final item = filtered[index];
-                      return _ReservationListTile(
-                        reservation: item,
-                        assigneeName: item.assignedTo == null
-                            ? null
-                            : names[item.assignedTo] ?? 'Team member',
-                        onAssign: () => _assign(item, roster),
-                        onStatusChanged: (newStatus) async {
-                          await ref
-                              .read(guestsReservationsRepositoryProvider)
-                              .updateReservationStatus(
-                                reservationId: item.id,
-                                status: newStatus,
-                              );
-                          ref.invalidate(reservationsListProvider);
-                        },
+                      return Card(
+                        child: _ReservationListTile(
+                          reservation: item,
+                          assigneeName: item.assignedTo == null
+                              ? null
+                              : names[item.assignedTo] ?? 'Team member',
+                          onAssign: () => _assign(item, roster),
+                          onStatusChanged: (newStatus) async {
+                            await ref
+                                .read(guestsReservationsRepositoryProvider)
+                                .updateReservationStatus(
+                                  reservationId: item.id,
+                                  status: newStatus,
+                                );
+                            ref.invalidate(reservationsListProvider);
+                          },
+                        ),
                       );
                     },
                   ),
@@ -159,12 +162,18 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
           ),
         ],
       ),
-      floatingActionButton: activeVenue != null
-          ? FloatingActionButton(
-              onPressed: () =>
-                  _showCreateReservationDialog(context, activeVenue.id),
-              tooltip: 'New Reservation',
-              child: const Icon(Icons.add),
+      bottomNavigationBar: activeVenue != null
+          ? SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: FilledButton.icon(
+                  onPressed: () =>
+                      _showCreateReservationDialog(context, activeVenue.id),
+                  label: const Text('New Reservation'),
+                  icon: const Icon(Icons.add),
+                ),
+              ),
             )
           : null,
     );

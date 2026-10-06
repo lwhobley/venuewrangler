@@ -17,6 +17,7 @@ import '../../time_clock/application/time_clock_providers.dart';
 import '../../time_clock/domain/time_entry.dart';
 import '../../venues/application/venues_providers.dart';
 import '../../workforce/domain/workforce_models.dart';
+import '../../workforce/presentation/employee_profile_widgets.dart';
 
 const _weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const _months = [
@@ -86,13 +87,6 @@ class ProfileScreen extends ConsumerWidget {
     final name = profile?.displayName?.trim().isNotEmpty == true
         ? profile!.displayName!.trim()
         : (email ?? 'You');
-    final initials = name
-        .split(RegExp(r'\s+'))
-        .where((p) => p.isNotEmpty)
-        .take(2)
-        .map((p) => p[0].toUpperCase())
-        .join();
-
     return Scaffold(
       appBar: AppBar(title: const Text('My profile')),
       body: ListView(
@@ -100,15 +94,12 @@ class ProfileScreen extends ConsumerWidget {
         children: [
           Row(
             children: [
-              CircleAvatar(
-                radius: 32,
-                backgroundColor: theme.colorScheme.primary,
-                child: Text(
-                  initials,
-                  style: theme.textTheme.titleLarge
-                      ?.copyWith(color: theme.colorScheme.onPrimary),
+              if (venue != null && userId != null)
+                StaffAvatar(
+                  profileKey: (venueId: venue.id, userId: userId),
+                  name: name,
+                  radius: 32,
                 ),
-              ),
               const SizedBox(width: 16),
               Expanded(
                 child: Column(
@@ -132,6 +123,19 @@ class ProfileScreen extends ConsumerWidget {
             ],
           ),
           const SizedBox(height: 20),
+          if (venue != null && userId != null) ...[
+            ProfilePhotoButton(
+              profileKey: (venueId: venue.id, userId: userId),
+              organizationId: venue.organizationId,
+            ),
+            const SizedBox(height: 12),
+            EmployeeHrCard(
+              profileKey: (venueId: venue.id, userId: userId),
+              name: name,
+              manageEmployment: false,
+            ),
+            const SizedBox(height: 20),
+          ],
           const SectionTitle('This week'),
           Row(
             children: [

@@ -6,6 +6,10 @@ import '../../../core/auth/sign_out_service.dart';
 import '../../../core/network/supabase_providers.dart';
 import '../application/settings_providers.dart';
 import '../../../core/theme/theme_mode_provider.dart';
+import '../../../core/auth/auth_providers.dart';
+import '../../venues/application/venues_providers.dart';
+import '../../workforce/presentation/employee_profile_widgets.dart';
+import '../../workforce/domain/employee_hr_profile.dart';
 
 /// Profile, account, and app settings. Deliberately minimal for this first slice — just the
 /// display name every other screen already shows (roster tiles, "created by", etc.) and sign
@@ -18,6 +22,9 @@ class SettingsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final profileAsync = ref.watch(myProfileProvider);
     final email = ref.watch(supabaseClientProvider).auth.currentUser?.email;
+    final venue = ref.watch(activeVenueProvider);
+    final userId = ref.watch(currentUserIdProvider);
+    final role = ref.watch(myVenueRoleProvider).valueOrNull;
 
     return Scaffold(
       appBar: AppBar(
@@ -30,6 +37,28 @@ class SettingsScreen extends ConsumerWidget {
         data: (profile) => ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            if (venue != null && userId != null) ...[
+              Center(
+                child: StaffAvatar(
+                  profileKey: (venueId: venue.id, userId: userId),
+                  name: profile.displayName ?? 'You',
+                  radius: 40,
+                ),
+              ),
+              const SizedBox(height: 12),
+              ProfilePhotoButton(
+                profileKey: (venueId: venue.id, userId: userId),
+                organizationId: venue.organizationId,
+              ),
+              const SizedBox(height: 16),
+              EmployeeHrCard(
+                profileKey: (venueId: venue.id, userId: userId),
+                name: profile.displayName ?? 'My profile',
+                manageEmployment:
+                    canManageEmployeeDetails(role, role ?? 'staff'),
+              ),
+              const SizedBox(height: 24),
+            ],
             if (email != null) ...[
               Text('Email', style: Theme.of(context).textTheme.labelMedium),
               const SizedBox(height: 4),

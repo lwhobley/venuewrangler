@@ -3,16 +3,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/errors/app_error.dart';
+import '../../../core/auth/auth_providers.dart';
 import '../../ai/application/ai_providers.dart';
 import '../../ai/domain/ai_models.dart';
 import '../../venues/application/venues_providers.dart';
 import '../application/workforce_providers.dart';
 import '../domain/workforce_models.dart';
+import '../domain/employee_hr_profile.dart';
+import 'employee_profile_widgets.dart';
 
-/// Staff roster + invites for the active venue. The roster list is read-only here (members
-/// are managed via `memberships`, not from this screen); invites are the only write path,
-/// per workforce_invites.sql's "redemption is a future Edge Function" scope note — accepting
-/// an invite into an actual membership is not implemented yet, by design.
+/// Team identity, HR profiles, and invitations for the active venue.
 class WorkforceRosterScreen extends ConsumerWidget {
   const WorkforceRosterScreen({super.key});
 
@@ -25,10 +25,19 @@ class WorkforceRosterScreen extends ConsumerWidget {
 
     final rosterAsync = ref.watch(rosterForVenueProvider(venue.id));
     final invitesAsync = ref.watch(invitesForVenueProvider(venue.id));
+    final actorRole = ref.watch(myVenueRoleProvider).valueOrNull;
+    final actorId = ref.watch(currentUserIdProvider);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Staff'),
+        title: const Text('Team Management'),
+        actions: [
+          IconButton(
+            tooltip: 'Import staff',
+            icon: const Icon(Icons.upload_file_outlined),
+            onPressed: () => _showImportDialog(context, ref, venue.id),
+          ),
+        ],
       ),
       body: RefreshIndicator(
         onRefresh: () async {
@@ -36,6 +45,8 @@ class WorkforceRosterScreen extends ConsumerWidget {
           ref.invalidate(invitesForVenueProvider(venue.id));
         },
         child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+          physics: const AlwaysScrollableScrollPhysics(),
           children: [
             const _SectionHeader('Roster'),
             rosterAsync.when(
@@ -50,10 +61,93 @@ class WorkforceRosterScreen extends ConsumerWidget {
                   : Column(
                       children: [
                         for (final member in roster)
-                          ListTile(
-                            leading: const Icon(Icons.person_outline),
-                            title: Text(member.displayName ?? '(no name set)'),
-                            subtitle: Text(member.role),
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 6),
+                            child: Card(
+                              child: ListTile(
+                                leading: StaffAvatar(
+                                  profileKey: (
+                                    venueId: venue.id,
+                                    userId: member.userId
+                                  ),
+                                  name: member.displayName ?? 'Team member',
+                                ),
+                                title:
+                                    Text(member.displayName ?? '(no name set)'),
+                                subtitle:
+                                    Text(member.role.replaceAll('_', ' ')),
+                                trailing: canManageEmployeeDetails(
+                                          actorRole,
+                                          member.role,
+                                        ) ||
+                                        actorId == member.userId
+                                    ? const Icon(Icons.chevron_right)
+                                    : null,
+                                onTap: canManageEmployeeDetails(
+                                          actorRole,
+                                          member.role,
+                                        ) ||
+                                        actorId == member.userId
+                                    ? () => showModalBottomSheet<void>(
+                                          context: context,
+                                          isScrollControlled: true,
+                                          useSafeArea: true,
+                                          builder: (context) => SizedBox(
+                                            height: MediaQuery.sizeOf(context)
+                                                    .height *
+                                                .85,
+                                            child: ListView(
+                                              padding: const EdgeInsets.all(16),
+                                              children: [
+                                                Text(
+                                                  member.displayName ??
+                                                      'Team member',
+                                                  style: Theme.of(context)
+                                                      .textTheme
+                                                      .titleLarge,
+                                                ),
+                                                const SizedBox(height: 16),
+                                                Center(
+                                                  child: StaffAvatar(
+                                                    profileKey: (
+                                                      venueId: venue.id,
+                                                      userId: member.userId
+                                                    ),
+                                                    name: member.displayName ??
+                                                        'Team member',
+                                                    radius: 40,
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 12),
+                                                ProfilePhotoButton(
+                                                  profileKey: (
+                                                    venueId: venue.id,
+                                                    userId: member.userId
+                                                  ),
+                                                  organizationId:
+                                                      venue.organizationId,
+                                                ),
+                                                const SizedBox(height: 16),
+                                                EmployeeHrCard(
+                                                  profileKey: (
+                                                    venueId: venue.id,
+                                                    userId: member.userId
+                                                  ),
+                                                  name: member.displayName ??
+                                                      'Team member',
+                                                  manageEmployment:
+                                                      canManageEmployeeDetails(
+                                                    actorRole,
+                                                    member.role,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        )
+                                    : null,
+                              ),
+                            ),
                           ),
                       ],
                     ),
@@ -94,23 +188,16 @@ class WorkforceRosterScreen extends ConsumerWidget {
           ],
         ),
       ),
-      floatingActionButton: Column(
-        mainAxisAlignment: MainAxisAlignment.end,
-        children: [
-          FloatingActionButton.extended(
-            heroTag: 'import-staff',
-            onPressed: () => _showImportDialog(context, ref, venue.id),
-            icon: const Icon(Icons.auto_awesome_outlined),
-            label: const Text('Import from paste'),
-          ),
-          const SizedBox(height: 12),
-          FloatingActionButton.extended(
-            heroTag: 'invite-staff',
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: FilledButton.icon(
             onPressed: () => _showInviteDialog(context, ref, venue.id),
             icon: const Icon(Icons.person_add_alt_outlined),
-            label: const Text('Invite staff'),
+            label: const Text('Add New Staff'),
           ),
-        ],
+        ),
       ),
     );
   }

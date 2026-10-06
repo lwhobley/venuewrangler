@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/errors/app_error.dart';
+import '../../../core/theme/ops_colors.dart';
+import '../../../core/widgets/status_chip.dart';
 import '../../ai/application/ai_providers.dart';
 import '../../ai/domain/ai_models.dart';
 import '../../venues/application/venues_providers.dart';
@@ -26,7 +28,14 @@ class InventoryListScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Inventory'),
+        title: const Text('Inventory Hub'),
+        actions: [
+          IconButton(
+            tooltip: 'Import inventory',
+            icon: const Icon(Icons.upload_file_outlined),
+            onPressed: () => _showParseDialog(context, ref, venue.id),
+          ),
+        ],
       ),
       body: RefreshIndicator(
         onRefresh: () async =>
@@ -60,6 +69,7 @@ class InventoryListScreen extends ConsumerWidget {
               );
             }
             return ListView(
+              padding: const EdgeInsets.all(16),
               children: [
                 for (final item in items) _InventoryTile(item: item),
               ],
@@ -67,23 +77,16 @@ class InventoryListScreen extends ConsumerWidget {
           },
         ),
       ),
-      floatingActionButton: Column(
-        mainAxisAlignment: MainAxisAlignment.end,
-        children: [
-          FloatingActionButton.extended(
-            heroTag: 'parse-inventory',
-            onPressed: () => _showParseDialog(context, ref, venue.id),
-            icon: const Icon(Icons.auto_awesome_outlined),
-            label: const Text('Parse from paste'),
-          ),
-          const SizedBox(height: 12),
-          FloatingActionButton.extended(
-            heroTag: 'add-item',
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: FilledButton.icon(
             onPressed: () => _showAddItemDialog(context, ref, venue.id),
             icon: const Icon(Icons.add),
-            label: const Text('Add item'),
+            label: const Text('Add inventory item'),
           ),
-        ],
+        ),
       ),
     );
   }
@@ -293,19 +296,43 @@ class _InventoryTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return ListTile(
-      leading: const Icon(Icons.inventory_2_outlined),
-      title: Text(item.name),
-      subtitle: Text(
-        [
-          if (item.quantity != null)
-            '${item.quantity} ${item.unit ?? ''}'.trim(),
-          if (item.unitCostUsd != null) '\$${item.unitCostUsd}/unit',
-        ].join(' · '),
-      ),
-      trailing: IconButton(
-        icon: const Icon(Icons.delete_outline),
-        onPressed: () => _delete(context, ref),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Card(
+        child: ListTile(
+          leading: const Icon(Icons.inventory_2_outlined),
+          title: Text(item.name),
+          subtitle: Text(
+            [
+              if (item.quantity != null)
+                '${item.quantity} ${item.unit ?? ''}'.trim(),
+              if (item.unitCostUsd != null) '\$${item.unitCostUsd}/unit',
+            ].join(' · '),
+          ),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              StatusChip(
+                label: item.quantity == null
+                    ? 'Not counted'
+                    : item.quantity! <= 0
+                        ? 'Out of stock'
+                        : 'Available',
+                tone: item.quantity == null
+                    ? Tone.neutral
+                    : item.quantity! <= 0
+                        ? Tone.danger
+                        : Tone.success,
+                dense: true,
+              ),
+              IconButton(
+                tooltip: 'Delete item',
+                icon: const Icon(Icons.delete_outline),
+                onPressed: () => _delete(context, ref),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
