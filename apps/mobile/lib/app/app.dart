@@ -1,3 +1,4 @@
+import '../core/theme/theme_mode_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -32,6 +33,7 @@ class VenueWranglerApp extends ConsumerWidget {
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),
+      themeMode: ref.watch(themeModeProvider),
       routerConfig: router,
     );
   }

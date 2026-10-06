@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/auth/sign_out_service.dart';
 import '../../../core/network/supabase_providers.dart';
 import '../application/settings_providers.dart';
+import '../../../core/theme/theme_mode_provider.dart';
 
 /// Profile, account, and app settings. Deliberately minimal for this first slice — just the
 /// display name every other screen already shows (roster tiles, "created by", etc.) and sign
@@ -37,6 +38,31 @@ class SettingsScreen extends ConsumerWidget {
               Text(email),
               const SizedBox(height: 24),
             ],
+            Text('Appearance', style: Theme.of(context).textTheme.labelMedium),
+            const SizedBox(height: 8),
+            SegmentedButton<ThemeMode>(
+              segments: const [
+                ButtonSegment(
+                  value: ThemeMode.light,
+                  icon: Icon(Icons.light_mode_outlined),
+                  label: Text('Light'),
+                ),
+                ButtonSegment(
+                  value: ThemeMode.dark,
+                  icon: Icon(Icons.dark_mode_outlined),
+                  label: Text('Dark'),
+                ),
+                ButtonSegment(
+                  value: ThemeMode.system,
+                  icon: Icon(Icons.brightness_auto_outlined),
+                  label: Text('Auto'),
+                ),
+              ],
+              selected: {ref.watch(themeModeProvider)},
+              onSelectionChanged: (s) =>
+                  ref.read(themeModeProvider.notifier).set(s.first),
+            ),
+            const SizedBox(height: 24),
             FilledButton.icon(
               onPressed: () =>
                   _editDisplayName(context, ref, profile.displayName),

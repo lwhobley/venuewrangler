@@ -12,6 +12,7 @@ import '../features/documents/presentation/documents_screen.dart';
 import '../features/ai/presentation/wrangler_assistant_screen.dart';
 import '../features/dashboard/presentation/dashboard_screen.dart';
 import '../features/events/presentation/event_list_screen.dart';
+import '../features/floor/presentation/floor_plan_editor_screen.dart';
 import '../features/floor/presentation/floor_plan_screen.dart';
 import '../features/guests_reservations/presentation/reservations_screen.dart';
 import '../features/incidents/presentation/incident_list_screen.dart';
@@ -138,6 +139,12 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/floor',
         builder: (context, state) => const FloorPlanScreen(),
+        routes: [
+          GoRoute(
+            path: 'edit',
+            builder: (context, state) => const FloorPlanEditorScreen(),
+          ),
+        ],
       ),
       GoRoute(
         path: '/pos',

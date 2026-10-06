@@ -1,6 +1,7 @@
 import '../../../core/widgets/home_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../../core/theme/ops_colors.dart';
 import '../../../core/widgets/state_views.dart';
 import '../../venues/application/venues_providers.dart';
@@ -28,6 +29,11 @@ class _FloorPlanScreenState extends ConsumerState<FloorPlanScreen> {
         leading: const HomeButton(),
         title: const Text('Floor Plan'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.edit_location_alt_outlined),
+            tooltip: 'Edit layout',
+            onPressed: () => context.push('/floor/edit'),
+          ),
           if (_selectedTableIds.length >= 2 && activeVenue != null)
             IconButton(
               icon: const Icon(Icons.merge_type),

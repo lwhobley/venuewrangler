@@ -1,10 +1,22 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../domain/editor_table.dart';
 import '../domain/floor_plan.dart';
 import '../domain/floor_table.dart';
 
 abstract class FloorRepository {
   Future<List<FloorPlan>> getFloorPlans({required String venueId});
   Future<List<FloorTable>> getFloorTables({required String floorPlanId});
+  Future<FloorPlan> createFloorPlan({
+    required String venueId,
+    required String name,
+  });
+  Future<void> saveLayout({
+    required String venueId,
+    required String floorPlanId,
+    required List<EditorTable> created,
+    required List<EditorTable> updated,
+    required List<String> removedIds,
+  });
   Stream<List<FloorTable>> streamFloorTables({required String venueId});
   Future<void> updateTableStatus({
     required String venueId,
@@ -57,6 +69,53 @@ class SupabaseFloorRepository implements FloorRepository {
     return (response as List<dynamic>)
         .map((row) => FloorTable.fromJson(row as Map<String, dynamic>))
         .toList();
+  }
+
+  @override
+  Future<FloorPlan> createFloorPlan({
+    required String venueId,
+    required String name,
+  }) async {
+    final row = await _client
+        .from('floor_plans')
+        .insert({'venue_id': venueId, 'name': name})
+        .select()
+        .single();
+    return FloorPlan.fromJson(row);
+  }
+
+  @override
+  Future<void> saveLayout({
+    required String venueId,
+    required String floorPlanId,
+    required List<EditorTable> created,
+    required List<EditorTable> updated,
+    required List<String> removedIds,
+  }) async {
+    if (removedIds.isNotEmpty) {
+      await _client
+          .from('floor_tables')
+          .delete()
+          .eq('venue_id', venueId)
+          .inFilter('id', removedIds);
+    }
+    for (final t in updated) {
+      await _client
+          .from('floor_tables')
+          .update(t.toLayoutColumns())
+          .eq('id', t.id)
+          .eq('venue_id', venueId);
+    }
+    if (created.isNotEmpty) {
+      await _client.from('floor_tables').insert([
+        for (final t in created)
+          {
+            'venue_id': venueId,
+            'floor_plan_id': floorPlanId,
+            ...t.toLayoutColumns(),
+          },
+      ]);
+    }
   }
 
   @override

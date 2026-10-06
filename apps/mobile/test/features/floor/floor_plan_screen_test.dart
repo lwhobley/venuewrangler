@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:venuewrangler_mobile/features/floor/application/floor_providers.dart';
 import 'package:venuewrangler_mobile/features/floor/data/floor_repository.dart';
+import 'package:venuewrangler_mobile/features/floor/domain/editor_table.dart';
 import 'package:venuewrangler_mobile/features/floor/domain/floor_plan.dart';
 import 'package:venuewrangler_mobile/features/floor/domain/floor_table.dart';
 import 'package:venuewrangler_mobile/features/floor/presentation/floor_plan_screen.dart';
@@ -27,6 +28,22 @@ class _FakeFloorRepository implements FloorRepository {
     required String floorPlanId,
   }) async =>
       _tables;
+
+  @override
+  Future<FloorPlan> createFloorPlan({
+    required String venueId,
+    required String name,
+  }) =>
+      throw UnimplementedError();
+
+  @override
+  Future<void> saveLayout({
+    required String venueId,
+    required String floorPlanId,
+    required List<EditorTable> created,
+    required List<EditorTable> updated,
+    required List<String> removedIds,
+  }) async {}
 
   @override
   Stream<List<FloorTable>> streamFloorTables({required String venueId}) async* {
