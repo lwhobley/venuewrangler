@@ -83,6 +83,15 @@ class DashboardScreen extends ConsumerWidget {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            FilledButton.icon(
+              style: FilledButton.styleFrom(
+                minimumSize: const Size.fromHeight(64),
+              ),
+              onPressed: () => context.go('/shift'),
+              icon: const Icon(Icons.badge_outlined),
+              label: const Text('Shift mode'),
+            ),
+            const SizedBox(height: 16),
             GridView.count(
               crossAxisCount: 2,
               shrinkWrap: true,

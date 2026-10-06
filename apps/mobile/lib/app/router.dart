@@ -27,6 +27,7 @@ import '../features/pos/presentation/pos_management_screen.dart';
 import '../features/schedules/presentation/schedule_list_screen.dart';
 import '../features/schedules/presentation/schedule_timeline_screen.dart';
 import '../features/settings/presentation/settings_screen.dart';
+import '../features/shift_mode/presentation/shift_mode_screen.dart';
 import '../features/staff_requests/presentation/staff_requests_screen.dart';
 import '../features/tasks/presentation/task_board_screen.dart';
 import '../features/tasks/presentation/task_list_screen.dart';
@@ -60,6 +61,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/',
         builder: (context, state) => const DashboardScreen(),
+      ),
+      GoRoute(
+        path: '/shift',
+        builder: (context, state) => const ShiftModeScreen(),
       ),
       GoRoute(
         path: '/sign-in',

@@ -124,8 +124,11 @@ void main() {
       isNull,
     );
 
-    await tester.drag(find.byType(Image), const Offset(120, 60),
-        warnIfMissed: false);
+    await tester.drag(
+      find.byType(Image),
+      const Offset(120, 60),
+      warnIfMissed: false,
+    );
     await tester.pump();
     final undo =
         tester.widget<IconButton>(find.widgetWithIcon(IconButton, Icons.undo));
