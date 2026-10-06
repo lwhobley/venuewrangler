@@ -21,6 +21,7 @@ class Shift {
     required this.venueId,
     this.staffId,
     this.roleLabel,
+    this.section,
     required this.startTime,
     required this.endTime,
     required this.status,
@@ -30,6 +31,9 @@ class Shift {
   final String venueId;
   final String? staffId;
   final String? roleLabel;
+
+  /// Floor section worked on this shift (matches FloorTable.section), set by managers.
+  final String? section;
   final DateTime startTime;
   final DateTime endTime;
   final ShiftStatus status;
@@ -38,6 +42,7 @@ class Shift {
     String? staffId,
     bool clearStaff = false,
     String? roleLabel,
+    String? section,
     DateTime? startTime,
     DateTime? endTime,
     ShiftStatus? status,
@@ -47,6 +52,7 @@ class Shift {
         venueId: venueId,
         staffId: clearStaff ? null : (staffId ?? this.staffId),
         roleLabel: roleLabel ?? this.roleLabel,
+        section: section ?? this.section,
         startTime: startTime ?? this.startTime,
         endTime: endTime ?? this.endTime,
         status: status ?? this.status,
@@ -57,6 +63,7 @@ class Shift {
         venueId: json['venue_id'] as String,
         staffId: json['staff_id'] as String?,
         roleLabel: json['role_label'] as String?,
+        section: json['section'] as String?,
         startTime: DateTime.parse(json['start_time'] as String).toLocal(),
         endTime: DateTime.parse(json['end_time'] as String).toLocal(),
         status: ShiftStatus.fromDb(json['status'] as String),

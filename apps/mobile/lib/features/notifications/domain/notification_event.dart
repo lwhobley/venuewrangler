@@ -59,8 +59,8 @@ class NotificationEvent {
       'title': title,
       'body': body,
       'data': data,
-      'read_at': readAt?.toIso8601String(),
-      'created_at': createdAt.toIso8601String(),
+      'read_at': readAt?.toUtc().toIso8601String(),
+      'created_at': createdAt.toUtc().toIso8601String(),
     };
   }
 }

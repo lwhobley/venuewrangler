@@ -161,7 +161,7 @@ class SupabaseTimeClockRepository implements TimeClockRepository {
     bool mocked = false,
   }) async {
     try {
-      final now = DateTime.now().toIso8601String();
+      final now = DateTime.now().toUtc().toIso8601String();
       final row = await _client
           .from('time_entries')
           .update({
@@ -195,7 +195,7 @@ class SupabaseTimeClockRepository implements TimeClockRepository {
       );
       updatedBreaks.add({
         'type': type,
-        'start_at': DateTime.now().toIso8601String(),
+        'start_at': DateTime.now().toUtc().toIso8601String(),
         'end_at': null,
       });
 
@@ -219,12 +219,12 @@ class SupabaseTimeClockRepository implements TimeClockRepository {
     required TimeEntry entry,
   }) async {
     try {
-      final now = DateTime.now().toIso8601String();
+      final now = DateTime.now().toUtc().toIso8601String();
       final updatedBreaks = entry.breaks.map((b) {
         if (b.isOpen) {
           return {
             'type': b.type,
-            'start_at': b.startAt.toIso8601String(),
+            'start_at': b.startAt.toUtc().toIso8601String(),
             'end_at': now,
           };
         }

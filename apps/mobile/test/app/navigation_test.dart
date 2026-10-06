@@ -46,10 +46,11 @@ const _linked = [
 ];
 
 void main() {
-  test('every linked location resolves to a route', () {
+  test('every linked location resolves to a route', () async {
     final container = ProviderContainer(
       overrides: [
         isSignedInProvider.overrideWithValue(true),
+        myVenueRoleProvider.overrideWith((ref) async => 'venue_manager'),
         activeVenueProvider.overrideWith(
           (ref) => Venue(
             id: 'v',
@@ -61,6 +62,7 @@ void main() {
       ],
     );
     addTearDown(container.dispose);
+    await container.read(myVenueRoleProvider.future);
     final router = container.read(routerProvider);
 
     for (final path in _linked) {
@@ -155,5 +157,77 @@ void main() {
     await tester.tap(find.text('Floor'));
     await tester.pumpAndSettle();
     expect(find.text('Floor page'), findsOneWidget);
+  });
+
+  group('employee app', () {
+    Future<GoRouter> employeeRouter() async {
+      final container = ProviderContainer(
+        overrides: [
+          isSignedInProvider.overrideWithValue(true),
+          myVenueRoleProvider.overrideWith((ref) async => 'staff'),
+          activeVenueProvider.overrideWith(
+            (ref) => Venue(
+              id: 'v',
+              organizationId: 'o',
+              name: 'Venue',
+              createdAt: DateTime(2026),
+            ),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      await container.read(myVenueRoleProvider.future);
+      return container.read(routerProvider);
+    }
+
+    test('has exactly the employee screens', () async {
+      final router = await employeeRouter();
+      for (final path in [
+        '/',
+        '/me',
+        '/notifications',
+        '/time-clock',
+        '/schedules',
+        '/schedules/timeline',
+        '/floor',
+        '/chat',
+      ]) {
+        expect(
+          router.configuration.findMatch(Uri.parse(path)).isError,
+          isFalse,
+          reason: '$path should exist for employees',
+        );
+      }
+      for (final path in [
+        '/more',
+        '/tasks/board',
+        '/floor/edit',
+        '/crm',
+        '/billing',
+        '/inventory',
+        '/settings',
+      ]) {
+        expect(
+          router.configuration.findMatch(Uri.parse(path)).matches,
+          isEmpty,
+          reason: '$path should not exist for employees',
+        );
+      }
+    });
+
+    test('anything outside the employee screens redirects home', () {
+      expect(employeeCanOpen('/floor'), isTrue);
+      expect(employeeCanOpen('/me'), isTrue);
+      expect(employeeCanOpen('/floor/edit'), isFalse);
+      expect(employeeCanOpen('/staff-requests'), isFalse);
+      expect(employeeCanOpen('/more'), isFalse);
+    });
+
+    test('staff get the employee app; supervisors and up do not', () {
+      expect(isEmployeeRole('staff'), isTrue);
+      expect(isEmployeeRole('supervisor'), isFalse);
+      expect(isEmployeeRole('venue_manager'), isFalse);
+      expect(isEmployeeRole('organization_owner'), isFalse);
+    });
   });
 }

@@ -4,6 +4,8 @@ import '../../../core/theme/ops_colors.dart';
 import '../../../core/widgets/state_views.dart';
 import '../../../core/widgets/status_chip.dart';
 import '../../venues/application/venues_providers.dart';
+import '../../workforce/application/workforce_providers.dart';
+import '../../workforce/domain/workforce_models.dart';
 import '../application/guests_reservations_providers.dart';
 import '../domain/reservation.dart';
 
@@ -16,6 +18,45 @@ class ReservationsScreen extends ConsumerStatefulWidget {
 
 class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
   String _statusFilter = 'all';
+
+  Future<void> _assign(Reservation r, List<RosterMember> roster) async {
+    final picked = await showModalBottomSheet<({String? userId})>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+              child: Text(
+                'Assign ${r.guestName}',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.person_off_outlined),
+              title: const Text('Unassigned'),
+              selected: r.assignedTo == null,
+              onTap: () => Navigator.pop(context, (userId: null)),
+            ),
+            for (final m in roster)
+              ListTile(
+                leading: const Icon(Icons.person_outline),
+                title: Text(m.displayName ?? 'Team member'),
+                selected: r.assignedTo == m.userId,
+                onTap: () => Navigator.pop(context, (userId: m.userId)),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (picked == null || picked.userId == r.assignedTo) return;
+    await ref
+        .read(guestsReservationsRepositoryProvider)
+        .assignReservation(reservationId: r.id, userId: picked.userId);
+    ref.invalidate(reservationsListProvider);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -58,6 +99,16 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
           Expanded(
             child: reservationsAsync.when(
               data: (reservations) {
+                final roster = activeVenue == null
+                    ? const <RosterMember>[]
+                    : ref
+                            .watch(rosterForVenueProvider(activeVenue.id))
+                            .valueOrNull ??
+                        const <RosterMember>[];
+                final names = {
+                  for (final m in roster)
+                    m.userId: m.displayName ?? 'Team member',
+                };
                 final filtered = _statusFilter == 'all'
                     ? reservations
                     : reservations
@@ -81,6 +132,10 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
                       final item = filtered[index];
                       return _ReservationListTile(
                         reservation: item,
+                        assigneeName: item.assignedTo == null
+                            ? null
+                            : names[item.assignedTo] ?? 'Team member',
+                        onAssign: () => _assign(item, roster),
                         onStatusChanged: (newStatus) async {
                           await ref
                               .read(guestsReservationsRepositoryProvider)
@@ -219,10 +274,14 @@ class _ReservationListTile extends StatelessWidget {
   const _ReservationListTile({
     required this.reservation,
     required this.onStatusChanged,
+    this.assigneeName,
+    this.onAssign,
   });
 
   final Reservation reservation;
   final ValueChanged<String> onStatusChanged;
+  final String? assigneeName;
+  final VoidCallback? onAssign;
 
   Tone _statusTone(String status) {
     switch (status) {
@@ -265,6 +324,16 @@ class _ReservationListTile extends StatelessWidget {
             'Time: ${_formatTime(reservation.reservationTime)} | Source: ${reservation.source}',
             style: Theme.of(context).textTheme.bodySmall,
           ),
+          if (assigneeName != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: StatusChip(
+                label: assigneeName!,
+                tone: Tone.info,
+                icon: Icons.person_outline,
+                dense: true,
+              ),
+            ),
           if (reservation.specialRequests != null &&
               reservation.specialRequests!.isNotEmpty)
             Padding(
@@ -288,8 +357,11 @@ class _ReservationListTile extends StatelessWidget {
           const SizedBox(width: 4),
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert),
-            onSelected: onStatusChanged,
+            onSelected: (value) =>
+                value == 'assign' ? onAssign?.call() : onStatusChanged(value),
             itemBuilder: (context) => [
+              if (onAssign != null)
+                const PopupMenuItem(value: 'assign', child: Text('Assign to…')),
               if (reservation.status != 'seated')
                 const PopupMenuItem(value: 'seated', child: Text('Seat')),
               if (reservation.status != 'completed')

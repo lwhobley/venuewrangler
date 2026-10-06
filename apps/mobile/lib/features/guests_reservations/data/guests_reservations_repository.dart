@@ -39,6 +39,12 @@ abstract class GuestsReservationsRepository {
     required String reservationId,
     required String status,
   });
+
+  /// Assigns the reservation to a team member, or clears it when [userId] is null.
+  Future<void> assignReservation({
+    required String reservationId,
+    String? userId,
+  });
 }
 
 class SupabaseGuestsReservationsRepository
@@ -111,10 +117,10 @@ class SupabaseGuestsReservationsRepository
     var query = _client.from('reservations').select().eq('venue_id', venueId);
 
     if (from != null) {
-      query = query.gte('reservation_time', from.toIso8601String());
+      query = query.gte('reservation_time', from.toUtc().toIso8601String());
     }
     if (to != null) {
-      query = query.lte('reservation_time', to.toIso8601String());
+      query = query.lte('reservation_time', to.toUtc().toIso8601String());
     }
 
     final response =
@@ -156,7 +162,7 @@ class SupabaseGuestsReservationsRepository
           if (guestPhone != null) 'guest_phone': guestPhone,
           if (guestEmail != null) 'guest_email': guestEmail,
           'party_size': partySize,
-          'reservation_time': reservationTime.toIso8601String(),
+          'reservation_time': reservationTime.toUtc().toIso8601String(),
           'duration_minutes': durationMinutes,
           'source': source,
           if (specialRequests != null) 'special_requests': specialRequests,
@@ -177,13 +183,23 @@ class SupabaseGuestsReservationsRepository
   }) async {
     final updates = <String, dynamic>{'status': status};
     if (status == 'seated') {
-      updates['seated_at'] = DateTime.now().toIso8601String();
+      updates['seated_at'] = DateTime.now().toUtc().toIso8601String();
     } else if (status == 'completed') {
-      updates['completed_at'] = DateTime.now().toIso8601String();
+      updates['completed_at'] = DateTime.now().toUtc().toIso8601String();
     } else if (status == 'cancelled') {
-      updates['cancelled_at'] = DateTime.now().toIso8601String();
+      updates['cancelled_at'] = DateTime.now().toUtc().toIso8601String();
     }
 
     await _client.from('reservations').update(updates).eq('id', reservationId);
+  }
+
+  @override
+  Future<void> assignReservation({
+    required String reservationId,
+    String? userId,
+  }) async {
+    await _client
+        .from('reservations')
+        .update({'assigned_to': userId}).eq('id', reservationId);
   }
 }

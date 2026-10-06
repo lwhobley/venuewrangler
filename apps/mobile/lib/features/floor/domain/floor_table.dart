@@ -103,12 +103,12 @@ class FloorTable {
       'is_reservable': isReservable,
       'status': status,
       if (partySize != null) 'party_size': partySize,
-      if (seatedAt != null) 'seated_at': seatedAt!.toIso8601String(),
-      'last_activity_at': lastActivityAt.toIso8601String(),
+      if (seatedAt != null) 'seated_at': seatedAt!.toUtc().toIso8601String(),
+      'last_activity_at': lastActivityAt.toUtc().toIso8601String(),
       if (mergeGroupId != null) 'merge_group_id': mergeGroupId,
       if (notes != null) 'notes': notes,
-      'created_at': createdAt.toIso8601String(),
-      'updated_at': updatedAt.toIso8601String(),
+      'created_at': createdAt.toUtc().toIso8601String(),
+      'updated_at': updatedAt.toUtc().toIso8601String(),
     };
   }
 }

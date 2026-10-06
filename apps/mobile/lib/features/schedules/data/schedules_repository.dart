@@ -12,6 +12,7 @@ abstract interface class SchedulesRepository {
     required String venueId,
     String? staffId,
     String? roleLabel,
+    String? section,
     required DateTime startTime,
     required DateTime endTime,
   });
@@ -22,6 +23,7 @@ abstract interface class SchedulesRepository {
     String? staffId,
     bool clearStaff = false,
     String? roleLabel,
+    String? section,
     DateTime? startTime,
     DateTime? endTime,
     ShiftStatus? status,
@@ -68,6 +70,7 @@ class SupabaseSchedulesRepository implements SchedulesRepository {
     required String venueId,
     String? staffId,
     String? roleLabel,
+    String? section,
     required DateTime startTime,
     required DateTime endTime,
   }) async {
@@ -75,6 +78,7 @@ class SupabaseSchedulesRepository implements SchedulesRepository {
       'venue_id': venueId,
       if (staffId != null) 'staff_id': staffId,
       if (roleLabel != null) 'role_label': roleLabel,
+      if (section != null && section.isNotEmpty) 'section': section,
       'start_time': startTime.toUtc().toIso8601String(),
       'end_time': endTime.toUtc().toIso8601String(),
     });
@@ -86,6 +90,7 @@ class SupabaseSchedulesRepository implements SchedulesRepository {
     String? staffId,
     bool clearStaff = false,
     String? roleLabel,
+    String? section,
     DateTime? startTime,
     DateTime? endTime,
     ShiftStatus? status,
@@ -96,6 +101,8 @@ class SupabaseSchedulesRepository implements SchedulesRepository {
       else if (staffId != null)
         'staff_id': staffId,
       if (roleLabel != null) 'role_label': roleLabel,
+      // Empty string clears the section.
+      if (section != null) 'section': section.isEmpty ? null : section,
       if (startTime != null) 'start_time': startTime.toUtc().toIso8601String(),
       if (endTime != null) 'end_time': endTime.toUtc().toIso8601String(),
       if (status != null) 'status': status.toDb(),

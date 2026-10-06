@@ -32,8 +32,8 @@ class TimeBreak {
 
   Map<String, dynamic> toJson() => {
         'type': type,
-        'start_at': startAt.toIso8601String(),
-        if (endAt != null) 'end_at': endAt!.toIso8601String(),
+        'start_at': startAt.toUtc().toIso8601String(),
+        if (endAt != null) 'end_at': endAt!.toUtc().toIso8601String(),
       };
 }
 
@@ -145,12 +145,13 @@ class TimeEntry {
         'venue_id': venueId,
         'user_id': userId,
         if (shiftId != null) 'shift_id': shiftId,
-        'clock_in_at': clockInAt.toIso8601String(),
+        'clock_in_at': clockInAt.toUtc().toIso8601String(),
         'clock_in_lat': clockInLat,
         'clock_in_lng': clockInLng,
         'clock_in_accuracy_m': clockInAccuracyM,
         'clock_in_mocked': clockInMocked,
-        if (clockOutAt != null) 'clock_out_at': clockOutAt!.toIso8601String(),
+        if (clockOutAt != null)
+          'clock_out_at': clockOutAt!.toUtc().toIso8601String(),
         if (clockOutLat != null) 'clock_out_lat': clockOutLat,
         if (clockOutLng != null) 'clock_out_lng': clockOutLng,
         if (clockOutAccuracyM != null)
@@ -159,7 +160,7 @@ class TimeEntry {
         'is_open': isOpen,
         'breaks': breaks.map((b) => b.toJson()).toList(),
         if (locationAnomaly != null) 'location_anomaly': locationAnomaly,
-        'created_at': createdAt.toIso8601String(),
-        'updated_at': updatedAt.toIso8601String(),
+        'created_at': createdAt.toUtc().toIso8601String(),
+        'updated_at': updatedAt.toUtc().toIso8601String(),
       };
 }

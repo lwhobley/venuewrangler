@@ -38,6 +38,7 @@ class _FakeRepo implements SchedulesRepository {
     String? staffId,
     bool clearStaff = false,
     String? roleLabel,
+    String? section,
     DateTime? startTime,
     DateTime? endTime,
     ShiftStatus? status,

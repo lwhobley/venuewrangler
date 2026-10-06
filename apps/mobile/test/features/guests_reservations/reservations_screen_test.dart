@@ -11,6 +11,16 @@ import 'package:venuewrangler_mobile/features/venues/domain/venue.dart';
 
 class _FakeGuestsReservationsRepository
     implements GuestsReservationsRepository {
+  String? lastAssignedTo;
+
+  @override
+  Future<void> assignReservation({
+    required String reservationId,
+    String? userId,
+  }) async {
+    lastAssignedTo = userId;
+  }
+
   _FakeGuestsReservationsRepository({List<Reservation>? initialReservations})
       : reservations = initialReservations ?? [];
 

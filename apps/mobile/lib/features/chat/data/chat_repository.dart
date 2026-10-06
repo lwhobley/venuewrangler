@@ -107,7 +107,7 @@ class SupabaseChatRepository implements ChatRepository {
         'venue_id': conv['venue_id'],
         'organization_id': conv['organization_id'],
         'user_id': userId,
-        'read_at': DateTime.now().toIso8601String(),
+        'read_at': DateTime.now().toUtc().toIso8601String(),
       },
       onConflict: 'conversation_id,user_id',
     );

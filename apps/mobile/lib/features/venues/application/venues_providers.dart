@@ -25,29 +25,51 @@ final venuesForOrganizationProvider =
 /// venue membership on every query regardless of what the client remembers.
 final activeVenueProvider = StateProvider<Venue?>((ref) => null);
 
+/// Membership roles from most to least privileged.
+const _roleRank = [
+  'organization_owner',
+  'organization_admin',
+  'venue_manager',
+  'supervisor',
+  'staff',
+];
+
 const _managerRoles = {
   'venue_manager',
   'organization_owner',
   'organization_admin',
 };
 
-/// Whether the signed-in user holds a manager-tier role for the active venue — either a
-/// venue_manager membership on it or an owner/admin membership on its organization. Used only
-/// to decide what to *show*; the database enforces the same rule on every write.
-final canManageActiveVenueProvider =
-    FutureProvider.autoDispose<bool>((ref) async {
+/// The signed-in user's highest role for the active venue — a venue membership on it, or an
+/// owner/admin membership on its organization. Null if they have none. Used only to decide
+/// what to *show*; the database enforces access on every read and write.
+final myVenueRoleProvider = FutureProvider.autoDispose<String?>((ref) async {
   final venue = ref.watch(activeVenueProvider);
   final userId = ref.watch(currentUserIdProvider);
-  if (venue == null || userId == null) return false;
+  if (venue == null || userId == null) return null;
   final rows = await ref
       .watch(supabaseClientProvider)
       .from('memberships')
       .select('role, venue_id')
       .eq('user_id', userId)
       .eq('organization_id', venue.organizationId);
-  return rows.any(
-    (r) =>
-        _managerRoles.contains(r['role']) &&
-        (r['venue_id'] == null || r['venue_id'] == venue.id),
-  );
+  final roles = [
+    for (final r in rows)
+      if (r['venue_id'] == null || r['venue_id'] == venue.id)
+        r['role'] as String,
+  ];
+  for (final role in _roleRank) {
+    if (roles.contains(role)) return role;
+  }
+  return null;
 });
+
+/// Whether the signed-in user holds a manager-tier role for the active venue.
+final canManageActiveVenueProvider =
+    FutureProvider.autoDispose<bool>((ref) async {
+  return _managerRoles.contains(await ref.watch(myVenueRoleProvider.future));
+});
+
+/// Staff get the simplified employee app (their own day, clock, schedule, floor, chat and
+/// profile); supervisors and managers get the full app.
+bool isEmployeeRole(String? role) => role == 'staff';

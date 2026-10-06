@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../core/auth/auth_providers.dart';
 import '../../../core/theme/ops_colors.dart';
 import '../../../core/widgets/state_views.dart';
 import '../../venues/application/venues_providers.dart';
@@ -186,6 +187,10 @@ class _ScheduleTimelineScreenState
         rows.add(_Row(staffId: id, name: 'Former team member'));
       }
     }
+    // Your own row first, so you don't have to hunt for it.
+    final me = ref.read(currentUserIdProvider);
+    final mine = rows.indexWhere((r) => r.staffId == me);
+    if (mine > 0) rows.insert(0, rows.removeAt(mine));
     rows.add(const _Row(staffId: null, name: 'Open shifts'));
     return rows;
   }
@@ -241,6 +246,7 @@ class _ScheduleTimelineScreenState
       initial: (
         staffId: staffId,
         role: '',
+        section: '',
         start: start,
         end: start.add(const Duration(hours: 4)),
       ),
@@ -251,6 +257,7 @@ class _ScheduleTimelineScreenState
             venueId: venueId,
             staffId: result.staffId,
             roleLabel: result.role.isEmpty ? null : result.role,
+            section: result.section.isEmpty ? null : result.section,
             startTime: result.start,
             endTime: result.end,
           );
@@ -269,6 +276,7 @@ class _ScheduleTimelineScreenState
       initial: (
         staffId: shift.staffId,
         role: shift.roleLabel ?? '',
+        section: shift.section ?? '',
         start: shift.startTime,
         end: shift.endTime,
       ),
@@ -284,6 +292,7 @@ class _ScheduleTimelineScreenState
           staffId: result.staffId,
           clearStaff: result.staffId == null,
           roleLabel: result.role,
+          section: result.section,
           startTime: result.start,
           endTime: result.end,
         );
@@ -301,6 +310,7 @@ class _ScheduleTimelineScreenState
     required ({
       String? staffId,
       String role,
+      String section,
       DateTime start,
       DateTime end
     }) initial,
@@ -617,6 +627,7 @@ class _ScheduleTimelineScreenState
 
     final label = [
       if (s.roleLabel != null && s.roleLabel!.isNotEmpty) s.roleLabel!,
+      if (s.section != null && s.section!.isNotEmpty) s.section!,
       '${clockLabel(s.startTime)}–${clockLabel(s.endTime)}',
     ].join(' · ');
 
@@ -999,6 +1010,7 @@ class _ShiftFormResult {
   const _ShiftFormResult({
     required this.staffId,
     required this.role,
+    required this.section,
     required this.start,
     required this.end,
     this.delete = false,
@@ -1006,6 +1018,7 @@ class _ShiftFormResult {
 
   final String? staffId;
   final String role;
+  final String section;
   final DateTime start;
   final DateTime end;
   final bool delete;
@@ -1023,7 +1036,13 @@ class _ShiftForm extends StatefulWidget {
   final String title;
   final String confirmLabel;
   final List<_Row> rows;
-  final ({String? staffId, String role, DateTime start, DateTime end}) initial;
+  final ({
+    String? staffId,
+    String role,
+    String section,
+    DateTime start,
+    DateTime end
+  }) initial;
   final bool allowDelete;
 
   @override
@@ -1032,6 +1051,7 @@ class _ShiftForm extends StatefulWidget {
 
 class _ShiftFormState extends State<_ShiftForm> {
   late final _role = TextEditingController(text: widget.initial.role);
+  late final _section = TextEditingController(text: widget.initial.section);
   late String? _staffId = widget.initial.staffId;
   late DateTime _start = widget.initial.start;
   late DateTime _end = widget.initial.end;
@@ -1040,6 +1060,7 @@ class _ShiftFormState extends State<_ShiftForm> {
   @override
   void dispose() {
     _role.dispose();
+    _section.dispose();
     super.dispose();
   }
 
@@ -1072,6 +1093,7 @@ class _ShiftFormState extends State<_ShiftForm> {
       _ShiftFormResult(
         staffId: _staffId,
         role: _role.text.trim(),
+        section: _section.text.trim(),
         start: _start,
         end: _end,
       ),
@@ -1104,6 +1126,13 @@ class _ShiftFormState extends State<_ShiftForm> {
               controller: _role,
               decoration: const InputDecoration(
                 labelText: 'Role (e.g. bartender)',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _section,
+              decoration: const InputDecoration(
+                labelText: 'Section (e.g. patio, bar)',
               ),
             ),
             const SizedBox(height: 8),
@@ -1151,6 +1180,7 @@ class _ShiftFormState extends State<_ShiftForm> {
                   _ShiftFormResult(
                     staffId: _staffId,
                     role: _role.text.trim(),
+                    section: _section.text.trim(),
                     start: _start,
                     end: _end,
                     delete: true,

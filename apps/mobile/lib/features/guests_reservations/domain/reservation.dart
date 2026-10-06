@@ -26,6 +26,7 @@ class Reservation {
     this.completedAt,
     this.cancelledAt,
     this.notes,
+    this.assignedTo,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -40,7 +41,8 @@ class Reservation {
       guestPhone: json['guest_phone'] as String?,
       guestEmail: json['guest_email'] as String?,
       partySize: (json['party_size'] as num).toInt(),
-      reservationTime: DateTime.parse(json['reservation_time'] as String),
+      reservationTime:
+          DateTime.parse(json['reservation_time'] as String).toLocal(),
       durationMinutes: (json['duration_minutes'] as num?)?.toInt() ?? 90,
       source: json['source'] as String? ?? 'direct',
       status: json['status'] as String? ?? 'confirmed',
@@ -70,11 +72,14 @@ class Reservation {
           ? DateTime.parse(json['cancelled_at'] as String)
           : null,
       notes: json['notes'] as String?,
+      assignedTo: json['assigned_to'] as String?,
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
     );
   }
 
+  /// Team member this reservation is assigned to (its server/host), if any.
+  final String? assignedTo;
   final String id;
   final String organizationId;
   final String venueId;
@@ -118,7 +123,7 @@ class Reservation {
       if (guestPhone != null) 'guest_phone': guestPhone,
       if (guestEmail != null) 'guest_email': guestEmail,
       'party_size': partySize,
-      'reservation_time': reservationTime.toIso8601String(),
+      'reservation_time': reservationTime.toUtc().toIso8601String(),
       'duration_minutes': durationMinutes,
       'source': source,
       'status': status,
@@ -133,16 +138,19 @@ class Reservation {
       if (depositPaymentIntentId != null)
         'deposit_payment_intent_id': depositPaymentIntentId,
       if (depositPaidAt != null)
-        'deposit_paid_at': depositPaidAt!.toIso8601String(),
+        'deposit_paid_at': depositPaidAt!.toUtc().toIso8601String(),
       if (externalId != null) 'external_id': externalId,
       if (lastExternalEventAt != null)
-        'last_external_event_at': lastExternalEventAt!.toIso8601String(),
-      if (seatedAt != null) 'seated_at': seatedAt!.toIso8601String(),
-      if (completedAt != null) 'completed_at': completedAt!.toIso8601String(),
-      if (cancelledAt != null) 'cancelled_at': cancelledAt!.toIso8601String(),
+        'last_external_event_at':
+            lastExternalEventAt!.toUtc().toIso8601String(),
+      if (seatedAt != null) 'seated_at': seatedAt!.toUtc().toIso8601String(),
+      if (completedAt != null)
+        'completed_at': completedAt!.toUtc().toIso8601String(),
+      if (cancelledAt != null)
+        'cancelled_at': cancelledAt!.toUtc().toIso8601String(),
       if (notes != null) 'notes': notes,
-      'created_at': createdAt.toIso8601String(),
-      'updated_at': updatedAt.toIso8601String(),
+      'created_at': createdAt.toUtc().toIso8601String(),
+      'updated_at': updatedAt.toUtc().toIso8601String(),
     };
   }
 }

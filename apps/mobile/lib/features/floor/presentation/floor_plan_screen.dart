@@ -3,10 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/ops_colors.dart';
 import '../../../core/widgets/state_views.dart';
+import '../../../core/widgets/status_chip.dart';
+import '../../employee/application/employee_providers.dart';
 import '../../venues/application/venues_providers.dart';
 import '../application/floor_providers.dart';
 import '../domain/floor_table.dart';
 import '../domain/table_status_style.dart';
+import 'live_floor_map.dart';
 
 class FloorPlanScreen extends ConsumerStatefulWidget {
   const FloorPlanScreen({super.key});
@@ -17,16 +20,32 @@ class FloorPlanScreen extends ConsumerStatefulWidget {
 
 class _FloorPlanScreenState extends ConsumerState<FloorPlanScreen> {
   final Set<String> _selectedTableIds = {};
+  bool _showMap = true;
+  bool _highlightMine = true;
 
   @override
   Widget build(BuildContext context) {
     final activeVenue = ref.watch(activeVenueProvider);
     final tablesStreamAsync = ref.watch(floorTablesStreamProvider);
+    final plans = ref.watch(floorPlansProvider).valueOrNull ?? const [];
+    final plan =
+        plans.where((p) => p.isActive).firstOrNull ?? plans.firstOrNull;
+    final mySection = ref.watch(mySectionProvider);
+    final mapAvailable = plan != null;
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Floor Plan'),
         actions: [
+          if (mapAvailable)
+            IconButton(
+              icon: Icon(_showMap ? Icons.grid_view : Icons.map_outlined),
+              tooltip: _showMap ? 'Show as list' : 'Show floor map',
+              onPressed: () => setState(() {
+                _showMap = !_showMap;
+                _selectedTableIds.clear();
+              }),
+            ),
           if (ref.watch(canManageActiveVenueProvider).valueOrNull ?? false)
             IconButton(
               icon: const Icon(Icons.edit_location_alt_outlined),
@@ -60,6 +79,39 @@ class _FloorPlanScreenState extends ConsumerState<FloorPlanScreen> {
             return const EmptyState(
               icon: Icons.table_restaurant,
               message: 'No tables found for this venue',
+            );
+          }
+
+          if (mapAvailable && _showMap) {
+            final planTables = [
+              for (final t in tables)
+                if (t.floorPlanId == plan.id) t,
+            ];
+            return Column(
+              children: [
+                if (mySection != null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: FilterChip(
+                        avatar: const Icon(Icons.map_outlined, size: 18),
+                        label: Text('My section: $mySection'),
+                        selected: _highlightMine,
+                        onSelected: (v) => setState(() => _highlightMine = v),
+                      ),
+                    ),
+                  ),
+                Expanded(
+                  child: LiveFloorMap(
+                    plan: plan,
+                    tables: planTables,
+                    highlightSection: _highlightMine ? mySection : null,
+                    onTableTap: (t) => _showTableActionSheet(context, t),
+                  ),
+                ),
+                const _StatusLegend(),
+              ],
             );
           }
 
@@ -286,6 +338,35 @@ class _TableGridTile extends StatelessWidget {
                   Icons.check_circle,
                   size: 18,
                   color: Theme.of(context).colorScheme.primary,
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StatusLegend extends StatelessWidget {
+  const _StatusLegend();
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+        child: Row(
+          children: [
+            for (final entry in TableStatusStyle.all)
+              Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: StatusChip(
+                  label: entry.value.label,
+                  tone: entry.value.tone,
+                  icon: entry.value.icon,
+                  dense: true,
                 ),
               ),
           ],
