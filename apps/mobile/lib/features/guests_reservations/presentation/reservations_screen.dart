@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/theme/ops_colors.dart';
+import '../../../core/widgets/state_views.dart';
+import '../../../core/widgets/status_chip.dart';
 import '../../venues/application/venues_providers.dart';
 import '../application/guests_reservations_providers.dart';
 import '../domain/reservation.dart';
@@ -62,18 +65,9 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
                         .toList();
 
                 if (filtered.isEmpty) {
-                  return const Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.event_seat, size: 64, color: Colors.grey),
-                        SizedBox(height: 16),
-                        Text(
-                          'No reservations found',
-                          style: TextStyle(fontSize: 16, color: Colors.grey),
-                        ),
-                      ],
-                    ),
+                  return const EmptyState(
+                    icon: Icons.event_seat,
+                    message: 'No reservations found',
                   );
                 }
 
@@ -102,27 +96,9 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
                 );
               },
               loading: () => const Center(child: CircularProgressIndicator()),
-              error: (err, _) => Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(
-                      Icons.error_outline,
-                      size: 48,
-                      color: Colors.red,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Failed to load reservations: $err',
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 16),
-                    ElevatedButton(
-                      onPressed: () => ref.invalidate(reservationsListProvider),
-                      child: const Text('Retry'),
-                    ),
-                  ],
-                ),
+              error: (err, _) => ErrorState(
+                message: 'Failed to load reservations: $err',
+                onRetry: () => ref.invalidate(reservationsListProvider),
               ),
             ),
           ),
@@ -248,19 +224,19 @@ class _ReservationListTile extends StatelessWidget {
   final Reservation reservation;
   final ValueChanged<String> onStatusChanged;
 
-  Color _statusColor(BuildContext context, String status) {
+  Tone _statusTone(String status) {
     switch (status) {
       case 'confirmed':
-        return Colors.green;
+        return Tone.success;
       case 'seated':
-        return Colors.blue;
+        return Tone.info;
       case 'completed':
-        return Colors.grey;
+        return Tone.neutral;
       case 'cancelled':
       case 'no_show':
-        return Colors.red;
+        return Tone.danger;
       default:
-        return Colors.orange;
+        return Tone.warning;
     }
   }
 
@@ -304,18 +280,10 @@ class _ReservationListTile extends StatelessWidget {
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Chip(
-            label: Text(
-              reservation.status.toUpperCase(),
-              style: const TextStyle(
-                fontSize: 10,
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            backgroundColor: _statusColor(context, reservation.status),
-            padding: EdgeInsets.zero,
-            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          StatusChip(
+            label: reservation.status.toUpperCase(),
+            tone: _statusTone(reservation.status),
+            dense: true,
           ),
           const SizedBox(width: 4),
           PopupMenuButton<String>(

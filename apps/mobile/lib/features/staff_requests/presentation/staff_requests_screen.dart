@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/auth/auth_providers.dart';
+import '../../../core/theme/ops_colors.dart';
 import '../../venues/application/venues_providers.dart';
 import '../application/staff_requests_providers.dart';
 import '../domain/staff_request.dart';
@@ -110,19 +111,18 @@ class _StaffRequestTile extends ConsumerWidget {
   final StaffRequest request;
   final bool isOwner;
 
-  Color _statusColor(ThemeData theme) {
+  Tone _statusTone() {
     return switch (request.status) {
-      StaffRequestStatus.pending => theme.colorScheme.primary,
-      StaffRequestStatus.approved => Colors.green,
-      StaffRequestStatus.denied => theme.colorScheme.error,
-      StaffRequestStatus.cancelled => theme.colorScheme.outline,
+      StaffRequestStatus.pending => Tone.warning,
+      StaffRequestStatus.approved => Tone.success,
+      StaffRequestStatus.denied => Tone.danger,
+      StaffRequestStatus.cancelled => Tone.neutral,
     };
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final statusColor = _statusColor(theme);
+    final statusColor = context.ops.of(_statusTone()).fg;
 
     return ListTile(
       leading: CircleAvatar(

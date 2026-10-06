@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/theme/ops_colors.dart';
+import '../../../core/widgets/state_views.dart';
 import '../../venues/application/venues_providers.dart';
 import '../application/floor_providers.dart';
 import '../domain/floor_table.dart';
+import '../domain/table_status_style.dart';
 
 class FloorPlanScreen extends ConsumerStatefulWidget {
   const FloorPlanScreen({super.key});
@@ -47,18 +50,9 @@ class _FloorPlanScreenState extends ConsumerState<FloorPlanScreen> {
       body: tablesStreamAsync.when(
         data: (tables) {
           if (tables.isEmpty) {
-            return const Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.table_restaurant, size: 64, color: Colors.grey),
-                  SizedBox(height: 16),
-                  Text(
-                    'No tables found for this venue',
-                    style: TextStyle(fontSize: 16, color: Colors.grey),
-                  ),
-                ],
-              ),
+            return const EmptyState(
+              icon: Icons.table_restaurant,
+              message: 'No tables found for this venue',
             );
           }
 
@@ -105,19 +99,8 @@ class _FloorPlanScreenState extends ConsumerState<FloorPlanScreen> {
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, _) => Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.error_outline, size: 48, color: Colors.red),
-              const SizedBox(height: 8),
-              Text(
-                'Failed to load floor tables: $err',
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ),
-        ),
+        error: (err, _) =>
+            ErrorState(message: 'Failed to load floor tables: $err'),
       ),
     );
   }
@@ -143,7 +126,10 @@ class _FloorPlanScreenState extends ConsumerState<FloorPlanScreen> {
             ),
             const Divider(height: 1),
             ListTile(
-              leading: const Icon(Icons.check_circle, color: Colors.green),
+              leading: Icon(
+                Icons.check_circle_outline,
+                color: sheetCtx.ops.success.fg,
+              ),
               title: const Text('Mark Available'),
               onTap: () async {
                 Navigator.of(sheetCtx).pop();
@@ -155,9 +141,9 @@ class _FloorPlanScreenState extends ConsumerState<FloorPlanScreen> {
               },
             ),
             ListTile(
-              leading: const Icon(
-                Icons.airline_seat_recline_normal,
-                color: Colors.blue,
+              leading: Icon(
+                Icons.event_seat_outlined,
+                color: sheetCtx.ops.info.fg,
               ),
               title: const Text('Mark Seated'),
               onTap: () async {
@@ -170,8 +156,10 @@ class _FloorPlanScreenState extends ConsumerState<FloorPlanScreen> {
               },
             ),
             ListTile(
-              leading:
-                  const Icon(Icons.cleaning_services, color: Colors.orange),
+              leading: Icon(
+                Icons.cleaning_services_outlined,
+                color: sheetCtx.ops.warning.fg,
+              ),
               title: const Text('Mark Dirty (Needs Bussing)'),
               onTap: () async {
                 Navigator.of(sheetCtx).pop();
@@ -184,7 +172,7 @@ class _FloorPlanScreenState extends ConsumerState<FloorPlanScreen> {
             ),
             if (table.isMerged)
               ListTile(
-                leading: const Icon(Icons.call_split, color: Colors.purple),
+                leading: Icon(Icons.call_split, color: sheetCtx.ops.vip.fg),
                 title: const Text('Split Merged Tables'),
                 onTap: () async {
                   Navigator.of(sheetCtx).pop();
@@ -214,26 +202,10 @@ class _TableGridTile extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onLongPress;
 
-  Color _statusColor(String status) {
-    switch (status) {
-      case 'available':
-        return Colors.green.shade600;
-      case 'seated':
-        return Colors.blue.shade600;
-      case 'dirty':
-        return Colors.amber.shade700;
-      case 'reserved':
-        return Colors.purple.shade600;
-      case 'held':
-        return Colors.indigo.shade600;
-      default:
-        return Colors.grey.shade600;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    final statusColor = _statusColor(table.status);
+    final statusTone = context.ops.of(TableStatusStyle.of(table.status).tone);
+    final statusColor = statusTone.fg;
 
     return InkWell(
       onTap: onTap,
@@ -242,7 +214,7 @@ class _TableGridTile extends StatelessWidget {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         decoration: BoxDecoration(
-          color: statusColor.withValues(alpha: 0.12),
+          color: statusTone.bg,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: isSelected
@@ -271,13 +243,24 @@ class _TableGridTile extends StatelessWidget {
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                   const SizedBox(height: 2),
-                  Text(
-                    table.status.toUpperCase(),
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      color: statusColor,
-                    ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        TableStatusStyle.of(table.status).icon,
+                        size: 12,
+                        color: statusColor,
+                      ),
+                      const SizedBox(width: 3),
+                      Text(
+                        table.status.toUpperCase(),
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: statusColor,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
