@@ -6,7 +6,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/offline/offline_queue_providers.dart';
 import '../../../core/theme/ops_colors.dart';
-import '../../../core/widgets/home_button.dart';
 import '../../../core/widgets/state_views.dart';
 import '../../../core/widgets/status_chip.dart';
 import '../../venues/application/venues_providers.dart';
@@ -149,7 +148,6 @@ class _TaskBoardScreenState extends ConsumerState<TaskBoardScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        leading: const HomeButton(),
         title: const Text('Task board'),
         actions: [
           IconButton(

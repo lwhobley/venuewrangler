@@ -1,7 +1,9 @@
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../core/auth/auth_providers.dart';
+import 'app_shell.dart';
 import '../features/auth/reset_password_screen.dart';
 import '../features/auth/sign_in_screen.dart';
 import '../features/billing/presentation/billing_screen.dart';
@@ -12,6 +14,7 @@ import '../features/crm/presentation/crm_screen.dart';
 import '../features/documents/presentation/documents_screen.dart';
 import '../features/ai/presentation/wrangler_assistant_screen.dart';
 import '../features/dashboard/presentation/dashboard_screen.dart';
+import '../features/dashboard/presentation/more_screen.dart';
 import '../features/events/presentation/event_list_screen.dart';
 import '../features/floor/presentation/floor_plan_editor_screen.dart';
 import '../features/floor/presentation/floor_plan_screen.dart';
@@ -46,7 +49,11 @@ final routerProvider = Provider<GoRouter>((ref) {
   final hasActiveVenue = ref.watch(activeVenueProvider) != null;
   final recoveringPassword = ref.watch(passwordRecoveryPendingProvider);
 
+  // Fresh per router instance (the router is rebuilt when auth/venue state changes).
+  final rootKey = GlobalKey<NavigatorState>(debugLabel: 'root');
+
   return GoRouter(
+    navigatorKey: rootKey,
     initialLocation: '/',
     redirect: (context, state) {
       final goingToSignIn = state.matchedLocation == '/sign-in';
@@ -67,14 +74,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       return null;
     },
     routes: [
-      GoRoute(
-        path: '/',
-        builder: (context, state) => const DashboardScreen(),
-      ),
-      GoRoute(
-        path: '/shift',
-        builder: (context, state) => const ShiftModeScreen(),
-      ),
+      // Outside the tab shell: auth, venue choice, and full-screen editors.
       GoRoute(
         path: '/sign-in',
         builder: (context, state) => const SignInScreen(),
@@ -87,116 +87,164 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/select-venue',
         builder: (context, state) => const OrganizationVenueSwitcherScreen(),
       ),
-      GoRoute(
-        path: '/tasks',
-        builder: (context, state) => const TaskListScreen(),
-        routes: [
-          GoRoute(
-            path: 'board',
-            builder: (context, state) => const TaskBoardScreen(),
+      StatefulShellRoute.indexedStack(
+        builder: (context, state, shell) => AppShell(navigationShell: shell),
+        branches: [
+          // Home
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/',
+                builder: (context, state) => const DashboardScreen(),
+              ),
+              GoRoute(
+                path: '/shift',
+                builder: (context, state) => const ShiftModeScreen(),
+              ),
+              GoRoute(
+                path: '/notifications',
+                builder: (context, state) => const NotificationsScreen(),
+              ),
+              GoRoute(
+                path: '/wrangler',
+                builder: (context, state) => const WranglerAssistantScreen(),
+              ),
+            ],
+          ),
+          // Floor
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/floor',
+                builder: (context, state) => const FloorPlanScreen(),
+                routes: [
+                  GoRoute(
+                    path: 'edit',
+                    parentNavigatorKey: rootKey,
+                    builder: (context, state) => const FloorPlanEditorScreen(),
+                  ),
+                ],
+              ),
+              GoRoute(
+                path: '/reservations',
+                builder: (context, state) => const ReservationsScreen(),
+              ),
+            ],
+          ),
+          // Schedule — opens on the board; /schedules is the list with swap requests.
+          StatefulShellBranch(
+            initialLocation: '/schedules/timeline',
+            routes: [
+              GoRoute(
+                path: '/schedules',
+                builder: (context, state) => const ScheduleListScreen(),
+                routes: [
+                  GoRoute(
+                    path: 'timeline',
+                    builder: (context, state) => const ScheduleTimelineScreen(),
+                  ),
+                ],
+              ),
+              GoRoute(
+                path: '/time-clock',
+                builder: (context, state) => const TimeClockScreen(),
+              ),
+              GoRoute(
+                path: '/staff-requests',
+                builder: (context, state) => const StaffRequestsScreen(),
+              ),
+              GoRoute(
+                path: '/shift-insights',
+                builder: (context, state) => ShiftInsightsScreen(
+                  shiftId: state.uri.queryParameters['shiftId'],
+                ),
+              ),
+              GoRoute(
+                path: '/workforce',
+                builder: (context, state) => const WorkforceRosterScreen(),
+              ),
+            ],
+          ),
+          // Tasks — opens on the board; /tasks is the list view.
+          StatefulShellBranch(
+            initialLocation: '/tasks/board',
+            routes: [
+              GoRoute(
+                path: '/tasks',
+                builder: (context, state) => const TaskListScreen(),
+                routes: [
+                  GoRoute(
+                    path: 'board',
+                    builder: (context, state) => const TaskBoardScreen(),
+                  ),
+                ],
+              ),
+              GoRoute(
+                path: '/checklists',
+                builder: (context, state) => const ChecklistListScreen(),
+                routes: [
+                  GoRoute(
+                    path: ':templateId',
+                    parentNavigatorKey: rootKey,
+                    builder: (context, state) => ChecklistCompletionScreen(
+                      templateId: state.pathParameters['templateId']!,
+                      title: state.extra as String?,
+                    ),
+                  ),
+                ],
+              ),
+              GoRoute(
+                path: '/incidents',
+                builder: (context, state) => const IncidentListScreen(),
+              ),
+            ],
+          ),
+          // More
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/more',
+                builder: (context, state) => const MoreScreen(),
+              ),
+              GoRoute(
+                path: '/chat',
+                builder: (context, state) => const ChatScreen(),
+              ),
+              GoRoute(
+                path: '/inventory',
+                builder: (context, state) => const InventoryListScreen(),
+              ),
+              GoRoute(
+                path: '/events',
+                builder: (context, state) => const EventListScreen(),
+              ),
+              GoRoute(
+                path: '/crm',
+                builder: (context, state) => const CrmScreen(),
+              ),
+              GoRoute(
+                path: '/documents',
+                builder: (context, state) => const DocumentsScreen(),
+              ),
+              GoRoute(
+                path: '/pos',
+                builder: (context, state) => const PosManagementScreen(),
+              ),
+              GoRoute(
+                path: '/billing',
+                builder: (context, state) => const BillingScreen(),
+              ),
+              GoRoute(
+                path: '/integrations',
+                builder: (context, state) => const IntegrationsScreen(),
+              ),
+              GoRoute(
+                path: '/settings',
+                builder: (context, state) => const SettingsScreen(),
+              ),
+            ],
           ),
         ],
-      ),
-      GoRoute(
-        path: '/checklists',
-        builder: (context, state) => const ChecklistListScreen(),
-      ),
-      GoRoute(
-        path: '/checklists/:templateId',
-        builder: (context, state) => ChecklistCompletionScreen(
-          templateId: state.pathParameters['templateId']!,
-          title: state.extra as String?,
-        ),
-      ),
-      GoRoute(
-        path: '/incidents',
-        builder: (context, state) => const IncidentListScreen(),
-      ),
-      GoRoute(
-        path: '/wrangler',
-        builder: (context, state) => const WranglerAssistantScreen(),
-      ),
-      GoRoute(
-        path: '/workforce',
-        builder: (context, state) => const WorkforceRosterScreen(),
-      ),
-      GoRoute(
-        path: '/inventory',
-        builder: (context, state) => const InventoryListScreen(),
-      ),
-      GoRoute(
-        path: '/schedules',
-        builder: (context, state) => const ScheduleListScreen(),
-        routes: [
-          GoRoute(
-            path: 'timeline',
-            builder: (context, state) => const ScheduleTimelineScreen(),
-          ),
-        ],
-      ),
-      GoRoute(
-        path: '/billing',
-        builder: (context, state) => const BillingScreen(),
-      ),
-      GoRoute(
-        path: '/integrations',
-        builder: (context, state) => const IntegrationsScreen(),
-      ),
-      GoRoute(
-        path: '/events',
-        builder: (context, state) => const EventListScreen(),
-      ),
-      GoRoute(
-        path: '/staff-requests',
-        builder: (context, state) => const StaffRequestsScreen(),
-      ),
-      GoRoute(
-        path: '/shift-insights',
-        builder: (context, state) => ShiftInsightsScreen(
-          shiftId: state.uri.queryParameters['shiftId'],
-        ),
-      ),
-      GoRoute(
-        path: '/time-clock',
-        builder: (context, state) => const TimeClockScreen(),
-      ),
-      GoRoute(
-        path: '/notifications',
-        builder: (context, state) => const NotificationsScreen(),
-      ),
-      GoRoute(
-        path: '/reservations',
-        builder: (context, state) => const ReservationsScreen(),
-      ),
-      GoRoute(
-        path: '/floor',
-        builder: (context, state) => const FloorPlanScreen(),
-        routes: [
-          GoRoute(
-            path: 'edit',
-            builder: (context, state) => const FloorPlanEditorScreen(),
-          ),
-        ],
-      ),
-      GoRoute(
-        path: '/pos',
-        builder: (context, state) => const PosManagementScreen(),
-      ),
-      GoRoute(
-        path: '/chat',
-        builder: (context, state) => const ChatScreen(),
-      ),
-      GoRoute(
-        path: '/crm',
-        builder: (context, state) => const CrmScreen(),
-      ),
-      GoRoute(
-        path: '/documents',
-        builder: (context, state) => const DocumentsScreen(),
-      ),
-      GoRoute(
-        path: '/settings',
-        builder: (context, state) => const SettingsScreen(),
       ),
     ],
   );

@@ -7,7 +7,6 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/theme/ops_colors.dart';
-import '../../../core/widgets/home_button.dart';
 import '../../../core/widgets/state_views.dart';
 import '../../venues/application/venues_providers.dart';
 import '../../workforce/application/workforce_providers.dart';
@@ -349,7 +348,6 @@ class _ScheduleTimelineScreenState
 
     return Scaffold(
       appBar: AppBar(
-        leading: const HomeButton(),
         title: const Text('Schedule board'),
         actions: [
           IconButton(
@@ -364,7 +362,7 @@ class _ScheduleTimelineScreenState
           ),
           IconButton(
             icon: const Icon(Icons.view_list_outlined),
-            tooltip: 'List view',
+            tooltip: 'List & swap requests',
             onPressed: () => context.go('/schedules'),
           ),
         ],

@@ -1,4 +1,3 @@
-import '../../../core/widgets/home_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -33,8 +32,7 @@ class ScheduleListScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        leading: const HomeButton(),
-        title: Text('Schedule — ${venue.name}'),
+        title: const Text('Schedule'),
         actions: [
           IconButton(
             icon: const Icon(Icons.view_timeline_outlined),

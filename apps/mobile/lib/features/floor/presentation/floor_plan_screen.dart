@@ -1,4 +1,3 @@
-import '../../../core/widgets/home_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -26,7 +25,6 @@ class _FloorPlanScreenState extends ConsumerState<FloorPlanScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        leading: const HomeButton(),
         title: const Text('Floor Plan'),
         actions: [
           if (ref.watch(canManageActiveVenueProvider).valueOrNull ?? false)

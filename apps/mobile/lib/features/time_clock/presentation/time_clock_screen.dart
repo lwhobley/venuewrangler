@@ -1,4 +1,3 @@
-import '../../../core/widgets/home_button.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -205,8 +204,7 @@ class _TimeClockScreenState extends ConsumerState<TimeClockScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        leading: const HomeButton(),
-        title: Text('Time Clock — ${venue.name}'),
+        title: const Text('Time Clock'),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),

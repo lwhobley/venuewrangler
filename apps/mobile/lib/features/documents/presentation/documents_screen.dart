@@ -1,4 +1,3 @@
-import '../../../core/widgets/home_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -37,8 +36,7 @@ class DocumentsScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        leading: const HomeButton(),
-        title: Text('Documents — ${venue.name}'),
+        title: const Text('Documents'),
       ),
       body: RefreshIndicator(
         onRefresh: () async => ref.invalidate(documentsProvider(venue.id)),

@@ -1,4 +1,3 @@
-import '../../../core/widgets/home_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -42,8 +41,7 @@ class TaskListScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        leading: const HomeButton(),
-        title: Text('Tasks — ${venue.name}'),
+        title: const Text('Tasks'),
         actions: [
           IconButton(
             icon: const Icon(Icons.view_kanban_outlined),

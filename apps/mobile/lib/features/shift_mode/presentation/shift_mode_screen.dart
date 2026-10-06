@@ -7,7 +7,6 @@ import 'package:go_router/go_router.dart';
 import '../../../core/auth/auth_providers.dart';
 import '../../../core/offline/offline_queue_providers.dart';
 import '../../../core/theme/ops_colors.dart';
-import '../../../core/widgets/home_button.dart';
 import '../../../core/widgets/state_views.dart';
 import '../../../core/widgets/status_chip.dart';
 import '../../notifications/application/notifications_providers.dart';
@@ -73,7 +72,6 @@ class _ShiftModeScreenState extends ConsumerState<ShiftModeScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        leading: const HomeButton(),
         title: const Text('Shift mode'),
       ),
       body: RefreshIndicator(

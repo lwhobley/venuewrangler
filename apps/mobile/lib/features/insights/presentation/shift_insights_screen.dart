@@ -1,4 +1,3 @@
-import '../../../core/widgets/home_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/ops_colors.dart';
@@ -34,8 +33,7 @@ class ShiftInsightsScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        leading: const HomeButton(),
-        title: Text('Shift Insights — ${venue.name}'),
+        title: const Text('Shift Insights'),
       ),
       body: RefreshIndicator(
         onRefresh: () async {

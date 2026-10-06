@@ -1,4 +1,3 @@
-import '../../../core/widgets/home_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -21,8 +20,7 @@ class ChecklistListScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        leading: const HomeButton(),
-        title: Text('Checklists — ${venue.name}'),
+        title: const Text('Checklists'),
       ),
       body: templatesAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),

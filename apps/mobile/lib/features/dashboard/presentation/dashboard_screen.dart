@@ -2,18 +2,41 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/auth/sign_out_service.dart';
+import '../../../core/theme/ops_colors.dart';
 import '../../events/application/events_providers.dart';
 import '../../inventory/application/inventory_providers.dart';
+import '../../notifications/application/notifications_providers.dart';
 import '../../schedules/application/schedules_providers.dart';
 import '../../tasks/application/tasks_providers.dart';
 import '../../tasks/domain/operational_task.dart';
 import '../../venues/application/venues_providers.dart';
 
-/// The authenticated landing screen: a summary of the active venue's open tasks, today's
-/// shifts, and upcoming events, each a stat tile that deep-links into its own feature screen
-/// — plus the same quick-nav list the old placeholder home screen had, since not everything
-/// belongs in a summary tile (Ask Wrangler, Billing, Integrations, Settings, …).
+const _weekdays = [
+  'Monday',
+  'Tuesday',
+  'Wednesday',
+  'Thursday',
+  'Friday',
+  'Saturday',
+  'Sunday',
+];
+const _months = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+];
+
+/// Home tab: today at a glance, the way into shift mode, and one-tap jumps to the places
+/// people go most. Everything else lives under the More tab.
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
 
@@ -25,14 +48,22 @@ class DashboardScreen extends ConsumerWidget {
       return const Scaffold(body: Center(child: Text('No venue selected.')));
     }
 
+    final theme = Theme.of(context);
     final venueId = activeVenue.id;
     final tasksAsync = ref.watch(tasksForVenueProvider(venueId));
     final shiftsAsync = ref.watch(shiftsForVenueProvider(venueId));
     final eventsAsync = ref.watch(eventsForVenueProvider(venueId));
     final inventoryAsync = ref.watch(inventoryForVenueProvider(venueId));
+    final unread = ref.watch(unreadNotificationsCountProvider);
 
     final openTaskCount = tasksAsync.maybeWhen(
-      data: (tasks) => tasks.where((t) => t.status == TaskStatus.open).length,
+      data: (tasks) => tasks
+          .where(
+            (t) =>
+                t.status == TaskStatus.open ||
+                t.status == TaskStatus.inProgress,
+          )
+          .length,
       orElse: () => null,
     );
     final now = DateTime.now();
@@ -56,20 +87,30 @@ class DashboardScreen extends ConsumerWidget {
       orElse: () => null,
     );
 
+    final greeting = now.hour < 12
+        ? 'Good morning'
+        : now.hour < 17
+            ? 'Good afternoon'
+            : 'Good evening';
+
     return Scaffold(
       appBar: AppBar(
         title: Text(activeVenue.name),
         actions: [
           IconButton(
+            tooltip: 'Notifications',
+            onPressed: () => context.push('/notifications'),
+            icon: Badge(
+              isLabelVisible: unread > 0,
+              label: Text('$unread'),
+              child: const Icon(Icons.notifications_outlined),
+            ),
+          ),
+          IconButton(
             icon: const Icon(Icons.swap_horiz),
             tooltip: 'Switch venue',
             onPressed: () =>
                 ref.read(activeVenueProvider.notifier).state = null,
-          ),
-          IconButton(
-            icon: const Icon(Icons.logout),
-            tooltip: 'Sign out',
-            onPressed: () => signOutAndClearScopedData(ref),
           ),
         ],
       ),
@@ -81,29 +122,31 @@ class DashboardScreen extends ConsumerWidget {
           ref.invalidate(inventoryForVenueProvider(venueId));
         },
         child: ListView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
           children: [
-            FilledButton.icon(
-              style: FilledButton.styleFrom(
-                minimumSize: const Size.fromHeight(64),
+            Text(greeting, style: theme.textTheme.headlineSmall),
+            Text(
+              '${_weekdays[now.weekday - 1]}, ${_months[now.month - 1]} ${now.day}',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
               ),
-              onPressed: () => context.go('/shift'),
-              icon: const Icon(Icons.badge_outlined),
-              label: const Text('Shift mode'),
             ),
             const SizedBox(height: 16),
+            _ShiftModeCard(onTap: () => context.push('/shift')),
+            const SizedBox(height: 20),
+            const _SectionLabel('Today'),
             GridView.count(
               crossAxisCount: 2,
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               mainAxisSpacing: 12,
               crossAxisSpacing: 12,
-              childAspectRatio: 1.4,
+              childAspectRatio: 1.6,
               children: [
                 _StatTile(
                   label: 'Open tasks',
                   value: openTaskCount,
-                  icon: Icons.checklist_outlined,
+                  icon: Icons.view_kanban_outlined,
                   onTap: () => context.go('/tasks/board'),
                 ),
                 _StatTile(
@@ -126,70 +169,119 @@ class DashboardScreen extends ConsumerWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 24),
-            Text('More', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            _NavTile(
-              icon: Icons.handshake_outlined,
-              label: 'CRM',
-              route: '/crm',
-            ),
-            _NavTile(
-              icon: Icons.folder_outlined,
-              label: 'Documents',
-              route: '/documents',
-            ),
-            _NavTile(
-              icon: Icons.fact_check_outlined,
-              label: 'Checklists',
-              route: '/checklists',
-            ),
-            _NavTile(
-              icon: Icons.report_outlined,
-              label: 'Incidents',
-              route: '/incidents',
-            ),
-            _NavTile(
-              icon: Icons.auto_awesome_outlined,
-              label: 'Ask Wrangler',
-              route: '/wrangler',
-            ),
-            _NavTile(
-              icon: Icons.groups_outlined,
-              label: 'Staff',
-              route: '/workforce',
-            ),
-            _NavTile(
-              icon: Icons.timer_outlined,
-              label: 'Time Clock',
-              route: '/time-clock',
-            ),
-            _NavTile(
-              icon: Icons.assignment_outlined,
-              label: 'Staff Requests',
-              route: '/staff-requests',
-            ),
-            _NavTile(
-              icon: Icons.lightbulb_outlined,
-              label: 'Shift Insights',
-              route: '/shift-insights',
-            ),
-            _NavTile(
-              icon: Icons.credit_card_outlined,
-              label: 'Billing',
-              route: '/billing',
-            ),
-            _NavTile(
-              icon: Icons.extension_outlined,
-              label: 'Integrations',
-              route: '/integrations',
-            ),
-            _NavTile(
-              icon: Icons.settings_outlined,
-              label: 'Settings',
-              route: '/settings',
+            const SizedBox(height: 20),
+            const _SectionLabel('Jump to'),
+            GridView.count(
+              crossAxisCount: 3,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              mainAxisSpacing: 12,
+              crossAxisSpacing: 12,
+              childAspectRatio: 1.05,
+              children: [
+                _JumpTile(
+                  icon: Icons.table_restaurant_outlined,
+                  label: 'Floor plan',
+                  onTap: () => context.go('/floor'),
+                ),
+                _JumpTile(
+                  icon: Icons.view_timeline_outlined,
+                  label: 'Schedule',
+                  onTap: () => context.go('/schedules/timeline'),
+                ),
+                _JumpTile(
+                  icon: Icons.view_kanban_outlined,
+                  label: 'Task board',
+                  onTap: () => context.go('/tasks/board'),
+                ),
+                _JumpTile(
+                  icon: Icons.timer_outlined,
+                  label: 'Time clock',
+                  onTap: () => context.go('/time-clock'),
+                ),
+                _JumpTile(
+                  icon: Icons.event_seat_outlined,
+                  label: 'Reservations',
+                  onTap: () => context.go('/reservations'),
+                ),
+                _JumpTile(
+                  icon: Icons.report_outlined,
+                  label: 'Incidents',
+                  onTap: () => context.go('/incidents'),
+                ),
+              ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SectionLabel extends StatelessWidget {
+  const _SectionLabel(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
+      child: Text(
+        text.toUpperCase(),
+        style: Theme.of(context)
+            .textTheme
+            .labelSmall
+            ?.copyWith(letterSpacing: 0.8),
+      ),
+    );
+  }
+}
+
+class _ShiftModeCard extends StatelessWidget {
+  const _ShiftModeCard({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      color: scheme.primary,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Icon(Icons.badge_outlined, size: 32, color: scheme.onPrimary),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Shift mode',
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleMedium
+                          ?.copyWith(color: scheme.onPrimary),
+                    ),
+                    Text(
+                      'Your shift, clock status and tasks in one place',
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(color: scheme.onPrimary),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right, color: scheme.onPrimary),
+            ],
+          ),
         ),
       ),
     );
@@ -211,21 +303,39 @@ class _StatTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
+    final theme = Theme.of(context);
+    return Material(
+      color: theme.colorScheme.surfaceContainerLow,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: context.ops.panelBorder),
+      ),
       child: InkWell(
+        borderRadius: BorderRadius.circular(14),
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(14),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Icon(icon),
+              Row(
+                children: [
+                  Icon(icon, size: 20, color: theme.colorScheme.primary),
+                  const Spacer(),
+                  Icon(
+                    Icons.chevron_right,
+                    size: 18,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ],
+              ),
               Text(
                 value?.toString() ?? '—',
-                style: Theme.of(context).textTheme.headlineMedium,
+                style: theme.textTheme.headlineMedium
+                    ?.copyWith(fontWeight: FontWeight.w800),
               ),
-              Text(label, style: Theme.of(context).textTheme.bodySmall),
+              Text(label, style: theme.textTheme.bodySmall),
             ],
           ),
         ),
@@ -234,24 +344,46 @@ class _StatTile extends StatelessWidget {
   }
 }
 
-class _NavTile extends StatelessWidget {
-  const _NavTile({
+class _JumpTile extends StatelessWidget {
+  const _JumpTile({
     required this.icon,
     required this.label,
-    required this.route,
+    required this.onTap,
   });
 
   final IconData icon;
   final String label;
-  final String route;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      leading: Icon(icon),
-      title: Text(label),
-      trailing: const Icon(Icons.chevron_right),
-      onTap: () => context.go(route),
+    final theme = Theme.of(context);
+    return Material(
+      color: theme.colorScheme.surfaceContainerHigh,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: context.ops.panelBorder),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(10),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 28, color: theme.colorScheme.primary),
+              const SizedBox(height: 8),
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                style: theme.textTheme.labelMedium,
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
