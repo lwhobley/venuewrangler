@@ -1,9 +1,0 @@
--- AlterTable
-ALTER TABLE "Venue" ADD COLUMN "earlyClockInWindowMin" INTEGER NOT NULL DEFAULT 10;
-
--- AlterTable
-ALTER TABLE "Profile" ADD COLUMN "sickHoursAccrued" DOUBLE PRECISION NOT NULL DEFAULT 40.0,
-ADD COLUMN "ptoHoursAccrued" DOUBLE PRECISION NOT NULL DEFAULT 80.0;
-
--- AlterTable
-ALTER TABLE "TimeEntry" ADD COLUMN "breaks" JSONB;

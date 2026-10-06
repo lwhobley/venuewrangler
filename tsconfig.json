@@ -1,14 +1,18 @@
 {
-  "extends": "expo/tsconfig.base",
   "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
     "strict": true,
-    "experimentalDecorators": true,
-    "emitDecoratorMetadata": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
     "lib": ["ES2022", "DOM"],
+    "types": ["node"],
     "paths": {
       "@/*": ["./*"]
     }
   },
-  "include": ["**/*.ts", "**/*.tsx"],
-  "exclude": ["packages/api/**", "supabase/functions/**"]
+  "include": ["**/*.ts"],
+  "exclude": ["node_modules", "supabase/functions/**", "packages/marketing/**", "apps/mobile/**"]
 }
