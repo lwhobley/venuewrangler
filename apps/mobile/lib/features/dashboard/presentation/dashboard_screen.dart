@@ -95,7 +95,7 @@ class DashboardScreen extends ConsumerWidget {
                   label: 'Open tasks',
                   value: openTaskCount,
                   icon: Icons.checklist_outlined,
-                  onTap: () => context.go('/tasks'),
+                  onTap: () => context.go('/tasks/board'),
                 ),
                 _StatTile(
                   label: "Today's shifts",

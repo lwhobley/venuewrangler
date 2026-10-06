@@ -43,6 +43,8 @@ class _FakeTasksRepository implements TasksRepository {
   Future<void> createTask({
     required String venueId,
     required String title,
+    String? description,
+    DateTime? dueAt,
     String? assignedTo,
   }) async {
     lastCreatedTitle = title;

@@ -1,6 +1,7 @@
 import '../../../core/widgets/home_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/offline/offline_queue_providers.dart';
@@ -43,6 +44,13 @@ class TaskListScreen extends ConsumerWidget {
       appBar: AppBar(
         leading: const HomeButton(),
         title: Text('Tasks — ${venue.name}'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.view_kanban_outlined),
+            tooltip: 'Task board',
+            onPressed: () => context.go('/tasks/board'),
+          ),
+        ],
       ),
       body: Column(
         children: [

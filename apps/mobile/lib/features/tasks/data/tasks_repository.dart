@@ -14,6 +14,8 @@ abstract interface class TasksRepository {
   Future<void> createTask({
     required String venueId,
     required String title,
+    String? description,
+    DateTime? dueAt,
     String? assignedTo,
   });
 
@@ -54,11 +56,16 @@ class SupabaseTasksRepository implements TasksRepository {
   Future<void> createTask({
     required String venueId,
     required String title,
+    String? description,
+    DateTime? dueAt,
     String? assignedTo,
   }) async {
     await _client.from('operational_tasks').insert({
       'venue_id': venueId,
       'title': title,
+      if (description != null && description.isNotEmpty)
+        'description': description,
+      if (dueAt != null) 'due_at': dueAt.toUtc().toIso8601String(),
       if (assignedTo != null) 'assigned_to': assignedTo,
     });
   }

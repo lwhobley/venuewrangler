@@ -28,6 +28,7 @@ import '../features/schedules/presentation/schedule_list_screen.dart';
 import '../features/schedules/presentation/schedule_timeline_screen.dart';
 import '../features/settings/presentation/settings_screen.dart';
 import '../features/staff_requests/presentation/staff_requests_screen.dart';
+import '../features/tasks/presentation/task_board_screen.dart';
 import '../features/tasks/presentation/task_list_screen.dart';
 import '../features/time_clock/presentation/time_clock_screen.dart';
 import '../features/venues/application/venues_providers.dart';
@@ -71,6 +72,12 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/tasks',
         builder: (context, state) => const TaskListScreen(),
+        routes: [
+          GoRoute(
+            path: 'board',
+            builder: (context, state) => const TaskBoardScreen(),
+          ),
+        ],
       ),
       GoRoute(
         path: '/checklists',
