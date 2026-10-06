@@ -1,3 +1,4 @@
+import '../../../core/widgets/home_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -19,7 +20,10 @@ class SettingsScreen extends ConsumerWidget {
     final email = ref.watch(supabaseClientProvider).auth.currentUser?.email;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Settings')),
+      appBar: AppBar(
+        leading: const HomeButton(),
+        title: const Text('Settings'),
+      ),
       body: profileAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (_, __) =>

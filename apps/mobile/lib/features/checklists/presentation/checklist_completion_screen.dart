@@ -1,3 +1,4 @@
+import '../../../core/widgets/home_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -40,7 +41,10 @@ class _ChecklistCompletionScreenState
         ref.watch(checklistItemsForTemplateProvider(widget.templateId));
 
     return Scaffold(
-      appBar: AppBar(title: Text(widget.title ?? 'Checklist')),
+      appBar: AppBar(
+        leading: const HomeButton(),
+        title: Text(widget.title ?? 'Checklist'),
+      ),
       body: itemsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, _) => Center(

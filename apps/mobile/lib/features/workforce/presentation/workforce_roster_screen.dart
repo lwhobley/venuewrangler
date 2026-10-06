@@ -1,3 +1,4 @@
+import '../../../core/widgets/home_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -27,7 +28,10 @@ class WorkforceRosterScreen extends ConsumerWidget {
     final invitesAsync = ref.watch(invitesForVenueProvider(venue.id));
 
     return Scaffold(
-      appBar: AppBar(title: Text('Staff — ${venue.name}')),
+      appBar: AppBar(
+        leading: const HomeButton(),
+        title: Text('Staff — ${venue.name}'),
+      ),
       body: RefreshIndicator(
         onRefresh: () async {
           ref.invalidate(rosterForVenueProvider(venue.id));

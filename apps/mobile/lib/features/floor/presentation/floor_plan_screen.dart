@@ -1,3 +1,4 @@
+import '../../../core/widgets/home_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/ops_colors.dart';
@@ -24,6 +25,7 @@ class _FloorPlanScreenState extends ConsumerState<FloorPlanScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        leading: const HomeButton(),
         title: const Text('Floor Plan'),
         actions: [
           if (_selectedTableIds.length >= 2 && activeVenue != null)

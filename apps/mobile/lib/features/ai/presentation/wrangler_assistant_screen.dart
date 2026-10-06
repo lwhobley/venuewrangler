@@ -1,3 +1,4 @@
+import '../../../core/widgets/home_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -40,7 +41,10 @@ class _WranglerAssistantScreenState
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Ask Wrangler')),
+      appBar: AppBar(
+        leading: const HomeButton(),
+        title: const Text('Ask Wrangler'),
+      ),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(

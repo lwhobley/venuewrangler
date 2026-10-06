@@ -1,3 +1,4 @@
+import '../../../core/widgets/home_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -25,7 +26,10 @@ class InventoryListScreen extends ConsumerWidget {
     final itemsAsync = ref.watch(inventoryForVenueProvider(venue.id));
 
     return Scaffold(
-      appBar: AppBar(title: Text('Inventory — ${venue.name}')),
+      appBar: AppBar(
+        leading: const HomeButton(),
+        title: Text('Inventory — ${venue.name}'),
+      ),
       body: RefreshIndicator(
         onRefresh: () async =>
             ref.invalidate(inventoryForVenueProvider(venue.id)),

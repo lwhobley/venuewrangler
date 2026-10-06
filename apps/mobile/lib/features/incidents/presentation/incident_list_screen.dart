@@ -1,3 +1,4 @@
+import '../../../core/widgets/home_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
@@ -41,7 +42,10 @@ class IncidentListScreen extends ConsumerWidget {
     };
 
     return Scaffold(
-      appBar: AppBar(title: Text('Incidents — ${venue.name}')),
+      appBar: AppBar(
+        leading: const HomeButton(),
+        title: Text('Incidents — ${venue.name}'),
+      ),
       body: RefreshIndicator(
         onRefresh: () async =>
             ref.invalidate(incidentsForVenueProvider(venue.id)),

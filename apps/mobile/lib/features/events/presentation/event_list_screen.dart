@@ -1,3 +1,4 @@
+import '../../../core/widgets/home_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -23,7 +24,10 @@ class EventListScreen extends ConsumerWidget {
     final eventsAsync = ref.watch(eventsForVenueProvider(venue.id));
 
     return Scaffold(
-      appBar: AppBar(title: Text('Events — ${venue.name}')),
+      appBar: AppBar(
+        leading: const HomeButton(),
+        title: Text('Events — ${venue.name}'),
+      ),
       body: RefreshIndicator(
         onRefresh: () async => ref.invalidate(eventsForVenueProvider(venue.id)),
         child: eventsAsync.when(

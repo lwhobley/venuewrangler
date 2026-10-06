@@ -1,3 +1,4 @@
+import '../../../core/widgets/home_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -30,7 +31,10 @@ class ScheduleListScreen extends ConsumerWidget {
         ref.watch(supabaseClientProvider).auth.currentUser?.id;
 
     return Scaffold(
-      appBar: AppBar(title: Text('Schedule — ${venue.name}')),
+      appBar: AppBar(
+        leading: const HomeButton(),
+        title: Text('Schedule — ${venue.name}'),
+      ),
       body: RefreshIndicator(
         onRefresh: () async {
           ref.invalidate(shiftsForVenueProvider(venue.id));

@@ -1,3 +1,4 @@
+import '../../../core/widgets/home_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../application/chat_providers.dart';
@@ -29,6 +30,7 @@ class _ConversationListView extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
+        leading: const HomeButton(),
         title: const Text('Team Chat'),
         actions: [
           IconButton(

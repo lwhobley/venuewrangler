@@ -1,3 +1,4 @@
+import '../../../core/widgets/home_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -27,7 +28,10 @@ class BillingScreen extends ConsumerWidget {
         ref.watch(depositAccountForOrgProvider(organizationId));
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Billing')),
+      appBar: AppBar(
+        leading: const HomeButton(),
+        title: const Text('Billing'),
+      ),
       body: RefreshIndicator(
         onRefresh: () async {
           ref.invalidate(subscriptionForOrgProvider(organizationId));

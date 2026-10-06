@@ -1,3 +1,4 @@
+import '../../../core/widgets/home_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -25,7 +26,10 @@ class IntegrationsScreen extends ConsumerWidget {
         ref.watch(payrollConnectionsForVenueProvider(venue.id));
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Integrations')),
+      appBar: AppBar(
+        leading: const HomeButton(),
+        title: const Text('Integrations'),
+      ),
       body: RefreshIndicator(
         onRefresh: () async =>
             ref.invalidate(payrollConnectionsForVenueProvider(venue.id)),
