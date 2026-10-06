@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../core/auth/auth_providers.dart';
+import '../features/auth/reset_password_screen.dart';
 import '../features/auth/sign_in_screen.dart';
 import '../features/billing/presentation/billing_screen.dart';
 import '../features/checklists/presentation/checklist_completion_screen.dart';
@@ -43,12 +44,20 @@ import '../features/workforce/presentation/workforce_roster_screen.dart';
 final routerProvider = Provider<GoRouter>((ref) {
   final isSignedIn = ref.watch(isSignedInProvider);
   final hasActiveVenue = ref.watch(activeVenueProvider) != null;
+  final recoveringPassword = ref.watch(passwordRecoveryPendingProvider);
 
   return GoRouter(
     initialLocation: '/',
     redirect: (context, state) {
       final goingToSignIn = state.matchedLocation == '/sign-in';
       final goingToSelectVenue = state.matchedLocation == '/select-venue';
+      final goingToReset = state.matchedLocation == '/reset-password';
+
+      // Opened a reset link: nothing else until a new password is set.
+      if (isSignedIn && recoveringPassword) {
+        return goingToReset ? null : '/reset-password';
+      }
+      if (goingToReset) return '/';
 
       if (!isSignedIn) {
         return goingToSignIn ? null : '/sign-in';
@@ -69,6 +78,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/sign-in',
         builder: (context, state) => const SignInScreen(),
+      ),
+      GoRoute(
+        path: '/reset-password',
+        builder: (context, state) => const ResetPasswordScreen(),
       ),
       GoRoute(
         path: '/select-venue',

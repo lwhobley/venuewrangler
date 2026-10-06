@@ -29,11 +29,12 @@ class _FloorPlanScreenState extends ConsumerState<FloorPlanScreen> {
         leading: const HomeButton(),
         title: const Text('Floor Plan'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.edit_location_alt_outlined),
-            tooltip: 'Edit layout',
-            onPressed: () => context.push('/floor/edit'),
-          ),
+          if (ref.watch(canManageActiveVenueProvider).valueOrNull ?? false)
+            IconButton(
+              icon: const Icon(Icons.edit_location_alt_outlined),
+              tooltip: 'Edit layout',
+              onPressed: () => context.push('/floor/edit'),
+            ),
           if (_selectedTableIds.length >= 2 && activeVenue != null)
             IconButton(
               icon: const Icon(Icons.merge_type),

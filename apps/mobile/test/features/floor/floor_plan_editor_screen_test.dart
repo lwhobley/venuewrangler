@@ -74,7 +74,10 @@ void main() {
     createdAt: DateTime(2026),
   );
 
-  Future<(ProviderContainer, _Repo)> pumpEditor(WidgetTester tester) async {
+  Future<(ProviderContainer, _Repo)> pumpEditor(
+    WidgetTester tester, {
+    bool manager = true,
+  }) async {
     FlutterSecureStorage.setMockInitialValues({});
     tester.view.physicalSize = const Size(800, 1400);
     tester.view.devicePixelRatio = 1;
@@ -85,6 +88,7 @@ void main() {
       overrides: [
         activeVenueProvider.overrideWith((ref) => venue),
         floorRepositoryProvider.overrideWithValue(repo),
+        canManageActiveVenueProvider.overrideWith((ref) async => manager),
       ],
     );
     addTearDown(container.dispose);
@@ -139,5 +143,17 @@ void main() {
     expect(state.selected?.isNew, isTrue);
     expect(find.text('Edit table'), findsNothing);
     expect(find.byTooltip('Edit table'), findsOneWidget);
+  });
+
+  testWidgets('non-managers are told only managers can edit the layout',
+      (tester) async {
+    await pumpEditor(tester, manager: false);
+
+    expect(
+      find.text('Only managers can edit the floor layout.'),
+      findsOneWidget,
+    );
+    expect(find.text('T1'), findsNothing);
+    expect(find.text('Add table'), findsNothing);
   });
 }

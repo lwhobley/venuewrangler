@@ -118,6 +118,7 @@ void main() {
         overrides: [
           activeVenueProvider.overrideWith((ref) => testVenue),
           floorRepositoryProvider.overrideWithValue(fakeRepo),
+          canManageActiveVenueProvider.overrideWith((ref) async => false),
         ],
         child: const MaterialApp(home: FloorPlanScreen()),
       ),
@@ -153,6 +154,7 @@ void main() {
         overrides: [
           activeVenueProvider.overrideWith((ref) => testVenue),
           floorRepositoryProvider.overrideWithValue(fakeRepo),
+          canManageActiveVenueProvider.overrideWith((ref) async => false),
         ],
         child: const MaterialApp(home: FloorPlanScreen()),
       ),

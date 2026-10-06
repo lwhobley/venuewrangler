@@ -19,5 +19,10 @@ Port of legacy NestJS `floor` module to native Supabase + Flutter with PostgreSQ
 - **Security & RLS**:
   - `FORCE ROW LEVEL SECURITY` on all floor tables.
   - Venue members can view floor layouts and tables.
-  - Managers can create and update floor plans.
-  - Staff and managers can update table states, merge, split, and assign tables.
+  - Managers can create and update floor plans, and are the only role that can change table
+    layout (direct writes to `floor_tables` are manager-only).
+  - Staff and managers can update table states, merge, split, and assign tables — always via
+    the SECURITY DEFINER RPCs above, never by writing the table directly.
+- **Layout publishing**: `public.save_floor_layout` applies a whole editor session (new,
+  changed and removed tables) in one transaction, so a publish either goes fully live or not
+  at all. It refuses to remove tables that are in use or merged, and rejects duplicate labels.

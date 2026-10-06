@@ -92,30 +92,20 @@ class SupabaseFloorRepository implements FloorRepository {
     required List<EditorTable> updated,
     required List<String> removedIds,
   }) async {
-    if (removedIds.isNotEmpty) {
-      await _client
-          .from('floor_tables')
-          .delete()
-          .eq('venue_id', venueId)
-          .inFilter('id', removedIds);
-    }
-    for (final t in updated) {
-      await _client
-          .from('floor_tables')
-          .update(t.toLayoutColumns())
-          .eq('id', t.id)
-          .eq('venue_id', venueId);
-    }
-    if (created.isNotEmpty) {
-      await _client.from('floor_tables').insert([
-        for (final t in created)
-          {
-            'venue_id': venueId,
-            'floor_plan_id': floorPlanId,
-            ...t.toLayoutColumns(),
-          },
-      ]);
-    }
+    // One transaction server-side: every change goes live or none do
+    // (supabase/migrations/20261006150753_floor_layout_managers_and_atomic_publish.sql).
+    await _client.rpc(
+      'save_floor_layout',
+      params: {
+        'p_venue_id': venueId,
+        'p_floor_plan_id': floorPlanId,
+        'p_created': [for (final t in created) t.toLayoutColumns()],
+        'p_updated': [
+          for (final t in updated) {'id': t.id, ...t.toLayoutColumns()},
+        ],
+        'p_removed': removedIds,
+      },
+    );
   }
 
   @override

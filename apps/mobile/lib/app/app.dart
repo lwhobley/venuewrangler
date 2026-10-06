@@ -2,6 +2,7 @@ import '../core/theme/theme_mode_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/auth/auth_providers.dart';
 import '../core/offline/offline_queue_connectivity.dart';
 import '../core/security/app_attest_providers.dart';
 import '../core/theme/app_theme.dart';
@@ -25,6 +26,9 @@ class VenueWranglerApp extends ConsumerWidget {
     // Side-effect only: routes a tapped push notification (or one tapped while already in the
     // notifications list) to its destination screen. See app/router.dart.
     ref.watch(notificationTapRoutingProvider);
+    // Side-effect only: notices a password-reset sign-in so the router can hold the user on
+    // /reset-password. See core/auth/auth_providers.dart.
+    ref.watch(passwordRecoveryTriggerProvider);
 
     final router = ref.watch(routerProvider);
 

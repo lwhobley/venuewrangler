@@ -6,7 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../../../core/auth/auth_providers.dart';
 import '../../../core/theme/ops_colors.dart';
 import '../../../core/widgets/home_button.dart';
 import '../../../core/widgets/state_views.dart';
@@ -347,7 +346,6 @@ class _ScheduleTimelineScreenState
     }
     final shiftsAsync = ref.watch(shiftsForVenueProvider(venue.id));
     final rosterAsync = ref.watch(rosterForVenueProvider(venue.id));
-    final userId = ref.watch(currentUserIdProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -379,11 +377,8 @@ class _ScheduleTimelineScreenState
         ),
         data: (shifts) {
           final roster = rosterAsync.valueOrNull ?? const <RosterMember>[];
-          final myRole = roster
-              .where((m) => m.userId == userId)
-              .map((m) => m.role)
-              .firstOrNull;
-          final canEdit = myRole != 'staff' && myRole != 'supervisor';
+          final canEdit =
+              ref.watch(canManageActiveVenueProvider).valueOrNull ?? false;
           _rows = _buildRows(roster, shifts);
           return _buildBoard(venue.id, shifts, canEdit);
         },

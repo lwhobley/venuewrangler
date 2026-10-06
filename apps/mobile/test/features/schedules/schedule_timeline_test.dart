@@ -184,6 +184,7 @@ void main() {
           activeVenueProvider.overrideWith((ref) => venue),
           currentUserIdProvider.overrideWithValue('boss'),
           schedulesRepositoryProvider.overrideWithValue(repo),
+          canManageActiveVenueProvider.overrideWith((ref) async => true),
           rosterForVenueProvider.overrideWith(
             (ref, venueId) async => const [
               RosterMember(

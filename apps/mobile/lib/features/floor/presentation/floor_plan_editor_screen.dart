@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/theme/ops_colors.dart';
 import '../../../core/widgets/blueprint_grid.dart';
@@ -312,9 +313,28 @@ class _FloorPlanEditorScreenState extends ConsumerState<FloorPlanEditorScreen> {
       );
       _toast('Floor plan published.');
       await _load();
-    } catch (e) {
-      _toast('Publish failed: $e', error: true);
+    } on PostgrestException catch (e) {
+      _toast(_publishError(e), error: true);
+    } catch (_) {
+      _toast(
+        'Could not publish — check your connection. Nothing was changed.',
+        error: true,
+      );
     }
+  }
+
+  /// The publish runs in one transaction, so any failure means nothing went live.
+  String _publishError(PostgrestException e) {
+    final detail = e.message.contains(':')
+        ? e.message.substring(e.message.indexOf(':') + 1).trim()
+        : e.message;
+    return switch (e.code) {
+      '42501' => 'Only managers can edit the floor layout.',
+      '55006' => 'Not published: $detail.',
+      '23505' => 'Not published: $detail.',
+      '40001' => 'Someone else changed this floor plan. Reload and try again.',
+      _ => 'Could not publish. Nothing was changed.',
+    };
   }
 
   Future<bool> _confirmLeave() async {
@@ -394,7 +414,8 @@ class _FloorPlanEditorScreenState extends ConsumerState<FloorPlanEditorScreen> {
             ),
           ],
         ),
-        floatingActionButton: _plan == null
+        floatingActionButton: _plan == null ||
+                ref.watch(canManageActiveVenueProvider).valueOrNull != true
             ? null
             : FloatingActionButton.extended(
                 onPressed: _addTable,
@@ -407,6 +428,16 @@ class _FloorPlanEditorScreenState extends ConsumerState<FloorPlanEditorScreen> {
   }
 
   Widget _buildBody(FloorEditorState state, FloorEditorController editor) {
+    final canManage = ref.watch(canManageActiveVenueProvider);
+    if (canManage.isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (canManage.valueOrNull != true) {
+      return const EmptyState(
+        icon: Icons.lock_outline,
+        message: 'Only managers can edit the floor layout.',
+      );
+    }
     if (_loading) return const Center(child: CircularProgressIndicator());
     if (_loadError != null) {
       return ErrorState(message: _loadError!, onRetry: _load);
