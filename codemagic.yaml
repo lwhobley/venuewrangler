@@ -11,6 +11,11 @@ workflows:
       flutter: 3.47.5
       xcode: latest
       cocoapods: default
+      # Signs with the original app's App Store distribution certificate + profile, both
+      # uploaded under Codemagic → Code signing identities.
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.venuewrangler.app
       vars:
         BUNDLE_ID: "com.venuewrangler.app"
         XCODE_WORKSPACE: "Runner.xcworkspace"
@@ -37,13 +42,9 @@ workflows:
       - name: Run tests
         script: flutter test
       - name: Set up iOS code signing
-        script: |
-          keychain initialize
-          app-store-connect fetch-signing-files "$BUNDLE_ID" \
-            --type IOS_APP_STORE \
-            --create
-          keychain add-certificates
-          xcode-project use-profiles
+        # The certificate and profile come from ios_signing above (uploaded to Codemagic →
+        # Code signing identities); this applies them to the Xcode project.
+        script: xcode-project use-profiles
       - name: Build IPA for App Store
         script: |
           # TestFlight rejects a build number it has already seen, so always go one past the

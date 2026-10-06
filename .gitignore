@@ -100,3 +100,7 @@ apps/mobile/**/*.freezed.dart
 builds/
 facebook-assets/
 screenshots/
+
+# EAS credential downloads (certificate + password) — never commit
+credentials.json
+credentials/
