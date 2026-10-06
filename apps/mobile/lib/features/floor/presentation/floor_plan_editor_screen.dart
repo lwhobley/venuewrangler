@@ -171,8 +171,13 @@ class _FloorPlanEditorScreenState extends ConsumerState<FloorPlanEditorScreen> {
         0.95;
     final dx = (viewport.width - s.planWidth * scale) / 2;
     final dy = (viewport.height - s.planHeight * scale) / 2;
-    _tc.value = Matrix4.translationValues(dx, dy, 0)
+    final fitted = Matrix4.translationValues(dx, dy, 0)
       ..scaleByDouble(scale, scale, 1, 1);
+    // Called from a LayoutBuilder; changing the controller notifies listeners, which must
+    // not happen mid-layout.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _tc.value = fitted;
+    });
   }
 
   // ---- actions -------------------------------------------------------------

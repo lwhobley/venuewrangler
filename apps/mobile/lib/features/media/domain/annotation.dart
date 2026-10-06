@@ -172,7 +172,9 @@ class TextLabel extends Annotation {
       ),
       textDirection: TextDirection.ltr,
     )..layout(maxWidth: size.width * 0.9);
-    painter.paint(canvas, Annotation.scale(at, size));
+    painter
+      ..paint(canvas, Annotation.scale(at, size))
+      ..dispose();
   }
 }
 

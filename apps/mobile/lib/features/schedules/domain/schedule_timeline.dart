@@ -21,9 +21,14 @@ DateTime weekStart(DateTime date) {
 }
 
 DateTime snapTime(DateTime t, {int minutes = kSnapMinutes}) {
-  final total = t.hour * 60 + t.minute;
+  // Work in local wall-clock time: rebuilding a UTC instant from its fields as a local
+  // DateTime would shift it by the UTC offset.
+  final local = t.toLocal();
+  final total = local.hour * 60 + local.minute;
   final snapped = (total / minutes).round() * minutes;
-  return DateTime(t.year, t.month, t.day).add(Duration(minutes: snapped));
+  // The (year, month, day, 0, minutes) constructor normalises overflow in local time, so a
+  // DST change that day doesn't add or drop an hour.
+  return DateTime(local.year, local.month, local.day, 0, snapped);
 }
 
 Duration _deltaFor(double dx, double hourWidth) =>
@@ -143,7 +148,8 @@ String hourLabel(int hour24) {
   return '$h12$suffix';
 }
 
-String clockLabel(DateTime t) {
+String clockLabel(DateTime time) {
+  final t = time.toLocal();
   final h = t.hour % 12 == 0 ? 12 : t.hour % 12;
   final m = t.minute.toString().padLeft(2, '0');
   return t.minute == 0

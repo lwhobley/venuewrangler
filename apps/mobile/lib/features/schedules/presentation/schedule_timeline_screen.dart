@@ -85,6 +85,18 @@ class _ScheduleTimelineScreenState
     super.dispose();
   }
 
+  /// Zooms the hour scale while keeping the same time at the left edge in view.
+  void _zoom(double delta) {
+    final old = _hourWidth;
+    final offset = _hScroll.hasClients ? _hScroll.offset : 0.0;
+    setState(() => _hourWidth = old + delta);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_hScroll.hasClients) return;
+      final target = offset * _hourWidth / old;
+      _hScroll.jumpTo(target.clamp(0, _hScroll.position.maxScrollExtent));
+    });
+  }
+
   DateTime get _windowStart => businessDayStart(_date, startHour: _startHour);
   DateTime get _windowEnd => _windowStart.add(const Duration(hours: 24));
 
@@ -345,15 +357,12 @@ class _ScheduleTimelineScreenState
           IconButton(
             icon: const Icon(Icons.zoom_out),
             tooltip: 'Zoom out',
-            onPressed:
-                _hourWidth > 32 ? () => setState(() => _hourWidth -= 12) : null,
+            onPressed: _hourWidth > 32 ? () => _zoom(-12) : null,
           ),
           IconButton(
             icon: const Icon(Icons.zoom_in),
             tooltip: 'Zoom in',
-            onPressed: _hourWidth < 104
-                ? () => setState(() => _hourWidth += 12)
-                : null,
+            onPressed: _hourWidth < 104 ? () => _zoom(12) : null,
           ),
           IconButton(
             icon: const Icon(Icons.view_list_outlined),

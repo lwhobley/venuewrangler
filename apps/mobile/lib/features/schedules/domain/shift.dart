@@ -57,8 +57,8 @@ class Shift {
         venueId: json['venue_id'] as String,
         staffId: json['staff_id'] as String?,
         roleLabel: json['role_label'] as String?,
-        startTime: DateTime.parse(json['start_time'] as String),
-        endTime: DateTime.parse(json['end_time'] as String),
+        startTime: DateTime.parse(json['start_time'] as String).toLocal(),
+        endTime: DateTime.parse(json['end_time'] as String).toLocal(),
         status: ShiftStatus.fromDb(json['status'] as String),
       );
 

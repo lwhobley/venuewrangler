@@ -126,6 +126,31 @@ void main() {
       expect(lanes['a']!.lanes, 2);
     });
 
+    test('UTC times from the database are not shifted by snapping', () {
+      // Regression: snapping rebuilt a UTC instant's fields as local time, so in any non-UTC
+      // timezone picking a shift up and dropping it in place moved it by the UTC offset.
+      final utc = DateTime.parse('2026-10-05T23:00:00+00:00');
+      final r = movedBy(utc, utc.add(const Duration(hours: 4)), 0, 56);
+      expect(r.start.isAtSameMomentAs(utc), isTrue);
+      expect(r.end.isAtSameMomentAs(utc.add(const Duration(hours: 4))), isTrue);
+      expect(clockLabel(utc), clockLabel(utc.toLocal()));
+    });
+
+    test('shifts parsed from the database are in local time', () {
+      final s = Shift.fromJson({
+        'id': 'a',
+        'venue_id': 'v',
+        'start_time': '2026-10-05T23:00:00+00:00',
+        'end_time': '2026-10-06T03:00:00+00:00',
+        'status': 'scheduled',
+      });
+      expect(s.startTime.isUtc, isFalse);
+      expect(
+        s.startTime.isAtSameMomentAs(DateTime.utc(2026, 10, 5, 23)),
+        isTrue,
+      );
+    });
+
     test('before 6am still belongs to the previous business day', () {
       expect(
         businessDateFor(DateTime(2026, 10, 6, 2)),

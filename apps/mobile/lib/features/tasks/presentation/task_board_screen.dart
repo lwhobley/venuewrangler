@@ -50,9 +50,13 @@ class TaskBoardScreen extends ConsumerStatefulWidget {
 
 class _TaskBoardScreenState extends ConsumerState<TaskBoardScreen> {
   TaskLane _lane = TaskLane.open;
+  Map<String, TaskStatus> _pending = const {};
+
+  TaskStatus _statusOf(OperationalTask t) => displayedStatus(t, _pending);
 
   Future<void> _move(OperationalTask task, TaskStatus to) async {
-    if (task.status == to) return;
+    // Compare with what's on screen: a queued offline change may already have moved it.
+    if (_statusOf(task) == to) return;
     await changeTaskStatus(ref, ScaffoldMessenger.of(context), task, to);
   }
 
@@ -136,6 +140,7 @@ class _TaskBoardScreenState extends ConsumerState<TaskBoardScreen> {
     final tasksAsync = ref.watch(tasksForVenueProvider(venue.id));
     final queue = ref.watch(offlineQueueControllerProvider);
     final pending = pendingTaskStatuses(queue.pending);
+    _pending = pending;
     final roster = ref.watch(rosterForVenueProvider(venue.id)).valueOrNull;
     final names = {
       for (final m in roster ?? const [])
@@ -193,6 +198,7 @@ class _TaskBoardScreenState extends ConsumerState<TaskBoardScreen> {
                             padding: const EdgeInsets.symmetric(horizontal: 6),
                             child: _LaneColumn(
                               lane: lane,
+                              statusOf: _statusOf,
                               tasks: lanes[lane]!,
                               cardBuilder: card,
                               onDrop: (t) => _move(t, lane.status),
@@ -217,6 +223,7 @@ class _TaskBoardScreenState extends ConsumerState<TaskBoardScreen> {
                                   const EdgeInsets.symmetric(horizontal: 3),
                               child: _LaneTab(
                                 lane: lane,
+                                statusOf: _statusOf,
                                 count: lanes[lane]!.length,
                                 selected: lane == _lane,
                                 onTap: () => setState(() => _lane = lane),
@@ -272,6 +279,7 @@ class _TaskBoardScreenState extends ConsumerState<TaskBoardScreen> {
 class _LaneTab extends StatelessWidget {
   const _LaneTab({
     required this.lane,
+    required this.statusOf,
     required this.count,
     required this.selected,
     required this.onTap,
@@ -279,6 +287,7 @@ class _LaneTab extends StatelessWidget {
   });
 
   final TaskLane lane;
+  final TaskStatus Function(OperationalTask) statusOf;
   final int count;
   final bool selected;
   final VoidCallback onTap;
@@ -288,7 +297,7 @@ class _LaneTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return DragTarget<OperationalTask>(
-      onWillAcceptWithDetails: (d) => d.data.status != lane.status,
+      onWillAcceptWithDetails: (d) => statusOf(d.data) != lane.status,
       onAcceptWithDetails: (d) => onDrop(d.data),
       builder: (context, candidates, _) {
         final hovering = candidates.isNotEmpty;
@@ -334,12 +343,14 @@ class _LaneTab extends StatelessWidget {
 class _LaneColumn extends StatelessWidget {
   const _LaneColumn({
     required this.lane,
+    required this.statusOf,
     required this.tasks,
     required this.cardBuilder,
     required this.onDrop,
   });
 
   final TaskLane lane;
+  final TaskStatus Function(OperationalTask) statusOf;
   final List<OperationalTask> tasks;
   final Widget Function(OperationalTask) cardBuilder;
   final ValueChanged<OperationalTask> onDrop;
@@ -348,7 +359,7 @@ class _LaneColumn extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return DragTarget<OperationalTask>(
-      onWillAcceptWithDetails: (d) => d.data.status != lane.status,
+      onWillAcceptWithDetails: (d) => statusOf(d.data) != lane.status,
       onAcceptWithDetails: (d) => onDrop(d.data),
       builder: (context, candidates, _) {
         final hovering = candidates.isNotEmpty;
