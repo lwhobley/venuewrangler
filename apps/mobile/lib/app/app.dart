@@ -7,13 +7,33 @@ import '../core/offline/offline_queue_connectivity.dart';
 import '../core/security/app_attest_providers.dart';
 import '../core/theme/app_theme.dart';
 import '../features/notifications/application/notifications_providers.dart';
+import 'intro_video_screen.dart';
 import 'router.dart';
 
-class VenueWranglerApp extends ConsumerWidget {
+class VenueWranglerApp extends ConsumerStatefulWidget {
   const VenueWranglerApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<VenueWranglerApp> createState() => _VenueWranglerAppState();
+}
+
+class _VenueWranglerAppState extends ConsumerState<VenueWranglerApp> {
+  // Plays once per cold start, ahead of auth/venue state, so it shows no matter who's signed
+  // in or what they were last doing.
+  bool _introDone = false;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_introDone) {
+      return MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: AppTheme.light(),
+        home: IntroVideoScreen(
+          onFinished: () => setState(() => _introDone = true),
+        ),
+      );
+    }
+
     // Side-effect only: activates the offline-mutation-queue flush-on-reconnect listener for
     // the whole app's lifetime. See core/offline/offline_queue_connectivity.dart.
     ref.watch(offlineQueueConnectivityProvider);

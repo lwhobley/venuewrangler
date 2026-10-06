@@ -58,6 +58,9 @@ dependencies:
   firebase_messaging: ^15.1.5
   geolocator: ^14.0.2
 
+  # App-open intro video (app/intro_video_screen.dart)
+  video_player: ^2.9.2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -73,3 +76,5 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/video/intro.mp4
