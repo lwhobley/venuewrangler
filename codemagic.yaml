@@ -18,6 +18,8 @@ workflows:
         # is enforced by Postgres RLS). Not secret, so safe to keep in this file.
         SUPABASE_URL: "https://puttwjwmwrzmhpsjykuj.supabase.co"
         SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB1dHR3andtd3J6bWhwc2p5a3VqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA5NTI5MTEsImV4cCI6MjEwNjUyODkxMX0.U5TR_8BdtkkT0qpG4oNuhDh4m52mlsltH44ex8budIQ"
+        # Sentry DSNs are public by design (they can only submit events), like the anon key.
+        SENTRY_DSN: "https://01fa184f9164f8f0bfb8250ca79e9c28@o4511660428820480.ingest.us.sentry.io/4511961182044160"
     triggering:
       events:
         - tag
@@ -43,10 +45,24 @@ workflows:
           xcode-project use-profiles
       - name: Build IPA for App Store
         script: |
+          # TestFlight rejects a build number it has already seen, so always go one past the
+          # latest uploaded build for this app (and never below Codemagic's own counter).
+          APP_ID=$(app-store-connect apps list \
+            --bundle-id-identifier "$BUNDLE_ID" --strict-match-identifier --json \
+            | jq -r '.[0].id // empty')
+          LATEST=0
+          if [ -n "$APP_ID" ]; then
+            LATEST=$(app-store-connect get-latest-testflight-build-number "$APP_ID" 2>/dev/null || echo 0)
+          fi
+          NEXT=$(( LATEST + 1 ))
+          if [ "${BUILD_NUMBER:-0}" -gt "$NEXT" ]; then NEXT=$BUILD_NUMBER; fi
+          echo "Building with build number $NEXT (latest on TestFlight: $LATEST)"
           flutter build ipa --release \
             -t lib/main_production.dart \
+            --build-number=$NEXT \
             --dart-define=SUPABASE_URL=$SUPABASE_URL \
             --dart-define=SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY \
+            --dart-define=SENTRY_DSN=$SENTRY_DSN \
             --export-options-plist=/Users/builder/export_options.plist
     artifacts:
       - build/ios/ipa/*.ipa
