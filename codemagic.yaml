@@ -5,7 +5,8 @@ workflows:
     instance_type: mac_mini_m2
     working_directory: apps/mobile
     integrations:
-      app_store_connect: venuewrangler-asc-key
+      # Team-wide App Store Connect API key (Codemagic → Integrations → Developer Portal).
+      app_store_connect: Venue Wrangler Wine
     environment:
       flutter: 3.47.5
       xcode: latest
