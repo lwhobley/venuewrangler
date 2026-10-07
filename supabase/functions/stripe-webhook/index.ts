@@ -50,6 +50,50 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ received: true, duplicate: true }), { status: 200 });
   }
 
+  // Applies a subscription's state in ONE atomic statement (public.apply_stripe_subscription_state):
+  // the "is this newer than what we have" check and the write cannot be split by a racing
+  // delivery. Returns whether a row was written.
+  async function applyState(
+    organizationId: string | null,
+    customerId: string,
+    subscription: Stripe.Subscription | null,
+    statusOverride?: string,
+  ): Promise<boolean> {
+    // As of this account's API version, current_period_end lives on each subscription ITEM,
+    // not the top-level Subscription — a single-price subscription (the only kind this app
+    // creates) has exactly one item.
+    const firstItem = subscription?.items.data[0];
+    const periodEnd = firstItem?.current_period_end;
+    const { data, error } = await serviceClient.rpc("apply_stripe_subscription_state", {
+      p_organization_id: organizationId,
+      p_customer_id: customerId,
+      p_subscription_id: subscription?.id ?? null,
+      p_price_id: firstItem?.price?.id ?? null,
+      p_status: statusOverride ?? subscription?.status ?? "none",
+      p_current_period_end: periodEnd ? new Date(periodEnd * 1000).toISOString() : null,
+      p_cancel_at_period_end: subscription?.cancel_at_period_end ?? false,
+      p_event_id: event.id,
+      p_event_created: event.created,
+    });
+    if (error) throw error;
+    return data === true;
+  }
+
+  // The event payload is a snapshot from when it fired; a late or replayed delivery would carry
+  // old state. Ask Stripe for the subscription as it is now. A deleted subscription may no
+  // longer be retrievable, in which case the event's own copy (status canceled) is the answer.
+  async function currentSubscription(
+    subscriptionId: string,
+    fallback: Stripe.Subscription | null,
+  ): Promise<Stripe.Subscription> {
+    try {
+      return await stripe.subscriptions.retrieve(subscriptionId);
+    } catch (err) {
+      if (fallback && event.type === "customer.subscription.deleted") return fallback;
+      throw err;
+    }
+  }
+
   try {
     switch (event.type) {
       case "checkout.session.completed": {
@@ -64,88 +108,43 @@ Deno.serve(async (req) => {
             : session.subscription?.id;
 
         if (!organizationId) break; // The platform Stripe account is shared with other projects.
-        if (customerId) {
-          const { error } = await serviceClient.from("subscriptions").upsert(
-            {
-              organization_id: organizationId,
-              stripe_customer_id: customerId,
-              stripe_subscription_id: subscriptionId ?? null,
-              // checkout.session.completed fires when the subscription starts —
-              // subsequent subscription events refine this. Never leave it as 'none'
-              // after a successful checkout.
-              status: subscriptionId ? "active" : "none",
-              last_event_id: event.id,
-              last_event_created: event.created,
-            },
-            { onConflict: "organization_id" },
-          );
-          if (error) throw error;
-        } else {
-          throw new Error("subscription checkout missing customer");
-        }
+        if (!customerId) throw new Error("subscription checkout missing customer");
+
+        // A completed checkout does not mean the subscription is active (the first payment can
+        // still be incomplete or require action), so take the real status from Stripe instead
+        // of assuming it. No subscription on the session leaves the row at 'none'.
+        const subscription = subscriptionId
+          ? await currentSubscription(subscriptionId, null)
+          : null;
+        await applyState(organizationId, customerId, subscription);
         break;
       }
 
       case "customer.subscription.created":
       case "customer.subscription.updated":
       case "customer.subscription.deleted": {
-        const subscription = event.data.object as Stripe.Subscription;
+        const eventSubscription = event.data.object as Stripe.Subscription;
         const customerId =
-          typeof subscription.customer === "string"
-            ? subscription.customer
-            : subscription.customer.id;
-        // As of this account's API version, current_period_end/start live on each
-        // subscription ITEM, not the top-level Subscription object (confirmed via
-        // GetSubscriptions' query-param docs: "minimum item current_period_end") — a single-
-        // price subscription (the only kind this app creates) has exactly one item.
-        const firstItem = subscription.items.data[0];
-        const priceId = firstItem?.price?.id ?? null;
-        const currentPeriodEnd = firstItem?.current_period_end;
-        const status =
-          event.type === "customer.subscription.deleted" ? "canceled" : subscription.status;
+          typeof eventSubscription.customer === "string"
+            ? eventSubscription.customer
+            : eventSubscription.customer.id;
 
-        // Order-safety: fetch the row's last applied event timestamp first; an older
-        // event delivered late must never overwrite newer state.
-        const { data: current, error: fetchError } = await serviceClient
-          .from("subscriptions")
-          .select("id, last_event_created")
-          .eq("stripe_customer_id", customerId)
-          .maybeSingle();
-        if (fetchError) throw fetchError;
-        if (!current) {
-          // Other products also use this Stripe platform account. Their customers
-          // have no subscriptions row in Venue Wrangler.
-          console.warn("subscription event for unlinked Stripe customer", { eventType: event.type, customerId });
-          break;
-        }
-        if (
-          typeof current.last_event_created === "number" &&
-          current.last_event_created >= event.created
-        ) {
-          console.warn("ignoring out-of-order subscription event", {
+        const subscription = await currentSubscription(eventSubscription.id, eventSubscription);
+        const applied = await applyState(
+          null,
+          customerId,
+          subscription,
+          event.type === "customer.subscription.deleted" ? "canceled" : undefined,
+        );
+        if (!applied) {
+          // Either a customer from another product on this shared Stripe account, or an event
+          // older than the state already stored — both are correct to skip.
+          console.warn("subscription event not applied", {
+            eventType: event.type,
             eventId: event.id,
-            eventCreated: event.created,
-            lastApplied: current.last_event_created,
+            customerId,
           });
-          break;
         }
-
-        const { error } = await serviceClient
-          .from("subscriptions")
-          .update({
-            stripe_subscription_id: subscription.id,
-            stripe_price_id: priceId,
-            status,
-            current_period_end: currentPeriodEnd
-              ? new Date(currentPeriodEnd * 1000).toISOString()
-              : null,
-            cancel_at_period_end: subscription.cancel_at_period_end,
-            last_event_id: event.id,
-            last_event_created: event.created,
-          })
-          .eq("id", current.id);
-
-        if (error) throw error;
         break;
       }
 

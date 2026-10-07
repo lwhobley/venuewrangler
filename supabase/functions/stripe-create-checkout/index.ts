@@ -61,11 +61,13 @@ async function handleRequest(req: Request): Promise<Response> {
   }
 
   // Org-level membership (venue_id is null) with an admin-tier role — RLS
-  // (memberships_select_self) returns this row only for the caller's own memberships, so a
-  // non-empty result IS the authorization check, same pattern as ai-assistant's venue lookup.
+  // The policy also lets org admins read every membership in the org, so the caller's own
+  // user_id is filtered explicitly: another admin's row must not authorize this caller, and
+  // two admins must not make maybeSingle() fail.
   const { data: membership, error: membershipError } = await userClient
     .from("memberships")
     .select("role")
+    .eq("user_id", userData.user.id)
     .eq("organization_id", organizationId)
     .is("venue_id", null)
     .in("role", ["organization_owner", "organization_admin"])

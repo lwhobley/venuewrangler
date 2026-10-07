@@ -60,6 +60,7 @@ async function handleRequest(req: Request): Promise<Response> {
   const { data: membership, error: membershipError } = await userClient
     .from("memberships")
     .select("role")
+    .eq("user_id", userData.user.id)
     .eq("organization_id", organizationId)
     .is("venue_id", null)
     .in("role", ["organization_owner", "organization_admin"])
