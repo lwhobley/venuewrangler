@@ -2,14 +2,10 @@ name: Deploy Cloudflare Pages
 
 on:
   push:
-    # Only desktop-web deploys. It is the Cloudflare Pages project's
-    # Production Branch, so it is the single source of what venuewrangler.com
-    # serves. Do NOT add main here: this job always deploys under the
-    # --branch desktop-web label, so a main push would publish main's site/
-    # straight to production and silently clobber desktop-web's live content.
-    # Site changes made on main must be ported to desktop-web to go live.
+    # The retired desktop-web Git branch is gone. Build production from main;
+    # Wrangler still uses the Pages project's desktop-web production label.
     branches:
-      - desktop-web
+      - main
     paths:
       - 'site/**'
       - 'packages/marketing/**'
@@ -27,16 +23,14 @@ on:
       - 'babel.config.js'
       - 'scripts/build-site.mjs'
       - 'scripts/site-build-files.mjs'
+      - 'apps/mobile/**'
+      - 'flutter-version.txt'
       - '.github/workflows/deploy-cloudflare-pages.yml'
   workflow_dispatch:
 
 jobs:
   deploy:
-    # workflow_dispatch carries no branch filter, so without this guard a manual
-    # run from ANY branch would publish that branch's site/ to production under
-    # the hardcoded --branch desktop-web label — exactly what the push filter
-    # above exists to prevent.
-    if: github.ref == 'refs/heads/desktop-web'
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     concurrency:
@@ -58,10 +52,21 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
 
-      - name: Build current Expo client and marketing site
-        run: npm run build:site
+      - name: Setup Flutter
+        uses: subosito/flutter-action@e938fdf56512cc96ef2f93601a5a40bde3801046 # v2.19.0
+        with:
+          channel: stable
+          flutter-version-file: flutter-version.txt
+          cache: true
+
+      - name: Prepare Flutter production configuration
         env:
-          EXPO_PUBLIC_RESTAURANT_CORE_ONLY: 'true'
+          FLUTTER_PRODUCTION_ENV_JSON: ${{ secrets.FLUTTER_PRODUCTION_ENV_JSON }}
+        run: |
+          node -e "const fs = require('fs'); const value = process.env.FLUTTER_PRODUCTION_ENV_JSON; if (!value) throw new Error('FLUTTER_PRODUCTION_ENV_JSON is missing'); const config = JSON.parse(value); if (!config.SUPABASE_URL || !config.SUPABASE_ANON_KEY) throw new Error('Flutter production config is incomplete'); fs.mkdirSync('apps/mobile/env', { recursive: true }); fs.writeFileSync('apps/mobile/env/production.json', JSON.stringify(config));"
+
+      - name: Build Flutter operator app and marketing site
+        run: npm run build:site
 
       # dist-site/ combines the marketing pages with a fresh /app web bundle.
       # The Cloudflare Pages project's Production Branch is set to
