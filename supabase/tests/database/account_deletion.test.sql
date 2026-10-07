@@ -4,7 +4,7 @@
 -- attribution anonymization, and that the async auth.users-deletion job gets queued.
 
 begin;
-select plan(28);
+select plan(27);
 
 insert into auth.users (id, email) values
   ('40000000-0000-0000-0000-000000000001', 'sole-owner@example.com'),
