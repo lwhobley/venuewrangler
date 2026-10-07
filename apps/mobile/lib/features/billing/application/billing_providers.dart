@@ -13,11 +13,3 @@ final subscriptionForOrgProvider = FutureProvider.autoDispose
     .family<Subscription?, String>((ref, organizationId) {
   return ref.watch(billingRepositoryProvider).fetchSubscription(organizationId);
 });
-
-final depositAccountForOrgProvider = FutureProvider.autoDispose
-    .family<({bool connected, bool ready, bool payoutsReady}), String>(
-        (ref, organizationId) {
-  return ref
-      .watch(billingRepositoryProvider)
-      .fetchDepositAccountStatus(organizationId);
-});
