@@ -30,7 +30,13 @@ jobs:
       postgres:
         image: supabase/postgres:15.19.0.004
         env:
-          POSTGRES_USER: postgres
+          # This image's own bootstrap (/docker-entrypoint-initdb.d/migrate.sh, which sets up
+          # pgtap/pg_net/pg_cron, the auth/storage schemas, etc.) is hardcoded to connect as
+          # "supabase_admin" regardless of POSTGRES_USER - overriding it to "postgres" (as a
+          # vanilla postgres:16 image would need) breaks that bootstrap with "role
+          # supabase_admin does not exist" before our own steps ever run. Use its actual
+          # superuser name instead of fighting it.
+          POSTGRES_USER: supabase_admin
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: postgres
         ports:
@@ -42,6 +48,11 @@ jobs:
           --health-retries 5
 
     env:
+      # Connect as "postgres", not the supabase_admin bootstrap superuser above: this image's
+      # own init migrations (supabase/postgres's demote-postgres.sql) set up "postgres" as a
+      # separate, pre-existing CREATEDB/CREATEROLE/BYPASSRLS role - the actual project-owner
+      # role real Supabase migrations run as, which supabase/migrations/..._ensure_public_
+      # grants.sql's "alter default privileges for role postgres" already assumes.
       PGHOST: localhost
       PGUSER: postgres
       PGPASSWORD: postgres
