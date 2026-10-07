@@ -26,12 +26,17 @@ class SupabaseWorkforceRepository implements WorkforceRepository {
 
   @override
   Future<List<RosterMember>> fetchRosterForVenue(String venueId) async {
-    final rows = await _client
-        .from('memberships')
-        .select('user_id, role, profiles(display_name)')
-        .eq('venue_id', venueId);
+    // An RPC rather than a table read: venue managers can't read other members' membership
+    // rows, and memberships has no relationship to profiles to embed (public.venue_roster).
+    final rows = await _client.rpc(
+      'venue_roster',
+      params: {'p_venue_id': venueId},
+    ) as List<dynamic>;
 
-    return rows.map(RosterMember.fromJson).toList(growable: false);
+    return rows
+        .cast<Map<String, dynamic>>()
+        .map(RosterMember.fromJson)
+        .toList(growable: false);
   }
 
   @override

@@ -40,13 +40,10 @@ class RosterMember {
   final String? displayName;
 
   factory RosterMember.fromJson(Map<String, dynamic> json) {
-    final profile = json['profiles'];
     return RosterMember(
       userId: json['user_id'] as String,
       role: json['role'] as String,
-      displayName: profile is Map<String, dynamic>
-          ? profile['display_name'] as String?
-          : null,
+      displayName: json['display_name'] as String?,
     );
   }
 }
