@@ -43,11 +43,14 @@ class SupabaseOrganizationsRepository implements OrganizationsRepository {
     required String venueName,
     String timezone = 'UTC',
   }) async {
-    final response = await _client.rpc('create_workspace', params: {
-      'p_organization_name': organizationName,
-      'p_venue_name': venueName,
-      'p_timezone': timezone,
-    },);
+    final response = await _client.rpc(
+      'create_workspace',
+      params: {
+        'p_organization_name': organizationName,
+        'p_venue_name': venueName,
+        'p_timezone': timezone,
+      },
+    );
     final row = (response as List<dynamic>).first as Map<String, dynamic>;
 
     return (

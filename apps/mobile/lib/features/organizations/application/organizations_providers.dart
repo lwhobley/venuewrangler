@@ -52,11 +52,13 @@ final pendingWorkspaceCreationTriggerProvider = Provider<void>((ref) {
       );
 
       await ref.read(supabaseClientProvider).auth.updateUser(
-            UserAttributes(data: {
-              ...?session.user.userMetadata,
-              'pending_workspace_name': null,
-              'pending_timezone': null,
-            },),
+            UserAttributes(
+              data: {
+                ...?session.user.userMetadata,
+                'pending_workspace_name': null,
+                'pending_timezone': null,
+              },
+            ),
           );
 
       ref.read(activeVenueProvider.notifier).state = created.venue;

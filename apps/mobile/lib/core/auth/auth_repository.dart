@@ -82,8 +82,7 @@ class SupabaseAuthRepository implements AuthRepository {
     required String password,
     Map<String, dynamic>? data,
   }) async {
-    final response =
-        await _client.auth.signUp(
+    final response = await _client.auth.signUp(
       email: email,
       password: password,
       data: data,
