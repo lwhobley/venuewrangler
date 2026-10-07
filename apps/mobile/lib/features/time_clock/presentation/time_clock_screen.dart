@@ -310,9 +310,10 @@ class _TimeClockScreenState extends ConsumerState<TimeClockScreen> {
                             ),
                             const SizedBox(height: 16),
                             Text(
-                              isClockedIn
-                                  ? _formatDuration(activeEntry.workedDuration)
-                                  : '00:00:00',
+                              // The actual (local) time, ticking live via _ticker — not
+                              // hours worked, which the "Shift elapsed" line and Recent
+                              // Punches below already cover.
+                              _formatClockFace(DateTime.now()),
                               style: const TextStyle(
                                 fontSize: 48,
                                 fontWeight: FontWeight.w800,
@@ -576,5 +577,13 @@ class _TimeClockScreenState extends ConsumerState<TimeClockScreen> {
     final hour = dt.hour.toString().padLeft(2, '0');
     final minute = dt.minute.toString().padLeft(2, '0');
     return '$hour:$minute';
+  }
+
+  // Same local-time convention as _formatTime, with seconds for the live clock face.
+  String _formatClockFace(DateTime dt) {
+    final hour = dt.hour.toString().padLeft(2, '0');
+    final minute = dt.minute.toString().padLeft(2, '0');
+    final second = dt.second.toString().padLeft(2, '0');
+    return '$hour:$minute:$second';
   }
 }
