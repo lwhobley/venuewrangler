@@ -1,11 +1,19 @@
+import 'dart:typed_data';
+
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// A thin interface over `file_picker`, same reasoning as media's ImagePickerService: UI code
 /// and tests never depend on the plugin directly.
+///
+/// Exactly one of [path] (mobile/desktop: a file on disk) or [bytes] (web: browsers expose no file
+/// path, and reading `PlatformFile.path` there throws) is set.
 class PickedDocument {
-  const PickedDocument({required this.path, required this.name});
-  final String path;
+  const PickedDocument({this.path, this.bytes, required this.name})
+      : assert((path == null) != (bytes == null));
+  final String? path;
+  final Uint8List? bytes;
   final String name;
 }
 
@@ -38,11 +46,18 @@ class DeviceDocumentPickerService implements DocumentPickerService {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: _allowedExtensions,
-      withData: false,
+      withData: kIsWeb,
     );
     final file = result?.files.single;
-    if (file?.path == null) return null;
-    return PickedDocument(path: file!.path!, name: file.name);
+    if (file == null) return null;
+    if (kIsWeb) {
+      final bytes = file.bytes;
+      return bytes == null
+          ? null
+          : PickedDocument(bytes: bytes, name: file.name);
+    }
+    final path = file.path;
+    return path == null ? null : PickedDocument(path: path, name: file.name);
   }
 }
 

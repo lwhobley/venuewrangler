@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -18,7 +19,8 @@ abstract interface class DocumentsRepository {
     required String title,
     required String category,
     required String fileName,
-    required String localFilePath,
+    String? localFilePath,
+    Uint8List? bytes,
   });
 
   Future<void> deleteDocument({required String documentId});
@@ -56,17 +58,26 @@ class SupabaseDocumentsRepository implements DocumentsRepository {
     required String title,
     required String category,
     required String fileName,
-    required String localFilePath,
+    String? localFilePath,
+    Uint8List? bytes,
   }) async {
-    final file = File(localFilePath);
-    if (!await file.exists()) {
+    // Web hands over the bytes (no file path exists there); other platforms a path on disk.
+    final Uint8List fileBytes;
+    if (bytes != null) {
+      fileBytes = bytes;
+    } else if (localFilePath != null) {
+      final file = File(localFilePath);
+      if (!await file.exists()) {
+        throw const UnknownError('The selected file could not be found.');
+      }
+      fileBytes = await file.readAsBytes();
+    } else {
       throw const UnknownError('The selected file could not be found.');
     }
-    final bytes = await file.readAsBytes();
     // 10MB cap matches documents-upload's own check; failing fast client-side avoids a
     // pointless base64-encoded multi-MB round trip when the file is already too large.
     const maxBytes = 10 * 1024 * 1024;
-    if (bytes.length > maxBytes) {
+    if (fileBytes.length > maxBytes) {
       throw const UnknownError('That file is too large (max 10MB).');
     }
 
@@ -82,7 +93,7 @@ class SupabaseDocumentsRepository implements DocumentsRepository {
           // never relied on for the actual stored mime_type.
           'mime_type': 'application/octet-stream',
           'category': category,
-          'data_base64': base64Encode(bytes),
+          'data_base64': base64Encode(fileBytes),
         },
       );
       final data = response.data;

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
@@ -137,27 +138,30 @@ class IncidentListScreen extends ConsumerWidget {
                 onChanged: (value) =>
                     setState(() => severity = value ?? severity),
               ),
-              const SizedBox(height: 12),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton.icon(
-                  onPressed: () async {
-                    final picked = await ref
-                        .read(imagePickerServiceProvider)
-                        .pickImage(source: ImageSource.camera);
-                    if (picked == null || !context.mounted) return;
-                    // Let the reporter mark up the photo (circle the damage, add a label…)
-                    // before it's attached; backing out keeps the original.
-                    final annotated =
-                        await ref.read(photoAnnotatorProvider)(context, picked);
-                    setState(() => photoPath = annotated ?? picked);
-                  },
-                  icon: const Icon(Icons.camera_alt_outlined),
-                  label: Text(
-                    photoPath == null ? 'Attach photo' : 'Photo attached',
+              // Photo evidence is captured, annotated and uploaded by file path, which a browser
+              // doesn't have (dart:io File/FileImage throw on web), so the option is native-only.
+              if (!kIsWeb) const SizedBox(height: 12),
+              if (!kIsWeb)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: () async {
+                      final picked = await ref
+                          .read(imagePickerServiceProvider)
+                          .pickImage(source: ImageSource.camera);
+                      if (picked == null || !context.mounted) return;
+                      // Let the reporter mark up the photo (circle the damage, add a label…)
+                      // before it's attached; backing out keeps the original.
+                      final annotate = ref.read(photoAnnotatorProvider);
+                      final annotated = await annotate(context, picked);
+                      setState(() => photoPath = annotated ?? picked);
+                    },
+                    icon: const Icon(Icons.camera_alt_outlined),
+                    label: Text(
+                      photoPath == null ? 'Attach photo' : 'Photo attached',
+                    ),
                   ),
                 ),
-              ),
             ],
           ),
           actions: [

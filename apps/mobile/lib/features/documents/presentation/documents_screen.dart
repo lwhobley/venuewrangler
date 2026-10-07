@@ -158,6 +158,7 @@ class DocumentsScreen extends ConsumerWidget {
             category: category,
             fileName: picked.name,
             localFilePath: picked.path,
+            bytes: picked.bytes,
           );
       ref.invalidate(documentsProvider(venueId));
     } on AppError catch (error) {
