@@ -3,7 +3,7 @@
 -- existing memberships creates their own organization + venue + organization_owner membership.
 
 begin;
-select plan(9);
+select plan(11);
 
 insert into auth.users (id, email) values
   ('30000000-0000-0000-0000-000000000001', 'new-owner@example.com');
@@ -56,6 +56,17 @@ select throws_ok(
   'a blank venue name is rejected'
 );
 
+select throws_ok(
+  $$select * from public.create_workspace('Tz Org', 'Tz Venue', 'Mars/Olympus_Mons')$$,
+  '22023', 'Unknown time zone',
+  'an unknown time zone is rejected'
+);
+
+select lives_ok(
+  $$select * from public.create_workspace('Tz Org Ok', 'Tz Venue Ok', 'America/Los_Angeles')$$,
+  'a real IANA time zone is accepted'
+);
+
 reset role;
 set local role anon;
 select throws_ok(
@@ -66,7 +77,7 @@ select throws_ok(
 reset role;
 
 select is(
-  (select count(*)::int from public.organizations where name in ('Anon Org', 'Some Org', '  ')),
+  (select count(*)::int from public.organizations where name in ('Anon Org', 'Some Org', '  ', 'Tz Org')),
   0,
   'none of the rejected calls left partial rows behind'
 );
