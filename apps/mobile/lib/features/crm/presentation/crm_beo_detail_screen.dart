@@ -239,80 +239,7 @@ class CrmBeoDetailScreen extends ConsumerWidget {
   }
 
   Future<void> _addCharge(BuildContext context, WidgetRef ref) async {
-    final description = TextEditingController();
-    final amount = TextEditingController();
-    final formKey = GlobalKey<FormState>();
-    var category = CrmBeoCharge.categories.first;
-    final draft =
-        await showDialog<({String description, String category, int cents})>(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: const Text('Add BEO charge'),
-          content: Form(
-            key: formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextFormField(
-                  controller: description,
-                  decoration: const InputDecoration(labelText: 'Description'),
-                  maxLength: 160,
-                  validator: (value) => value == null || value.trim().isEmpty
-                      ? 'Enter a description'
-                      : null,
-                ),
-                DropdownButtonFormField<String>(
-                  initialValue: category,
-                  decoration: const InputDecoration(labelText: 'Category'),
-                  items: [
-                    for (final item in CrmBeoCharge.categories)
-                      DropdownMenuItem(value: item, child: Text(item)),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) setState(() => category = value);
-                  },
-                ),
-                TextFormField(
-                  controller: amount,
-                  decoration: const InputDecoration(
-                    labelText: 'Amount',
-                    prefixText: r'$',
-                  ),
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
-                  validator: (value) => _parseCents(value ?? '') == null
-                      ? 'Enter a positive amount, up to 2 decimals'
-                      : null,
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () {
-                if (!formKey.currentState!.validate()) return;
-                Navigator.pop(
-                  dialogContext,
-                  (
-                    description: description.text.trim(),
-                    category: category,
-                    cents: _parseCents(amount.text)!,
-                  ),
-                );
-              },
-              child: const Text('Add'),
-            ),
-          ],
-        ),
-      ),
-    );
-    description.dispose();
-    amount.dispose();
+    final draft = await AddBeoChargeDialog.show(context);
     if (draft == null) return;
     try {
       await ref.read(crmRepositoryProvider).addBeoCharge(
@@ -368,16 +295,113 @@ class CrmBeoDetailScreen extends ConsumerWidget {
       }
     }
   }
+}
 
-  static int? _parseCents(String input) {
-    final value = input.trim();
-    if (!RegExp(r'^\d+(?:\.\d{1,2})?$').hasMatch(value)) return null;
-    final parts = value.split('.');
-    final whole = int.tryParse(parts.first);
-    if (whole == null) return null;
-    final cents =
-        int.parse(parts.length == 1 ? '0' : parts.last.padRight(2, '0'));
-    final total = whole * 100 + cents;
-    return total > 0 && total <= 2147483647 ? total : null;
+/// Amount in cents from user input ("12", "12.5", "12.50"); null unless positive with at most two
+/// decimals and within a 32-bit int.
+int? parseChargeCents(String input) {
+  final value = input.trim();
+  if (!RegExp(r'^\d+(?:\.\d{1,2})?$').hasMatch(value)) return null;
+  final parts = value.split('.');
+  final whole = int.tryParse(parts.first);
+  if (whole == null) return null;
+  final cents =
+      int.parse(parts.length == 1 ? '0' : parts.last.padRight(2, '0'));
+  final total = whole * 100 + cents;
+  return total > 0 && total <= 2147483647 ? total : null;
+}
+
+typedef BeoChargeDraft = ({String description, String category, int cents});
+
+/// The "Add BEO charge" form. A StatefulWidget of its own so the text controllers are disposed
+/// when the dialog is really gone — disposing them right after `showDialog` returns races the
+/// route's exit animation, during which the fields are still built.
+class AddBeoChargeDialog extends StatefulWidget {
+  const AddBeoChargeDialog({super.key});
+
+  static Future<BeoChargeDraft?> show(BuildContext context) =>
+      showDialog<BeoChargeDraft>(
+        context: context,
+        builder: (_) => const AddBeoChargeDialog(),
+      );
+
+  @override
+  State<AddBeoChargeDialog> createState() => _AddBeoChargeDialogState();
+}
+
+class _AddBeoChargeDialogState extends State<AddBeoChargeDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _description = TextEditingController();
+  final _amount = TextEditingController();
+  String _category = CrmBeoCharge.categories.first;
+
+  @override
+  void dispose() {
+    _description.dispose();
+    _amount.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    if (!_formKey.currentState!.validate()) return;
+    final BeoChargeDraft draft = (
+      description: _description.text.trim(),
+      category: _category,
+      cents: parseChargeCents(_amount.text)!,
+    );
+    Navigator.pop(context, draft);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Add BEO charge'),
+      content: Form(
+        key: _formKey,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextFormField(
+              controller: _description,
+              decoration: const InputDecoration(labelText: 'Description'),
+              maxLength: 160,
+              validator: (value) => value == null || value.trim().isEmpty
+                  ? 'Enter a description'
+                  : null,
+            ),
+            DropdownButtonFormField<String>(
+              initialValue: _category,
+              decoration: const InputDecoration(labelText: 'Category'),
+              items: [
+                for (final item in CrmBeoCharge.categories)
+                  DropdownMenuItem(value: item, child: Text(item)),
+              ],
+              onChanged: (value) {
+                if (value != null) setState(() => _category = value);
+              },
+            ),
+            TextFormField(
+              controller: _amount,
+              decoration: const InputDecoration(
+                labelText: 'Amount',
+                prefixText: r'$',
+              ),
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              validator: (value) => parseChargeCents(value ?? '') == null
+                  ? 'Enter a positive amount, up to 2 decimals'
+                  : null,
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(onPressed: _submit, child: const Text('Add')),
+      ],
+    );
   }
 }
