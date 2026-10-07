@@ -35,6 +35,11 @@ event orders), contracts, and a pipeline forecast — to Supabase + Flutter.
 - **RLS**: manager-tier only (`venue_manager`/`organization_owner`/`organization_admin`) on
   every table, matching legacy's `canManageVenue` gate on every CRM endpoint including reads —
   staff/supervisor get nothing, not even a read policy.
+- **BEO charges** (`supabase/migrations/20261007160000_crm_beo_charges.sql`): itemized
+  amounts for food, beverage, room, service, tax, discount, or other charges. Each row
+  must match its BEO's venue through a composite foreign key, and manager-tier RLS
+  protects reads and writes. Discounts subtract from the recorded total. The food and
+  beverage minimum is shown separately because it is a commitment, not another charge.
 
 ## Not built here (documented gap, not silently skipped)
 
@@ -46,6 +51,9 @@ event orders), contracts, and a pipeline forecast — to Supabase + Flutter.
 ## Flutter
 
 `presentation/crm_screen.dart` — a 4-tab screen (Leads / BEOs / Contracts / Forecast).
+The BEO tab opens `presentation/crm_beo_detail_screen.dart`, which displays the order's
+event, menu, instructions, and itemized charges. Managers can add and remove charge
+lines there; tax and service amounts must be entered explicitly rather than inferred.
 `presentation/crm_lead_detail_screen.dart` — a lead's notes and activity trail, plus inline
 status change. Both rely entirely on RLS for authorization, same as every other feature in this
 app — no client-side role check duplicates what the database already enforces.

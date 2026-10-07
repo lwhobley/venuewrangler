@@ -2,6 +2,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/errors/app_error.dart';
 import '../domain/crm_beo.dart';
+import '../domain/crm_beo_charge.dart';
 import '../domain/crm_contract.dart';
 import '../domain/crm_lead.dart';
 
@@ -43,6 +44,15 @@ abstract class CrmRepository {
     String? venueSpace,
   });
   Future<void> updateBeoStatus({required String beoId, required String status});
+  Future<List<CrmBeoCharge>> getBeoCharges({required String beoId});
+  Future<void> addBeoCharge({
+    required String beoId,
+    required String venueId,
+    required String description,
+    required String category,
+    required int amountCents,
+  });
+  Future<void> deleteBeoCharge({required String chargeId});
   Future<({String contractId, bool alreadyExisted})> convertBeoToContract({
     required String beoId,
   });
@@ -220,6 +230,40 @@ class SupabaseCrmRepository implements CrmRepository {
     required String status,
   }) async {
     await _client.from('crm_beos').update({'status': status}).eq('id', beoId);
+  }
+
+  @override
+  Future<List<CrmBeoCharge>> getBeoCharges({required String beoId}) async {
+    final response = await _client
+        .from('crm_beo_charges')
+        .select()
+        .eq('beo_id', beoId)
+        .order('created_at');
+    return (response as List<dynamic>)
+        .map((row) => CrmBeoCharge.fromJson(row as Map<String, dynamic>))
+        .toList();
+  }
+
+  @override
+  Future<void> addBeoCharge({
+    required String beoId,
+    required String venueId,
+    required String description,
+    required String category,
+    required int amountCents,
+  }) async {
+    await _client.from('crm_beo_charges').insert({
+      'beo_id': beoId,
+      'venue_id': venueId,
+      'description': description,
+      'category': category,
+      'amount_cents': amountCents,
+    });
+  }
+
+  @override
+  Future<void> deleteBeoCharge({required String chargeId}) async {
+    await _client.from('crm_beo_charges').delete().eq('id', chargeId);
   }
 
   @override

@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:venuewrangler_mobile/features/crm/application/crm_providers.dart';
 import 'package:venuewrangler_mobile/features/crm/data/crm_repository.dart';
 import 'package:venuewrangler_mobile/features/crm/domain/crm_beo.dart';
+import 'package:venuewrangler_mobile/features/crm/domain/crm_beo_charge.dart';
 import 'package:venuewrangler_mobile/features/crm/domain/crm_contract.dart';
 import 'package:venuewrangler_mobile/features/crm/domain/crm_lead.dart';
 import 'package:venuewrangler_mobile/features/crm/presentation/crm_screen.dart';
@@ -11,9 +12,12 @@ import 'package:venuewrangler_mobile/features/venues/application/venues_provider
 import 'package:venuewrangler_mobile/features/venues/domain/venue.dart';
 
 class _FakeCrmRepository implements CrmRepository {
-  _FakeCrmRepository({List<CrmBeo>? beos}) : _beos = beos ?? [];
+  _FakeCrmRepository({List<CrmBeo>? beos, List<CrmBeoCharge>? charges})
+      : _beos = beos ?? [],
+        _charges = charges ?? [];
 
   final List<CrmBeo> _beos;
+  final List<CrmBeoCharge> _charges;
 
   @override
   Future<List<CrmLead>> getLeads({
@@ -79,6 +83,24 @@ class _FakeCrmRepository implements CrmRepository {
     required String beoId,
     required String status,
   }) =>
+      throw UnimplementedError();
+
+  @override
+  Future<List<CrmBeoCharge>> getBeoCharges({required String beoId}) async =>
+      _charges;
+
+  @override
+  Future<void> addBeoCharge({
+    required String beoId,
+    required String venueId,
+    required String description,
+    required String category,
+    required int amountCents,
+  }) =>
+      throw UnimplementedError();
+
+  @override
+  Future<void> deleteBeoCharge({required String chargeId}) =>
       throw UnimplementedError();
 
   @override
@@ -149,5 +171,80 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('No BEOs yet.'), findsOneWidget);
+  });
+
+  testWidgets('opens a formatted BEO with details and recorded charges',
+      (tester) async {
+    final now = DateTime.utc(2026, 10, 7);
+    final fakeRepo = _FakeCrmRepository(
+      beos: [
+        CrmBeo(
+          id: 'beo-1',
+          venueId: testVenue.id,
+          eventName: 'Founders Dinner',
+          eventDate: now,
+          eventType: 'Private dinner',
+          guestCount: 40,
+          venueSpace: 'Main dining',
+          setupStyle: 'Banquet rounds',
+          fbMinimumCents: 200000,
+          menuAppetizers: 'Passed canapés',
+          menuEntrees: 'Steak and mushroom risotto',
+          menuDesserts: 'Chocolate tart',
+          menuBarPackage: 'Hosted bar',
+          specialRequirements: 'Nut-free table',
+          internalNotes: 'Vendor load-in at 16:00',
+          status: 'confirmed',
+          createdAt: now,
+          updatedAt: now,
+        ),
+      ],
+      charges: [
+        CrmBeoCharge(
+          id: 'charge-1',
+          beoId: 'beo-1',
+          venueId: testVenue.id,
+          description: 'Dinner package',
+          category: 'food',
+          amountCents: 250000,
+        ),
+        CrmBeoCharge(
+          id: 'charge-2',
+          beoId: 'beo-1',
+          venueId: testVenue.id,
+          description: 'Courtesy discount',
+          category: 'discount',
+          amountCents: 10000,
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          activeVenueProvider.overrideWith((ref) => testVenue),
+          crmRepositoryProvider.overrideWithValue(fakeRepo),
+        ],
+        child: const MaterialApp(home: CrmScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('BEOs'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Founders Dinner'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('View BEO'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Banquet event order'), findsOneWidget);
+    expect(find.text('Passed canapés'), findsOneWidget);
+    expect(find.text('Nut-free table'), findsOneWidget);
+    expect(find.text('Dinner package'), findsOneWidget);
+    expect(find.text('Courtesy discount'), findsOneWidget);
+    expect(find.text('\$2,400.00'), findsOneWidget);
+    expect(
+      find.text('The minimum is a commitment, not an additional charge.'),
+      findsOneWidget,
+    );
   });
 }

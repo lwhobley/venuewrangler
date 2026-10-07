@@ -6,6 +6,7 @@ import '../application/crm_providers.dart';
 import '../domain/crm_beo.dart';
 import '../domain/crm_contract.dart';
 import 'crm_lead_detail_screen.dart';
+import 'crm_beo_detail_screen.dart';
 
 /// CRM: leads, BEOs (banquet event orders), contracts, and a pipeline forecast. Manager-tier
 /// only end to end (RLS has no select policy for staff/supervisor on any crm_* table — see
@@ -353,6 +354,15 @@ class _BeoTile extends ConsumerWidget {
           child: Wrap(
             spacing: 8,
             children: [
+              OutlinedButton.icon(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => CrmBeoDetailScreen(beo: beo),
+                  ),
+                ),
+                icon: const Icon(Icons.visibility_outlined),
+                label: const Text('View BEO'),
+              ),
               if (beo.status != 'confirmed' && beo.status != 'cancelled')
                 OutlinedButton(
                   onPressed: () async {

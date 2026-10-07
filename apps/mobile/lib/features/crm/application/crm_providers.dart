@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/network/supabase_providers.dart';
 import '../data/crm_repository.dart';
 import '../domain/crm_beo.dart';
+import '../domain/crm_beo_charge.dart';
 import '../domain/crm_contract.dart';
 import '../domain/crm_lead.dart';
 
@@ -29,6 +30,11 @@ final crmActivityProvider = FutureProvider.autoDispose
 final crmBeosProvider =
     FutureProvider.autoDispose.family<List<CrmBeo>, String>((ref, venueId) {
   return ref.watch(crmRepositoryProvider).getBeos(venueId: venueId);
+});
+
+final crmBeoChargesProvider =
+    FutureProvider.autoDispose.family<List<CrmBeoCharge>, String>((ref, beoId) {
+  return ref.watch(crmRepositoryProvider).getBeoCharges(beoId: beoId);
 });
 
 final crmContractsProvider = FutureProvider.autoDispose
