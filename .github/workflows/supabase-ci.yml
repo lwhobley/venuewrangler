@@ -112,4 +112,4 @@ jobs:
         run: deno lint supabase/functions
 
       - name: Deno test shared modules
-        run: deno test --allow-none supabase/functions/_shared/
+        run: deno test --permit-no-files supabase/functions/_shared/
