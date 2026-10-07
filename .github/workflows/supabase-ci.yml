@@ -49,8 +49,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends postgresql-client-16 postgresql-16-pgtap
 
+      # Must connect to the pre-existing "postgres" database here, not $PGDATABASE
+      # (supabase_migration_check) — that's the database this step creates, so
+      # connecting to it first is a chicken-and-egg error.
       - name: Create test database
-        run: psql -h localhost -U postgres -c "CREATE DATABASE supabase_migration_check;"
+        run: psql -h localhost -U postgres -d postgres -c "CREATE DATABASE supabase_migration_check;"
 
       # Stubs the parts of a real Supabase project (auth schema, auth.uid(), anon/
       # authenticated/service_role roles) that the migrations under supabase/migrations
@@ -92,7 +95,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: denoland/setup-deno@e6d9465a4a544d1a8a3b8c29e96d9957f3a86027 # v2.0.2
+      - uses: denoland/setup-deno@909cc5acb0fdd60627fb858598759246509fa755 # v2.0.2
         with:
           deno-version: v2.x
 
