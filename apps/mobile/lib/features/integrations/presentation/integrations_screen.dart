@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/errors/app_error.dart';
@@ -42,6 +43,14 @@ class IntegrationsScreen extends ConsumerWidget {
             };
             return ListView(
               children: [
+                ListTile(
+                  leading: const Icon(Icons.point_of_sale_outlined),
+                  title: const Text('POS'),
+                  subtitle: const Text('Provider access, capabilities and schedule sync'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => context.push('/pos'),
+                ),
+                const Divider(),
                 for (final provider in PayrollProvider.values)
                   _ProviderTile(
                     provider: provider,

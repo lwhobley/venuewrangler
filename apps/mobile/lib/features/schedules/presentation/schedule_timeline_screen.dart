@@ -286,6 +286,9 @@ class _ScheduleTimelineScreenState
     try {
       if (result.delete) {
         await repo.deleteShift(shift.id);
+        _toast(
+          'Shift removed locally or marked cancelled. Publish the schedule to sync a connected POS.',
+        );
       } else {
         await repo.updateShift(
           shiftId: shift.id,
@@ -1188,7 +1191,7 @@ class _ShiftFormState extends State<_ShiftForm> {
                 ),
                 icon: Icon(Icons.delete_outline, color: context.ops.danger.fg),
                 label: Text(
-                  'Delete shift',
+                  'Remove or cancel shift',
                   style: TextStyle(color: context.ops.danger.fg),
                 ),
               ),

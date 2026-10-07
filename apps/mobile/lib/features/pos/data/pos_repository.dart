@@ -4,6 +4,13 @@ import '../domain/pos_connection.dart';
 
 abstract class PosRepository {
   Future<List<PosConnection>> getConnections({required String venueId});
+  Future<List<Map<String, dynamic>>> getCapabilities(String connectionId);
+  Future<List<Map<String, dynamic>>> getOutboundJobs(String connectionId);
+  Future<String> requestConnection({
+    required String venueId,
+    required String provider,
+  });
+  Future<int> publishSchedule(String connectionId);
   Future<List<PosCheck>> getRecentChecks({
     required String venueId,
     int limit = 50,
@@ -19,6 +26,56 @@ class SupabasePosRepository implements PosRepository {
   SupabasePosRepository(this._client);
 
   final SupabaseClient _client;
+
+  @override
+  Future<String> requestConnection({
+    required String venueId,
+    required String provider,
+  }) async {
+    final id = await _client.rpc(
+      'request_pos_connection',
+      params: {'p_venue_id': venueId, 'p_provider': provider},
+    );
+    return id as String;
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> getCapabilities(
+    String connectionId,
+  ) async {
+    final rows = await _client
+        .from('pos_connection_capabilities')
+        .select(
+          'capability,state,verified_at,evidence_url',
+        )
+        .eq('connection_id', connectionId)
+        .order('capability');
+    return rows;
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> getOutboundJobs(
+    String connectionId,
+  ) async {
+    final rows = await _client
+        .from('pos_outbound_jobs')
+        .select(
+          'id,operation,status,error_code,created_at,completed_at',
+        )
+        .eq('connection_id', connectionId)
+        .order('created_at', ascending: false)
+        .limit(20);
+    return rows;
+  }
+
+  @override
+  Future<int> publishSchedule(String connectionId) async {
+    final result = await _client.rpc(
+      'publish_pos_schedule',
+      params: {'p_connection_id': connectionId},
+    );
+    return result as int;
+  }
 
   @override
   Future<List<PosConnection>> getConnections({required String venueId}) async {
@@ -55,17 +112,8 @@ class SupabasePosRepository implements PosRepository {
     required String venueId,
     required String itemGuid,
     required bool isAvailable,
-  }) async {
-    await _client.functions.invoke(
-      'toast-pos/outbound-command',
-      body: {
-        'venue_id': venueId,
-        'command_type': 'update_item_availability_86',
-        'payload': {
-          'itemGuid': itemGuid,
-          'isAvailable': isAvailable,
-        },
-      },
-    );
-  }
+  }) async =>
+      throw UnsupportedError(
+        'Toast item availability has no verified delivery worker.',
+      );
 }

@@ -15,6 +15,10 @@ and `20261002160000_shift_swaps_schema.sql`.
   dialog — the suggestion is never applied directly, satisfying the manual-fallback
   requirement in `features/ai/README.md` by construction.
 
+  Removing a shift calls the server-side `remove_or_cancel_shift` RPC. Local drafts are
+  deleted; shifts with POS mapping history are retained as cancelled so a later schedule
+  publication can send the provider cancellation.
+
   Shift swaps appear as an "Open swap requests" section above the shift list. A shift's
   current assignee gets a swap icon on their own tile to request one (open to anyone, or
   targeted — targeting isn't exposed in the UI yet, only in the repository); any other venue

@@ -30,8 +30,22 @@ revoke all on public.storage_deletion_jobs from authenticated, anon;
 -- payroll_connections does above. Re-apply it here so local tests see the real end state.
 revoke all on public.pos_connections from authenticated;
 grant select (
-  id, organization_id, venue_id, provider, external_location_id, status, last_sync_at, created_at, updated_at
+  id, organization_id, venue_id, provider, product, external_location_id, status,
+  readiness, last_sync_at, last_inbound_at, last_outbound_at, created_at, updated_at
 ) on public.pos_connections to authenticated;
+
+-- The POS schedule migration revokes client writes to its state and the unsupported
+-- legacy menu queue. Reapply after this stub's broad compatibility grant.
+revoke insert on public.pos_outbound_commands from authenticated;
+do $$ declare t text; begin
+  foreach t in array array['pos_connection_capabilities','pos_location_mappings',
+    'pos_employee_mappings','pos_job_mappings','pos_external_shift_mappings',
+    'pos_schedule_versions','pos_outbound_jobs','pos_sync_conflicts',
+    'pos_sales','pos_time_entries','pos_sync_runs','pos_audit_events'] loop
+    execute format('revoke all on public.%I from anon, authenticated', t);
+    execute format('grant select on public.%I to authenticated', t);
+  end loop;
+end $$;
 
 -- reservation_connections' own migration (20261002250000) does the same narrowing for its
 -- webhook_secret_hash column; webhook_replay_log is revoked entirely (service-role only).

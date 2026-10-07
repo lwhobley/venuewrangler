@@ -24,7 +24,7 @@ type/status, hourly pay, certifications, and PTO/sick-hour balances. Records are
 scoped to a user and venue; edits retain that scope and refuse a save after a
 venue/account change. Empty fields explicitly clear saved values.
 
-Supabase support is in `20261006220000_flutter_staff_hr_and_photos.sql`:
+Supabase support is in `20261006212133_flutter_staff_hr_and_photos.sql`:
 
 - `employee_hr_profiles`: self/authorized-manager access with protected employment fields.
 - `staff_photos`: team-readable identity metadata without exposing HR details.

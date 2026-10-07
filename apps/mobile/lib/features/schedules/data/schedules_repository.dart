@@ -29,6 +29,7 @@ abstract interface class SchedulesRepository {
     ShiftStatus? status,
   });
 
+  /// Deletes a local draft or retains an exported shift as cancelled for POS publication.
   Future<void> deleteShift(String shiftId);
 
   Future<List<ShiftSwap>> fetchSwapsForVenue(String venueId);
@@ -113,7 +114,10 @@ class SupabaseSchedulesRepository implements SchedulesRepository {
 
   @override
   Future<void> deleteShift(String shiftId) async {
-    await _client.from('shifts').delete().eq('id', shiftId);
+    await _client.rpc(
+      'remove_or_cancel_shift',
+      params: {'p_shift_id': shiftId},
+    );
   }
 
   @override

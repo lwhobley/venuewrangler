@@ -1,27 +1,7 @@
-# Bidirectional POS Integration Feature
+# POS integrations
 
-Port of legacy NestJS `pos` module with an explicit architecture expansion: **bidirectional synchronization**, starting with **Toast POS**.
+The management screen reads venue-scoped connection readiness, capability evidence, recent outbound jobs, and ingested checks from Supabase. Managers can request provider setup without entering credentials. The repository calls `publish_pos_schedule` to atomically snapshot the existing venue schedule into a versioned outbox after server-side manager, mapping, and capability checks. The mobile app never contacts a POS provider.
 
-## Asymmetry & Implemented Scope
+See `docs/pos-integration-platform.md` for the repository audit, official provider documentation, capability matrix, and rollout gates.
 
-The legacy NestJS pos module was strictly **ingest-only** and never called external vendor APIs. Under the new bidirectional architecture:
-
-### 1. Inbound Ingest-Only (Legacy Parity)
-- Providers: `toast`, `square`, `clover`, `shopify_pos`, `lightspeed_restaurant`, `spoton`, `generic`.
-- Supported Inbound Capabilities:
-  - Check ingestion with table, server, guest count, and line items.
-  - Idempotent upsert via unique constraint `(venue_id, provider, external_check_id)` preventing duplicate revenue reporting on webhook retries.
-  - Labor punches, tips, and service charges remain ingest-driven from webhook payloads.
-
-### 2. Outbound Operations (New Architectural Capability)
-- Primary Vendor: **Toast POS** (selected as first target vendor).
-- Supported Outbound Operations:
-  - `update_item_availability_86`: Push real-time 86'd (out-of-stock) item statuses directly to Toast restaurant terminals.
-  - `sync_menu_item`: Scaffolding for pushing menu modifications and item updates.
-  - `void_item`: Scaffolding for item cancellation commands.
-- Reliability & Queue Architecture:
-  - Commands are enqueued into `public.pos_outbound_commands` with exponential retry counts (`attempts`, `max_attempts`) and worker claiming (`claim_pos_outbound_commands_batch` using `FOR UPDATE SKIP LOCKED`).
-  - Edge Function `supabase/functions/toast-pos/index.ts` mediates authenticated outbound calls with manager authorization checks, looking up venue credentials securely.
-- Security:
-  - `webhook_secret_hash` and `credentials_encrypted` are strictly revoked from `authenticated` at the database column level.
-  - Inbound `toast-pos/webhook` requires `X-Venue-Webhook-Secret` (a unique random secret of at least 32 characters for the venue). Store only its lowercase SHA-256 hex digest in the active Toast `pos_connections.webhook_secret_hash` row. Requests without a configured active connection or a matching secret fail closed with 401. A POS gateway must add this header; do not expose the secret to the Flutter app or publish the endpoint as a native Toast destination until Toast's actual signing scheme is integrated and verified.
+**Operational status:** the schedule outbox has no deployed worker or provider adapter. Existing `toast-pos` only queues legacy menu commands and accepts a custom gateway webhook; it is not a native Toast webhook or verified delivery path. The mobile 86 action is withheld. No outbound schedule operation is claimed synced until a worker records provider acknowledgment.

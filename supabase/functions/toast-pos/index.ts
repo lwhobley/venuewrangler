@@ -1,18 +1,16 @@
 // supabase/functions/toast-pos/index.ts
-// Handles bidirectional Toast POS integration:
-// 1. Inbound webhook ingestion: receives POS checks, validates signature/secret, and upserts idempotently.
-// 2. Outbound commands: pushes 86'd out-of-stock items, menu item updates, or item voids to Toast POS API.
+// Legacy gateway check ingestion. This uses a custom gateway secret, not a
+// verified native Toast webhook signature. Outbound menu commands are disabled
+// until a provider-approved adapter and delivery worker exist.
 
 import { corsHeaders, handleCorsPreflight } from "../_shared/cors.ts";
-import { createServiceClient, createUserClient } from "../_shared/supabase-clients.ts";
-import { getCallerVenueRoles, isManager } from "../_shared/venue-auth.ts";
+import { createServiceClient } from "../_shared/supabase-clients.ts";
 import { initObservability, captureException, flushObservability } from "../_shared/observability.ts";
 import { sha256Hex } from "../_shared/crypto.ts";
 
 initObservability();
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const ALLOWED_COMMAND_TYPES = ["86_item", "void_item", "menu_item_update"];
 const MAX_WEBHOOK_BYTES = 256 * 1024;
 
 function jsonResponse(body: Record<string, unknown>, status = 200): Response {
@@ -166,90 +164,9 @@ async function handleRequest(req: Request): Promise<Response> {
     return jsonResponse({ ok: true, external_check_id: externalCheckId });
   }
 
-  // Outbound 86 item / Command Execution (/toast-pos/outbound-command)
+  // No verified Toast delivery worker exists for legacy menu commands.
   if (req.method === "POST" && action === "outbound-command") {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return jsonResponse({ error: "missing_authorization_header" }, 401);
-    }
-
-    let body: {
-      venue_id?: string;
-      command_type?: string;
-      payload?: Record<string, unknown>;
-    };
-
-    try {
-      body = await req.json();
-    } catch {
-      return jsonResponse({ error: "invalid_json_body" }, 400);
-    }
-
-    const { venue_id, command_type, payload } = body;
-    if (!venue_id || !command_type || !payload) {
-      return jsonResponse({ error: "missing_required_parameters" }, 400);
-    }
-    if (typeof venue_id !== "string" || !UUID_PATTERN.test(venue_id)) {
-      return jsonResponse({ error: "invalid_venue_id" }, 400);
-    }
-    if (!ALLOWED_COMMAND_TYPES.includes(command_type)) {
-      return jsonResponse({ error: "invalid_command_type" }, 400);
-    }
-    if (typeof payload !== "object" || payload === null || Array.isArray(payload)) {
-      return jsonResponse({ error: "invalid_command_payload" }, 400);
-    }
-
-    // Verify user authorization with RLS-respecting user client. Org owners/admins
-    // hold org-level memberships (venue_id null), so cover both venue and org rows.
-    const userClient = createUserClient(authHeader);
-    const { data: userData, error: userError } = await userClient.auth.getUser();
-    if (userError || !userData?.user) {
-      return jsonResponse({ error: "invalid_session" }, 401);
-    }
-
-    const callerRoles = await getCallerVenueRoles(userClient, userData.user.id, venue_id);
-    if (!callerRoles || !isManager(callerRoles.roles)) {
-      return jsonResponse({ error: "forbidden_manager_role_required" }, 403);
-    }
-
-    const serviceClient = createServiceClient();
-
-    // Find the active Toast connection for this venue
-    const { data: connection, error: connError } = await serviceClient
-      .from("pos_connections")
-      .select("id, status, credentials_encrypted")
-      .eq("venue_id", venue_id)
-      .eq("provider", "toast")
-      .maybeSingle();
-
-    if (connError || !connection) {
-      return jsonResponse({ error: "no_toast_pos_connection_found" }, 404);
-    }
-
-    // Enqueue command into pos_outbound_commands queue table
-    const { data: queuedCommand, error: queueError } = await serviceClient
-      .from("pos_outbound_commands")
-      .insert({
-        venue_id,
-        pos_connection_id: connection.id,
-        provider: "toast",
-        command_type,
-        payload,
-        status: "pending",
-      })
-      .select()
-      .single();
-
-    if (queueError) {
-      console.error("toast-pos: failed to queue command", queueError);
-      return jsonResponse({ error: "failed_to_queue_command" }, 500);
-    }
-
-    return jsonResponse({
-      ok: true,
-      message: "outbound_command_queued",
-      command: queuedCommand,
-    });
+    return jsonResponse({ error: "unsupported_capability" }, 501);
   }
 
   return jsonResponse({ error: "not_found" }, 404);

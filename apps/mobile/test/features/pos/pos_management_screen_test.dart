@@ -21,6 +21,32 @@ class _FakePosRepository implements PosRepository {
   bool push86Called = false;
   String? pushedItemGuid;
   bool? pushedAvailability;
+  String? requestedProvider;
+
+  @override
+  Future<String> requestConnection({
+    required String venueId,
+    required String provider,
+  }) async {
+    requestedProvider = provider;
+    return 'new-connection';
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> getCapabilities(
+    String connectionId,
+  ) async =>
+      [];
+
+  @override
+  Future<List<Map<String, dynamic>>> getOutboundJobs(
+    String connectionId,
+  ) async =>
+      [];
+
+  @override
+  Future<int> publishSchedule(String connectionId) async =>
+      throw UnsupportedError('Not connected');
 
   @override
   Future<List<PosConnection>> getConnections({required String venueId}) async =>
@@ -70,9 +96,11 @@ void main() {
 
     await tester.pumpAndSettle();
 
-    expect(find.text('POS Management'), findsOneWidget);
+    expect(find.text('Integrations · POS'), findsOneWidget);
     expect(
-      find.text('No active POS connections found for this venue.'),
+      find.text(
+        'No POS connection configured for this venue. Provider onboarding is required.',
+      ),
       findsOneWidget,
     );
     expect(find.text('No recent checks received from POS.'), findsOneWidget);
@@ -120,13 +148,14 @@ void main() {
 
     await tester.pumpAndSettle();
 
-    expect(find.text('TOAST'), findsOneWidget);
-    expect(find.text('CONNECTED'), findsOneWidget);
+    expect(find.text('TOAST · restaurant'), findsOneWidget);
+    expect(find.text('SETUP REQUIRED'), findsOneWidget);
     expect(find.text('Check #9876'), findsOneWidget);
     expect(find.text('Total: \$45.00 | Tip: \$8.00'), findsOneWidget);
   });
 
-  testWidgets('triggers outbound 86 dialog and pushes command', (tester) async {
+  testWidgets('does not offer unimplemented outbound 86 action',
+      (tester) async {
     final fakeRepo = _FakePosRepository();
 
     await tester.pumpWidget(
@@ -141,24 +170,35 @@ void main() {
 
     await tester.pumpAndSettle();
 
-    final btn86 = find.text('86 Item (Toast)');
-    expect(btn86, findsOneWidget);
+    expect(find.text('86 Item (Toast)'), findsNothing);
+    expect(fakeRepo.push86Called, isFalse);
+  });
 
-    await tester.tap(btn86);
+  testWidgets('records setup request without claiming provider access',
+      (tester) async {
+    final fakeRepo = _FakePosRepository();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          activeVenueProvider.overrideWith((ref) => testVenue),
+          posRepositoryProvider.overrideWithValue(fakeRepo),
+        ],
+        child: const MaterialApp(home: PosManagementScreen()),
+      ),
+    );
     await tester.pumpAndSettle();
-
-    expect(find.text('Update Item Availability (86)'), findsOneWidget);
-
-    // Enter item GUID
-    await tester.enterText(find.byType(TextField), 'toast-item-ribeye');
+    await tester.scrollUntilVisible(find.text('Toast'), 250);
+    await tester.tap(find.text('Toast'));
     await tester.pumpAndSettle();
-
-    // Tap Send to POS
-    await tester.tap(find.text('Send to POS'));
+    await tester.tap(find.text('Request setup').first);
     await tester.pumpAndSettle();
-
-    expect(fakeRepo.push86Called, isTrue);
-    expect(fakeRepo.pushedItemGuid, 'toast-item-ribeye');
-    expect(fakeRepo.pushedAvailability, isFalse);
+    expect(fakeRepo.requestedProvider, 'toast');
+    expect(
+      find.text(
+        'Setup request recorded. Provider authorization is still required.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('CONNECTED'), findsNothing);
   });
 }

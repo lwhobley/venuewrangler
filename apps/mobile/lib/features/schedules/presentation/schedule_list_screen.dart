@@ -369,7 +369,8 @@ class _ShiftTile extends ConsumerWidget {
       title: Text(shift.roleLabel ?? 'Shift'),
       subtitle: Text(
         '${shift.startTime} → ${shift.endTime}'
-        '${shift.staffId != null ? '\nStaff: ${shift.staffId}' : '\n(open shift)'}',
+        '${shift.staffId != null ? '\nStaff: ${shift.staffId}' : '\n(open shift)'}'
+        '${shift.status == ShiftStatus.cancelled ? '\nCancelled' : ''}',
       ),
       isThreeLine: true,
       trailing: Row(
@@ -381,10 +382,12 @@ class _ShiftTile extends ConsumerWidget {
               tooltip: 'Request a swap',
               onPressed: () => _requestSwap(context, ref),
             ),
-          IconButton(
-            icon: const Icon(Icons.delete_outline),
-            onPressed: () => _delete(context, ref),
-          ),
+          if (shift.status != ShiftStatus.cancelled)
+            IconButton(
+              icon: const Icon(Icons.event_busy_outlined),
+              tooltip: 'Remove or cancel shift',
+              onPressed: () => _delete(context, ref),
+            ),
         ],
       ),
     );
@@ -416,10 +419,18 @@ class _ShiftTile extends ConsumerWidget {
     try {
       await ref.read(schedulesRepositoryProvider).deleteShift(shift.id);
       ref.invalidate(shiftsForVenueProvider(shift.venueId));
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Shift removed locally or marked cancelled. Publish the schedule to sync a connected POS.',
+          ),
+        ),
+      );
     } on PostgrestException catch (error) {
       if (!context.mounted) return;
       final message = error.code == '42501'
-          ? "You don't have permission to delete this shift."
+          ? "You don't have permission to remove this shift."
           : 'Something went wrong. Please try again.';
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(message)));

@@ -159,12 +159,12 @@ select throws_ok(
 );
 
 -- ---------------------------------------------------------------------------
--- 11 & 12. Manager can enqueue outbound command; Staff cannot
+-- 11 & 12. Legacy queue has no worker; neither manager nor staff may enqueue
 -- ---------------------------------------------------------------------------
 set local role authenticated;
 set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-000000000004'; -- manager
 
-select lives_ok(
+select throws_ok(
   $$ insert into public.pos_outbound_commands (
        pos_connection_id, command_type, payload
      ) values (
@@ -172,7 +172,9 @@ select lives_ok(
        'update_item_availability_86',
        '{"itemGuid": "item-beer-ipa", "isAvailable": false}'::jsonb
      ) $$,
-  'manager can enqueue outbound 86 command'
+  '42501',
+  null,
+  'manager cannot enqueue unsupported outbound 86 command'
 );
 
 reset role;
@@ -189,7 +191,7 @@ select throws_ok(
      ) $$,
   '42501',
   null,
-  'staff cannot enqueue outbound command (manager-only RLS)'
+  'staff cannot enqueue unsupported outbound command'
 );
 
 -- ---------------------------------------------------------------------------
@@ -198,8 +200,8 @@ select throws_ok(
 reset role;
 select results_eq(
   $$ select count(*)::int from app_hidden.claim_pos_outbound_commands_batch(10) $$,
-  $$ values (2) $$,
-  'worker claims 2 pending outbound commands'
+  $$ values (1) $$,
+  'legacy claim sees only the preexisting service-inserted command'
 );
 
 select * from finish();

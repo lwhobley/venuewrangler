@@ -12,13 +12,13 @@ class PosManagementScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final activeVenue = ref.watch(activeVenueProvider);
+    final venue = ref.watch(activeVenueProvider);
     final connectionsAsync = ref.watch(posConnectionsProvider);
     final checksAsync = ref.watch(recentPosChecksProvider);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('POS Management'),
+        title: const Text('Integrations · POS'),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -32,7 +32,7 @@ class PosManagementScreen extends ConsumerWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // Outbound 86 Action Header
+          // This legacy action only queued a menu command; no provider worker existed.
           Card(
             color: Theme.of(context).colorScheme.surfaceContainerHighest,
             child: Padding(
@@ -40,28 +40,13 @@ class PosManagementScreen extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Outbound POS Controls',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      ElevatedButton.icon(
-                        icon: const Icon(Icons.block, size: 18),
-                        label: const Text('86 Item (Toast)'),
-                        onPressed: activeVenue != null
-                            ? () => _show86Dialog(context, ref, activeVenue.id)
-                            : null,
-                      ),
-                    ],
+                  const Text(
+                    'Provider access and schedule publication',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Push out-of-stock items (86) directly to connected Toast terminals in real-time.',
+                    'Connections require provider approval, verified permissions, location and workforce mappings, and a configured server worker. Queued work is not a provider acknowledgment.',
                     style: TextStyle(
                       fontSize: 12,
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -85,14 +70,15 @@ class PosManagementScreen extends ConsumerWidget {
                 return const Card(
                   child: Padding(
                     padding: EdgeInsets.all(16.0),
-                    child:
-                        Text('No active POS connections found for this venue.'),
+                    child: Text(
+                      'No POS connection configured for this venue. Provider onboarding is required.',
+                    ),
                   ),
                 );
               }
               return Column(
                 children: connections
-                    .map((c) => _ConnectionTile(connection: c))
+                    .map((c) => _ConnectionTile(connection: c, ref: ref))
                     .toList(),
               );
             },
@@ -103,7 +89,7 @@ class PosManagementScreen extends ConsumerWidget {
 
           // Inbound Checks Feed
           const Text(
-            'Recent Ingested Checks',
+            'Recent POS checks',
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
@@ -125,90 +111,149 @@ class PosManagementScreen extends ConsumerWidget {
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (err, _) => Text('Error loading checks: $err'),
           ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _show86Dialog(
-    BuildContext context,
-    WidgetRef ref,
-    String venueId,
-  ) async {
-    final itemCtrl = TextEditingController();
-    bool isAvailable = false;
-
-    await showDialog<void>(
-      context: context,
-      builder: (dialogCtx) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: const Text('Update Item Availability (86)'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: itemCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Toast Item GUID or Name',
-                  hintText: 'e.g. item-salmon-fillet',
-                ),
-              ),
-              const SizedBox(height: 16),
-              SwitchListTile(
-                title: const Text('Available to Order'),
-                subtitle: Text(
-                  isAvailable ? 'Item in stock' : 'Item 86\'d (Out of stock)',
-                ),
-                value: isAvailable,
-                onChanged: (val) => setState(() => isAvailable = val),
-              ),
-            ],
+          const SizedBox(height: 24),
+          const Text(
+            'Choose your POS product',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogCtx).pop(),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                final item = itemCtrl.text.trim();
-                if (item.isEmpty) return;
-
-                Navigator.of(dialogCtx).pop();
-                try {
-                  await ref.read(posRepositoryProvider).push86Item(
-                        venueId: venueId,
-                        itemGuid: item,
-                        isAvailable: isAvailable,
-                      );
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Outbound 86 command sent for $item'),
+          const SizedBox(height: 8),
+          for (final product in _posProducts)
+            Card(
+              child: ExpansionTile(
+                title: Text(product.name),
+                subtitle: Text(product.status),
+                childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                children: [
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(product.requirement),
+                  ),
+                  const SizedBox(height: 8),
+                  if (venue != null && connectionsAsync.hasValue)
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: OutlinedButton(
+                        onPressed: connectionsAsync.valueOrNull!.any(
+                          (connection) => connection.provider == product.id,
+                        )
+                            ? null
+                            : () async {
+                                try {
+                                  await ref
+                                      .read(posRepositoryProvider)
+                                      .requestConnection(
+                                        venueId: venue.id,
+                                        provider: product.id,
+                                      );
+                                  ref.invalidate(posConnectionsProvider);
+                                  if (!context.mounted) return;
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text(
+                                        'Setup request recorded. Provider authorization is still required.',
+                                      ),
+                                    ),
+                                  );
+                                } catch (_) {
+                                  if (!context.mounted) return;
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text(
+                                        'Could not request POS setup. Check your venue access.',
+                                      ),
+                                    ),
+                                  );
+                                }
+                              },
+                        child: Text(
+                          connectionsAsync.valueOrNull!.any(
+                            (connection) => connection.provider == product.id,
+                          )
+                              ? 'Setup requested'
+                              : 'Request setup',
+                        ),
                       ),
-                    );
-                  }
-                } catch (e) {
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Failed to push 86: $e')),
-                    );
-                  }
-                }
-              },
-              child: const Text('Send to POS'),
+                    ),
+                ],
+              ),
             ),
-          ],
-        ),
+        ],
       ),
     );
   }
 }
 
+typedef _PosProduct = ({
+  String id,
+  String name,
+  String status,
+  String requirement
+});
+
+const _posProducts = <_PosProduct>[
+  (
+    id: 'toast',
+    name: 'Toast',
+    status: 'Approval required',
+    requirement:
+        'Partner approval, restaurant access and scheduling scopes are required. Schedule export is not enabled in this build.',
+  ),
+  (
+    id: 'square',
+    name: 'Square',
+    status: 'Configuration required',
+    requirement:
+        'Merchant OAuth and Labor API scheduling permissions are required. Square payroll access does not authorize POS scheduling.',
+  ),
+  (
+    id: 'spoton',
+    name: 'SpotOn Restaurant',
+    status: 'Approval required',
+    requirement:
+        'Provider and location access are required. Future schedule writes need a separately verified interface.',
+  ),
+  (
+    id: 'clover',
+    name: 'Clover',
+    status: 'Schedule export unverified',
+    requirement:
+        'Merchant authorization is required. Actual employee shifts are not future scheduled shifts.',
+  ),
+  (
+    id: 'lightspeed_restaurant_k',
+    name: 'Lightspeed Restaurant K-Series',
+    status: 'Approval required',
+    requirement:
+        'K-Series partner and merchant access must be verified independently.',
+  ),
+  (
+    id: 'lightspeed_restaurant_l',
+    name: 'Lightspeed Restaurant L-Series',
+    status: 'Schedule export unverified',
+    requirement:
+        'L-Series restaurant API access and operations must be verified independently.',
+  ),
+  (
+    id: 'oracle_simphony',
+    name: 'Oracle MICROS Simphony',
+    status: 'Configuration required',
+    requirement:
+        'The customer deployment, licensed interfaces and partner provisioning must be identified.',
+  ),
+  (
+    id: 'ncr_aloha',
+    name: 'NCR Voyix Aloha',
+    status: 'Configuration required',
+    requirement:
+        'The exact Aloha product and approved API or middleware route must be identified.',
+  ),
+];
+
 class _ConnectionTile extends StatelessWidget {
-  const _ConnectionTile({required this.connection});
+  const _ConnectionTile({required this.connection, required this.ref});
 
   final PosConnection connection;
+  final WidgetRef ref;
 
   @override
   Widget build(BuildContext context) {
@@ -219,18 +264,115 @@ class _ConnectionTile extends StatelessWidget {
           child: const Icon(Icons.point_of_sale),
         ),
         title: Text(
-          connection.provider.toUpperCase(),
+          '${connection.provider.toUpperCase()} · ${connection.product}',
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
-        subtitle: Text('Status: ${connection.status.toUpperCase()}'),
+        subtitle: Text('Status: ${connection.readiness.replaceAll('_', ' ')}'),
         trailing: StatusChip(
-          label: connection.isActive ? 'CONNECTED' : 'DISCONNECTED',
+          label: connection.isActive ? 'CONNECTED' : 'SETUP REQUIRED',
           tone: connection.isActive ? Tone.success : Tone.danger,
           dense: true,
         ),
+        onTap: () => _showConnectionDetails(context, ref, connection),
       ),
     );
   }
+}
+
+Future<void> _showConnectionDetails(
+  BuildContext context,
+  WidgetRef ref,
+  PosConnection connection,
+) async {
+  final repo = ref.read(posRepositoryProvider);
+  await showDialog<void>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text('${connection.provider} · ${connection.product}'),
+      content: SizedBox(
+        width: 440,
+        child: FutureBuilder(
+          future: Future.wait([
+            repo.getCapabilities(connection.id),
+            repo.getOutboundJobs(connection.id),
+          ]),
+          builder: (context, snapshot) {
+            if (snapshot.hasError) {
+              return const Text('Could not load integration status.');
+            }
+            if (!snapshot.hasData) return const CircularProgressIndicator();
+            final capabilities = snapshot.data![0];
+            final jobs = snapshot.data![1];
+            return SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Readiness: ${connection.readiness.replaceAll('_', ' ')}',
+                  ),
+                  Text(
+                    'Last inbound: ${connection.lastSyncAt?.toLocal() ?? 'never'}',
+                  ),
+                  const SizedBox(height: 12),
+                  const Text('Verified capabilities'),
+                  if (capabilities.isEmpty)
+                    const Text('No capabilities verified.'),
+                  for (final capability in capabilities)
+                    Text('${capability['capability']}: ${capability['state']}'),
+                  const SizedBox(height: 12),
+                  const Text('Recent outbound operations'),
+                  if (jobs.isEmpty) const Text('No published operations.'),
+                  for (final job in jobs)
+                    Text(
+                      '${job['operation']}: ${job['status']}'
+                      '${job['error_code'] == null ? '' : ' · ${job['error_code']}'}',
+                    ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Publishing requires approved provider access and complete mappings.',
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Close'),
+        ),
+        if (connection.isActive)
+          FilledButton(
+            onPressed: () async {
+              try {
+                final version = await repo.publishSchedule(connection.id);
+                if (!context.mounted) return;
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      'Schedule version $version queued. Check sync status for acknowledgment.',
+                    ),
+                  ),
+                );
+              } catch (_) {
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      'Could not publish. Check access, capabilities and mappings.',
+                    ),
+                  ),
+                );
+              }
+            },
+            child: const Text('Publish schedule'),
+          ),
+      ],
+    ),
+  );
 }
 
 class _CheckListTile extends StatelessWidget {

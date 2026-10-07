@@ -1,4 +1,4 @@
--- Follow-up to 20261006190000_harden_time_entry_integrity.sql: comparing historical break
+-- Follow-up to 20261006203252_harden_time_entry_integrity.sql: comparing historical break
 -- elements with raw JSONB equality (`a -> i is distinct from b -> i`) is exact-text, so a
 -- client that re-serializes an unchanged timestamp slightly differently (different
 -- microsecond padding, offset notation, etc. — routine when round-tripping through

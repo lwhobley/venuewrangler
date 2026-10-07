@@ -1,5 +1,12 @@
 # Flutter cutover closeout — 2026-10-03
 
+> Historical snapshot. Its migration and payment-action sections are superseded by
+> later subscription-only work. On 2026-10-06 Chicago time, the POS schema and
+> foreign-key-index migrations were applied as `20261007021641_pos_schedule_platform`
+> and `20261007021847_pos_schedule_fk_indexes`. See
+> `docs/pos-integration-platform.md` for current POS deployment limits and
+> `docs/migration/pos-schedule-platform-rollback.sql` for the guarded reverse path.
+
 Target: Supabase project `puttwjwmwrzmhpsjykuj`. Flutter uses Supabase for application
 data and Edge Functions, with Firebase only for Android push notifications.
 

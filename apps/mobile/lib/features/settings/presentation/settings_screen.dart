@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/auth/sign_out_service.dart';
@@ -65,6 +66,14 @@ class SettingsScreen extends ConsumerWidget {
               Text(email),
               const SizedBox(height: 24),
             ],
+            ListTile(
+              leading: const Icon(Icons.extension_outlined),
+              title: const Text('Integrations'),
+              subtitle: const Text('POS and connected services'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => context.push('/integrations'),
+            ),
+            const SizedBox(height: 16),
             Text('Appearance', style: Theme.of(context).textTheme.labelMedium),
             const SizedBox(height: 8),
             SegmentedButton<ThemeMode>(

@@ -4,8 +4,10 @@ class PosConnection {
     required this.organizationId,
     required this.venueId,
     required this.provider,
+    this.product = 'restaurant',
     this.externalLocationId,
     required this.status,
+    this.readiness = 'configuration_required',
     this.lastSyncAt,
     required this.createdAt,
     required this.updatedAt,
@@ -17,8 +19,10 @@ class PosConnection {
       organizationId: json['organization_id'] as String,
       venueId: json['venue_id'] as String,
       provider: json['provider'] as String,
+      product: json['product'] as String? ?? 'restaurant',
       externalLocationId: json['external_location_id'] as String?,
       status: json['status'] as String? ?? 'active',
+      readiness: json['readiness'] as String? ?? 'configuration_required',
       lastSyncAt: json['last_sync_at'] != null
           ? DateTime.parse(json['last_sync_at'] as String)
           : null,
@@ -31,11 +35,13 @@ class PosConnection {
   final String organizationId;
   final String venueId;
   final String provider;
+  final String product;
   final String? externalLocationId;
   final String status;
+  final String readiness;
   final DateTime? lastSyncAt;
   final DateTime createdAt;
   final DateTime updatedAt;
 
-  bool get isActive => status == 'active';
+  bool get isActive => status == 'active' && readiness == 'connected';
 }
