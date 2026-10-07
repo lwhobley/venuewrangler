@@ -1,3 +1,6 @@
 {
-  "nodeModulesDir": "auto"
+  "nodeModulesDir": "auto",
+  "imports": {
+    "@sentry/deno": "npm:@sentry/deno@^8"
+  }
 }
