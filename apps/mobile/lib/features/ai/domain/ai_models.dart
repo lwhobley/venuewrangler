@@ -43,12 +43,18 @@ class InventoryLineItem {
     this.quantity,
     this.unit,
     this.unitCostUsd,
+    this.sizeAmount,
+    this.sizeUnit,
+    this.category,
+    this.subcategory,
   });
 
   final String name;
   final num? quantity;
   final String? unit;
   final num? unitCostUsd;
+  final num? sizeAmount;
+  final String? sizeUnit, category, subcategory;
 
   factory InventoryLineItem.fromJson(Map<String, dynamic> json) =>
       InventoryLineItem(
@@ -56,6 +62,10 @@ class InventoryLineItem {
         quantity: json['quantity'] as num?,
         unit: json['unit'] as String?,
         unitCostUsd: json['unit_cost_usd'] as num?,
+        sizeAmount: json['size_amount'] as num?,
+        sizeUnit: json['size_unit'] as String?,
+        category: json['category'] as String?,
+        subcategory: json['subcategory'] as String?,
       );
 }
 

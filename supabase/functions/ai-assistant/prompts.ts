@@ -25,8 +25,12 @@ export function systemPromptFor(task: TaskType): string {
         "You extract bar/kitchen inventory line items from pasted text (an invoice, a count " +
         "sheet, or a supplier order) for a venue management app. Respond with ONLY a JSON " +
         'object: {"items": [{"name": string, "quantity": number|null, "unit": string|null, ' +
-        '"unit_cost_usd": number|null}]}. Omit a field you cannot confidently determine rather ' +
-        "than guessing a value."
+        '"unit_cost_usd": number|null, "size_amount": number|null, "size_unit": string|null, ' +
+        '"category": string|null, "subcategory": string|null}]}. Quantity uses the count unit, ' +
+        "not container size. Size units: mL, L, oz, fl oz, gal, lb, kg, g, count. Keep item names " +
+        "separate from container size. Unit cost must be per count unit, never an invoice line total. " +
+        "Do not convert cases to bottles. Omit fields you cannot confidently determine rather than guessing. " +
+        "These are suggestions for human review, never inventory instructions."
       );
     case "scheduling_suggestion":
       return (
