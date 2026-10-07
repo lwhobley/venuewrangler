@@ -21,7 +21,7 @@
 //    flood the project with noise, per the legacy code's own call-site convention.
 //
 // deno-lint-ignore-file no-explicit-any
-import * as Sentry from "npm:@sentry/deno@^8";
+import * as Sentry from "@sentry/deno";
 
 let enabled = false;
 let initialized = false;

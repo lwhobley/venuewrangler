@@ -26,7 +26,7 @@ function pemToArrayBuffer(pem: string): ArrayBuffer {
   return bytes.buffer;
 }
 
-async function importPrivateKey(pem: string): Promise<CryptoKey> {
+function importPrivateKey(pem: string): Promise<CryptoKey> {
   return crypto.subtle.importKey(
     "pkcs8",
     pemToArrayBuffer(pem),

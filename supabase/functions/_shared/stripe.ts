@@ -1,4 +1,4 @@
-import Stripe from "https://esm.sh/stripe@23.0.0?target=deno";
+import Stripe from "stripe";
 
 // Stripe's Node SDK works in Deno via esm.sh given a fetch-based HTTP client (no Node net/tls
 // APIs) and `constructEventAsync` instead of the sync `constructEvent`, which needs Node's

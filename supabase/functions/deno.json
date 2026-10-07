@@ -1,6 +1,9 @@
 {
   "nodeModulesDir": "auto",
   "imports": {
-    "@sentry/deno": "npm:@sentry/deno@^8"
+    "@sentry/deno": "npm:@sentry/deno@^8",
+    "@supabase/supabase-js": "npm:@supabase/supabase-js@2",
+    "stripe": "npm:stripe@23.0.0",
+    "std/http/server": "https://deno.land/std@0.177.0/http/server.ts"
   }
 }

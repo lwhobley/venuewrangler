@@ -33,8 +33,8 @@ export function safeDocumentFileName(value: string): string {
   // ([a-zA-Z0-9_-.]+): strip accents, replace any other char (spaces, brackets,
   // unicode) with _, collapse repeats. Original name stays in documents.file_name.
   const noAccents = leaf.normalize("NFKD").replace(/[\u0300-\u036f]/g, "");
-  // deno-lint-ignore no-control-regex
   const cleaned = noAccents
+    // deno-lint-ignore no-control-regex
     .replace(/[\u0000-\u001f\u007f"<>:|?*]/g, "_")
     .replace(/[^a-zA-Z0-9_.\-]/g, "_")
     .replace(/_+/g, "_")

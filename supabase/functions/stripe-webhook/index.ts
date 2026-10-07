@@ -9,7 +9,7 @@
 // against.
 import { createServiceClient } from "../_shared/supabase-clients.ts";
 import { createStripeClient } from "../_shared/stripe.ts";
-import type Stripe from "https://esm.sh/stripe@23.0.0?target=deno";
+import type Stripe from "stripe";
 import { initObservability, captureException, flushObservability } from "../_shared/observability.ts";
 
 initObservability();

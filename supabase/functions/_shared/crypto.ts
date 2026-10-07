@@ -26,14 +26,14 @@ export async function sha256Hex(bytes: Uint8Array<ArrayBuffer>): Promise<string>
     .join("");
 }
 
-async function importAesKey(base64Key: string): Promise<CryptoKey> {
+function importAesKey(base64Key: string): Promise<CryptoKey> {
   return crypto.subtle.importKey("raw", base64ToBytes(base64Key), "AES-GCM", false, [
     "encrypt",
     "decrypt",
   ]);
 }
 
-async function importHmacKey(base64Key: string): Promise<CryptoKey> {
+function importHmacKey(base64Key: string): Promise<CryptoKey> {
   return crypto.subtle.importKey(
     "raw",
     base64ToBytes(base64Key),

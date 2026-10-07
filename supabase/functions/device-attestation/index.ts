@@ -44,7 +44,6 @@ function base64ToBytes(b64: string): Uint8Array {
   return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
 }
 
-// deno-lint-ignore no-explicit-any
 async function consumeAttestationChallenge(
   // deno-lint-ignore no-explicit-any
   serviceClient: any,

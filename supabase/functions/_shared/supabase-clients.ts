@@ -1,4 +1,4 @@
-import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
 // RLS-respecting client: forwards the caller's own JWT, so every query runs under their
 // actual permissions. Used to verify the caller is who they claim and belongs to the venue

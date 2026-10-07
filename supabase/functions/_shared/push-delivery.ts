@@ -2,7 +2,7 @@
 // native APNs (iOS) or FCM (Android/web). Used by both notifications-send (a signed-in manager
 // sending an ad-hoc notification) and notifications-dispatch (the database trigger path), so
 // the two can never drift in how they pick recipients or treat dead tokens.
-import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { getGoogleAccessToken } from "./google-auth.ts";
 import { loadApnsConfigFromEnv, sendApnsPush } from "./apns.ts";
 
