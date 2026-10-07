@@ -6,6 +6,7 @@ import '../core/auth/auth_providers.dart';
 import 'app_shell.dart';
 import '../features/auth/reset_password_screen.dart';
 import '../features/auth/sign_in_screen.dart';
+import '../features/auth/sign_up_screen.dart';
 import '../features/billing/presentation/billing_screen.dart';
 import '../features/checklists/presentation/checklist_completion_screen.dart';
 import '../features/checklists/presentation/checklist_list_screen.dart';
@@ -68,6 +69,7 @@ final routerProvider = Provider<GoRouter>((ref) {
     initialLocation: '/',
     redirect: (context, state) {
       final goingToSignIn = state.matchedLocation == '/sign-in';
+      final goingToSignUp = state.matchedLocation == '/sign-up';
       final goingToSelectVenue = state.matchedLocation == '/select-venue';
       final goingToReset = state.matchedLocation == '/reset-password';
 
@@ -78,9 +80,9 @@ final routerProvider = Provider<GoRouter>((ref) {
       if (goingToReset) return '/';
 
       if (!isSignedIn) {
-        return goingToSignIn ? null : '/sign-in';
+        return (goingToSignIn || goingToSignUp) ? null : '/sign-in';
       }
-      if (isSignedIn && goingToSignIn) return '/';
+      if (isSignedIn && (goingToSignIn || goingToSignUp)) return '/';
       if (!hasActiveVenue && !goingToSelectVenue) return '/select-venue';
       if (!hasActiveVenue) return null;
 
@@ -95,6 +97,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/sign-in',
         builder: (context, state) => const SignInScreen(),
+      ),
+      GoRoute(
+        path: '/sign-up',
+        builder: (context, state) => const SignUpScreen(),
       ),
       GoRoute(
         path: '/reset-password',
@@ -125,6 +131,7 @@ bool employeeCanOpen(String path) => const {
       '/floor',
       '/chat',
       '/sign-in',
+      '/sign-up',
       '/select-venue',
       '/reset-password',
       '/loading',

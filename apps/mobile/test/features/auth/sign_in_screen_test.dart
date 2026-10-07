@@ -21,10 +21,12 @@ class _FakeAuthRepository implements AuthRepository {
   }
 
   @override
-  Future<void> signUpWithPassword({
+  Future<bool> signUpWithPassword({
     required String email,
     required String password,
-  }) async {}
+    Map<String, dynamic>? data,
+  }) async =>
+      false;
 
   String? resetEmail;
 

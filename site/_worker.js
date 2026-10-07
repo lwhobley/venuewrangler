@@ -9,7 +9,7 @@ export default {
     if (!['GET', 'HEAD'].includes(request.method)) {
       return new Response('Method not allowed', { status: 405, headers: { Allow: 'GET, HEAD' } });
     }
-    const isAsset = url.pathname.startsWith('/app/_expo/') || url.pathname.startsWith('/app/assets/') || /\.[^/]+$/.test(url.pathname);
+    const isAsset = url.pathname.startsWith('/app/assets/') || url.pathname.startsWith('/app/canvaskit/') || /\.[^/]+$/.test(url.pathname);
     if (isAsset) return env.ASSETS.fetch(request);
 
     const shellUrl = new URL('/app/', url.origin);
@@ -22,14 +22,17 @@ export default {
     response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
     response.headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
     response.headers.set('Permissions-Policy', 'camera=(self), microphone=(), geolocation=(self)');
-    // script-src has no 'unsafe-inline': the Expo web export only ever loads
-    // JS via <script src="/_expo/...">, never inline, so dropping it closes
-    // off script injection without touching anything that's actually served.
-    // style-src keeps 'unsafe-inline' -- Expo's static export always emits a
-    // fixed boilerplate <style id="expo-reset"> block inline, regenerated on
-    // every build, so hash-pinning it would be one Expo upgrade away from
-    // silently breaking the page's layout.
-    response.headers.set('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https://venue-wrangler-api-c57mm72zpa-ue.a.run.app; connect-src 'self' https://venue-wrangler-api-c57mm72zpa-ue.a.run.app; media-src 'self' blob:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
+    // /app/ is the Flutter web build (scripts/build-site.mjs). script-src still
+    // has no 'unsafe-inline': web/index.html only loads flutter_bootstrap.js via
+    // src, and the build uses --no-web-resources-cdn so CanvasKit/skwasm come
+    // from 'self' rather than gstatic. 'wasm-unsafe-eval' is required to
+    // instantiate that wasm renderer; it does not permit JS eval. sentry_flutter
+    // loads its browser SDK from browser.sentry-cdn.com (version-pinned path).
+    // style-src keeps 'unsafe-inline' -- the Flutter engine injects <style>
+    // elements at runtime. fonts.gstatic.com is the engine's fallback-font
+    // source (fetched, so it is in connect-src too). Supabase covers REST/Auth/
+    // Storage (https) and Realtime (wss); sentry.io is crash reporting.
+    response.headers.set('Content-Security-Policy', "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://browser.sentry-cdn.com; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https://*.supabase.co; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.sentry.io https://fonts.gstatic.com; media-src 'self' blob: https://*.supabase.co; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'");
     return response;
   },
 };

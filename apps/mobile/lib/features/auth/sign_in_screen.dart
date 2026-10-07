@@ -2,6 +2,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/auth/auth_providers.dart';
 import '../../core/errors/app_error.dart';
@@ -160,6 +161,15 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                                         ),
                                       )
                                     : const Text('Sign in'),
+                              ),
+                              const SizedBox(height: 8),
+                              TextButton(
+                                onPressed: _isSubmitting
+                                    ? null
+                                    : () => context.go('/sign-up'),
+                                child: const Text(
+                                  'New here? Launch your workspace',
+                                ),
                               ),
                             ],
                           ),

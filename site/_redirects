@@ -1,9 +1,6 @@
 # App document routing is handled by _worker.js using the canonical /app/ URL.
-# Keep these asset aliases for older open tabs during the next deployment.
-/_expo/* /app/_expo/:splat 200
-# The web bundle requests its assets from the site root, not from /app. Both
-# prefixes below are exported only under site/app, and the marketing site's
-# own /assets holds no `assets` or `node_modules` subdirectory, so neither
-# rule shadows a marketing file.
-/assets/assets/* /app/assets/assets/:splat 200
-/assets/node_modules/* /app/assets/node_modules/:splat 200
+# The Flutter web build is compiled with --base-href=/app/ (scripts/build-site.mjs),
+# so its assets already resolve under /app/ and need no root-level aliases.
+# Old deep links from the retired web onboarding page land on the sign-up screen.
+/start /app/#/sign-up 302
+/start/ /app/#/sign-up 302

@@ -10,13 +10,21 @@ describe('website onboarding routes', () => {
     expect(readSite('_headers')).not.toContain('createcdn.com');
   });
 
-  it('verifies an owner email before registering a workspace', () => {
-    const source = readSite('start/index.html');
-    expect(source).toContain('id="verificationStep"');
-    expect(source).toContain('/v1/auth/verify-email');
-    expect(source).toContain('/v1/auth/verify-email/send');
-    expect(source).toContain('await api("/v1/auth/verify-email", { method: "POST", body: JSON.stringify({ code }) }, pendingSession.token);');
-    expect(source).toContain('await createWorkspace();');
+  it('routes every workspace entry point into the Flutter web app', () => {
+    // Self-serve sign-up lives in the Flutter app (features/auth/sign_up_screen.dart),
+    // which uses hash routing under /app/. The retired start/ page must not come back.
+    expect(readSite('index.html')).toContain('href="app/#/sign-up"');
+    expect(readSite('index.html')).not.toContain('href="start/"');
+    expect(readSite('_redirects')).toMatch(/^\/start\/ \/app\/#\/sign-up 302$/m);
+  });
+
+  it('lets the Flutter web app reach Supabase without loosening script-src', () => {
+    const worker = readSite('_worker.js');
+    expect(worker).toContain("script-src 'self' 'wasm-unsafe-eval' https://browser.sentry-cdn.com;");
+    expect(worker).toContain('connect-src \'self\' https://*.supabase.co wss://*.supabase.co');
+    // Flutter's index.html relies on <base href="/app/">.
+    expect(worker).toContain("base-uri 'self'");
+    expect(worker).not.toContain("'unsafe-eval'");
   });
 
   it('sends the security headers the join flow depends on', () => {

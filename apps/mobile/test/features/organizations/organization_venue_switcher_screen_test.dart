@@ -16,6 +16,14 @@ class _FakeOrganizationsRepository implements OrganizationsRepository {
 
   @override
   Future<List<Organization>> fetchMyOrganizations() async => organizations;
+
+  @override
+  Future<({Organization organization, Venue venue})> createWorkspace({
+    required String organizationName,
+    required String venueName,
+    String timezone = 'UTC',
+  }) =>
+      throw UnimplementedError();
 }
 
 class _FakeVenuesRepository implements VenuesRepository {

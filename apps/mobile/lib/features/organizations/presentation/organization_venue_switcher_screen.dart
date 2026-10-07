@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/auth/sign_out_service.dart';
 import '../../venues/application/venues_providers.dart';
@@ -112,12 +113,23 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Center(
+    return Center(
       child: Padding(
-        padding: EdgeInsets.all(24),
-        child: Text(
-          "You don't belong to any organization yet. Ask an administrator to invite you.",
-          textAlign: TextAlign.center,
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              "You don't belong to any organization yet. Ask an administrator "
+              'to invite you, or start your own.',
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            OutlinedButton(
+              onPressed: () => context.go('/sign-up'),
+              child: const Text('Launch your own workspace'),
+            ),
+          ],
         ),
       ),
     );

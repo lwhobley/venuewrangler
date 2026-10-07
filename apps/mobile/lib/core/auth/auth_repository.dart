@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Where the password-reset email sends the user: the app's custom URL scheme (registered in
@@ -6,6 +7,14 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 /// emits AuthChangeEvent.passwordRecovery. This URL must be in the Supabase project's
 /// Auth → URL Configuration → Redirect URLs allow-list.
 const kPasswordResetRedirect = 'venuewrangler://reset-password';
+
+/// Where the sign-up confirmation email sends a web user: back into the Flutter web app at
+/// /app/ on whatever origin they signed up from, so supabase_flutter can exchange the PKCE
+/// code (its verifier lives in this browser's storage) and the pending workspace gets created
+/// straight away. Native sign-ups return `null` and fall back to the project's Site URL — the
+/// link still confirms the address server-side, and the user then signs in in the app. The web
+/// URL must be in the Supabase project's Auth → URL Configuration → Redirect URLs allow-list.
+String? signUpEmailRedirect() => kIsWeb ? '${Uri.base.origin}/app/' : null;
 
 /// The project's password policy (Supabase Auth: lower, upper, digit and symbol, 8+ chars),
 /// checked client-side so the user sees what's wrong before a round trip.
@@ -30,9 +39,15 @@ abstract interface class AuthRepository {
     required String password,
   });
 
-  Future<void> signUpWithPassword({
+  /// Returns `true` if signing up also returned a usable session (email confirmation is off
+  /// for this project), `false` if the account needs email confirmation before it can sign in.
+  /// [data] is stashed as Supabase Auth user metadata and comes back on `User.userMetadata` —
+  /// used by [pendingWorkspaceCreationTriggerProvider] to finish creating a workspace once a
+  /// session exists, whether that's immediately or after the user confirms their email later.
+  Future<bool> signUpWithPassword({
     required String email,
     required String password,
+    Map<String, dynamic>? data,
   });
 
   /// Emails a reset link that opens the app ([kPasswordResetRedirect]); tapping it signs the
@@ -62,11 +77,19 @@ class SupabaseAuthRepository implements AuthRepository {
   }
 
   @override
-  Future<void> signUpWithPassword({
+  Future<bool> signUpWithPassword({
     required String email,
     required String password,
+    Map<String, dynamic>? data,
   }) async {
-    await _client.auth.signUp(email: email, password: password);
+    final response =
+        await _client.auth.signUp(
+      email: email,
+      password: password,
+      data: data,
+      emailRedirectTo: signUpEmailRedirect(),
+    );
+    return response.session != null;
   }
 
   @override
