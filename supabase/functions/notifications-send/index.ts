@@ -1,4 +1,7 @@
-import { serve } from "std/http/server";
+// deno.land/std's bare-URL import doesn't resolve via deno.json's import map the way
+// npm:/jsr: specifiers do once nodeModulesDir is "auto" (see deno.json).
+// deno-lint-ignore no-import-prefix
+import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { corsHeaders } from "../_shared/cors.ts";
 import { createServiceClient, createUserClient } from "../_shared/supabase-clients.ts";
 import { deliverPush } from "../_shared/push-delivery.ts";

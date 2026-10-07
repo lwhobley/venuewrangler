@@ -99,6 +99,14 @@ jobs:
         with:
           deno-version: v2.x
 
+      # deno.json sets nodeModulesDir: "auto" so bare npm:/jsr: import-map specifiers
+      # (e.g. "@supabase/supabase-js") resolve through node_modules - deno check doesn't
+      # install them on its own, so without this, every such import fails with "not a
+      # dependency" on a fresh checkout.
+      - name: Install npm dependencies for Edge Functions
+        working-directory: supabase/functions
+        run: deno install
+
       - name: Deno check all functions
         run: |
           set -euo pipefail
