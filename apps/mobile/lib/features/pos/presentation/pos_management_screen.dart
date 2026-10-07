@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../venues/application/venues_providers.dart';
 import '../application/pos_providers.dart';
 import '../domain/pos_check.dart';
 import '../domain/pos_connection.dart';
@@ -12,7 +11,6 @@ class PosManagementScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final venue = ref.watch(activeVenueProvider);
     final connectionsAsync = ref.watch(posConnectionsProvider);
     final checksAsync = ref.watch(recentPosChecksProvider);
 
@@ -129,51 +127,18 @@ class PosManagementScreen extends ConsumerWidget {
                     child: Text(product.requirement),
                   ),
                   const SizedBox(height: 8),
-                  if (venue != null && connectionsAsync.hasValue)
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: OutlinedButton(
-                        onPressed: connectionsAsync.valueOrNull!.any(
-                          (connection) => connection.provider == product.id,
-                        )
-                            ? null
-                            : () async {
-                                try {
-                                  await ref
-                                      .read(posRepositoryProvider)
-                                      .requestConnection(
-                                        venueId: venue.id,
-                                        provider: product.id,
-                                      );
-                                  ref.invalidate(posConnectionsProvider);
-                                  if (!context.mounted) return;
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text(
-                                        'Setup request recorded. Provider authorization is still required.',
-                                      ),
-                                    ),
-                                  );
-                                } catch (_) {
-                                  if (!context.mounted) return;
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text(
-                                        'Could not request POS setup. Check your venue access.',
-                                      ),
-                                    ),
-                                  );
-                                }
-                              },
-                        child: Text(
-                          connectionsAsync.valueOrNull!.any(
-                            (connection) => connection.provider == product.id,
-                          )
-                              ? 'Setup requested'
-                              : 'Request setup',
-                        ),
-                      ),
+                  // Partner approval for POS integrations is still pending — listed for
+                  // visibility only. Do not re-enable "Request setup" until a provider
+                  // partnership is actually signed; the old button let anyone queue a
+                  // requestConnection() row implying progress that wasn't real.
+                  const Align(
+                    alignment: Alignment.centerRight,
+                    child: StatusChip(
+                      label: 'COMING SOON',
+                      tone: Tone.neutral,
+                      dense: true,
                     ),
+                  ),
                 ],
               ),
             ),
@@ -190,60 +155,63 @@ typedef _PosProduct = ({
   String requirement
 });
 
+// Listed for visibility so operators can see what's planned — every entry is "Coming soon"
+// until that provider's partnership is actually signed and approved. Do not flip a status
+// away from "Coming soon" without a real, approved partner integration to back it.
 const _posProducts = <_PosProduct>[
   (
     id: 'toast',
     name: 'Toast',
-    status: 'Approval required',
+    status: 'Coming soon',
     requirement:
         'Partner approval, restaurant access and scheduling scopes are required. Schedule export is not enabled in this build.',
   ),
   (
     id: 'square',
     name: 'Square',
-    status: 'Configuration required',
+    status: 'Coming soon',
     requirement:
         'Merchant OAuth and Labor API scheduling permissions are required. Square payroll access does not authorize POS scheduling.',
   ),
   (
     id: 'spoton',
     name: 'SpotOn Restaurant',
-    status: 'Approval required',
+    status: 'Coming soon',
     requirement:
         'Provider and location access are required. Future schedule writes need a separately verified interface.',
   ),
   (
     id: 'clover',
     name: 'Clover',
-    status: 'Schedule export unverified',
+    status: 'Coming soon',
     requirement:
         'Merchant authorization is required. Actual employee shifts are not future scheduled shifts.',
   ),
   (
     id: 'lightspeed_restaurant_k',
     name: 'Lightspeed Restaurant K-Series',
-    status: 'Approval required',
+    status: 'Coming soon',
     requirement:
         'K-Series partner and merchant access must be verified independently.',
   ),
   (
     id: 'lightspeed_restaurant_l',
     name: 'Lightspeed Restaurant L-Series',
-    status: 'Schedule export unverified',
+    status: 'Coming soon',
     requirement:
         'L-Series restaurant API access and operations must be verified independently.',
   ),
   (
     id: 'oracle_simphony',
     name: 'Oracle MICROS Simphony',
-    status: 'Configuration required',
+    status: 'Coming soon',
     requirement:
         'The customer deployment, licensed interfaces and partner provisioning must be identified.',
   ),
   (
     id: 'ncr_aloha',
     name: 'NCR Voyix Aloha',
-    status: 'Configuration required',
+    status: 'Coming soon',
     requirement:
         'The exact Aloha product and approved API or middleware route must be identified.',
   ),

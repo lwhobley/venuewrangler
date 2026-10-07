@@ -174,7 +174,8 @@ void main() {
     expect(fakeRepo.push86Called, isFalse);
   });
 
-  testWidgets('records setup request without claiming provider access',
+  testWidgets(
+      'lists POS products as coming soon and never requests a connection',
       (tester) async {
     final fakeRepo = _FakePosRepository();
     await tester.pumpWidget(
@@ -190,15 +191,9 @@ void main() {
     await tester.scrollUntilVisible(find.text('Toast'), 250);
     await tester.tap(find.text('Toast'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Request setup').first);
-    await tester.pumpAndSettle();
-    expect(fakeRepo.requestedProvider, 'toast');
-    expect(
-      find.text(
-        'Setup request recorded. Provider authorization is still required.',
-      ),
-      findsOneWidget,
-    );
-    expect(find.text('CONNECTED'), findsNothing);
+
+    expect(find.text('COMING SOON'), findsWidgets);
+    expect(find.text('Request setup'), findsNothing);
+    expect(fakeRepo.requestedProvider, isNull);
   });
 }
