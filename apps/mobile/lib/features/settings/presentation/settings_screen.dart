@@ -11,6 +11,7 @@ import '../../../core/auth/auth_providers.dart';
 import '../../venues/application/venues_providers.dart';
 import '../../workforce/presentation/employee_profile_widgets.dart';
 import '../../workforce/domain/employee_hr_profile.dart';
+import 'delete_account_button.dart';
 
 /// Profile, account, and app settings. Deliberately minimal for this first slice — just the
 /// display name every other screen already shows (roster tiles, "created by", etc.) and sign
@@ -115,6 +116,8 @@ class SettingsScreen extends ConsumerWidget {
               icon: const Icon(Icons.logout),
               label: const Text('Sign out'),
             ),
+            const SizedBox(height: 32),
+            const DeleteAccountButton(),
           ],
         ),
       ),

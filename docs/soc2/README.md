@@ -13,7 +13,7 @@ Venue Wrangler is committed to the highest standards of data security, availabil
 | **Security (Common Criteria - CC)** | Mandatory | Firewalls, vulnerability management, access controls, multi-tenant isolation, retained audit logging, and encryption. |
 | **Availability (A)** | Included | 99.9% target uptime, Cloud Run multi-zone auto-scaling, nightly off-site database backups, and disaster recovery drills. PITR remains a launch prerequisite, not a current control. |
 | **Confidentiality (C)** | Included | Strict tenant data segregation, role-based access control, confidential POS & employee data handling, and encryption at rest and in transit. |
-| **Privacy (P)** | Addressed | PII scrubbing, consent policies, data retention schedules, and "Right to be Forgotten" account erasure procedures. |
+| **Privacy (P)** | Partially addressed | PII scrubbing, consent policies, and data retention schedules are implemented. "Right to be Forgotten" account erasure covers personal self-deletion only; tenant/organization offboarding is designed (see [data-retention-disposal-policy.md §4](./data-retention-disposal-policy.md#4-account-deletion--right-to-be-forgotten-protocol)) but not yet built. |
 
 ---
 

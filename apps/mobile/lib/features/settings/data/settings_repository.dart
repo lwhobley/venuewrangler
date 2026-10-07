@@ -10,6 +10,19 @@ abstract interface class SettingsRepository {
   Future<Profile> fetchMyProfile(String userId);
 
   Future<void> updateDisplayName(String userId, String displayName);
+
+  /// Calls `public.request_account_deletion` (supabase/migrations/*_account_deletion.sql) —
+  /// personal "delete my account" only, not organization/tenant offboarding. Synchronously
+  /// anonymizes/removes everything RLS-governed (profile, memberships, HR data, time
+  /// entries preserved anonymized for wage-law retention); the `auth.users` row itself is
+  /// deleted asynchronously by a queued Edge Function, since the Auth Admin API has no
+  /// SQL-level equivalent — see that migration's header comment.
+  ///
+  /// Throws a [PostgrestException] with code `42501` if the caller is the sole
+  /// `organization_owner` of any organization — they must add another owner first. The
+  /// caller is still fully signed in afterward and must sign out themselves
+  /// (features/settings calls [signOutAndClearScopedData] right after this succeeds).
+  Future<void> deleteAccount({String? reason});
 }
 
 class SupabaseSettingsRepository implements SettingsRepository {
@@ -29,5 +42,13 @@ class SupabaseSettingsRepository implements SettingsRepository {
     await _client
         .from('profiles')
         .update({'display_name': displayName}).eq('id', userId);
+  }
+
+  @override
+  Future<void> deleteAccount({String? reason}) async {
+    await _client.rpc(
+      'request_account_deletion',
+      params: {'p_reason': reason},
+    );
   }
 }
