@@ -21,8 +21,14 @@ jobs:
     runs-on: ubuntu-latest
 
     services:
+      # supabase/postgres (not vanilla postgres:16): bundles pgtap, pg_net and pg_cron, none
+      # of which are available in vanilla Postgres (no contrib/apt package installs them into
+      # a *service container*, as opposed to the runner itself - `apt-get install
+      # postgresql-16-pgtap` on the runner VM has no effect on a separate Docker container's
+      # filesystem, which is what this used to do here). Tag matches supabase/config.toml's
+      # major_version (15).
       postgres:
-        image: postgres:16
+        image: supabase/postgres:15.19.0.004
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -44,10 +50,10 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Install pgTAP
+      - name: Install psql client
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends postgresql-client-16 postgresql-16-pgtap
+          sudo apt-get install -y --no-install-recommends postgresql-client-16
 
       # Must connect to the pre-existing "postgres" database here, not $PGDATABASE
       # (supabase_migration_check) — that's the database this step creates, so

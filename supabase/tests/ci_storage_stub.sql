@@ -8,10 +8,15 @@
 -- columns/triggers/functions than this — just enough surface for RLS policies keyed on
 -- `bucket_id` and `name` (the object path) to be exercised. This file must NEVER be applied
 -- to a real Supabase project and is not itself a migration.
+--
+-- Every create is guarded with "if not exists": a Postgres image that already bundles the
+-- real Supabase Storage schema (used so pgtap/pg_net/pg_cron are available - see
+-- supabase-ci.yml) creates these itself at container start, with its own, richer columns.
+-- This stub only needs to fill the gap on a vanilla Postgres image.
 
 create schema if not exists storage;
 
-create table storage.buckets (
+create table if not exists storage.buckets (
   id text primary key,
   name text not null,
   public boolean not null default false,
@@ -20,7 +25,7 @@ create table storage.buckets (
   created_at timestamptz not null default now()
 );
 
-create table storage.objects (
+create table if not exists storage.objects (
   id uuid primary key default gen_random_uuid(),
   bucket_id text references storage.buckets (id),
   name text not null,
