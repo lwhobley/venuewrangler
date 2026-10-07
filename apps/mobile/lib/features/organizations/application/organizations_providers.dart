@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../core/auth/auth_providers.dart';
 import '../../../core/network/supabase_providers.dart';
 import '../../venues/application/venues_providers.dart';
 import '../data/organizations_repository.dart';
@@ -13,6 +14,9 @@ final organizationsRepositoryProvider =
 });
 
 final myOrganizationsProvider = FutureProvider<List<Organization>>((ref) {
+  // Cached per signed-in user (see activeVenueProvider): organization names must not
+  // survive a sign-out into the next person's session on the same device.
+  ref.watch(currentUserIdProvider);
   return ref.watch(organizationsRepositoryProvider).fetchMyOrganizations();
 });
 

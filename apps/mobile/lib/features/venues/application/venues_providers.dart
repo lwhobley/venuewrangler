@@ -12,6 +12,9 @@ final venuesRepositoryProvider = Provider<VenuesRepository>((ref) {
 
 final venuesForOrganizationProvider =
     FutureProvider.family<List<Venue>, String>((ref, organizationId) {
+  // Cached per signed-in user: a different person signing in on this device must refetch
+  // under their own permissions rather than be handed the previous user's result.
+  ref.watch(currentUserIdProvider);
   return ref
       .watch(venuesRepositoryProvider)
       .fetchVenuesForOrganization(organizationId);
@@ -23,7 +26,14 @@ final venuesForOrganizationProvider =
 /// is a reasonable follow-up once core/storage's session-scoped persistence pattern is
 /// established, but is not required for this slice to be correct or secure: RLS re-checks
 /// venue membership on every query regardless of what the client remembers.
-final activeVenueProvider = StateProvider<Venue?>((ref) => null);
+final activeVenueProvider = StateProvider<Venue?>((ref) {
+  // Watching the user id makes this reset to null whenever the signed-in user changes
+  // (including to "nobody" on sign-out), so a second person signing in on the same device
+  // never inherits the previous user's selected venue. It does not fire on token refresh:
+  // the id is unchanged, so Riverpod doesn't notify.
+  ref.watch(currentUserIdProvider);
+  return null;
+});
 
 /// Membership roles from most to least privileged.
 const _roleRank = [

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'pending_mutation.dart';
@@ -45,5 +46,47 @@ class FileOfflineQueueStore implements OfflineQueueStore {
     final file = await _file();
     final encoded = jsonEncode(mutations.map((m) => m.toJson()).toList());
     await file.writeAsString(encoded);
+  }
+}
+
+/// Browser-backed queue, used instead of [FileOfflineQueueStore] on web: `path_provider` has no
+/// web implementation and there is no filesystem, so the file store throws during
+/// initialization and no queued action could ever be saved or replayed. flutter_secure_storage
+/// is already a dependency and supports web (encrypted values in `localStorage`), so this adds
+/// no new plugin to the native builds. Cleared along with every other secure-storage value on
+/// sign-out (see core/auth/sign_out_service.dart).
+class SecureStorageOfflineQueueStore implements OfflineQueueStore {
+  const SecureStorageOfflineQueueStore({
+    FlutterSecureStorage storage = const FlutterSecureStorage(),
+    this.key = 'offline_mutation_queue',
+  }) : _storage = storage;
+
+  final FlutterSecureStorage _storage;
+  final String key;
+
+  @override
+  Future<List<PendingMutation>> loadAll() async {
+    final raw = await _storage.read(key: key);
+    if (raw == null || raw.trim().isEmpty) return const [];
+    try {
+      final decoded = jsonDecode(raw) as List<dynamic>;
+      return decoded
+          .map(
+            (entry) => PendingMutation.fromJson(entry as Map<String, dynamic>),
+          )
+          .toList(growable: false);
+    } on FormatException {
+      // A blob the browser left half-written is unrecoverable; starting empty is better than
+      // throwing from the controller's load and leaving offline writes permanently broken.
+      return const [];
+    }
+  }
+
+  @override
+  Future<void> saveAll(List<PendingMutation> mutations) async {
+    await _storage.write(
+      key: key,
+      value: jsonEncode(mutations.map((m) => m.toJson()).toList()),
+    );
   }
 }

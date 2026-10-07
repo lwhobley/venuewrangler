@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:venuewrangler_mobile/core/offline/offline_queue_controller.dart';
 import 'package:venuewrangler_mobile/core/offline/offline_queue_store.dart';
@@ -11,6 +13,23 @@ class _InMemoryOfflineQueueStore implements OfflineQueueStore {
 
   @override
   Future<void> saveAll(List<PendingMutation> mutations) async {
+    saved = mutations;
+  }
+}
+
+/// The first save takes noticeably longer than later ones, so two un-serialized overlapping
+/// writes would complete out of order.
+class _SlowFirstWriteStore implements OfflineQueueStore {
+  List<PendingMutation> saved = const [];
+  int _calls = 0;
+
+  @override
+  Future<List<PendingMutation>> loadAll() async => saved;
+
+  @override
+  Future<void> saveAll(List<PendingMutation> mutations) async {
+    final call = ++_calls;
+    if (call == 1) await Future<void>.delayed(const Duration(milliseconds: 40));
     saved = mutations;
   }
 }
@@ -134,6 +153,73 @@ void main() {
 
       expect(controller.state.pending, hasLength(1));
       expect(controller.state.pending.single.attemptCount, 1);
+    });
+
+    test(
+        'a mutation enqueued while flush is awaiting a handler survives the flush',
+        () async {
+      final store = _InMemoryOfflineQueueStore();
+      final handlerGate = Completer<void>();
+      late OfflineQueueController controller;
+      controller = OfflineQueueController(store, {
+        'test_kind': (payload) async {
+          await handlerGate.future;
+          return const MutationResult(MutationOutcome.applied);
+        },
+      });
+      await controller.ready;
+      await controller.enqueue(_mutation(id: 'first'));
+
+      final flushing = controller.flush();
+      // flush() is now suspended inside the handler; this arrives mid-sync.
+      await controller.enqueue(_mutation(id: 'arrived-during-sync'));
+      handlerGate.complete();
+      await flushing;
+
+      expect(
+        controller.state.pending.map((m) => m.id),
+        ['arrived-during-sync'],
+      );
+      expect(store.saved.map((m) => m.id), ['arrived-during-sync']);
+    });
+
+    test('clearAll during a flush is not undone when the flush finishes',
+        () async {
+      final store = _InMemoryOfflineQueueStore();
+      final handlerGate = Completer<void>();
+      final controller = OfflineQueueController(store, {
+        'test_kind': (payload) async {
+          await handlerGate.future;
+          return const MutationResult(MutationOutcome.conflict);
+        },
+      });
+      await controller.ready;
+      await controller.enqueue(_mutation(id: 'old-user'));
+      await controller.enqueue(_mutation(id: 'old-user-2'));
+
+      final flushing = controller.flush();
+      await controller.clearAll(); // sign-out while the flush is mid-handler
+      handlerGate.complete();
+      await flushing;
+
+      expect(controller.state.pending, isEmpty);
+      expect(controller.state.conflicts, isEmpty);
+      expect(store.saved, isEmpty);
+    });
+
+    test('overlapping writes persist in order, ending on the latest queue',
+        () async {
+      final store = _SlowFirstWriteStore();
+      final controller = OfflineQueueController(store, const {});
+      await controller.ready;
+
+      final first = controller.enqueue(_mutation(id: 'a'));
+      final second = controller.enqueue(_mutation(id: 'b'));
+      await Future.wait([first, second]);
+
+      // The first write is deliberately slow; without serialization it would finish last and
+      // leave only [a] on disk.
+      expect(store.saved.map((m) => m.id), ['a', 'b']);
     });
 
     test('dismissConflict removes it from the conflicts list', () async {

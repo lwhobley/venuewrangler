@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../auth/auth_providers.dart';
@@ -7,6 +8,8 @@ import 'offline_queue_store.dart';
 import 'pending_mutation.dart';
 
 final offlineQueueStoreProvider = Provider<OfflineQueueStore>((ref) {
+  // No filesystem on web (path_provider has no web implementation).
+  if (kIsWeb) return const SecureStorageOfflineQueueStore();
   return FileOfflineQueueStore();
 });
 

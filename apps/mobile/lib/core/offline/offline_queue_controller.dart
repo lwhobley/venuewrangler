@@ -47,6 +47,11 @@ class OfflineQueueController extends StateNotifier<OfflineQueueState> {
   late final Future<void> _loaded;
   bool _flushing = false;
 
+  // Every write to the store goes through this chain so two overlapping writes (an enqueue
+  // landing while flush() is saving) can never finish out of order and persist a stale list.
+  // Each link saves whatever state.pending is *when it runs*, not a snapshot taken earlier.
+  Future<void> _writeChain = Future<void>.value();
+
   Future<void> get ready => _loaded;
 
   Future<void> _load() async {
@@ -67,13 +72,20 @@ class OfflineQueueController extends StateNotifier<OfflineQueueState> {
             userId: _currentUserId?.call(),
           );
     state = state.copyWith(pending: [...state.pending, stamped]);
-    await _store.saveAll(state.pending);
+    await _persist();
+  }
+
+  Future<void> _persist() {
+    final write = _writeChain.then((_) => _store.saveAll(state.pending));
+    // A failed write must not wedge every later one; the caller still sees its own error.
+    _writeChain = write.then((_) {}, onError: (_) {});
+    return write;
   }
 
   Future<void> clearAll() async {
     await _loaded;
     state = const OfflineQueueState();
-    await _store.saveAll(const []);
+    await _persist();
   }
 
   void dismissConflict(String mutationId) {
@@ -99,45 +111,59 @@ class OfflineQueueController extends StateNotifier<OfflineQueueState> {
     _flushing = true;
     try {
       await _loaded;
-      final stillPending = <PendingMutation>[];
+      // Outcomes are recorded by id and applied to the queue as it is *after* the loop, not
+      // to the list this loop started from: handlers are awaited, and anything enqueued (or
+      // cleared by a sign-out) in the meantime must survive the flush.
+      final settled = <String>{};
+      final retried = <String, PendingMutation>{};
       final newConflicts = <PendingMutation>[];
 
-      for (final mutation in state.pending) {
+      for (final mutation in List<PendingMutation>.of(state.pending)) {
         if (mutation.userId != null &&
             effectiveUserId != null &&
             mutation.userId != effectiveUserId) {
-          stillPending.add(mutation);
           continue;
         }
         final handler = _handlers[mutation.kind];
         if (handler == null) {
           // No feature has registered a handler for this kind (e.g. an older app version
           // queued it). Keep it rather than silently dropping someone's unsynced change.
-          stillPending.add(mutation);
           continue;
         }
 
         final result = await _tryApply(handler, mutation);
         switch (result.outcome) {
           case MutationOutcome.applied:
-            break;
+            settled.add(mutation.id);
           case MutationOutcome.conflict:
+            settled.add(mutation.id);
             newConflicts.add(mutation);
           case MutationOutcome.retryableFailure:
             final attempted = mutation.withIncrementedAttempt();
             if (attempted.attemptCount >= kMaxMutationAttempts) {
+              settled.add(mutation.id);
               newConflicts.add(attempted);
             } else {
-              stillPending.add(attempted);
+              retried[mutation.id] = attempted;
             }
         }
       }
 
+      // A conflict is only recorded if its mutation is still queued: a sign-out's clearAll()
+      // during the flush discards the previous user's queue *and* anything it would conflict.
+      final queuedIds = {for (final m in state.pending) m.id};
       state = state.copyWith(
-        pending: stillPending,
-        conflicts: [...state.conflicts, ...newConflicts],
+        pending: [
+          for (final m in state.pending)
+            if (!settled.contains(m.id)) retried[m.id] ?? m,
+        ],
+        conflicts: [
+          ...state.conflicts,
+          for (final c in newConflicts)
+            if (queuedIds.contains(c.id)) c,
+        ],
       );
-      await _store.saveAll(stillPending);
+      await _persist();
     } finally {
       _flushing = false;
     }
