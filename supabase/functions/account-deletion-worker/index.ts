@@ -47,17 +47,30 @@ Deno.serve(async (req) => {
 
   const admin = createServiceClient();
 
-  const { data: job, error: fetchError } = await admin
-    .from("account_deletion_jobs")
-    .select("id, user_id, status, attempts")
-    .eq("id", job_id)
-    .maybeSingle();
-  if (fetchError) throw fetchError;
+  let job: { id: string; user_id: string; status: string; attempts: number } | null;
+  try {
+    const { data, error: fetchError } = await admin
+      .from("account_deletion_jobs")
+      .select("id, user_id, status, attempts")
+      .eq("id", job_id)
+      .maybeSingle();
+    if (fetchError) throw fetchError;
+    job = data;
+  } catch (err) {
+    // Can't read the queue at all: nothing to mark failed. The retry sweep will pick the job
+    // up again once the database is reachable.
+    console.error("account-deletion-worker could not load job", err);
+    captureException(err, { function: "account-deletion-worker", job_id });
+    await flushObservability();
+    return respond({ error: "job_lookup_failed" }, 500);
+  }
   if (!job) return respond({ error: "job_not_found" }, 404);
   if (job.status === "completed" || job.status === "dead") {
     return respond({ ok: true, already: job.status });
   }
 
+  // 'processing' is only a lease: if this invocation dies before reporting a result, the
+  // retry sweep (app_hidden.sweep_account_deletion_jobs) reclaims the job after 15 minutes.
   const nextAttempts = job.attempts + 1;
   await admin
     .from("account_deletion_jobs")
