@@ -61,10 +61,14 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Install psql client
+      # pg_prove (the TAP harness the last step runs) comes from
+      # libtap-parser-sourcehandler-pgtap-perl, which postgresql-16-pgtap only Recommends,
+      # not Depends on - --no-install-recommends (kept for a lean CI image) skips it unless
+      # named explicitly. This was always missing; it just never ran far enough to matter.
+      - name: Install psql client and pg_prove
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends postgresql-client-16
+          sudo apt-get install -y --no-install-recommends postgresql-client-16 libtap-parser-sourcehandler-pgtap-perl
 
       # Must connect to the pre-existing "postgres" database here, not $PGDATABASE
       # (supabase_migration_check) — that's the database this step creates, so
