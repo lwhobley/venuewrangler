@@ -8,7 +8,21 @@
 -- this migration alone never breaks a write — in-app notifications work immediately and push
 -- starts the moment the secrets are provisioned (see docs/migration/push-dispatch-setup.md).
 
-create extension if not exists pg_net with schema extensions;
+-- pg_net is not available at all in a vanilla local Postgres (no contrib package); guarded
+-- the same way pg_cron is in storage_deletion_worker_and_schedule.sql — local CI
+-- verification must not depend on a platform-managed extension. Safe to skip here: every
+-- net.http_post call below already runs inside its own exception handler (a push failure
+-- must never roll back the business write that triggered it), so a missing pg_net just
+-- means that handler fires instead.
+do $$
+begin
+  if exists (select 1 from pg_available_extensions where name = 'pg_net') then
+    create extension if not exists pg_net with schema extensions;
+  end if;
+exception when others then
+  null;
+end;
+$$;
 
 create or replace function app_hidden.dispatch_notification_push()
 returns trigger

@@ -31,5 +31,10 @@
     "https://deno.land/std@0.177.0/http/server.ts": "cbb17b594651215ba95c01a395700684e569c165a567e4e04bba327f41197433",
     "https://esm.sh/@supabase/supabase-js@2.110.0": "b99c0ce7729f9de7797f836b93ab9ec94f1cfe079b4f937fa4144fe13525e979",
     "https://esm.sh/stripe@23.0.0?target=deno": "704d9ab9a8f317e703992c28eb7e1a3e783553e5d9c33a0059835255e5e81012"
+  },
+  "workspace": {
+    "dependencies": [
+      "npm:@sentry/deno@8"
+    ]
   }
 }
