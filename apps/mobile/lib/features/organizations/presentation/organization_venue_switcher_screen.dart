@@ -1,24 +1,29 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../../core/auth/sign_out_service.dart';
 import '../../venues/application/venues_providers.dart';
 import '../../venues/domain/venue.dart';
 import '../application/organizations_providers.dart';
+import '../application/workspace_provisioning.dart';
 import '../domain/organization.dart';
+import 'create_workspace_dialog.dart';
 
 /// Post-auth landing screen when no venue is selected yet (see app/router.dart). Lists every
 /// organization the signed-in user belongs to, then that organization's venues — both lists
 /// come straight from Supabase with no client-side authorization filtering, because the RLS
 /// policies on `organizations`/`venues` already guarantee the rows returned are exactly the
 /// ones this user is allowed to see.
+///
+/// Also where a new self-serve owner lands while their workspace is being created, and where a
+/// failure to create it is shown with a retry (see [workspaceProvisioningProvider]).
 class OrganizationVenueSwitcherScreen extends ConsumerWidget {
   const OrganizationVenueSwitcherScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final organizationsAsync = ref.watch(myOrganizationsProvider);
+    final provisioning = ref.watch(workspaceProvisioningProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -31,24 +36,29 @@ class OrganizationVenueSwitcherScreen extends ConsumerWidget {
           ),
         ],
       ),
-      body: organizationsAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => _ErrorState(
-          message: 'Could not load your organizations.',
-          onRetry: () => ref.invalidate(myOrganizationsProvider),
-        ),
-        data: (organizations) {
-          if (organizations.isEmpty) {
-            return const _EmptyState();
-          }
-          return ListView.builder(
-            itemCount: organizations.length,
-            itemBuilder: (context, index) => _OrganizationSection(
-              organization: organizations[index],
+      body: switch (provisioning.status) {
+        WorkspaceProvisioningStatus.creating => const _CreatingWorkspace(),
+        WorkspaceProvisioningStatus.failed =>
+          _WorkspaceFailed(message: provisioning.message),
+        WorkspaceProvisioningStatus.idle => organizationsAsync.when(
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (error, _) => _ErrorState(
+              message: 'Could not load your organizations.',
+              onRetry: () => ref.invalidate(myOrganizationsProvider),
             ),
-          );
-        },
-      ),
+            data: (organizations) {
+              if (organizations.isEmpty) {
+                return const _EmptyState();
+              }
+              return ListView.builder(
+                itemCount: organizations.length,
+                itemBuilder: (context, index) => _OrganizationSection(
+                  organization: organizations[index],
+                ),
+              );
+            },
+          ),
+      },
     );
   }
 }
@@ -108,11 +118,11 @@ class _OrganizationSection extends ConsumerWidget {
   }
 }
 
-class _EmptyState extends StatelessWidget {
+class _EmptyState extends ConsumerWidget {
   const _EmptyState();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -125,9 +135,78 @@ class _EmptyState extends StatelessWidget {
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 16),
+            // Signed-in users are redirected away from /sign-up (app/router.dart), so this
+            // creates the workspace right here instead of navigating there.
             OutlinedButton(
-              onPressed: () => context.go('/sign-up'),
-              child: const Text('Launch your own workspace'),
+              onPressed: () => _createWorkspace(context, ref),
+              child: const Text('Create your own workspace'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+Future<void> _createWorkspace(BuildContext context, WidgetRef ref) async {
+  final details = await CreateWorkspaceDialog.show(context);
+  if (details == null) return;
+  // Progress and any failure are shown by the screen itself (workspaceProvisioningProvider).
+  await ref
+      .read(workspaceProvisioningProvider.notifier)
+      .create(name: details.name, timezone: details.timezone);
+}
+
+class _CreatingWorkspace extends StatelessWidget {
+  const _CreatingWorkspace();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          CircularProgressIndicator(),
+          SizedBox(height: 16),
+          Text('Setting up your workspace…'),
+        ],
+      ),
+    );
+  }
+}
+
+class _WorkspaceFailed extends ConsumerWidget {
+  const _WorkspaceFailed({required this.message});
+
+  final String? message;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.error_outline,
+              size: 40,
+              color: Theme.of(context).colorScheme.error,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              message ?? "We couldn't set up your workspace.",
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            FilledButton(
+              onPressed: () =>
+                  ref.read(workspaceProvisioningProvider.notifier).retry(),
+              child: const Text('Try again'),
+            ),
+            TextButton(
+              onPressed: () => signOutAndClearScopedData(ref),
+              child: const Text('Sign out'),
             ),
           ],
         ),

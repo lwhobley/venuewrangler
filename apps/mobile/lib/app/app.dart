@@ -8,7 +8,7 @@ import '../core/offline/offline_queue_connectivity.dart';
 import '../core/security/app_attest_providers.dart';
 import '../core/theme/app_theme.dart';
 import '../features/notifications/application/notifications_providers.dart';
-import '../features/organizations/application/organizations_providers.dart';
+import '../features/organizations/application/workspace_provisioning.dart';
 import 'intro_video_screen.dart';
 import 'router.dart';
 
@@ -55,7 +55,7 @@ class _VenueWranglerAppState extends ConsumerState<VenueWranglerApp> {
     // /reset-password. See core/auth/auth_providers.dart.
     ref.watch(passwordRecoveryTriggerProvider);
     // Side-effect only: finishes "Launch Workspace" sign-ups once a session exists. See
-    // features/organizations/application/organizations_providers.dart.
+    // features/organizations/application/workspace_provisioning.dart.
     ref.watch(pendingWorkspaceCreationTriggerProvider);
 
     final router = ref.watch(routerProvider);

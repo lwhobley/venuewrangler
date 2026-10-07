@@ -8,6 +8,8 @@ import '../../core/auth/auth_providers.dart';
 import '../../core/auth/auth_repository.dart';
 import '../../core/errors/app_error.dart';
 import '../../core/theme/app_colors.dart';
+import '../organizations/domain/workspace_name.dart';
+import '../organizations/domain/workspace_timezones.dart';
 
 /// "Launch Workspace" — the marketing site's entry point for a brand-new customer starting
 /// their own organization from scratch (as opposed to SignInScreen, for someone already
@@ -34,6 +36,10 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
   bool _checkYourEmail = false;
   AppError? _error;
 
+  /// Pre-selected from the device when it can be told apart, otherwise the person picks.
+  /// Becomes the venue's `timezone`, which the time clock reads server-side.
+  String? _timezone = guessWorkspaceTimezone();
+
   @override
   void dispose() {
     _workspaceController.dispose();
@@ -55,7 +61,10 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
           await ref.read(authRepositoryProvider).signUpWithPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text,
-        data: {'pending_workspace_name': _workspaceController.text.trim()},
+        data: {
+          'pending_workspace_name': _workspaceController.text.trim(),
+          'pending_timezone': _timezone,
+        },
       );
       if (!mounted) return;
       if (hasSession) {
@@ -136,9 +145,27 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
                                         prefixIcon:
                                             Icon(Icons.storefront_outlined),
                                       ),
-                                      validator: (value) => (value == null ||
-                                              value.trim().isEmpty)
-                                          ? 'Enter your venue name'
+                                      validator: workspaceNameProblem,
+                                    ),
+                                    const SizedBox(height: 12),
+                                    DropdownButtonFormField<String>(
+                                      initialValue: _timezone,
+                                      isExpanded: true,
+                                      decoration: const InputDecoration(
+                                        labelText: 'Time zone',
+                                        prefixIcon: Icon(Icons.schedule),
+                                      ),
+                                      items: [
+                                        for (final zone in kWorkspaceTimezones)
+                                          DropdownMenuItem(
+                                            value: zone.id,
+                                            child: Text(zone.label),
+                                          ),
+                                      ],
+                                      onChanged: (value) =>
+                                          setState(() => _timezone = value),
+                                      validator: (value) => value == null
+                                          ? 'Select your time zone'
                                           : null,
                                     ),
                                     const SizedBox(height: 12),

@@ -15,10 +15,14 @@ user can't just insert their way into owning one. Instead `OrganizationsReposito
 createWorkspace()` calls `public.create_workspace` (supabase/migrations), a SECURITY DEFINER
 RPC that's the one deliberate, audited bypass: given an authenticated caller, it creates a new
 organization + venue and grants that caller an `organization_owner` membership on it, nothing
-else. `features/auth/sign_up_screen.dart` is the UI; `pendingWorkspaceCreationTriggerProvider`
-in `application/organizations_providers.dart` is what actually calls it, watched once at the
-app root (`app/app.dart`) rather than inline in the sign-up screen — see that provider's doc
-comment for why (the signUp call that starts this doesn't always hand back a session on the
-same tick).
+else. `features/auth/sign_up_screen.dart` is the UI (venue name + time zone);
+`pendingWorkspaceCreationTriggerProvider` in `application/workspace_provisioning.dart` is what
+finishes it, watched once at the app root (`app/app.dart`) rather than inline in the sign-up
+screen — see that provider's doc comment for why (the signUp call that starts this doesn't
+always hand back a session on the same tick).
+
+Both that flow and the switcher screen's "Create your own workspace" button (for a signed-in
+user with no organization) go through `workspaceProvisioningProvider`: single-flight, per
+signed-in user, and visible — the switcher shows progress, or the failure with Try again.
 
 Not yet implemented: organization renaming, and a general organization settings screen.
