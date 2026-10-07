@@ -200,6 +200,12 @@ select throws_ok(
 -- 12c. breaks: append-only, server-timestamped, one open at a time
 -- ---------------------------------------------------------------------------
 reset role;
+-- app_hidden.prepare_time_entry_insert always overrides user_id to auth.uid() unless the
+-- caller has a manager-level role on the venue (never true here) - and auth.uid() reads
+-- request.jwt.claim.sub regardless of role, so without this, the explicit user_id below is
+-- silently replaced by whichever claim.sub a prior test block last left set (staff 1's,
+-- from line 155), not staff 2's.
+set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-000000000008';
 -- Open a fresh entry for staff 2 to exercise break transitions.
 insert into public.time_entries (
   id, organization_id, venue_id, user_id, clock_in_lat, clock_in_lng, clock_in_accuracy_m
@@ -281,6 +287,12 @@ select lives_ok(
   'a venue manager can correct a punch via correct_time_entry'
 );
 
+-- audit_log_select_org_admins (foundation_schema.sql) only lets organization_owner/
+-- organization_admin read audit_log - a venue_manager (the still-active role/claim above)
+-- legitimately can't, per that policy (covered in foundation_rls.test.sql). This check is
+-- about correct_time_entry having written the row at all, not who can read it back, so
+-- verify unconditionally instead of through that narrower lens.
+reset role;
 select ok(
   (select exists(
      select 1 from public.audit_log
@@ -294,6 +306,13 @@ select ok(
 -- 14. anti-replay: seed previous day entry, then attempt identical satellite fix
 -- ---------------------------------------------------------------------------
 reset role;
+-- app_hidden.prepare_time_entry_insert (20261006203252_harden_time_entry_integrity.sql)
+-- unconditionally forces clock_in_at to now(), is_open to true and clock_out_at to null on
+-- every insert, including this one - that's the point of the hardening (clock_in_at is
+-- never client/fixture-supplied), but it means this historical seed needs the trigger
+-- disabled, same as any other direct backfill would, to actually land in the past and
+-- closed the way a pre-hardening entry legitimately could.
+alter table public.time_entries disable trigger prepare_time_entry_insert;
 -- Insert previous day entry directly
 insert into public.time_entries (
   id, organization_id, venue_id, user_id,
@@ -306,6 +325,7 @@ insert into public.time_entries (
   now() - interval '2 days',
   29.760455, -95.369855, 5.0, false, now() - interval '2 days' + interval '6 hours'
 );
+alter table public.time_entries enable trigger prepare_time_entry_insert;
 
 set local role authenticated;
 set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-000000000005';
