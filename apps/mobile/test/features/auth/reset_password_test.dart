@@ -36,6 +36,9 @@ void main() {
 
   test('reset emails send the user back into the app', () {
     expect(kPasswordResetRedirect, startsWith('venuewrangler://'));
+    // Tests run on the VM, i.e. native: the custom scheme. On web it is the web app's /app/
+    // (a custom scheme is meaningless in a browser) — see passwordResetRedirect().
+    expect(passwordResetRedirect(), kPasswordResetRedirect);
   });
 
   testWidgets('forgot password sends a reset email for the typed address',

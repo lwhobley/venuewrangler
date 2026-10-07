@@ -16,6 +16,14 @@ const kPasswordResetRedirect = 'venuewrangler://reset-password';
 /// URL must be in the Supabase project's Auth → URL Configuration → Redirect URLs allow-list.
 String? signUpEmailRedirect() => kIsWeb ? '${Uri.base.origin}/app/' : null;
 
+/// Where the password-reset email sends the user. Native builds use the app's custom scheme
+/// ([kPasswordResetRedirect]); a custom scheme means nothing in a browser, so on web the link
+/// returns to the Flutter web app at /app/ on the origin the request was made from (the PKCE
+/// verifier lives in this browser's storage, so it has to open here). Same allow-list note as
+/// [signUpEmailRedirect].
+String passwordResetRedirect() =>
+    kIsWeb ? '${Uri.base.origin}/app/' : kPasswordResetRedirect;
+
 /// The project's password policy (Supabase Auth: lower, upper, digit and symbol, 8+ chars),
 /// checked client-side so the user sees what's wrong before a round trip.
 String? passwordPolicyProblem(String password) {
@@ -95,7 +103,7 @@ class SupabaseAuthRepository implements AuthRepository {
   Future<void> sendPasswordResetEmail(String email) async {
     await _client.auth.resetPasswordForEmail(
       email,
-      redirectTo: kPasswordResetRedirect,
+      redirectTo: passwordResetRedirect(),
     );
   }
 
