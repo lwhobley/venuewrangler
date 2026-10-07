@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 
 /// Delivers a tapped push notification's payload to [start]'s `onTap` callback, per platform:
@@ -18,8 +19,8 @@ class NotificationTapService {
     FirebaseMessaging? firebaseMessaging,
   })  : _channel = iosChannel ??
             const MethodChannel('com.venuewrangler.app/push_notifications'),
-        _isIOS = isIOS ?? (() => Platform.isIOS),
-        _isAndroid = isAndroid ?? (() => Platform.isAndroid),
+        _isIOS = isIOS ?? (() => !kIsWeb && Platform.isIOS),
+        _isAndroid = isAndroid ?? (() => !kIsWeb && Platform.isAndroid),
         _firebaseMessagingOverride = firebaseMessaging;
 
   final MethodChannel _channel;

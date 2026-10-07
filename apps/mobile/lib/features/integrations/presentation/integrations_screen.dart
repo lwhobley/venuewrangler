@@ -46,7 +46,8 @@ class IntegrationsScreen extends ConsumerWidget {
                 ListTile(
                   leading: const Icon(Icons.point_of_sale_outlined),
                   title: const Text('POS'),
-                  subtitle: const Text('Provider access, capabilities and schedule sync'),
+                  subtitle: const Text(
+                      'Provider access, capabilities and schedule sync'),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => context.push('/pos'),
                 ),

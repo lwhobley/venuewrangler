@@ -1,35 +1,45 @@
 # Venue Wrangler mobile (Flutter + Supabase)
 
-Phase 1 foundation scaffold. See `docs/migration/flutter-supabase-rebuild-plan.md` at the
-repo root for the full discovery, mapping table, and risk list this is built from.
+See `docs/migration/flutter-supabase-rebuild-plan.md` at the repo root for the original
+discovery, mapping table, and risk list this was built from.
 
 ## Status
 
-This is a hand-authored Dart-level scaffold (`pubspec.yaml`, `lib/`, `test/`). **The
-`android/`, `ios/`, and `web/` platform folders are not yet populated** — the Flutter SDK was
-not available in the environment this scaffold was authored in, and hand-fabricating native
-Xcode/Gradle project files without the tooling to verify them would be unbuildable, unreviewable
-boilerplate. The first thing to do with a real Flutter SDK is:
+`android/`, `ios/`, and `web/` are all populated and build. iOS ships to TestFlight via
+Codemagic (`codemagic.yaml`); Android and web are run/built locally with the commands below.
 
-```
-flutter create --platforms=android,ios,web --org com.venuewrangler --project-name venuewrangler_mobile .
-```
+The `web/` platform folder was added with `flutter create --platforms=web .`, which only
+touches `web/` plus a couple of tooling files (`.metadata`, `analysis_options.yaml`) — it does
+not add or need a generic `lib/main.dart`, since every target (including web) is built with an
+explicit `-t lib/main_*.dart`, same as iOS/Android (see Flavors below). Web-specific caveats:
 
-run from this directory, which fills in those three folders without touching anything under
-`lib/`, `test/`, or `pubspec.yaml`. After that, `flutter pub get`, `dart run build_runner build`
-(`freezed`/`build_runner` were removed — no models use codegen; re-add them if that changes), and the three
-flavored entrypoints below should run normally.
+- `bootstrap.dart` and the push/attestation services guard every `dart:io` `Platform.isX` check
+  with `!kIsWeb` first — those getters throw on web, not return `false`, so an unguarded check
+  blocks the whole app at startup. Follow this pattern for any new `Platform.isX` use.
+- The offline mutation queue (`core/offline/offline_queue_store.dart`) is file-based via
+  `path_provider`, which has no web implementation. On web this currently fails silently
+  (caught by the Sentry error zone, doesn't block rendering) rather than actually queuing — the
+  app works online but offline-queued writes don't yet persist across a web reload. Needs a
+  web storage backend (IndexedDB via a conditional import, or `shared_preferences`) before
+  offline support is real on web.
+- Web icons under `web/icons/` and `web/favicon.png` are reused from the existing iOS/Android
+  app icon (not dedicated maskable-safe-zone artwork) — adequate for now, worth regenerating
+  properly (e.g. via `flutter_launcher_icons`) before a real web launch.
 
 ## Flavors
 
 Three entrypoints, one per environment, each hardcoding its own `AppFlavor` so a flavor can
 never be mismatched between the binary built and the config it reads
-(`lib/app/bootstrap.dart`):
+(`lib/app/bootstrap.dart`). Any of the three works on any platform, including web — add
+`-d chrome` to run in a browser, or drop it (and use `flutter build web` instead of `flutter
+run`) to just build static output into `build/web/`:
 
 ```
-flutter run -t lib/main_development.dart --dart-define-from-file=env/development.json
-flutter run -t lib/main_staging.dart     --dart-define-from-file=env/staging.json
-flutter run -t lib/main_production.dart  --dart-define-from-file=env/production.json
+flutter run [-d chrome] -t lib/main_development.dart --dart-define-from-file=env/development.json
+flutter run [-d chrome] -t lib/main_staging.dart     --dart-define-from-file=env/staging.json
+flutter run [-d chrome] -t lib/main_production.dart  --dart-define-from-file=env/production.json
+
+flutter build web -t lib/main_production.dart --dart-define-from-file=env/production.json
 ```
 
 Copy each `env/*.json.example` to `env/*.json` (gitignored) and fill in the real Supabase

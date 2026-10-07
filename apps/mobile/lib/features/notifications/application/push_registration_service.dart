@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 
 import '../data/notifications_repository.dart';
@@ -28,8 +29,8 @@ class PushRegistrationService {
   })  : _repository = repository,
         _iosChannel = iosChannel ??
             const MethodChannel('com.venuewrangler.app/push_notifications'),
-        _isIOS = isIOS ?? (() => Platform.isIOS),
-        _isAndroid = isAndroid ?? (() => Platform.isAndroid),
+        _isIOS = isIOS ?? (() => !kIsWeb && Platform.isIOS),
+        _isAndroid = isAndroid ?? (() => !kIsWeb && Platform.isAndroid),
         _firebaseMessagingOverride = firebaseMessaging;
 
   final NotificationsRepository _repository;

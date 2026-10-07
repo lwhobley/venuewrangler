@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
@@ -35,7 +36,7 @@ class AppAttestService {
         _storage = storage,
         _channel =
             channel ?? const MethodChannel('com.venuewrangler.app/app_attest'),
-        _isIOS = isIOS ?? (() => Platform.isIOS);
+        _isIOS = isIOS ?? (() => !kIsWeb && Platform.isIOS);
 
   final SupabaseClient _client;
   final SecureSessionStorage _storage;

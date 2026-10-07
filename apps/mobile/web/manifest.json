@@ -1,0 +1,35 @@
+{
+    "name": "Venue Wrangler",
+    "short_name": "Venue Wrangler",
+    "start_url": ".",
+    "display": "standalone",
+    "background_color": "#194A62",
+    "theme_color": "#194A62",
+    "description": "Venue Wrangler: venue operations, scheduling, floor plans, and guest management.",
+    "orientation": "portrait-primary",
+    "prefer_related_applications": false,
+    "icons": [
+        {
+            "src": "icons/Icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png"
+        },
+        {
+            "src": "icons/Icon-512.png",
+            "sizes": "1024x1024",
+            "type": "image/png"
+        },
+        {
+            "src": "icons/Icon-maskable-192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "maskable"
+        },
+        {
+            "src": "icons/Icon-maskable-512.png",
+            "sizes": "1024x1024",
+            "type": "image/png",
+            "purpose": "maskable"
+        }
+    ]
+}

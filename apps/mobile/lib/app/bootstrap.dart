@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -38,7 +39,7 @@ Future<void> bootstrap(AppFlavor flavor) async {
   // check: android/app/google-services.json may still be the placeholder note rather than a
   // real config (see that path), in which case this throws at startup rather than registering
   // push for the wrong Firebase project — app startup must not depend on this succeeding.
-  if (Platform.isAndroid) {
+  if (!kIsWeb && Platform.isAndroid) {
     try {
       await Firebase.initializeApp();
     } catch (error) {
