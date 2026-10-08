@@ -25,10 +25,20 @@ class NotificationsScreen extends ConsumerWidget {
               icon: const Icon(Icons.done_all),
               tooltip: 'Mark all as read',
               onPressed: () async {
-                await ref
-                    .read(notificationsRepositoryProvider)
-                    .markAllAsRead(venueId: currentVenue.id);
-                ref.invalidate(notificationsFeedProvider);
+                try {
+                  await ref
+                      .read(notificationsRepositoryProvider)
+                      .markAllAsRead(venueId: currentVenue.id);
+                  ref.invalidate(notificationsFeedProvider);
+                } catch (_) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Could not mark notifications as read.'),
+                      ),
+                    );
+                  }
+                }
               },
             ),
         ],
@@ -56,8 +66,8 @@ class NotificationsScreen extends ConsumerWidget {
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, _) => ErrorState(
-          message: 'Failed to load notifications: $err',
+        error: (_, __) => ErrorState(
+          message: 'Could not load notifications.',
           onRetry: () => ref.invalidate(notificationsFeedProvider),
         ),
       ),
@@ -132,10 +142,21 @@ class _NotificationListTile extends ConsumerWidget {
             ),
       onTap: () async {
         if (!item.isRead) {
-          await ref
-              .read(notificationsRepositoryProvider)
-              .markAsRead(notificationId: item.id);
-          ref.invalidate(notificationsFeedProvider);
+          try {
+            await ref
+                .read(notificationsRepositoryProvider)
+                .markAsRead(notificationId: item.id);
+            ref.invalidate(notificationsFeedProvider);
+          } catch (_) {
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Could not mark this notification as read.'),
+                ),
+              );
+            }
+            return;
+          }
         }
         final route = routeForNotificationKind(item.kind);
         // maybeOf, not of: a plain MaterialApp test host (no GoRouter ancestor) should still
@@ -148,14 +169,15 @@ class _NotificationListTile extends ConsumerWidget {
   }
 
   String _formatDate(DateTime dt) {
+    final local = dt.toLocal();
     final now = DateTime.now();
-    final diff = now.difference(dt);
+    final diff = now.difference(local);
     if (diff.inMinutes < 60) {
       return '${diff.inMinutes}m ago';
     } else if (diff.inHours < 24) {
       return '${diff.inHours}h ago';
     } else {
-      return '${dt.month}/${dt.day}/${dt.year}';
+      return '${local.month}/${local.day}/${local.year}';
     }
   }
 }

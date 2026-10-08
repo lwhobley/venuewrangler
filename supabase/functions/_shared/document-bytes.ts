@@ -33,13 +33,18 @@ export function safeDocumentFileName(value: string): string {
   // ([a-zA-Z0-9_-.]+): strip accents, replace any other char (spaces, brackets,
   // unicode) with _, collapse repeats. Original name stays in documents.file_name.
   const noAccents = leaf.normalize("NFKD").replace(/[\u0300-\u036f]/g, "");
-  const cleaned = noAccents
+  const originalExtension = leaf.toLowerCase().match(/\.([a-z0-9]+)$/)?.[1] ?? "";
+  const extension = Object.hasOwn(MIME_BY_EXTENSION, originalExtension) ? `.${originalExtension}` : "";
+  const stem = extension ? noAccents.slice(0, -extension.length) : noAccents;
+  const cleanedStem = stem
     // deno-lint-ignore no-control-regex
     .replace(/[\u0000-\u001f\u007f"<>:|?*]/g, "_")
     .replace(/[^a-zA-Z0-9_.\-]/g, "_")
     .replace(/_+/g, "_")
+    .replace(/\.\.+/g, "_")
     .replace(/^[_.]+|[_.]+$/g, "")
-    .slice(0, 180);
+    .slice(0, 180 - extension.length);
+  const cleaned = `${cleanedStem || (extension ? "document" : "")}${extension}`;
   if (!cleaned || cleaned === "." || cleaned === "..") {
     throw new DocumentValidationError("A valid file name is required");
   }

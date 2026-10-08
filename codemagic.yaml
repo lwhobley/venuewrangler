@@ -52,10 +52,14 @@ workflows:
           APP_ID=$(app-store-connect apps list \
             --bundle-id-identifier "$BUNDLE_ID" --strict-match-identifier --json \
             | jq -r '.[0].id // empty')
-          LATEST=0
-          if [ -n "$APP_ID" ]; then
-            LATEST=$(app-store-connect get-latest-testflight-build-number "$APP_ID" 2>/dev/null || echo 0)
+          if [ -z "$APP_ID" ]; then
+            echo "App Store Connect app for $BUNDLE_ID was not found" >&2
+            exit 1
           fi
+          LATEST=$(app-store-connect get-latest-testflight-build-number "$APP_ID")
+          case "$LATEST" in
+            ''|*[!0-9]*) echo "Invalid TestFlight build number: $LATEST" >&2; exit 1 ;;
+          esac
           NEXT=$(( LATEST + 1 ))
           if [ "${BUILD_NUMBER:-0}" -gt "$NEXT" ]; then NEXT=$BUILD_NUMBER; fi
           echo "Building with build number $NEXT (latest on TestFlight: $LATEST)"

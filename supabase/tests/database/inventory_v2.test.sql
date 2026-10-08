@@ -59,7 +59,7 @@ select pg_temp.inv_ok((select quantity=4.5 from public.inventory_stock where id=
 select pg_temp.inv_ok((select previous_quantity=6.5 and variance_quantity=-2 and variance_value=-49 from public.inventory_count_items where count_id=pg_temp.inv_id('count')),'count keeps previous quantity and computes exact quantity/dollar variance');
 select pg_temp.inv_ok((select status='completed' and completed_by='81000000-0000-0000-0000-000000000002' and completed_at is not null from public.inventory_counts where id=pg_temp.inv_id('count')),'count records completing actor and time');
 select pg_temp.inv_ok((select count(*)=1 from public.inventory_history where reference_id=pg_temp.inv_id('count') and action_type='COUNT'),'count creates one history entry');
-select public.inventory_save_count(pg_temp.inv_id('count'),'[]',true);
+select pg_temp.inv_ok(pg_temp.inv_error($q$select public.inventory_save_count(pg_temp.inv_id('count'),'[]',true)$q$,'22023'),'a second completion reports that the count is already closed');
 select pg_temp.inv_ok((select count(*)=1 from public.inventory_history where reference_id=pg_temp.inv_id('count') and action_type='COUNT'),'completed count retry cannot apply twice');
 select public.inventory_apply_action(pg_temp.inv_id('room'),'RECEIVE',12,null,null,null,'87000000-0000-0000-0000-000000000001');
 select public.inventory_apply_action(pg_temp.inv_id('room'),'RECEIVE',12,null,null,null,'87000000-0000-0000-0000-000000000001');

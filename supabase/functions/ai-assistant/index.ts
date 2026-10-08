@@ -81,8 +81,9 @@ async function handleRequest(
       400,
     );
   }
-  if (!venue_id || typeof venue_id !== "string") {
-    return jsonResponse({ error: "missing_venue_id" }, 400);
+  if (!venue_id || typeof venue_id !== "string" ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(venue_id)) {
+    return jsonResponse({ error: "invalid_venue_id" }, 400);
   }
   if (!input || typeof input !== "string" || input.trim().length === 0) {
     return jsonResponse({ error: "missing_input" }, 400);
@@ -119,6 +120,27 @@ async function handleRequest(
     return jsonResponse({ error: "venue_not_found_or_not_a_member" }, 403);
   }
   const organizationId = venue.organization_id as string;
+
+  // These actions lead to manager-only writes or operate on manager-only
+  // roster/inventory data. Reject before reserving and spending AI budget.
+  if (task !== "wrangler_ask") {
+    const { data: memberships, error: membershipError } = await userClient
+      .from("memberships")
+      .select("venue_id,role")
+      .eq("user_id", userId)
+      .eq("organization_id", organizationId);
+    if (membershipError) {
+      return jsonResponse({ error: "membership_lookup_failed" }, 500);
+    }
+    const canManage = (memberships ?? []).some((membership) =>
+      (membership.venue_id === venue_id && membership.role === "venue_manager") ||
+      (membership.venue_id === null &&
+        ["organization_owner", "organization_admin"].includes(membership.role))
+    );
+    if (!canManage) {
+      return jsonResponse({ error: "manager_permission_required" }, 403);
+    }
+  }
 
   const serviceClient = createServiceClient();
 

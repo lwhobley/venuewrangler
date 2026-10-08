@@ -248,7 +248,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(repo.saved, [
       {'id': 'line1', 'quantity': '4.5'},
-      {'id': 'line2', 'quantity': null},
     ]);
     expect(repo.completed, true);
     expect(find.text('Known variance value: -\$49.00'), findsOneWidget);

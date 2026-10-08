@@ -10,7 +10,14 @@ export default {
       return new Response('Method not allowed', { status: 405, headers: { Allow: 'GET, HEAD' } });
     }
     const isAsset = url.pathname.startsWith('/app/assets/') || url.pathname.startsWith('/app/canvaskit/') || /\.[^/]+$/.test(url.pathname);
-    if (isAsset) return env.ASSETS.fetch(request);
+    if (isAsset) {
+      const asset = await env.ASSETS.fetch(request);
+      const response = new Response(asset.body, asset);
+      // Flutter reuses engine and bootstrap file names across releases. Keep
+      // one release's shell from loading another release's cached assets.
+      response.headers.set('Cache-Control', 'no-store');
+      return response;
+    }
 
     const shellUrl = new URL('/app/', url.origin);
     const asset = await env.ASSETS.fetch(new Request(shellUrl, { method: request.method }));

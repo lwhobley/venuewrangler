@@ -197,11 +197,19 @@ class _EventTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final localizations = MaterialLocalizations.of(context);
+    String formatTime(DateTime value) {
+      final local = value.toLocal();
+      return '${localizations.formatMediumDate(local)} '
+          '${localizations.formatTimeOfDay(TimeOfDay.fromDateTime(local))}';
+    }
+
     return ListTile(
       leading: Icon(_iconForStatus(event.status)),
       title: Text(event.name),
-      subtitle:
-          Text('${event.startTime} → ${event.endTime}\n${event.status.name}'),
+      subtitle: Text(
+        '${formatTime(event.startTime)} → ${formatTime(event.endTime)}\n${event.status.name}',
+      ),
       isThreeLine: true,
       trailing: IconButton(
         icon: const Icon(Icons.delete_outline),
@@ -211,6 +219,24 @@ class _EventTile extends ConsumerWidget {
   }
 
   Future<void> _delete(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete event?'),
+        content: Text('Delete ${event.name}?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
     try {
       await ref.read(eventsRepositoryProvider).deleteEvent(event.id);
       ref.invalidate(eventsForVenueProvider(event.venueId));

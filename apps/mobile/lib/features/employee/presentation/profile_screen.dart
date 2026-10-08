@@ -254,13 +254,15 @@ class ProfileScreen extends ConsumerWidget {
     WidgetRef ref,
     String? current,
   ) async {
-    final controller = TextEditingController(text: current);
+    final userId = ref.read(currentUserIdProvider);
+    var editedName = current ?? '';
     final name = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Display name'),
-        content: TextField(
-          controller: controller,
+        content: TextFormField(
+          initialValue: current,
+          onChanged: (value) => editedName = value,
           autofocus: true,
           textCapitalization: TextCapitalization.words,
         ),
@@ -270,15 +272,19 @@ class ProfileScreen extends ConsumerWidget {
             child: const Text('Cancel'),
           ),
           FilledButton(
-            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            onPressed: () => Navigator.pop(context, editedName.trim()),
             child: const Text('Save'),
           ),
         ],
       ),
     );
-    controller.dispose();
-    final userId = ref.read(currentUserIdProvider);
-    if (name == null || name.isEmpty || userId == null) return;
+    if (!context.mounted ||
+        name == null ||
+        name.isEmpty ||
+        userId == null ||
+        ref.read(currentUserIdProvider) != userId) {
+      return;
+    }
     try {
       await ref
           .read(settingsRepositoryProvider)

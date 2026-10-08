@@ -67,6 +67,10 @@ class _StatusCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final status = subscription?.status ?? 'none';
+    final end = subscription?.currentPeriodEnd?.toLocal();
+    final endLabel = end == null
+        ? null
+        : MaterialLocalizations.of(context).formatMediumDate(end);
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -76,12 +80,12 @@ class _StatusCard extends StatelessWidget {
             Text('Status', style: Theme.of(context).textTheme.labelMedium),
             const SizedBox(height: 4),
             Text(status, style: Theme.of(context).textTheme.headlineSmall),
-            if (subscription?.currentPeriodEnd != null) ...[
+            if (endLabel != null) ...[
               const SizedBox(height: 8),
               Text(
                 subscription!.cancelAtPeriodEnd
-                    ? 'Cancels on ${subscription!.currentPeriodEnd}'
-                    : 'Renews on ${subscription!.currentPeriodEnd}',
+                    ? 'Cancels on $endLabel'
+                    : 'Renews on $endLabel',
               ),
             ],
           ],

@@ -3,7 +3,7 @@
 -- for the full cast if these ids look unfamiliar.
 
 begin;
-select plan(19);
+select plan(20);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-000000000002', 'org-a-owner@example.com'),
@@ -26,6 +26,10 @@ insert into public.memberships (user_id, organization_id, venue_id, role) values
   ('00000000-0000-0000-0000-000000000005', '10000000-0000-0000-0000-00000000000a', '20000000-0000-0000-0000-0000000000a1', 'staff'),
   ('00000000-0000-0000-0000-000000000008', '10000000-0000-0000-0000-00000000000a', '20000000-0000-0000-0000-0000000000a1', 'staff'),
   ('00000000-0000-0000-0000-000000000006', '10000000-0000-0000-0000-00000000000b', null, 'organization_owner');
+
+insert into public.memberships (user_id, organization_id, venue_id, role) values
+  ('00000000-0000-0000-0000-000000000005', '10000000-0000-0000-0000-00000000000b',
+   '20000000-0000-0000-0000-0000000000b1', 'venue_manager');
 
 -- ---------------------------------------------------------------------------
 -- insert
@@ -82,6 +86,14 @@ select is(
   (select count(*)::int from public.incidents),
   1,
   'a venue member can see the incident'
+);
+
+select throws_ok(
+  $$ update public.incidents set venue_id = '20000000-0000-0000-0000-0000000000b1',
+     organization_id = '10000000-0000-0000-0000-00000000000b'
+     where id = '50000000-0000-0000-0000-000000000001' $$,
+  '42501', null,
+  'reporter cannot move an incident into a workspace they manage'
 );
 
 select lives_ok(

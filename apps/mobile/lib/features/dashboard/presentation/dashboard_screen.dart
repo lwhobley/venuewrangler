@@ -83,7 +83,7 @@ class DashboardScreen extends ConsumerWidget {
       orElse: () => null,
     );
     final inventoryItemCount = inventoryAsync.maybeWhen(
-      data: (items) => items.length,
+      data: (items) => items.where((item) => item.active).length,
       orElse: () => null,
     );
 

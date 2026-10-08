@@ -1,0 +1,80 @@
+name: Supabase Database Backup
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 4 * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_PRODUCTION_DB_URL }}
+      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PRODUCTION_PROJECT_REF }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.BACKUP_AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.BACKUP_AWS_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: ${{ secrets.BACKUP_AWS_REGION }}
+      BACKUP_BUCKET: ${{ secrets.BACKUP_S3_BUCKET }}
+      PGSSLMODE: require
+    steps:
+      - name: Verify production connection and backup destination
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          : "${SUPABASE_DB_URL:?SUPABASE_PRODUCTION_DB_URL is not configured}"
+          : "${SUPABASE_PROJECT_REF:?SUPABASE_PRODUCTION_PROJECT_REF is not configured}"
+          : "${AWS_ACCESS_KEY_ID:?BACKUP_AWS_ACCESS_KEY_ID is not configured}"
+          : "${AWS_SECRET_ACCESS_KEY:?BACKUP_AWS_SECRET_ACCESS_KEY is not configured}"
+          : "${AWS_DEFAULT_REGION:?BACKUP_AWS_REGION is not configured}"
+          : "${BACKUP_BUCKET:?BACKUP_S3_BUCKET is not configured}"
+          python3 - <<'PY'
+          import os
+          from urllib.parse import urlparse
+          url = urlparse(os.environ['SUPABASE_DB_URL'])
+          ref = os.environ['SUPABASE_PROJECT_REF']
+          if url.scheme not in ('postgres', 'postgresql') or url.path != '/postgres':
+              raise SystemExit('Expected a Postgres connection to the postgres database')
+          if not ref or not ref.isalnum() or len(ref) < 12:
+              raise SystemExit('Expected an explicit Supabase project reference')
+          if url.username != f'postgres.{ref}' and url.hostname != f'db.{ref}.supabase.co':
+              raise SystemExit('Database connection does not match the configured project')
+          PY
+
+      - name: Install pinned AWS CLI
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          curl --fail --silent --show-error --location \
+            https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.36.19.zip \
+            --output /tmp/awscliv2.zip
+          unzip -q /tmp/awscliv2.zip -d /tmp
+          sudo /tmp/aws/install --update
+
+      - name: Dump, verify, and upload Supabase database
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
+          dump="/tmp/supabase-${SUPABASE_PROJECT_REF}-${timestamp}.dump"
+          archive="${dump}.gz"
+          docker run --rm --network host --user "$(id -u):$(id -g)" \
+            --env SUPABASE_DB_URL --env PGSSLMODE \
+            --volume /tmp:/backup \
+            postgres:17-alpine@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193 \
+            pg_dump "$SUPABASE_DB_URL" --format=custom --no-owner --no-acl \
+            --schema=public --schema=app_hidden --schema=auth --schema=storage \
+            --file="/backup/$(basename "$dump")"
+          docker run --rm --user "$(id -u):$(id -g)" --volume /tmp:/backup \
+            postgres:17-alpine@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193 \
+            pg_restore --list "/backup/$(basename "$dump")" >/dev/null
+          gzip --best "$dump"
+          gzip --test "$archive"
+          key="database-backups/$(basename "$archive")"
+          aws s3 cp "$archive" "s3://${BACKUP_BUCKET}/${key}" \
+            --sse AES256 --only-show-errors
+          aws s3api head-object --bucket "$BACKUP_BUCKET" --key "$key" >/dev/null
+          rm -f "$archive"

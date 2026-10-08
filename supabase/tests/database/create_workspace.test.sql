@@ -69,6 +69,7 @@ select lives_ok(
 
 reset role;
 set local role anon;
+set local "request.jwt.claim.sub" to '';
 select throws_ok(
   $$select * from public.create_workspace('Anon Org', 'Anon Venue')$$,
   '42501', null,

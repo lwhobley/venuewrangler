@@ -26,7 +26,13 @@ class _ImportState extends ConsumerState<InventoryImportScreen> {
   String? error;
   final applied = <int>{};
   String mode = 'RECEIVE';
-  late final String? userId = ref.read(currentUserIdProvider);
+  late final String? userId;
+  @override
+  void initState() {
+    super.initState();
+    userId = ref.read(currentUserIdProvider);
+  }
+
   @override
   void dispose() {
     input.dispose();
@@ -154,7 +160,26 @@ class _ImportState extends ConsumerState<InventoryImportScreen> {
           'Could not read this file. Paste its text instead.',
         );
       }
-      input.text = utf8.decode(file.bytes!);
+      String decoded;
+      try {
+        decoded = utf8.decode(file.bytes!);
+      } on FormatException {
+        // Some supplier CSV exports use ISO-8859-1. Keep accented item names
+        // readable, but reject Windows-1252 control bytes rather than silently
+        // turning punctuation into invisible characters.
+        decoded = latin1.decode(file.bytes!);
+        if (decoded.runes.any((r) => r >= 0x80 && r <= 0x9f)) {
+          throw const FormatException(
+            'This file uses an unsupported text encoding. Export it as UTF-8 CSV and try again.',
+          );
+        }
+      }
+      if (decoded.trim().length > 20000) {
+        throw const FormatException(
+          'This import is too long for AI parsing. Use a file under 20,000 characters or split it into smaller parts.',
+        );
+      }
+      input.text = decoded;
       if (mounted) setState(() => error = null);
     } catch (e) {
       if (mounted) setState(() => error = inventoryError(e));
@@ -162,8 +187,16 @@ class _ImportState extends ConsumerState<InventoryImportScreen> {
   }
 
   Future<void> _parse() async {
-    if (input.text.trim().isEmpty) {
+    final text = input.text.trim();
+    if (text.isEmpty) {
       setState(() => error = 'Paste text or upload a text file first.');
+      return;
+    }
+    if (text.length > 20000) {
+      setState(() {
+        error = 'AI parsing accepts up to 20,000 characters. '
+            'Split the import into smaller parts.';
+      });
       return;
     }
     setState(() {
@@ -174,7 +207,7 @@ class _ImportState extends ConsumerState<InventoryImportScreen> {
       assertInventoryScope(ref, widget.scope, userId);
       final result = await ref.read(aiRepositoryProvider).parseInventory(
             venueId: widget.scope.venueId,
-            pastedText: input.text.trim(),
+            pastedText: text,
           );
       if (mounted) setState(() => lines = result.items);
     } catch (e) {
@@ -214,7 +247,13 @@ class _ReviewState extends ConsumerState<_ImportReview> {
   late final quantity =
       TextEditingController(text: widget.line.quantity?.toString());
   final notes = TextEditingController();
-  late final String? userId = ref.read(currentUserIdProvider);
+  late final String? userId;
+  @override
+  void initState() {
+    super.initState();
+    userId = ref.read(currentUserIdProvider);
+  }
+
   final operationId = const Uuid().v4();
   String? itemId, stockId, error;
   bool initialized = false, busy = false, verified = false;

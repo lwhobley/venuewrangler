@@ -65,6 +65,7 @@ select throws_ok(
 
 reset role;
 set local role anon;
+set local "request.jwt.claim.sub" to '';
 select throws_ok(
   $$select * from public.venue_roster('20000000-0000-0000-0000-0000000000a1')$$,
   '42501', null,

@@ -129,6 +129,7 @@ class _FloorPlanEditorScreenState extends ConsumerState<FloorPlanEditorScreen> {
       await ref
           .read(floorRepositoryProvider)
           .createFloorPlan(venueId: venue.id, name: 'Main floor');
+      ref.invalidate(floorPlansProvider);
       await _load();
     } catch (e) {
       _toast('Could not create a floor plan: $e', error: true);
@@ -311,6 +312,7 @@ class _FloorPlanEditorScreenState extends ConsumerState<FloorPlanEditorScreen> {
         venueId: venue.id,
         planId: plan.id,
       );
+      ref.invalidate(floorPlansProvider);
       _toast('Floor plan published.');
       await _load();
     } on PostgrestException catch (e) {

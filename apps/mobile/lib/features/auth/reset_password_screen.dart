@@ -45,6 +45,10 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
         const SnackBar(content: Text('Password updated.')),
       );
       // Releases the router's hold; the user continues into the app already signed in.
+      await ref
+          .read(passwordRecoveryStorageProvider)
+          .delete(passwordRecoveryStorageKey);
+      if (!mounted) return;
       ref.read(passwordRecoveryPendingProvider.notifier).state = false;
     } on AuthException catch (e) {
       if (mounted) setState(() => _error = e.message);

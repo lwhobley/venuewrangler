@@ -156,7 +156,19 @@ void main() {
 
   testWidgets('does not offer unimplemented outbound 86 action',
       (tester) async {
-    final fakeRepo = _FakePosRepository();
+    final fakeRepo = _FakePosRepository(
+      initialConnections: [
+        PosConnection(
+          id: 'conn-1',
+          organizationId: 'org-1',
+          venueId: 'venue-1',
+          provider: 'toast',
+          status: 'active',
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        ),
+      ],
+    );
 
     await tester.pumpWidget(
       ProviderScope(
@@ -170,6 +182,7 @@ void main() {
 
     await tester.pumpAndSettle();
 
+    expect(find.text('TOAST · restaurant'), findsOneWidget);
     expect(find.text('86 Item (Toast)'), findsNothing);
     expect(fakeRepo.push86Called, isFalse);
   });

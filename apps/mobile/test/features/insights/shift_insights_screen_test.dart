@@ -107,6 +107,7 @@ void main() {
       ProviderScope(
         overrides: [
           activeVenueProvider.overrideWith((ref) => _testVenue),
+          canManageActiveVenueProvider.overrideWith((ref) async => true),
           insightsRepositoryProvider.overrideWithValue(fakeRepo),
         ],
         child: const MaterialApp(home: ShiftInsightsScreen()),
@@ -139,6 +140,7 @@ void main() {
       ProviderScope(
         overrides: [
           activeVenueProvider.overrideWith((ref) => _testVenue),
+          canManageActiveVenueProvider.overrideWith((ref) async => true),
           insightsRepositoryProvider.overrideWithValue(fakeRepo),
         ],
         child: const MaterialApp(home: ShiftInsightsScreen()),
@@ -165,6 +167,7 @@ void main() {
       ProviderScope(
         overrides: [
           activeVenueProvider.overrideWith((ref) => _testVenue),
+          canManageActiveVenueProvider.overrideWith((ref) async => true),
           insightsRepositoryProvider.overrideWithValue(fakeRepo),
         ],
         child: const MaterialApp(home: ShiftInsightsScreen()),
@@ -206,6 +209,7 @@ void main() {
       ProviderScope(
         overrides: [
           activeVenueProvider.overrideWith((ref) => _testVenue),
+          canManageActiveVenueProvider.overrideWith((ref) async => true),
           insightsRepositoryProvider.overrideWithValue(fakeRepo),
         ],
         child: const MaterialApp(home: ShiftInsightsScreen()),

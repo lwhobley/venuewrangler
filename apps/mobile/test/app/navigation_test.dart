@@ -191,6 +191,7 @@ void main() {
         '/schedules/timeline',
         '/floor',
         '/chat',
+        '/staff-requests',
       ]) {
         expect(
           router.configuration.findMatch(Uri.parse(path)).isError,
@@ -219,7 +220,7 @@ void main() {
       expect(employeeCanOpen('/floor'), isTrue);
       expect(employeeCanOpen('/me'), isTrue);
       expect(employeeCanOpen('/floor/edit'), isFalse);
-      expect(employeeCanOpen('/staff-requests'), isFalse);
+      expect(employeeCanOpen('/staff-requests'), isTrue);
       expect(employeeCanOpen('/more'), isFalse);
     });
 

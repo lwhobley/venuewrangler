@@ -55,8 +55,8 @@ class TaskListScreen extends ConsumerWidget {
           for (final conflict in taskConflicts)
             _ConflictBanner(
               mutation: conflict,
-              onDismiss: () {
-                ref
+              onDismiss: () async {
+                await ref
                     .read(offlineQueueControllerProvider.notifier)
                     .dismissConflict(conflict.id);
                 ref.invalidate(tasksForVenueProvider(venue.id));

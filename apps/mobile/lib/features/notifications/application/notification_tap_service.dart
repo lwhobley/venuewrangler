@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -27,19 +28,25 @@ class NotificationTapService {
   final bool Function() _isIOS;
   final bool Function() _isAndroid;
   final FirebaseMessaging? _firebaseMessagingOverride;
+  void Function(Map<String, dynamic> data)? _onTap;
+  bool _started = false;
+  StreamSubscription<RemoteMessage>? _androidOpenedSubscription;
 
   Future<void> start(void Function(Map<String, dynamic> data) onTap) async {
+    _onTap = onTap;
+    if (_started) return;
+    _started = true;
     if (_isIOS()) {
-      await _startIOS(onTap);
+      await _startIOS();
     } else if (_isAndroid()) {
-      await _startAndroid(onTap);
+      await _startAndroid();
     }
   }
 
-  Future<void> _startIOS(void Function(Map<String, dynamic> data) onTap) async {
+  Future<void> _startIOS() async {
     _channel.setMethodCallHandler((call) async {
       if (call.method == 'onNotificationTapped') {
-        onTap(_asStringKeyedMap(call.arguments));
+        _onTap?.call(_asStringKeyedMap(call.arguments));
       }
       return null;
     });
@@ -47,7 +54,7 @@ class NotificationTapService {
     try {
       final pending = await _channel
           .invokeMethod<Map<dynamic, dynamic>>('consumePendingNotificationTap');
-      if (pending != null) onTap(_asStringKeyedMap(pending));
+      if (pending != null) _onTap?.call(_asStringKeyedMap(pending));
     } on PlatformException {
       // Native side rejected the call — nothing to route to.
     } on MissingPluginException {
@@ -55,20 +62,25 @@ class NotificationTapService {
     }
   }
 
-  Future<void> _startAndroid(
-    void Function(Map<String, dynamic> data) onTap,
-  ) async {
+  Future<void> _startAndroid() async {
     try {
       final messaging =
           _firebaseMessagingOverride ?? FirebaseMessaging.instance;
-      FirebaseMessaging.onMessageOpenedApp
-          .listen((message) => onTap(_asStringKeyedMap(message.data)));
+      _androidOpenedSubscription = FirebaseMessaging.onMessageOpenedApp
+          .listen((message) => _onTap?.call(_asStringKeyedMap(message.data)));
       final initial = await messaging.getInitialMessage();
-      if (initial != null) onTap(_asStringKeyedMap(initial.data));
+      if (initial != null) _onTap?.call(_asStringKeyedMap(initial.data));
     } catch (_) {
       // Firebase isn't initialized (google-services.json missing/placeholder — see
       // app/bootstrap.dart); push taps simply won't route, which must never break startup.
     }
+  }
+
+  Future<void> dispose() async {
+    await _androidOpenedSubscription?.cancel();
+    _channel.setMethodCallHandler(null);
+    _onTap = null;
+    _started = false;
   }
 
   Map<String, dynamic> _asStringKeyedMap(Object? raw) {

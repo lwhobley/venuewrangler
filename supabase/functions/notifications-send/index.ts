@@ -64,6 +64,17 @@ serve(async (req: Request) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+    if (!(["user", "venue_managers", "venue_staff", "organization_owners"] as string[]).includes(audience) ||
+      (target_user_ids !== undefined &&
+        (!Array.isArray(target_user_ids) || target_user_ids.length > 100 ||
+          target_user_ids.some((id) => typeof id !== "string" || !UUID_PATTERN.test(id)))) ||
+      data === null || Array.isArray(data) || typeof data !== "object" ||
+      ["origin", "aps", "kind", "alert", "sound"].some((key) => Object.hasOwn(data, key))) {
+      return new Response(JSON.stringify({ error: "Invalid notification payload" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
     // An unfiltered "user" audience used to fall through to every token at the venue, letting
     // any member broadcast. Individual notifications must name their recipients.
     if (audience === "user" && (!target_user_ids || target_user_ids.length === 0)) {
@@ -112,6 +123,23 @@ serve(async (req: Request) => {
         status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+    }
+    if (audience === "user") {
+      const recipients = [...new Set(target_user_ids!)];
+      const { data: memberships, error: recipientError } = await adminClient
+        .from("memberships")
+        .select("user_id")
+        .eq("organization_id", venue!.organization_id)
+        .in("user_id", recipients)
+        .or(`venue_id.eq.${venue_id},venue_id.is.null`);
+      if (recipientError) throw recipientError;
+      const members = new Set((memberships ?? []).map((row: { user_id: string }) => row.user_id));
+      if (recipients.some((id) => !members.has(id))) {
+        return new Response(JSON.stringify({ error: "Recipient is not a member of this venue" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
     }
 
     // 1. Write in-app notification event(s) first (independent of push delivery success)

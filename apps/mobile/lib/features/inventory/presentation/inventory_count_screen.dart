@@ -34,7 +34,13 @@ class _StartCountState extends ConsumerState<_StartCount> {
   String? area, category, subcategory, error;
   bool busy = false;
   final notes = TextEditingController();
-  late final String? userId = ref.read(currentUserIdProvider);
+  late final String? userId;
+  @override
+  void initState() {
+    super.initState();
+    userId = ref.read(currentUserIdProvider);
+  }
+
   @override
   void dispose() {
     notes.dispose();
@@ -213,7 +219,13 @@ class InventoryCountScreen extends ConsumerStatefulWidget {
 class _CountState extends ConsumerState<InventoryCountScreen> {
   final controllers = <String, TextEditingController>{};
   final focus = <String, FocusNode>{};
-  late final String? userId = ref.read(currentUserIdProvider);
+  late final String? userId;
+  @override
+  void initState() {
+    super.initState();
+    userId = ref.read(currentUserIdProvider);
+  }
+
   bool busy = false, dirty = false;
   String? error, closed;
   @override
@@ -513,7 +525,11 @@ class _CountState extends ConsumerState<InventoryCountScreen> {
         setState(() => error = '${r.name}: $problem');
         return;
       }
-      values.add({'id': r.id, 'quantity': text.isEmpty ? null : text});
+      // Only submit values this device changed. The RPC keeps saved values for
+      // omitted rows, so a stale screen cannot erase another manager's count.
+      if (text != (r.counted ?? '')) {
+        values.add({'id': r.id, 'quantity': text.isEmpty ? null : text});
+      }
     }
     if (complete &&
         !await confirmInventory(

@@ -22,6 +22,8 @@ class ShiftInsightsScreen extends ConsumerWidget {
         ),
       );
     }
+    final canManage =
+        ref.watch(canManageActiveVenueProvider).valueOrNull ?? false;
 
     final insightsAsync = shiftId != null
         ? ref.watch(
@@ -131,11 +133,14 @@ class ShiftInsightsScreen extends ConsumerWidget {
           },
         ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showGenerateDialog(context, ref, venue.id, shiftId),
-        icon: const Icon(Icons.auto_awesome),
-        label: const Text('Generate AI Insights'),
-      ),
+      floatingActionButton: canManage
+          ? FloatingActionButton.extended(
+              onPressed: () =>
+                  _showGenerateDialog(context, ref, venue.id, shiftId),
+              icon: const Icon(Icons.auto_awesome),
+              label: const Text('Generate AI Insights'),
+            )
+          : null,
     );
   }
 
@@ -170,6 +175,8 @@ class _ShiftInsightCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final (icon, color) = _kindMeta(context, insight.kind);
+    final canManage =
+        ref.watch(canManageActiveVenueProvider).valueOrNull ?? false;
 
     return Card(
       elevation: 1,
@@ -212,11 +219,12 @@ class _ShiftInsightCard extends ConsumerWidget {
                     ],
                   ),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.delete_outline, size: 20),
-                  tooltip: 'Delete Insight',
-                  onPressed: () => _confirmDelete(context, ref),
-                ),
+                if (canManage)
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline, size: 20),
+                    tooltip: 'Delete Insight',
+                    onPressed: () => _confirmDelete(context, ref),
+                  ),
               ],
             ),
             const SizedBox(height: 12),

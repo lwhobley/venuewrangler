@@ -27,6 +27,9 @@ class _FakeNotificationsRepository implements NotificationsRepository {
       'token-uuid';
 
   @override
+  Future<void> unregisterPushToken(String token) async {}
+
+  @override
   Future<List<NotificationEvent>> getNotifications({
     required String venueId,
     int limit = 50,

@@ -23,11 +23,13 @@ After rollback, verify `/api/health`, `/api/v1/documents` (expect `401` without 
 
 ## Database backups and restore
 
-The production database is Supabase project `dhgyezfkgbzzsuyrdpek`. Confirm the current plan and PITR in the Supabase dashboard before treating managed backups as the primary recovery path. `.github/workflows/database-backup.yml` is the required nightly logical backup; deploys also require `backups_and_restore_verified=true`.
+The Flutter production database is Supabase. Confirm the current project and plan in the Supabase dashboard before treating managed backups as the primary recovery path. `.github/workflows/supabase-database-backup.yml` is its nightly logical backup; `.github/workflows/database-backup.yml` covers the legacy Prisma database. Deploys also require `backups_and_restore_verified=true`.
 
-Until an upgrade is possible, `.github/workflows/database-backup.yml` provides a nightly logical backup to S3 with SSE-S3 encryption and restores every dump into an isolated PostgreSQL service container that is destroyed with the GitHub runner. Configure these repository secrets before relying on it: `PRODUCTION_POOLER_DATABASE_URL` (Supavisor session-mode URL), `BACKUP_AWS_ACCESS_KEY_ID`, `BACKUP_AWS_SECRET_ACCESS_KEY`, `BACKUP_AWS_REGION`, and `BACKUP_S3_BUCKET`. The backup IAM identity must allow `s3:GetLifecycleConfiguration` on that bucket in addition to object upload/read verification; the workflow fails if its enabled `database-backups/` lifecycle rule is not exactly 30 days or if the restore/integrity check fails.
+For the Flutter Supabase project, configure `SUPABASE_PRODUCTION_DB_URL` with the authoritative session-pooler or direct database URL and set `SUPABASE_PRODUCTION_PROJECT_REF` to that project's ref. The Supabase backup workflow also uses `BACKUP_AWS_ACCESS_KEY_ID`, `BACKUP_AWS_SECRET_ACCESS_KEY`, `BACKUP_AWS_REGION`, and `BACKUP_S3_BUCKET`. It takes a nightly logical dump of `public`, `app_hidden`, `auth`, and `storage`, checks archive readability, and uploads it to S3 with SSE-S3 encryption. A successful scheduled run and a restore drill are required before claiming the backup is operational. Database dumps contain Storage metadata, not object bytes; back up Storage objects separately.
 
-Never store a database password in this repository. For a restore, pause Cloud Run traffic, restore or clone the Supabase project, update `DATABASE_URL` as a new Cloud Run revision, run Prisma migrations, smoke-test, and then shift traffic back.
+The legacy Prisma workflow uses `PRODUCTION_POOLER_DATABASE_URL` and performs its own disposable restore drill. Do not use its success as evidence of Supabase recovery.
+
+Never store a database password in this repository. The Cloud Run `DATABASE_URL` and Prisma migration steps below apply to the legacy API. Restore the Flutter Supabase database into a separate Supabase project, verify Auth and application data there, and only then plan a production cutover.
 
 Production credentials on the Cloud Run service and both release jobs must use
 Secret Manager references (`--update-secrets` / `--set-secrets`), never literal

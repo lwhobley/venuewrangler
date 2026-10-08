@@ -70,6 +70,8 @@
     async function loadInvite() {
       if (!token) throw new Error("Missing invitation token");
       const invite = await request("/v1/app/invite/" + encodeURIComponent(token));
+      document.getElementById("venueName").textContent =
+        invite.venueName || invite.venue?.name || "your team";
       const titleEl = document.getElementById("jobTitle");
       if (invite.jobTitle) {
         titleEl.textContent = `Join as ${invite.jobTitle}.`;

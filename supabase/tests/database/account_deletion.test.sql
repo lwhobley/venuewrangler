@@ -65,6 +65,7 @@ select is(
 -- ---------------------------------------------------------------------------
 reset role;
 set local role anon;
+set local "request.jwt.claim.sub" to '';
 select throws_ok(
   $$select public.request_account_deletion()$$,
   '42501', null,

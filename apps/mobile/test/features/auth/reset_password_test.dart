@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:venuewrangler_mobile/core/auth/auth_providers.dart';
 import 'package:venuewrangler_mobile/core/auth/auth_repository.dart';
+import 'package:venuewrangler_mobile/core/storage/secure_session_storage.dart';
 import 'package:venuewrangler_mobile/features/auth/reset_password_screen.dart';
 import 'package:venuewrangler_mobile/features/auth/sign_in_screen.dart';
 
@@ -22,6 +23,15 @@ class _Auth implements AuthRepository {
 
   @override
   dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError();
+}
+
+class _RecoveryStorage extends SecureSessionStorage {
+  bool cleared = false;
+
+  @override
+  Future<void> delete(String key) async {
+    if (key == passwordRecoveryStorageKey) cleared = true;
+  }
 }
 
 void main() {
@@ -68,8 +78,12 @@ void main() {
   testWidgets('reset screen enforces the policy, then saves and releases hold',
       (tester) async {
     final auth = _Auth();
+    final storage = _RecoveryStorage();
     final container = ProviderContainer(
-      overrides: [authRepositoryProvider.overrideWithValue(auth)],
+      overrides: [
+        authRepositoryProvider.overrideWithValue(auth),
+        passwordRecoveryStorageProvider.overrideWithValue(storage),
+      ],
     );
     addTearDown(container.dispose);
     container.read(passwordRecoveryPendingProvider.notifier).state = true;
@@ -110,6 +124,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(auth.newPassword, 'Stronger1!');
+    expect(storage.cleared, isTrue);
     expect(container.read(passwordRecoveryPendingProvider), isFalse);
   });
 }

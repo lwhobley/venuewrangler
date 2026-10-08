@@ -2,7 +2,7 @@
 -- Fixture matches standard: org A (owner ...002), venue A1 (manager ...004, staff ...005), org B (owner ...006).
 
 begin;
-select plan(12);
+select plan(13);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-000000000002', 'org-a-owner@example.com'),
@@ -32,6 +32,14 @@ select is(
   ),
   true,
   'compliant org/venue/filename path passes safety check'
+);
+select is(
+  app_hidden.is_safe_storage_deletion_path(
+    'staff-documents',
+    '10000000-0000-0000-0000-00000000000a/20000000-0000-0000-0000-0000000000a1/report..final.pdf'
+  ),
+  true,
+  'doubled dots within a document filename are safe'
 );
 
 -- ---------------------------------------------------------------------------

@@ -152,16 +152,16 @@ class _PhotoAnnotationScreenState extends State<PhotoAnnotationScreen> {
   }
 
   Future<void> _addText(Offset at) async {
-    final controller = TextEditingController();
+    var label = '';
     final text = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Add label'),
         content: TextField(
-          controller: controller,
           autofocus: true,
           textCapitalization: TextCapitalization.sentences,
           decoration: const InputDecoration(labelText: 'Text'),
+          onChanged: (value) => label = value,
           onSubmitted: (v) => Navigator.pop(context, v.trim()),
         ),
         actions: [
@@ -170,14 +170,13 @@ class _PhotoAnnotationScreenState extends State<PhotoAnnotationScreen> {
             child: const Text('Cancel'),
           ),
           FilledButton(
-            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            onPressed: () => Navigator.pop(context, label.trim()),
             child: const Text('Add'),
           ),
         ],
       ),
     );
-    controller.dispose();
-    if (text == null || text.isEmpty) return;
+    if (!mounted || text == null || text.isEmpty) return;
     setState(() {
       _redo.clear();
       _done.add(TextLabel(color: _color, width: _width, at: at, text: text));

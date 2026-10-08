@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../application/chat_providers.dart';
@@ -101,9 +102,24 @@ class _ChatThreadView extends ConsumerStatefulWidget {
 
 class _ChatThreadViewState extends ConsumerState<_ChatThreadView> {
   final _textCtrl = TextEditingController();
+  bool _sending = false;
+  StreamSubscription<void>? _messageChanges;
+
+  @override
+  void initState() {
+    super.initState();
+    _messageChanges = ref
+        .read(chatRepositoryProvider)
+        .watchMessages(widget.conversationId)
+        .listen((_) {
+      ref.invalidate(conversationMessagesProvider(widget.conversationId));
+      ref.invalidate(conversationsListProvider);
+    });
+  }
 
   @override
   void dispose() {
+    _messageChanges?.cancel();
     _textCtrl.dispose();
     super.dispose();
   }
@@ -156,6 +172,7 @@ class _ChatThreadViewState extends ConsumerState<_ChatThreadView> {
                   Expanded(
                     child: TextField(
                       controller: _textCtrl,
+                      enabled: !_sending,
                       decoration: const InputDecoration(
                         hintText: 'Type a message...',
                         border: InputBorder.none,
@@ -168,7 +185,7 @@ class _ChatThreadViewState extends ConsumerState<_ChatThreadView> {
                   IconButton(
                     icon: const Icon(Icons.send),
                     color: Theme.of(context).colorScheme.primary,
-                    onPressed: _sendMessage,
+                    onPressed: _sending ? null : _sendMessage,
                   ),
                 ],
               ),
@@ -180,15 +197,28 @@ class _ChatThreadViewState extends ConsumerState<_ChatThreadView> {
   }
 
   Future<void> _sendMessage() async {
+    if (_sending) return;
     final text = _textCtrl.text.trim();
     if (text.isEmpty) return;
-
-    _textCtrl.clear();
-    await ref.read(chatRepositoryProvider).sendMessage(
-          conversationId: widget.conversationId,
-          text: text,
+    setState(() => _sending = true);
+    try {
+      await ref.read(chatRepositoryProvider).sendMessage(
+            conversationId: widget.conversationId,
+            text: text,
+          );
+      if (!mounted) return;
+      _textCtrl.clear();
+      ref.invalidate(conversationMessagesProvider(widget.conversationId));
+      ref.invalidate(conversationsListProvider);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Message not sent. Please try again.')),
         );
-    ref.invalidate(conversationMessagesProvider(widget.conversationId));
+      }
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
   }
 }
 

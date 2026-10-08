@@ -31,10 +31,9 @@ drop function if exists app_hidden.dispatch_account_deletion_job(uuid);
 
 alter table public.storage_deletion_jobs drop constraint storage_deletion_jobs_bucket_id_check;
 alter table public.storage_deletion_jobs add constraint storage_deletion_jobs_bucket_id_check
-  check (bucket_id in ('incident-evidence', 'checklist-evidence', 'staff-documents', 'exports', 'temp-imports', 'chat'));
+  check (bucket_id in ('incident-evidence', 'checklist-evidence', 'staff-documents', 'exports', 'temp-imports', 'chat', 'profile-photos'));
 
--- Restores the pre-this-migration path-safety function (profile-photos removed from the
--- allowlist). Identical to the version in 20261005115202_chat_storage_conversation_scoping.sql.
+-- Keep profile photos in the allowlist; queued photo deletions may already exist.
 create or replace function app_hidden.is_safe_storage_deletion_path(
   p_bucket_id text,
   p_object_path text
@@ -44,7 +43,7 @@ immutable
 set search_path = public
 as $$
 begin
-  if p_bucket_id not in ('incident-evidence', 'checklist-evidence', 'staff-documents', 'exports', 'temp-imports', 'chat') then
+  if p_bucket_id not in ('incident-evidence', 'checklist-evidence', 'staff-documents', 'exports', 'temp-imports', 'chat', 'profile-photos') then
     return false;
   end if;
 

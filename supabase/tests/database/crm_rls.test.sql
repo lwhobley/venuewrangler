@@ -2,7 +2,7 @@
 -- Fixtures: Org A, Venue A1 (manager 004, staff 005), Org B, Venue B1 (owner 006).
 
 begin;
-select plan(22);
+select plan(24);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-000000000004', 'venue-a1-manager@example.com'),
@@ -188,6 +188,25 @@ select throws_ok(
   'confirming a BEO into an already-held time window is rejected'
 );
 
+select throws_ok(
+  $$ insert into public.crm_beos(id, venue_id, event_name, status, event_date)
+     values ('70000000-0000-0000-0000-000000000003',
+       '20000000-0000-0000-0000-0000000000a1', 'Direct conflict', 'confirmed',
+       (select event_date from public.crm_beos where id = '70000000-0000-0000-0000-000000000001')) $$,
+  '23505', null, 'direct confirmed insert checks the reservation hold'
+);
+
+insert into public.crm_beos(id, venue_id, event_name, status, event_date)
+values ('70000000-0000-0000-0000-000000000004',
+  '20000000-0000-0000-0000-0000000000a1', 'Moving Gala', 'confirmed',
+  now() + interval '32 days');
+select throws_ok(
+  $$ update public.crm_beos set event_date =
+       (select event_date from public.crm_beos where id = '70000000-0000-0000-0000-000000000001')
+     where id = '70000000-0000-0000-0000-000000000004' $$,
+  '23505', null, 'moving an already confirmed BEO checks the new window'
+);
+
 -- ---------------------------------------------------------------------------
 -- 16. Cancelling a confirmed BEO cancels its reservation
 -- ---------------------------------------------------------------------------
@@ -232,8 +251,10 @@ reset role;
 set local role authenticated;
 set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-000000000004';
 
-insert into public.crm_beos (id, venue_id, event_name, status)
-values ('70000000-0000-0000-0000-000000000003', '20000000-0000-0000-0000-0000000000a1', 'Convertible Event', 'confirmed');
+-- A confirmed BEO requires an event_date (app_hidden.crm_beos_sync_reservation uses it as the
+-- reservation's start time); pick one well clear of the 240-minute holds above and below.
+insert into public.crm_beos (id, venue_id, event_name, status, event_date)
+values ('70000000-0000-0000-0000-000000000003', '20000000-0000-0000-0000-0000000000a1', 'Convertible Event', 'confirmed', now() + interval '90 days');
 
 select results_eq(
   $$ select already_existed from public.convert_beo_to_contract('70000000-0000-0000-0000-000000000003') $$,

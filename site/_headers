@@ -3,12 +3,6 @@
 # scripts and <style> blocks; the remaining directives still block framing,
 # object embeds, and cross-origin exfiltration to anything but the API.
 #
-# https://unpkg.com in script-src is required: both the marketing opener and
-# the web app shell (app/+html.tsx) load React/ReactDOM UMD from it. CSP has no
-# path-level granularity, so the host is allowed wholesale — the control that
-# actually matters is the SRI sha384 integrity hash on each of those two script
-# tags, which stops a tampered CDN file from executing.
-#
 # HSTS is set here as well as by helmet on the API, because this site serves
 # the invite/join flow and the tokens that go with it. `preload` is
 # deliberately omitted: submitting to the browser preload list is effectively
@@ -16,7 +10,7 @@
 # HTTPS. Add it only as a separate, deliberate decision once every subdomain is
 # confirmed HTTPS-only.
 /*
-  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://venue-wrangler-api-c57mm72zpa-ue.a.run.app; media-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://venue-wrangler-api-c57mm72zpa-ue.a.run.app; media-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'
   Strict-Transport-Security: max-age=31536000; includeSubDomains
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY

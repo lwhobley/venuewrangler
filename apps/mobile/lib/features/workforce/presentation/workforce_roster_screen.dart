@@ -6,6 +6,7 @@ import '../../../core/errors/app_error.dart';
 import '../../../core/auth/auth_providers.dart';
 import '../../ai/application/ai_providers.dart';
 import '../../ai/domain/ai_models.dart';
+import '../../schedules/application/schedules_providers.dart';
 import '../../venues/application/venues_providers.dart';
 import '../application/workforce_providers.dart';
 import '../domain/workforce_models.dart';
@@ -23,8 +24,15 @@ class WorkforceRosterScreen extends ConsumerWidget {
       return const Scaffold(body: Center(child: Text('No venue selected.')));
     }
 
-    final rosterAsync = ref.watch(rosterForVenueProvider(venue.id));
-    final invitesAsync = ref.watch(invitesForVenueProvider(venue.id));
+    final canManage =
+        ref.watch(canManageActiveVenueProvider).valueOrNull ?? false;
+    final rosterAsync = ref.watch(
+      canManage
+          ? rosterForVenueProvider(venue.id)
+          : scheduleRosterForVenueProvider(venue.id),
+    );
+    final invitesAsync =
+        canManage ? ref.watch(invitesForVenueProvider(venue.id)) : null;
     final actorRole = ref.watch(myVenueRoleProvider).valueOrNull;
     final actorId = ref.watch(currentUserIdProvider);
 
@@ -32,17 +40,24 @@ class WorkforceRosterScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Team Management'),
         actions: [
-          IconButton(
-            tooltip: 'Import staff',
-            icon: const Icon(Icons.upload_file_outlined),
-            onPressed: () => _showImportDialog(context, ref, venue.id),
-          ),
+          if (canManage)
+            IconButton(
+              tooltip: 'Import staff',
+              icon: const Icon(Icons.upload_file_outlined),
+              onPressed: () => _showImportDialog(context, ref, venue.id),
+            ),
         ],
       ),
       body: RefreshIndicator(
         onRefresh: () async {
-          ref.invalidate(rosterForVenueProvider(venue.id));
-          ref.invalidate(invitesForVenueProvider(venue.id));
+          ref.invalidate(
+            canManage
+                ? rosterForVenueProvider(venue.id)
+                : scheduleRosterForVenueProvider(venue.id),
+          );
+          if (canManage) {
+            ref.invalidate(invitesForVenueProvider(venue.id));
+          }
         },
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
@@ -152,53 +167,61 @@ class WorkforceRosterScreen extends ConsumerWidget {
                       ],
                     ),
             ),
-            const Divider(),
-            const _SectionHeader('Pending invites'),
-            invitesAsync.when(
-              loading: () => const Padding(
-                padding: EdgeInsets.all(16),
-                child: Center(child: CircularProgressIndicator()),
-              ),
-              error: (_, __) =>
-                  const ListTile(title: Text('Could not load invites.')),
-              data: (invites) {
-                final pending = invites
-                    .where((invite) => invite.status == InviteStatus.pending)
-                    .toList();
-                if (pending.isEmpty) {
-                  return const ListTile(title: Text('No pending invites.'));
-                }
-                return Column(
-                  children: [
-                    for (final invite in pending)
-                      ListTile(
-                        leading: const Icon(Icons.mail_outline),
-                        title: Text(invite.email),
-                        subtitle: Text(invite.role.label),
-                        trailing: TextButton(
-                          onPressed: () =>
-                              _revokeInvite(context, ref, invite.id, venue.id),
-                          child: const Text('Revoke'),
+            if (canManage) ...[
+              const Divider(),
+              const _SectionHeader('Pending invites'),
+              invitesAsync!.when(
+                loading: () => const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Center(child: CircularProgressIndicator()),
+                ),
+                error: (_, __) =>
+                    const ListTile(title: Text('Could not load invites.')),
+                data: (invites) {
+                  final pending = invites
+                      .where((invite) => invite.status == InviteStatus.pending)
+                      .toList();
+                  if (pending.isEmpty) {
+                    return const ListTile(title: Text('No pending invites.'));
+                  }
+                  return Column(
+                    children: [
+                      for (final invite in pending)
+                        ListTile(
+                          leading: const Icon(Icons.mail_outline),
+                          title: Text(invite.email),
+                          subtitle: Text(invite.role.label),
+                          trailing: TextButton(
+                            onPressed: () => _revokeInvite(
+                              context,
+                              ref,
+                              invite.id,
+                              venue.id,
+                            ),
+                            child: const Text('Revoke'),
+                          ),
                         ),
-                      ),
-                  ],
-                );
-              },
-            ),
+                    ],
+                  );
+                },
+              ),
+            ],
           ],
         ),
       ),
-      bottomNavigationBar: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: FilledButton.icon(
-            onPressed: () => _showInviteDialog(context, ref, venue.id),
-            icon: const Icon(Icons.person_add_alt_outlined),
-            label: const Text('Add New Staff'),
-          ),
-        ),
-      ),
+      bottomNavigationBar: canManage
+          ? SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: FilledButton.icon(
+                  onPressed: () => _showInviteDialog(context, ref, venue.id),
+                  icon: const Icon(Icons.person_add_alt_outlined),
+                  label: const Text('Add New Staff'),
+                ),
+              ),
+            )
+          : null,
     );
   }
 
@@ -356,7 +379,7 @@ class WorkforceRosterScreen extends ConsumerWidget {
 
     await showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Review parsed staff'),
         content: SizedBox(
           width: double.maxFinite,
@@ -376,7 +399,7 @@ class WorkforceRosterScreen extends ConsumerWidget {
                       ? null
                       : TextButton(
                           onPressed: () {
-                            Navigator.of(context).pop();
+                            Navigator.of(dialogContext).pop();
                             _showInviteDialog(
                               context,
                               ref,
@@ -392,7 +415,7 @@ class WorkforceRosterScreen extends ConsumerWidget {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () => Navigator.of(dialogContext).pop(),
             child: const Text('Close'),
           ),
         ],

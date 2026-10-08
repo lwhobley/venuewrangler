@@ -104,18 +104,24 @@ class SupabaseInsightsRepository implements InsightsRepository {
       context: shiftContext,
     );
 
-    final saved = <ShiftInsight>[];
-    for (final item in aiResult.insights) {
-      final insight = await saveInsight(
-        venueId: venueId,
-        shiftId: shiftId,
-        kind: ShiftInsightKind.fromDb(item.kind),
-        title: item.title,
-        body: item.body,
-      );
-      saved.add(insight);
+    if (aiResult.insights.isEmpty) return [];
+    try {
+      final rows = await _client.from('shift_insights').insert([
+        for (final item in aiResult.insights)
+          {
+            'venue_id': venueId,
+            if (shiftId != null) 'shift_id': shiftId,
+            'kind': ShiftInsightKind.fromDb(item.kind).toDb(),
+            'title': item.title,
+            'body': item.body,
+          },
+      ]).select();
+      return rows.map(ShiftInsight.fromJson).toList();
+    } on PostgrestException catch (e) {
+      throw _mapPostgrestException(e);
+    } catch (_) {
+      throw const NetworkError();
     }
-    return saved;
   }
 
   @override

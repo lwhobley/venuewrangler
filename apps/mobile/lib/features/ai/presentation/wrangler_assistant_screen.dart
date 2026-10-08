@@ -43,7 +43,7 @@ class _WranglerAssistantScreenState
       appBar: AppBar(
         title: const Text('Ask Wrangler'),
       ),
-      body: Padding(
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,

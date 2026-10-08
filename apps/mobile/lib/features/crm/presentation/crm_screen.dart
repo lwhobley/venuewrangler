@@ -274,8 +274,9 @@ class _BeosTab extends ConsumerWidget {
                 contentPadding: EdgeInsets.zero,
                 title: Text(
                   eventDate == null
-                      ? 'Event date (optional)'
-                      : eventDate.toString().split(' ').first,
+                      ? 'Event date and start time (optional)'
+                      : '${MaterialLocalizations.of(context).formatMediumDate(eventDate!)} '
+                          '${MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(eventDate!))}',
                 ),
                 trailing: const Icon(Icons.calendar_today_outlined),
                 onTap: () async {
@@ -285,7 +286,21 @@ class _BeosTab extends ConsumerWidget {
                     firstDate: DateTime.now(),
                     lastDate: DateTime.now().add(const Duration(days: 730)),
                   );
-                  if (picked != null) setState(() => eventDate = picked);
+                  if (picked == null || !context.mounted) return;
+                  final time = await showTimePicker(
+                    context: context,
+                    initialTime: const TimeOfDay(hour: 18, minute: 0),
+                  );
+                  if (time == null || !context.mounted) return;
+                  setState(() {
+                    eventDate = DateTime(
+                      picked.year,
+                      picked.month,
+                      picked.day,
+                      time.hour,
+                      time.minute,
+                    );
+                  });
                 },
               ),
             ],
@@ -330,21 +345,31 @@ class _BeosTab extends ConsumerWidget {
   }
 }
 
-class _BeoTile extends ConsumerWidget {
+class _BeoTile extends ConsumerStatefulWidget {
   const _BeoTile({required this.beo, required this.venueId});
 
   final CrmBeo beo;
   final String venueId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_BeoTile> createState() => _BeoTileState();
+}
+
+class _BeoTileState extends ConsumerState<_BeoTile> {
+  bool converting = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final beo = widget.beo;
+    final venueId = widget.venueId;
     return ExpansionTile(
       title: Text(beo.eventName),
       subtitle: Text(
         [
           beo.status,
           if (beo.eventDate != null)
-            beo.eventDate!.toLocal().toString().split(' ').first,
+            '${MaterialLocalizations.of(context).formatMediumDate(beo.eventDate!.toLocal())} '
+                '${MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(beo.eventDate!.toLocal()))}',
           if (beo.guestCount != null) '${beo.guestCount} guests',
         ].join(' · '),
       ),
@@ -402,32 +427,37 @@ class _BeoTile extends ConsumerWidget {
                   child: const Text('Cancel'),
                 ),
               FilledButton(
-                onPressed: () async {
-                  try {
-                    final result = await ref
-                        .read(crmRepositoryProvider)
-                        .convertBeoToContract(beoId: beo.id);
-                    ref.invalidate(crmContractsProvider(venueId));
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            result.alreadyExisted
-                                ? 'A contract already exists for this BEO.'
-                                : 'Contract created.',
-                          ),
-                        ),
-                      );
-                    }
-                  } catch (e) {
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(_friendlyError(e))),
-                      );
-                    }
-                  }
-                },
-                child: const Text('Convert to contract'),
+                onPressed: converting
+                    ? null
+                    : () async {
+                        setState(() => converting = true);
+                        try {
+                          final result = await ref
+                              .read(crmRepositoryProvider)
+                              .convertBeoToContract(beoId: beo.id);
+                          ref.invalidate(crmContractsProvider(venueId));
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  result.alreadyExisted
+                                      ? 'A contract already exists for this BEO.'
+                                      : 'Contract created.',
+                                ),
+                              ),
+                            );
+                          }
+                        } catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text(_friendlyError(e))),
+                            );
+                          }
+                        } finally {
+                          if (mounted) setState(() => converting = false);
+                        }
+                      },
+                child: Text(converting ? 'Converting…' : 'Convert to contract'),
               ),
             ],
           ),

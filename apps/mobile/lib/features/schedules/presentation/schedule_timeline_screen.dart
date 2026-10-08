@@ -10,7 +10,6 @@ import '../../../core/auth/auth_providers.dart';
 import '../../../core/theme/ops_colors.dart';
 import '../../../core/widgets/state_views.dart';
 import '../../venues/application/venues_providers.dart';
-import '../../workforce/application/workforce_providers.dart';
 import '../../workforce/domain/workforce_models.dart';
 import '../application/schedules_providers.dart';
 import '../domain/schedule_timeline.dart';
@@ -97,7 +96,12 @@ class _ScheduleTimelineScreenState
   }
 
   DateTime get _windowStart => businessDayStart(_date, startHour: _startHour);
-  DateTime get _windowEnd => _windowStart.add(const Duration(hours: 24));
+  DateTime get _windowEnd => DateTime(
+        _windowStart.year,
+        _windowStart.month,
+        _windowStart.day + 1,
+        _windowStart.hour,
+      );
 
   void _toast(String message, {bool error = false}) {
     if (!mounted) return;
@@ -357,7 +361,7 @@ class _ScheduleTimelineScreenState
       return const Scaffold(body: Center(child: Text('No venue selected.')));
     }
     final shiftsAsync = ref.watch(shiftsForVenueProvider(venue.id));
-    final rosterAsync = ref.watch(rosterForVenueProvider(venue.id));
+    final rosterAsync = ref.watch(scheduleRosterForVenueProvider(venue.id));
 
     return Scaffold(
       appBar: AppBar(
@@ -404,7 +408,7 @@ class _ScheduleTimelineScreenState
     final windowStart = _windowStart;
     final windowEnd = _windowEnd;
     final weekFrom = weekStart(_date);
-    final weekTo = weekFrom.add(const Duration(days: 7));
+    final weekTo = DateTime(weekFrom.year, weekFrom.month, weekFrom.day + 7);
     final totalWidth = 24 * _hourWidth;
     final theme = Theme.of(context);
 
@@ -420,10 +424,12 @@ class _ScheduleTimelineScreenState
       children: [
         _DayBar(
           date: _date,
-          onPrev: () =>
-              setState(() => _date = _date.subtract(const Duration(days: 1))),
-          onNext: () =>
-              setState(() => _date = _date.add(const Duration(days: 1))),
+          onPrev: () => setState(() {
+            _date = DateTime(_date.year, _date.month, _date.day - 1);
+          }),
+          onNext: () => setState(() {
+            _date = DateTime(_date.year, _date.month, _date.day + 1);
+          }),
           onToday: () =>
               setState(() => _date = businessDateFor(DateTime.now())),
           onPick: _pickDate,

@@ -39,14 +39,21 @@ class _ActionSheet extends ConsumerStatefulWidget {
 }
 
 class _ActionState extends ConsumerState<_ActionSheet> {
+  static final Map<String, String> _pendingOperationIds = {};
   final form = GlobalKey<FormState>();
   final quantity = TextEditingController(),
       reason = TextEditingController(),
       notes = TextEditingController();
-  final operationId = const Uuid().v4();
-  late final String? userId = ref.read(currentUserIdProvider);
+  late final String? userId;
   String? destination, error, wasteReason;
   bool busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    userId = ref.read(currentUserIdProvider);
+  }
+
   @override
   void dispose() {
     quantity.dispose();
@@ -194,6 +201,24 @@ class _ActionState extends ConsumerState<_ActionSheet> {
 
   Future<void> _save() async {
     if (!form.currentState!.validate()) return;
+    final operationKey = [
+      userId,
+      widget.scope.venueId,
+      widget.stock.id,
+      widget.action,
+      quantity.text.trim(),
+      destination,
+      reason.text.trim(),
+      wasteReason,
+      notes.text.trim(),
+    ].join('\u0000');
+    final operationId = _pendingOperationIds.putIfAbsent(
+      operationKey,
+      () => const Uuid().v4(),
+    );
+    if (_pendingOperationIds.length > 100) {
+      _pendingOperationIds.remove(_pendingOperationIds.keys.first);
+    }
     setState(() {
       busy = true;
       error = null;
@@ -211,6 +236,7 @@ class _ActionState extends ConsumerState<_ActionSheet> {
                 : reason.text.trim(),
             notes: notes.text.trim(),
           );
+      _pendingOperationIds.remove(operationKey);
       if (!mounted) return;
       refreshInventory(ref, widget.scope);
       ref.invalidate(inventoryItemHistoryProvider(widget.stock.itemId));

@@ -2,7 +2,7 @@
 -- org/venue/membership fixture shape as operational_tasks_rls.test.sql.
 
 begin;
-select plan(11);
+select plan(12);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-000000000002', 'org-a-owner@example.com'),
@@ -130,6 +130,11 @@ set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-000000000005';
 select lives_ok(
   $$ delete from public.inventory_items where id = '30000000-0000-0000-0000-000000000001' $$,
   'a staff member''s delete attempt executes without error (no delete policy covers them)'
+);
+select is(
+  (select count(*)::int from public.inventory_items where id = '30000000-0000-0000-0000-000000000001'),
+  1,
+  'staff delete attempt leaves the inventory item in place'
 );
 
 select * from finish();

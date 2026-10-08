@@ -22,6 +22,9 @@ class _FakeChatRepository implements ChatRepository {
   String? lastSentText;
 
   @override
+  Stream<void> watchMessages(String conversationId) => const Stream.empty();
+
+  @override
   Future<List<Conversation>> getConversations({
     required String venueId,
   }) async =>

@@ -89,6 +89,11 @@ final routerProvider = Provider<GoRouter>((ref) {
       final path = state.uri.path;
       if (roleLoading) return path == '/loading' ? null : '/loading';
       if (path == '/loading') return '/';
+      if (path == '/billing' &&
+          roleAsync.valueOrNull != 'organization_owner' &&
+          roleAsync.valueOrNull != 'organization_admin') {
+        return '/';
+      }
       if (employee && !employeeCanOpen(path)) return '/';
       return null;
     },
@@ -130,6 +135,7 @@ bool employeeCanOpen(String path) => const {
       '/schedules/timeline',
       '/floor',
       '/chat',
+      '/staff-requests',
       '/sign-in',
       '/sign-up',
       '/select-venue',
@@ -165,6 +171,10 @@ StatefulShellRoute _employeeShell() {
           GoRoute(
             path: '/notifications',
             builder: (context, state) => const NotificationsScreen(),
+          ),
+          GoRoute(
+            path: '/staff-requests',
+            builder: (context, state) => const StaffRequestsScreen(),
           ),
         ],
       ),
@@ -378,12 +388,41 @@ StatefulShellRoute _fullShell(GlobalKey<NavigatorState> rootKey) {
 /// [routeForNotificationKind]. Lives here (not in notifications_providers.dart) specifically
 /// so that file never has to import this one back: this router already depends on every
 /// feature screen, including the notifications one.
+final pendingNotificationRouteProvider = StateProvider<String?>((ref) => null);
+
 final notificationTapRoutingProvider = Provider<void>((ref) {
-  final router = ref.watch(routerProvider);
+  ref.watch(routerProvider);
+  void deliverPending() {
+    if (!ref.read(isSignedInProvider) ||
+        ref.read(activeVenueProvider) == null) {
+      return;
+    }
+    final role = ref.read(myVenueRoleProvider);
+    if (role.isLoading && !role.hasValue) return;
+    final pending = ref.read(pendingNotificationRouteProvider);
+    if (pending == null) return;
+    ref.read(pendingNotificationRouteProvider.notifier).state = null;
+    ref.read(routerProvider).go(pending);
+  }
+
+  ref.listen(activeVenueProvider, (_, __) => deliverPending());
+  ref.listen(myVenueRoleProvider, (_, __) => deliverPending());
+  ref.listen(isSignedInProvider, (_, signedIn) {
+    if (!signedIn) {
+      ref.read(pendingNotificationRouteProvider.notifier).state = null;
+    }
+  });
   // ignore: unawaited_futures
   ref.read(notificationTapServiceProvider).start((data) {
     final kind = data['kind'] as String? ?? '';
     final route = routeForNotificationKind(kind);
-    if (route != null) router.go(route);
+    if (route == null) return;
+    if (!ref.read(isSignedInProvider) ||
+        ref.read(activeVenueProvider) == null) {
+      ref.read(pendingNotificationRouteProvider.notifier).state = route;
+      return;
+    }
+    ref.read(pendingNotificationRouteProvider.notifier).state = route;
+    deliverPending();
   });
 });

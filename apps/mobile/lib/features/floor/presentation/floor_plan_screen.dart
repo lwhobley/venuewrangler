@@ -22,6 +22,25 @@ class _FloorPlanScreenState extends ConsumerState<FloorPlanScreen> {
   final Set<String> _selectedTableIds = {};
   bool _showMap = true;
   bool _highlightMine = true;
+  bool _busy = false;
+
+  Future<void> _runAction(Future<void> Function() action) async {
+    if (_busy || !mounted) return;
+    setState(() => _busy = true);
+    try {
+      await action();
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not update the floor. Please try again.'),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -56,14 +75,18 @@ class _FloorPlanScreenState extends ConsumerState<FloorPlanScreen> {
             IconButton(
               icon: const Icon(Icons.merge_type),
               tooltip: 'Merge Selected Tables',
-              onPressed: () async {
-                final tableIds = _selectedTableIds.toList();
-                await ref.read(floorRepositoryProvider).mergeTables(
-                      venueId: activeVenue.id,
-                      tableIds: tableIds,
-                    );
-                setState(() => _selectedTableIds.clear());
-              },
+              onPressed: _busy
+                  ? null
+                  : () async {
+                      final tableIds = _selectedTableIds.toList();
+                      await _runAction(() async {
+                        await ref.read(floorRepositoryProvider).mergeTables(
+                              venueId: activeVenue.id,
+                              tableIds: tableIds,
+                            );
+                        if (mounted) setState(() => _selectedTableIds.clear());
+                      });
+                    },
             ),
           if (_selectedTableIds.isNotEmpty)
             IconButton(
@@ -192,11 +215,13 @@ class _FloorPlanScreenState extends ConsumerState<FloorPlanScreen> {
               title: const Text('Mark Available'),
               onTap: () async {
                 Navigator.of(sheetCtx).pop();
-                await ref.read(floorRepositoryProvider).updateTableStatus(
-                      venueId: activeVenue.id,
-                      tableId: table.id,
-                      status: 'available',
-                    );
+                await _runAction(() {
+                  return ref.read(floorRepositoryProvider).updateTableStatus(
+                        venueId: activeVenue.id,
+                        tableId: table.id,
+                        status: 'available',
+                      );
+                });
               },
             ),
             ListTile(
@@ -207,11 +232,13 @@ class _FloorPlanScreenState extends ConsumerState<FloorPlanScreen> {
               title: const Text('Mark Seated'),
               onTap: () async {
                 Navigator.of(sheetCtx).pop();
-                await ref.read(floorRepositoryProvider).updateTableStatus(
-                      venueId: activeVenue.id,
-                      tableId: table.id,
-                      status: 'seated',
-                    );
+                await _runAction(() {
+                  return ref.read(floorRepositoryProvider).updateTableStatus(
+                        venueId: activeVenue.id,
+                        tableId: table.id,
+                        status: 'seated',
+                      );
+                });
               },
             ),
             ListTile(
@@ -222,11 +249,13 @@ class _FloorPlanScreenState extends ConsumerState<FloorPlanScreen> {
               title: const Text('Mark Dirty (Needs Bussing)'),
               onTap: () async {
                 Navigator.of(sheetCtx).pop();
-                await ref.read(floorRepositoryProvider).updateTableStatus(
-                      venueId: activeVenue.id,
-                      tableId: table.id,
-                      status: 'dirty',
-                    );
+                await _runAction(() {
+                  return ref.read(floorRepositoryProvider).updateTableStatus(
+                        venueId: activeVenue.id,
+                        tableId: table.id,
+                        status: 'dirty',
+                      );
+                });
               },
             ),
             if (table.isMerged)
@@ -235,10 +264,12 @@ class _FloorPlanScreenState extends ConsumerState<FloorPlanScreen> {
                 title: const Text('Split Merged Tables'),
                 onTap: () async {
                   Navigator.of(sheetCtx).pop();
-                  await ref.read(floorRepositoryProvider).splitTables(
-                        venueId: activeVenue.id,
-                        mergeGroupId: table.mergeGroupId!,
-                      );
+                  await _runAction(() {
+                    return ref.read(floorRepositoryProvider).splitTables(
+                          venueId: activeVenue.id,
+                          mergeGroupId: table.mergeGroupId!,
+                        );
+                  });
                 },
               ),
           ],

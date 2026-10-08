@@ -12,12 +12,12 @@ DateTime businessDayStart(DateTime date, {int startHour = 6}) =>
 /// Which business day "now" falls in (before [startHour] still belongs to yesterday).
 DateTime businessDateFor(DateTime now, {int startHour = 6}) {
   final d = DateTime(now.year, now.month, now.day);
-  return now.hour < startHour ? d.subtract(const Duration(days: 1)) : d;
+  return now.hour < startHour ? DateTime(d.year, d.month, d.day - 1) : d;
 }
 
 DateTime weekStart(DateTime date) {
   final d = DateTime(date.year, date.month, date.day);
-  return d.subtract(Duration(days: d.weekday - DateTime.monday));
+  return DateTime(d.year, d.month, d.day - (d.weekday - DateTime.monday));
 }
 
 DateTime snapTime(DateTime t, {int minutes = kSnapMinutes}) {

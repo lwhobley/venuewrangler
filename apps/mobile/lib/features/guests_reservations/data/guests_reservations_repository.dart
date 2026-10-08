@@ -114,21 +114,27 @@ class SupabaseGuestsReservationsRepository
     DateTime? to,
     int limit = 50,
   }) async {
-    var query = _client.from('reservations').select().eq('venue_id', venueId);
-
-    if (from != null) {
-      query = query.gte('reservation_time', from.toUtc().toIso8601String());
+    final now = DateTime.now().toUtc();
+    final windowFrom = from ?? now.subtract(const Duration(days: 30));
+    final windowTo = to ?? now.add(const Duration(days: 365));
+    final useDefaultWindow = from == null && to == null;
+    const pageSize = 500;
+    final reservations = <Reservation>[];
+    for (var offset = 0;; offset += pageSize) {
+      final query = _client
+          .from('reservations')
+          .select()
+          .eq('venue_id', venueId)
+          .gte('reservation_time', windowFrom.toIso8601String())
+          .lte('reservation_time', windowTo.toIso8601String());
+      final rows = await query
+          .order('reservation_time')
+          .order('id')
+          .range(offset, offset + (useDefaultWindow ? pageSize : limit) - 1);
+      reservations.addAll(rows.map(Reservation.fromJson));
+      if (!useDefaultWindow || rows.length < pageSize) break;
     }
-    if (to != null) {
-      query = query.lte('reservation_time', to.toUtc().toIso8601String());
-    }
-
-    final response =
-        await query.order('reservation_time', ascending: true).limit(limit);
-
-    return (response as List<dynamic>)
-        .map((row) => Reservation.fromJson(row as Map<String, dynamic>))
-        .toList();
+    return reservations;
   }
 
   @override

@@ -205,6 +205,7 @@ void main() {
         overrides: [
           activeVenueProvider.overrideWith((ref) => _testVenue),
           currentUserIdProvider.overrideWithValue('u1'),
+          canManageActiveVenueProvider.overrideWith((ref) async => true),
           staffRequestsRepositoryProvider.overrideWithValue(fakeRepo),
         ],
         child: const MaterialApp(home: StaffRequestsScreen()),

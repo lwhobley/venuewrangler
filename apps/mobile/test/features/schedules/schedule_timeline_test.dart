@@ -10,7 +10,6 @@ import 'package:venuewrangler_mobile/features/schedules/domain/shift.dart';
 import 'package:venuewrangler_mobile/features/schedules/presentation/schedule_timeline_screen.dart';
 import 'package:venuewrangler_mobile/features/venues/application/venues_providers.dart';
 import 'package:venuewrangler_mobile/features/venues/domain/venue.dart';
-import 'package:venuewrangler_mobile/features/workforce/application/workforce_providers.dart';
 import 'package:venuewrangler_mobile/features/workforce/domain/workforce_models.dart';
 
 Shift _shift(String id, String? staff, DateTime start, DateTime end) => Shift(
@@ -186,7 +185,7 @@ void main() {
           currentUserIdProvider.overrideWithValue('boss'),
           schedulesRepositoryProvider.overrideWithValue(repo),
           canManageActiveVenueProvider.overrideWith((ref) async => true),
-          rosterForVenueProvider.overrideWith(
+          scheduleRosterForVenueProvider.overrideWith(
             (ref, venueId) async => const [
               RosterMember(
                 userId: 'alice',
