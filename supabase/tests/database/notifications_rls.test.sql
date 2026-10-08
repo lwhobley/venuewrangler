@@ -2,7 +2,7 @@
 -- Fixture: org A (owner ...002), venue A1 (manager ...004, staff 1 ...005, staff 2 ...008), org B (owner ...006).
 
 begin;
-select plan(16);
+select plan(17);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-000000000002', 'org-a-owner@example.com'),
@@ -78,13 +78,20 @@ select is(
 );
 
 -- ---------------------------------------------------------------------------
--- 5. Anti-hijack: staff 2 claiming existing token at same venue is rejected
+-- 5. Possessing the live device token transfers its registration: a shared venue
+-- tablet must let the next person who signs in register pushes for themselves even
+-- if the previous user signed out offline and their own unregister call never reached
+-- the server (see register_push_token's comment, supabase/migrations/20261007202000).
 -- ---------------------------------------------------------------------------
-select throws_ok(
+select lives_ok(
   $$ select public.register_push_token('20000000-0000-0000-0000-0000000000a1', 'fcm-device-token-111', 'android') $$,
-  '42501',
-  null,
-  'different profile claiming same token at same venue is rejected'
+  'a different profile presenting the same device token transfers its registration'
+);
+
+select is(
+  (select user_id from public.push_tokens where token = 'fcm-device-token-111'),
+  '00000000-0000-0000-0000-000000000008'::uuid,
+  'the token now belongs to whoever last registered it, not the original registrant'
 );
 
 -- ---------------------------------------------------------------------------
