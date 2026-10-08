@@ -76,6 +76,8 @@ select pg_temp.inv_ok(pg_temp.inv_error($q$select public.inventory_apply_action(
 select pg_temp.inv_ok(pg_temp.inv_error($q$select public.inventory_apply_action(pg_temp.inv_id('bar'),'ADJUSTMENT',2)$q$,'22023'),'adjustments require a reason');
 select pg_temp.inv_ok((select quantity=34 from public.inventory_items where id='86000000-0000-0000-0000-000000000001'),'master compatibility total sums same item across locations');
 select pg_temp.inv_ok((select sum(s.quantity*i.unit_cost_usd)=833 from public.inventory_stock s join public.inventory_items i on i.id=s.inventory_item_id where i.id='86000000-0000-0000-0000-000000000001'),'inventory value uses exact NUMERIC arithmetic');
+select pg_temp.inv_ok(pg_temp.inv_error($q$update public.inventory_items set quantity=0 where id='86000000-0000-0000-0000-000000000001'$q$,'22023'),'legacy quantity edit cannot drive a location negative');
+select pg_temp.inv_ok((select quantity=34 from public.inventory_items where id='86000000-0000-0000-0000-000000000001'),'rejected legacy quantity edit leaves the total unchanged');
 insert into inventory_test_ids values('stale',public.inventory_start_count('83000000-0000-0000-0000-000000000001','full','84000000-0000-0000-0000-000000000001'));
 select public.inventory_apply_action(pg_temp.inv_id('bar'),'RECEIVE',1);
 select pg_temp.inv_ok(pg_temp.inv_error($q$select public.inventory_save_count(pg_temp.inv_id('stale'),(select jsonb_agg(jsonb_build_object('id',id,'quantity',0)) from public.inventory_count_items where count_id=pg_temp.inv_id('stale')),true)$q$,'40001'),'stale count cannot overwrite stock changed during counting');

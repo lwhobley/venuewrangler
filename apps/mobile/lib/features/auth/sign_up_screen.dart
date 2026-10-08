@@ -16,7 +16,7 @@ import '../organizations/domain/workspace_timezones.dart';
 /// invited into an existing one). Submitting calls [AuthRepository.signUpWithPassword] with
 /// the chosen workspace name stashed as pending user metadata; the actual organization/venue
 /// creation happens in `pendingWorkspaceCreationTriggerProvider`
-/// (features/organizations/application/organizations_providers.dart) once a session exists —
+/// (features/organizations/application/workspace_provisioning.dart) once a session exists —
 /// immediately here if this project doesn't require email confirmation, or later (possibly a
 /// different app launch) once the user confirms their email and signs in.
 class SignUpScreen extends ConsumerStatefulWidget {

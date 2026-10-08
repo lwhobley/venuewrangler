@@ -10,6 +10,7 @@ insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-000000000006', 'org-b-owner@example.com');
 
 insert into public.profiles (id, display_name) values
+  ('00000000-0000-0000-0000-000000000002', 'Olive Owner'),
   ('00000000-0000-0000-0000-000000000004', 'Mia Manager'),
   ('00000000-0000-0000-0000-000000000005', 'Sam Staff')
 on conflict (id) do update set display_name = excluded.display_name;
@@ -34,15 +35,15 @@ set local role authenticated;
 set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-000000000004';
 select results_eq(
   $$select display_name, role::text from public.venue_roster('20000000-0000-0000-0000-0000000000a1')$$,
-  $$values ('Mia Manager', 'venue_manager'), ('Sam Staff', 'staff')$$,
-  'a venue manager sees every venue-level member with display names'
+  $$values ('Mia Manager', 'venue_manager'), ('Olive Owner', 'organization_owner'), ('Sam Staff', 'staff')$$,
+  'a venue manager sees venue members and the org owner, with display names'
 );
 
 -- An org owner sees it too.
 set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-000000000002';
 select is(
   (select count(*)::int from public.venue_roster('20000000-0000-0000-0000-0000000000a1')),
-  2,
+  3,
   'an organization owner sees the venue roster'
 );
 
