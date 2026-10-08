@@ -2,7 +2,7 @@
 -- org/venue/membership fixture shape as operational_tasks_rls.test.sql.
 
 begin;
-select plan(9);
+select plan(11);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-000000000002', 'org-a-owner@example.com'),
@@ -104,6 +104,11 @@ select lives_ok(
   $$ update public.events set status = 'cancelled' where id = '30000000-0000-0000-0000-000000000001' $$,
   'a staff member''s update attempt executes without error but matches no rows'
 );
+select is(
+  (select status from public.events where id = '30000000-0000-0000-0000-000000000001'),
+  'planned',
+  'staff cannot change the event status'
+);
 
 reset role;
 set local role authenticated;
@@ -112,6 +117,11 @@ set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-000000000004';
 select lives_ok(
   $$ update public.events set status = 'confirmed' where id = '30000000-0000-0000-0000-000000000001' $$,
   'venue_manager can update an event in their venue'
+);
+select is(
+  (select status from public.events where id = '30000000-0000-0000-0000-000000000001'),
+  'confirmed',
+  'manager update changes the event status'
 );
 
 select * from finish();

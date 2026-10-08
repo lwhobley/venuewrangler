@@ -76,6 +76,9 @@ class MoreScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final venue = ref.watch(activeVenueProvider);
+    final role = ref.watch(myVenueRoleProvider).valueOrNull;
+    final canSeeBilling =
+        role == 'organization_owner' || role == 'organization_admin';
     return Scaffold(
       appBar: AppBar(title: const Text('More')),
       body: ListView(
@@ -92,16 +95,18 @@ class MoreScreen extends ConsumerWidget {
             _Group(
               children: [
                 for (final item in items)
-                  ListTile(
-                    leading: Icon(item.icon, color: theme.colorScheme.primary),
-                    title: Text(item.label),
-                    trailing: const Icon(Icons.chevron_right),
-                    // Screens that belong to this tab are pushed so Back returns here;
-                    // ones that live under another tab switch to that tab.
-                    onTap: () => _moreTabRoutes.contains(item.route)
-                        ? context.push(item.route)
-                        : context.go(item.route),
-                  ),
+                  if (item.route != '/billing' || canSeeBilling)
+                    ListTile(
+                      leading:
+                          Icon(item.icon, color: theme.colorScheme.primary),
+                      title: Text(item.label),
+                      trailing: const Icon(Icons.chevron_right),
+                      // Screens that belong to this tab are pushed so Back returns here;
+                      // ones that live under another tab switch to that tab.
+                      onTap: () => _moreTabRoutes.contains(item.route)
+                          ? context.push(item.route)
+                          : context.go(item.route),
+                    ),
               ],
             ),
           ],

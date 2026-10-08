@@ -9,6 +9,7 @@ abstract interface class NotificationsRepository {
     required String token,
     required String platform,
   });
+  Future<void> unregisterPushToken(String token);
 
   Future<List<NotificationEvent>> getNotifications({
     required String venueId,
@@ -24,6 +25,11 @@ class SupabaseNotificationsRepository implements NotificationsRepository {
   const SupabaseNotificationsRepository(this._client);
 
   final SupabaseClient _client;
+
+  @override
+  Future<void> unregisterPushToken(String token) async {
+    await _client.rpc('unregister_push_token', params: {'p_token': token});
+  }
 
   @override
   Future<String> registerPushToken({
@@ -59,14 +65,12 @@ class SupabaseNotificationsRepository implements NotificationsRepository {
     int limit = 50,
   }) async {
     try {
-      final rows = await _client
-          .from('notification_events')
-          .select()
-          .eq('venue_id', venueId)
-          .order('created_at', ascending: false)
-          .limit(limit);
+      final rows = await _client.rpc(
+        'notification_feed_for_me',
+        params: {'p_venue_id': venueId, 'p_limit': limit},
+      ) as List<dynamic>;
 
-      return (rows as List<dynamic>)
+      return rows
           .map((r) => NotificationEvent.fromMap(r as Map<String, dynamic>))
           .toList();
     } on PostgrestException catch (e) {
@@ -82,11 +86,9 @@ class SupabaseNotificationsRepository implements NotificationsRepository {
   @override
   Future<void> markAsRead({required String notificationId}) async {
     try {
-      await _client
-          .from('notification_events')
-          .update({'read_at': DateTime.now().toUtc().toIso8601String()}).eq(
-        'id',
-        notificationId,
+      await _client.rpc(
+        'mark_notification_read_for_me',
+        params: {'p_event_id': notificationId},
       );
     } on PostgrestException catch (e) {
       if (e.code == '42501') {
@@ -101,11 +103,10 @@ class SupabaseNotificationsRepository implements NotificationsRepository {
   @override
   Future<void> markAllAsRead({required String venueId}) async {
     try {
-      await _client
-          .from('notification_events')
-          .update({'read_at': DateTime.now().toUtc().toIso8601String()})
-          .eq('venue_id', venueId)
-          .isFilter('read_at', null);
+      await _client.rpc(
+        'mark_all_notifications_read_for_me',
+        params: {'p_venue_id': venueId},
+      );
     } on PostgrestException catch (e) {
       if (e.code == '42501') {
         throw const PermissionDeniedError();

@@ -67,6 +67,40 @@ async function handleRequest(req: Request): Promise<Response> {
     return jsonResponse({ error: "invalid_or_expired_session" }, 401);
   }
 
+  // Resolve the template venue through the caller's client before sending.
+  // render_email_template ignores an unrelated lead id, but the activity log
+  // previously used that id with the service role after the email was sent.
+  const { data: template, error: templateError } = await userClient
+    .from("email_templates")
+    .select("venue_id")
+    .eq("id", payload.template_id)
+    .maybeSingle();
+  if (templateError || !template) {
+    return jsonResponse({ error: "template_not_found" }, 404);
+  }
+  if (payload.lead_id) {
+    const { data: lead, error: leadError } = await userClient
+      .from("crm_leads")
+      .select("id")
+      .eq("id", payload.lead_id)
+      .eq("venue_id", template.venue_id)
+      .maybeSingle();
+    if (leadError || !lead) {
+      return jsonResponse({ error: "lead_not_in_template_venue" }, 400);
+    }
+  }
+  if (payload.beo_id) {
+    const { data: beo, error: beoError } = await userClient
+      .from("crm_beos")
+      .select("id")
+      .eq("id", payload.beo_id)
+      .eq("venue_id", template.venue_id)
+      .maybeSingle();
+    if (beoError || !beo) {
+      return jsonResponse({ error: "beo_not_in_template_venue" }, 400);
+    }
+  }
+
   // Runs through the caller's own client: render_email_template is `security definer` but
   // still checks has_venue_role internally and raises 42501 if the caller isn't authorized for
   // this template's venue — a non-2xx/empty result here means that check failed.
@@ -130,6 +164,7 @@ async function handleRequest(req: Request): Promise<Response> {
       .from("crm_leads")
       .select("organization_id, venue_id")
       .eq("id", payload.lead_id)
+      .eq("venue_id", template.venue_id)
       .maybeSingle();
     if (lead) {
       const { error: logError } = await serviceClient.from("crm_activity_log").insert({

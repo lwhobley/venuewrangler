@@ -57,7 +57,6 @@ class SupabaseTimeClockRepository implements TimeClockRepository {
       final row = await _client
           .from('time_entries')
           .select()
-          .eq('venue_id', venueId)
           .eq('user_id', user.id)
           .eq('is_open', true)
           .maybeSingle();
@@ -107,6 +106,7 @@ class SupabaseTimeClockRepository implements TimeClockRepository {
           .from('time_entries')
           .select()
           .eq('venue_id', venueId)
+          .eq('is_open', true)
           .order('clock_in_at', ascending: false)
           .limit(limit);
 

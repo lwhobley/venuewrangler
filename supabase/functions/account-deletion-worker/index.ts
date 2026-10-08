@@ -72,9 +72,10 @@ Deno.serve(async (req) => {
   // 'processing' is only a lease: if this invocation dies before reporting a result, the
   // retry sweep (app_hidden.sweep_account_deletion_jobs) reclaims the job after 15 minutes.
   const nextAttempts = job.attempts + 1;
+  const claimedAt = new Date().toISOString();
   await admin
     .from("account_deletion_jobs")
-    .update({ status: "processing", attempts: nextAttempts })
+    .update({ status: "processing", attempts: nextAttempts, updated_at: claimedAt })
     .eq("id", job_id);
 
   try {
@@ -85,7 +86,8 @@ Deno.serve(async (req) => {
 
     await admin
       .from("account_deletion_jobs")
-      .update({ status: "completed", completed_at: new Date().toISOString(), last_error: null })
+      .update({ status: "completed", completed_at: new Date().toISOString(), last_error: null,
+        updated_at: new Date().toISOString() })
       .eq("id", job_id);
     return respond({ ok: true });
   } catch (err) {
@@ -95,6 +97,7 @@ Deno.serve(async (req) => {
       .update({
         status: nextAttempts >= 10 ? "dead" : "failed",
         last_error: message.slice(0, 1000),
+        updated_at: new Date().toISOString(),
       })
       .eq("id", job_id);
     console.error("account-deletion-worker failed", err);

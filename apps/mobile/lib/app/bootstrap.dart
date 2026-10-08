@@ -8,11 +8,13 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../core/config/env_config.dart';
 import '../core/config/flavor.dart';
+import '../core/auth/auth_providers.dart';
 import '../core/errors/error_reporter.dart';
 import '../core/network/supabase_providers.dart';
 import '../core/offline/offline_queue_providers.dart';
 import '../core/offline/pending_mutation.dart';
 import '../core/storage/secure_local_storage.dart';
+import '../core/storage/secure_session_storage.dart';
 import '../features/checklists/application/checklists_providers.dart';
 import '../features/incidents/application/incidents_providers.dart';
 import '../features/media/application/media_providers.dart';
@@ -32,6 +34,10 @@ Future<void> bootstrap(AppFlavor flavor) async {
     publishableKey: env.supabaseAnonKey,
     authOptions: FlutterAuthClientOptions(localStorage: SecureLocalStorage()),
   );
+  final recoveryPending =
+      Supabase.instance.client.auth.currentSession != null &&
+          await const SecureSessionStorage().read(passwordRecoveryStorageKey) ==
+              'true';
 
   // Android push notifications only — iOS uses native APNs directly (see
   // ios/Runner/PushNotificationsPlugin.swift) and has no google-services equivalent file here,
@@ -54,6 +60,7 @@ Future<void> bootstrap(AppFlavor flavor) async {
     env,
     () => ProviderScope(
       overrides: [
+        passwordRecoveryPendingProvider.overrideWith((ref) => recoveryPending),
         supabaseClientProvider.overrideWithValue(Supabase.instance.client),
         // Composition root for the offline-mutation-queue handler registry: each feature
         // that queues mutations exposes its own handler-map provider, merged here so

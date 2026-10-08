@@ -72,9 +72,18 @@ class SupabaseTasksRepository implements TasksRepository {
 
   @override
   Future<void> updateStatus(String taskId, TaskStatus status) async {
-    await _client
+    final row = await _client
         .from('operational_tasks')
-        .update({'status': status.toDb()}).eq('id', taskId);
+        .update({'status': status.toDb()})
+        .eq('id', taskId)
+        .select('id')
+        .maybeSingle();
+    if (row == null) {
+      throw const PostgrestException(
+        message: 'Task update was not applied',
+        code: '42501',
+      );
+    }
   }
 
   @override
@@ -90,11 +99,36 @@ class SupabaseTasksRepository implements TasksRepository {
         .eq('updated_at', expectedUpdatedAt.toIso8601String())
         .select();
 
-    return rows.isNotEmpty;
+    if (rows.isNotEmpty) return true;
+    final current = await _client
+        .from('operational_tasks')
+        .select('updated_at')
+        .eq('id', taskId)
+        .maybeSingle();
+    if (current != null &&
+        DateTime.parse(current['updated_at'] as String)
+            .isAtSameMomentAs(expectedUpdatedAt)) {
+      throw const PostgrestException(
+        message: 'Task update was not applied',
+        code: '42501',
+      );
+    }
+    return false;
   }
 
   @override
   Future<void> deleteTask(String taskId) async {
-    await _client.from('operational_tasks').delete().eq('id', taskId);
+    final row = await _client
+        .from('operational_tasks')
+        .delete()
+        .eq('id', taskId)
+        .select('id')
+        .maybeSingle();
+    if (row == null) {
+      throw const PostgrestException(
+        message: 'Task deletion was not applied',
+        code: '42501',
+      );
+    }
   }
 }

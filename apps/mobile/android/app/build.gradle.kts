@@ -53,9 +53,15 @@ android {
 
     buildTypes {
         release {
-            // Signed with android/key.properties (gitignored upload key) when present; falls back
-            // to the debug key only so a fresh checkout without it can still run --release locally.
-            signingConfig = if (hasReleaseKey) signingConfigs.getByName("release") else signingConfigs.getByName("debug")
+            signingConfig = if (hasReleaseKey) signingConfigs.getByName("release") else null
+        }
+    }
+}
+
+tasks.matching { it.name == "assembleRelease" || it.name == "bundleRelease" }.configureEach {
+    doFirst {
+        if (!hasReleaseKey) {
+            throw GradleException("Release signing requires android/key.properties; refusing an unsigned or debug-signed release")
         }
     }
 }

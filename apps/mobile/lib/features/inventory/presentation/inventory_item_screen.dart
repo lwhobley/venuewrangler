@@ -280,7 +280,13 @@ class _ItemEditorState extends ConsumerState<InventoryItemEditor> {
       category = widget.item?.categoryId,
       subcategory = widget.item?.subcategoryId;
   late bool active = widget.item?.active ?? true;
-  late final String? userId = ref.read(currentUserIdProvider);
+  late final String? userId;
+  @override
+  void initState() {
+    super.initState();
+    userId = ref.read(currentUserIdProvider);
+  }
+
   bool busy = false;
   String? error;
   @override
@@ -580,7 +586,13 @@ class _LocationState extends ConsumerState<_LocationSheet> {
   final form = GlobalKey<FormState>();
   late String? area = widget.stock?.areaId, subArea = widget.stock?.subAreaId;
   late final par = TextEditingController(text: widget.stock?.par);
-  late final String? userId = ref.read(currentUserIdProvider);
+  late final String? userId;
+  @override
+  void initState() {
+    super.initState();
+    userId = ref.read(currentUserIdProvider);
+  }
+
   bool busy = false;
   String? error;
   @override
@@ -684,11 +696,20 @@ class _LocationState extends ConsumerState<_LocationSheet> {
     setState(() => busy = true);
     try {
       assertInventoryScope(ref, widget.scope, userId);
+      final existing = widget.snapshot.stock.where(
+        (stock) =>
+            stock.itemId == widget.item.id &&
+            stock.areaId == area &&
+            stock.subAreaId == subArea,
+      );
+      final currentPar = existing.isEmpty ? null : existing.first.par;
       await ref.read(inventoryRepositoryProvider).setStock(
             widget.item.id,
             area!,
             subAreaId: subArea,
-            par: par.text.trim().isEmpty ? null : par.text.trim(),
+            par: par.text.trim().isEmpty && widget.stock == null
+                ? currentPar
+                : (par.text.trim().isEmpty ? null : par.text.trim()),
           );
       if (!mounted) return;
       refreshInventory(ref, widget.scope);

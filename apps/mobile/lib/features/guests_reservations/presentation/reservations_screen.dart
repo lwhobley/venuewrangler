@@ -201,81 +201,164 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
     final phoneCtrl = TextEditingController();
     final emailCtrl = TextEditingController();
     final requestsCtrl = TextEditingController();
+    var reservationTime = DateTime.now().add(const Duration(hours: 1));
+    var saving = false;
+    String? validationError;
 
     await showDialog<void>(
       context: context,
-      builder: (dialogCtx) => AlertDialog(
-        title: const Text('New Reservation'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameCtrl,
-                decoration: const InputDecoration(labelText: 'Guest Name *'),
-              ),
-              TextField(
-                controller: partyCtrl,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Party Size *'),
-              ),
-              TextField(
-                controller: phoneCtrl,
-                keyboardType: TextInputType.phone,
-                decoration: const InputDecoration(labelText: 'Phone'),
-              ),
-              TextField(
-                controller: emailCtrl,
-                keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(labelText: 'Email'),
-              ),
-              TextField(
-                controller: requestsCtrl,
-                decoration:
-                    const InputDecoration(labelText: 'Special Requests'),
-              ),
-            ],
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (dialogCtx, update) => AlertDialog(
+          title: const Text('New Reservation'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: nameCtrl,
+                  decoration: const InputDecoration(labelText: 'Guest Name *'),
+                ),
+                TextField(
+                  controller: partyCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'Party Size *'),
+                ),
+                TextField(
+                  controller: phoneCtrl,
+                  keyboardType: TextInputType.phone,
+                  decoration: const InputDecoration(labelText: 'Phone'),
+                ),
+                TextField(
+                  controller: emailCtrl,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: const InputDecoration(labelText: 'Email'),
+                ),
+                TextField(
+                  controller: requestsCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Special Requests',
+                  ),
+                ),
+                ListTile(
+                  title: const Text('Date and time'),
+                  subtitle: Text(
+                    MaterialLocalizations.of(dialogCtx)
+                        .formatMediumDate(reservationTime),
+                  ),
+                  trailing: Text(
+                    MaterialLocalizations.of(dialogCtx).formatTimeOfDay(
+                      TimeOfDay.fromDateTime(reservationTime),
+                    ),
+                  ),
+                  onTap: saving
+                      ? null
+                      : () async {
+                          final date = await showDatePicker(
+                            context: dialogCtx,
+                            initialDate: reservationTime,
+                            firstDate: DateTime.now(),
+                            lastDate:
+                                DateTime.now().add(const Duration(days: 365)),
+                          );
+                          if (date == null || !dialogCtx.mounted) return;
+                          final time = await showTimePicker(
+                            context: dialogCtx,
+                            initialTime:
+                                TimeOfDay.fromDateTime(reservationTime),
+                          );
+                          if (time == null || !dialogCtx.mounted) return;
+                          update(() {
+                            reservationTime = DateTime(
+                              date.year,
+                              date.month,
+                              date.day,
+                              time.hour,
+                              time.minute,
+                            );
+                          });
+                        },
+                ),
+                if (validationError != null)
+                  Text(
+                    validationError!,
+                    style: TextStyle(
+                      color: Theme.of(dialogCtx).colorScheme.error,
+                    ),
+                  ),
+              ],
+            ),
           ),
+          actions: [
+            TextButton(
+              onPressed: saving ? null : () => Navigator.of(dialogCtx).pop(),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: saving
+                  ? null
+                  : () async {
+                      final name = nameCtrl.text.trim();
+                      final party = int.tryParse(partyCtrl.text.trim());
+                      if (name.isEmpty ||
+                          party == null ||
+                          party < 1 ||
+                          reservationTime.isBefore(DateTime.now())) {
+                        update(() {
+                          validationError =
+                              'Enter a guest, a valid party size, and a future time.';
+                        });
+                        return;
+                      }
+                      update(() {
+                        saving = true;
+                        validationError = null;
+                      });
+                      try {
+                        await ref
+                            .read(guestsReservationsRepositoryProvider)
+                            .createReservation(
+                              venueId: venueId,
+                              guestName: name,
+                              partySize: party,
+                              guestPhone: phoneCtrl.text.trim().isEmpty
+                                  ? null
+                                  : phoneCtrl.text.trim(),
+                              guestEmail: emailCtrl.text.trim().isEmpty
+                                  ? null
+                                  : emailCtrl.text.trim(),
+                              specialRequests: requestsCtrl.text.trim().isEmpty
+                                  ? null
+                                  : requestsCtrl.text.trim(),
+                              reservationTime: reservationTime,
+                            );
+                        if (dialogCtx.mounted) {
+                          Navigator.of(dialogCtx).pop();
+                          ref.invalidate(reservationsListProvider);
+                        }
+                      } catch (_) {
+                        if (dialogCtx.mounted) {
+                          update(() {
+                            validationError =
+                                'Could not create the reservation. Please try again.';
+                          });
+                        }
+                      } finally {
+                        if (dialogCtx.mounted) {
+                          update(() => saving = false);
+                        }
+                      }
+                    },
+              child: Text(saving ? 'Creating…' : 'Create'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogCtx).pop(),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              final name = nameCtrl.text.trim();
-              final party = int.tryParse(partyCtrl.text.trim()) ?? 2;
-              if (name.isEmpty) return;
-
-              await ref
-                  .read(guestsReservationsRepositoryProvider)
-                  .createReservation(
-                    venueId: venueId,
-                    guestName: name,
-                    partySize: party,
-                    guestPhone: phoneCtrl.text.trim().isEmpty
-                        ? null
-                        : phoneCtrl.text.trim(),
-                    guestEmail: emailCtrl.text.trim().isEmpty
-                        ? null
-                        : emailCtrl.text.trim(),
-                    specialRequests: requestsCtrl.text.trim().isEmpty
-                        ? null
-                        : requestsCtrl.text.trim(),
-                    reservationTime:
-                        DateTime.now().add(const Duration(hours: 1)),
-                  );
-              if (dialogCtx.mounted) {
-                Navigator.of(dialogCtx).pop();
-                ref.invalidate(reservationsListProvider);
-              }
-            },
-            child: const Text('Create'),
-          ),
-        ],
       ),
     );
+    nameCtrl.dispose();
+    partyCtrl.dispose();
+    phoneCtrl.dispose();
+    emailCtrl.dispose();
+    requestsCtrl.dispose();
   }
 }
 

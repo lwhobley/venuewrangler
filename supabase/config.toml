@@ -39,7 +39,7 @@ site_url = "http://localhost:3000"
 # venuewrangler://reset-password: the app's password-reset deep link (see
 # apps/mobile/lib/core/auth/auth_repository.dart). Must also be allow-listed on the hosted
 # project under Auth -> URL Configuration -> Redirect URLs.
-additional_redirect_urls = ["http://localhost:3000", "venuewrangler://reset-password"]
+additional_redirect_urls = ["http://localhost:3000", "http://localhost:3000/app/", "venuewrangler://reset-password"]
 jwt_expiry = 3600
 enable_refresh_token_rotation = true
 refresh_token_reuse_interval = 10

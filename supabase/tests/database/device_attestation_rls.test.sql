@@ -1,7 +1,7 @@
 -- pgTAP authorization tests for device_attestations (supabase/migrations/20261002170000).
 
 begin;
-select plan(5);
+select plan(6);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-000000000005', 'venue-a1-staff@example.com'),
@@ -52,6 +52,11 @@ set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-000000000005';
 select lives_ok(
   $$ update public.device_attestations set status = 'invalid' where user_id = '00000000-0000-0000-0000-000000000005' $$,
   'a client''s update attempt executes without error but matches no rows (no update policy exists)'
+);
+select is(
+  (select status from public.device_attestations where user_id = '00000000-0000-0000-0000-000000000005'),
+  'valid',
+  'client update attempt cannot alter the attestation status'
 );
 
 select * from finish();

@@ -65,8 +65,17 @@ class SupabaseIncidentsRepository implements IncidentsRepository {
 
   @override
   Future<void> updateStatus(String incidentId, IncidentStatus status) async {
-    await _client
+    final row = await _client
         .from('incidents')
-        .update({'status': status.toDb()}).eq('id', incidentId);
+        .update({'status': status.toDb()})
+        .eq('id', incidentId)
+        .select('id')
+        .maybeSingle();
+    if (row == null) {
+      throw const PostgrestException(
+        message: 'Incident update was not applied',
+        code: '42501',
+      );
+    }
   }
 }

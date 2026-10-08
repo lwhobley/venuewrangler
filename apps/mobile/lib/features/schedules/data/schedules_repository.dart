@@ -57,13 +57,28 @@ class SupabaseSchedulesRepository implements SchedulesRepository {
 
   @override
   Future<List<Shift>> fetchShiftsForVenue(String venueId) async {
-    final rows = await _client
-        .from('shifts')
-        .select()
-        .eq('venue_id', venueId)
-        .order('start_time');
-
-    return rows.map(Shift.fromJson).toList(growable: false);
+    // The board allows dates one year either side of today. Bound that window
+    // in SQL and page it, so years of old shifts cannot consume the first
+    // 1,000 PostgREST rows and hide today's schedule.
+    final now = DateTime.now().toUtc();
+    final from = now.subtract(const Duration(days: 367)).toIso8601String();
+    final to = now.add(const Duration(days: 367)).toIso8601String();
+    const pageSize = 500;
+    final shifts = <Shift>[];
+    for (var offset = 0;; offset += pageSize) {
+      final rows = await _client
+          .from('shifts')
+          .select()
+          .eq('venue_id', venueId)
+          .gte('start_time', from)
+          .lte('start_time', to)
+          .order('start_time')
+          .order('id')
+          .range(offset, offset + pageSize - 1);
+      shifts.addAll(rows.map(Shift.fromJson));
+      if (rows.length < pageSize) break;
+    }
+    return shifts;
   }
 
   @override

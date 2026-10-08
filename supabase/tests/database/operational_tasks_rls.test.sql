@@ -4,7 +4,7 @@
 -- (owner=...006). See that file for the full roster if these ids look unfamiliar.
 
 begin;
-select plan(14);
+select plan(15);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-000000000002', 'org-a-owner@example.com'),
@@ -27,6 +27,10 @@ insert into public.memberships (user_id, organization_id, venue_id, role) values
   ('00000000-0000-0000-0000-000000000005', '10000000-0000-0000-0000-00000000000a', '20000000-0000-0000-0000-0000000000a1', 'staff'),
   ('00000000-0000-0000-0000-000000000008', '10000000-0000-0000-0000-00000000000a', '20000000-0000-0000-0000-0000000000a1', 'staff'),
   ('00000000-0000-0000-0000-000000000006', '10000000-0000-0000-0000-00000000000b', null, 'organization_owner');
+
+insert into public.memberships (user_id, organization_id, venue_id, role) values
+  ('00000000-0000-0000-0000-000000000005', '10000000-0000-0000-0000-00000000000b',
+   '20000000-0000-0000-0000-0000000000b1', 'venue_manager');
 
 -- ---------------------------------------------------------------------------
 -- insert
@@ -77,6 +81,14 @@ select is(
   (select count(*)::int from public.operational_tasks where id = '30000000-0000-0000-0000-000000000001'),
   1,
   'a venue member can see a task in their venue'
+);
+
+select throws_ok(
+  $$ update public.operational_tasks set venue_id = '20000000-0000-0000-0000-0000000000b1',
+     organization_id = '10000000-0000-0000-0000-00000000000b'
+     where id = '30000000-0000-0000-0000-000000000001' $$,
+  '42501', null,
+  'assignee cannot move a task into a workspace they manage'
 );
 
 reset role;

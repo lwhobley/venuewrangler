@@ -46,6 +46,7 @@ class OfflineQueueController extends StateNotifier<OfflineQueueState> {
   final String? Function()? _currentUserId;
   late final Future<void> _loaded;
   bool _flushing = false;
+  int _queueGeneration = 0;
 
   // Every write to the store goes through this chain so two overlapping writes (an enqueue
   // landing while flush() is saving) can never finish out of order and persist a stale list.
@@ -56,7 +57,12 @@ class OfflineQueueController extends StateNotifier<OfflineQueueState> {
 
   Future<void> _load() async {
     final pending = await _store.loadAll();
-    state = state.copyWith(pending: pending);
+    state = state.copyWith(
+      pending: pending,
+      conflicts: pending
+          .where((m) => m.attemptCount >= kMaxMutationAttempts)
+          .toList(growable: false),
+    );
   }
 
   Future<void> enqueue(PendingMutation mutation) async {
@@ -84,16 +90,21 @@ class OfflineQueueController extends StateNotifier<OfflineQueueState> {
 
   Future<void> clearAll() async {
     await _loaded;
+    _queueGeneration++;
     state = const OfflineQueueState();
     await _persist();
   }
 
-  void dismissConflict(String mutationId) {
+  Future<void> dismissConflict(String mutationId) async {
     state = state.copyWith(
+      pending: state.pending
+          .where((m) => m.id != mutationId)
+          .toList(growable: false),
       conflicts: state.conflicts
           .where((m) => m.id != mutationId)
           .toList(growable: false),
     );
+    await _persist();
   }
 
   /// Attempts every pending mutation once, in queue order (oldest first), so an earlier
@@ -101,12 +112,11 @@ class OfflineQueueController extends StateNotifier<OfflineQueueState> {
   /// later one. Safe to call repeatedly (e.g. on every connectivity-restored event); a second
   /// call while one is already running is a no-op.
   ///
-  /// When [onlyUserId] is set, entries owned by a different user are left untouched
-  /// (kept pending, never applied). Pass the current user id; a null here with
-  /// pending entries present still flushes legacy entries with no owner, but never
-  /// another user's entries.
+  /// When auth is configured, only entries stamped for the current user run.
+  /// Legacy entries without an owner remain pending for manual recovery.
   Future<void> flush({String? onlyUserId}) async {
     final effectiveUserId = onlyUserId ?? _currentUserId?.call();
+    if (_currentUserId != null && effectiveUserId == null) return;
     if (_flushing) return;
     _flushing = true;
     try {
@@ -117,11 +127,19 @@ class OfflineQueueController extends StateNotifier<OfflineQueueState> {
       final settled = <String>{};
       final retried = <String, PendingMutation>{};
       final newConflicts = <PendingMutation>[];
+      final generation = _queueGeneration;
 
       for (final mutation in List<PendingMutation>.of(state.pending)) {
-        if (mutation.userId != null &&
-            effectiveUserId != null &&
-            mutation.userId != effectiveUserId) {
+        if (generation != _queueGeneration ||
+            (_currentUserId != null && _currentUserId() != effectiveUserId)) {
+          break;
+        }
+        if (!state.pending.any((m) => m.id == mutation.id) ||
+            mutation.attemptCount >= kMaxMutationAttempts ||
+            (_currentUserId != null && mutation.userId != effectiveUserId) ||
+            (_currentUserId == null &&
+                mutation.userId != null &&
+                mutation.userId != effectiveUserId)) {
           continue;
         }
         final handler = _handlers[mutation.kind];
@@ -141,7 +159,7 @@ class OfflineQueueController extends StateNotifier<OfflineQueueState> {
           case MutationOutcome.retryableFailure:
             final attempted = mutation.withIncrementedAttempt();
             if (attempted.attemptCount >= kMaxMutationAttempts) {
-              settled.add(mutation.id);
+              retried[mutation.id] = attempted;
               newConflicts.add(attempted);
             } else {
               retried[mutation.id] = attempted;

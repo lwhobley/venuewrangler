@@ -4,6 +4,8 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 
+import '../../../core/storage/secure_session_storage.dart';
+
 import '../data/notifications_repository.dart';
 
 /// Acquires a push token and registers it with [NotificationsRepository.registerPushToken],
@@ -38,9 +40,28 @@ class PushRegistrationService {
   final bool Function() _isIOS;
   final bool Function() _isAndroid;
   final FirebaseMessaging? _firebaseMessagingOverride;
+  final SecureSessionStorage _sessionStorage = const SecureSessionStorage();
 
   FirebaseMessaging get _firebaseMessaging =>
       _firebaseMessagingOverride ?? FirebaseMessaging.instance;
+
+  Future<void> _registerAndRemember(
+    String venueId,
+    String token,
+    String platform,
+  ) async {
+    await _repository.registerPushToken(
+      venueId: venueId,
+      token: token,
+      platform: platform,
+    );
+    try {
+      await _sessionStorage.write(registeredPushTokenStorageKey, token);
+    } catch (_) {
+      await _repository.unregisterPushToken(token);
+      rethrow;
+    }
+  }
 
   /// Requests permission, obtains a token, and registers it for [venueId]. Returns `true` only
   /// if a token was actually sent to the server.
@@ -64,11 +85,7 @@ class PushRegistrationService {
       final token = await _iosChannel
           .invokeMethod<String>('requestPermissionAndRegister');
       if (token == null || token.isEmpty) return false;
-      await _repository.registerPushToken(
-        venueId: venueId,
-        token: token,
-        platform: 'ios',
-      );
+      await _registerAndRemember(venueId, token, 'ios');
       return true;
     } on PlatformException {
       return false;
@@ -87,11 +104,7 @@ class PushRegistrationService {
     final token = await _firebaseMessaging.getToken();
     if (token == null || token.isEmpty) return false;
 
-    await _repository.registerPushToken(
-      venueId: venueId,
-      token: token,
-      platform: 'android',
-    );
+    await _registerAndRemember(venueId, token, 'android');
     return true;
   }
 }

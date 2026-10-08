@@ -241,14 +241,14 @@ void main() {
               _res(
                 'r1',
                 'Rivera',
-                now.add(const Duration(minutes: 30)),
+                now,
                 assignedTo: 'me',
                 party: 4,
               ),
               _res(
                 'r2',
                 'Other guest',
-                now.add(const Duration(minutes: 45)),
+                now,
                 assignedTo: 'you',
               ),
             ],

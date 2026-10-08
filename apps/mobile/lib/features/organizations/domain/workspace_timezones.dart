@@ -19,9 +19,7 @@ const kWorkspaceTimezones = <({String id, String label})>[
 const _byAbbreviation = {
   'EST': 'America/New_York',
   'EDT': 'America/New_York',
-  'CST': 'America/Chicago',
   'CDT': 'America/Chicago',
-  'MST': 'America/Denver',
   'MDT': 'America/Denver',
   'PST': 'America/Los_Angeles',
   'PDT': 'America/Los_Angeles',

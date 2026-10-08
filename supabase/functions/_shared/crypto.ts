@@ -97,17 +97,25 @@ export async function verifyOAuthState(
   if (!payloadB64 || !signatureB64) return null;
 
   const key = await importHmacKey(base64Key);
-  const valid = await crypto.subtle.verify(
-    "HMAC",
-    key,
-    base64ToBytes(signatureB64),
-    new TextEncoder().encode(payloadB64),
-  );
-  if (!valid) return null;
+  try {
+    const valid = await crypto.subtle.verify(
+      "HMAC",
+      key,
+      base64ToBytes(signatureB64),
+      new TextEncoder().encode(payloadB64),
+    );
+    if (!valid) return null;
 
-  const payload = JSON.parse(atob(payloadB64)) as OAuthStatePayload;
-  if (Date.now() - payload.issued_at > STATE_TTL_MS) return null;
-  return payload;
+    const payload = JSON.parse(atob(payloadB64)) as OAuthStatePayload;
+    if (!payload || typeof payload.issued_at !== "number" ||
+      payload.issued_at > Date.now() ||
+      Date.now() - payload.issued_at > STATE_TTL_MS ||
+      typeof payload.venue_id !== "string" ||
+      typeof payload.user_id !== "string") return null;
+    return payload;
+  } catch {
+    return null;
+  }
 }
 
 export interface AttestationChallengePayload {
@@ -161,16 +169,24 @@ export async function verifyAttestationChallenge(
   if (!payloadB64 || !signatureB64) return null;
 
   const key = await importHmacKey(base64Key);
-  const valid = await crypto.subtle.verify(
-    "HMAC",
-    key,
-    base64ToBytes(signatureB64),
-    new TextEncoder().encode(payloadB64),
-  );
-  if (!valid) return null;
+  try {
+    const valid = await crypto.subtle.verify(
+      "HMAC",
+      key,
+      base64ToBytes(signatureB64),
+      new TextEncoder().encode(payloadB64),
+    );
+    if (!valid) return null;
 
-  const payload = JSON.parse(atob(payloadB64)) as AttestationChallengePayload;
-  if (Date.now() - payload.issued_at > ATTESTATION_CHALLENGE_TTL_MS) return null;
-  if (payload.user_id !== userId || payload.device_id !== deviceId) return null;
-  return base64ToBytes(payload.nonce_b64);
+    const payload = JSON.parse(atob(payloadB64)) as AttestationChallengePayload;
+    if (!payload || typeof payload.issued_at !== "number" ||
+      payload.issued_at > Date.now() ||
+      Date.now() - payload.issued_at > ATTESTATION_CHALLENGE_TTL_MS ||
+      payload.user_id !== userId || payload.device_id !== deviceId ||
+      typeof payload.nonce_b64 !== "string") return null;
+    const nonce = base64ToBytes(payload.nonce_b64);
+    return nonce.length === 32 ? nonce : null;
+  } catch {
+    return null;
+  }
 }

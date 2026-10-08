@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/supabase_providers.dart';
@@ -26,7 +27,9 @@ final pushRegistrationServiceProvider =
 /// not here, so this file never has to import the router (which itself depends on screens that
 /// import this file).
 final notificationTapServiceProvider = Provider<NotificationTapService>((ref) {
-  return NotificationTapService();
+  final service = NotificationTapService();
+  ref.onDispose(() => unawaited(service.dispose()));
+  return service;
 });
 
 /// Watching this provider anywhere (app/app.dart does, once, app-wide) activates a listener

@@ -108,10 +108,12 @@ async function handleRequest(req: Request): Promise<Response> {
     const tax = cents(payload.tax_cents);
     const tip = cents(payload.tip_cents);
     const total = cents(payload.total_cents);
-    const status = (payload.status as string | undefined) ?? "closed";
+    const incomingStatus = (payload.status as string | undefined) ?? "closed";
+    const status = incomingStatus === "paid" ? "closed" :
+      incomingStatus === "void" ? "voided" : incomingStatus;
     if (
       subtotal === null || tax === null || tip === null || total === null ||
-      !["open", "paid", "closed", "void"].includes(status)
+      !["open", "closed", "voided"].includes(status)
     ) {
       return jsonResponse({ error: "invalid_check_fields" }, 400);
     }

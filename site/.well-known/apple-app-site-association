@@ -5,14 +5,6 @@
         "appIDs": ["8MTB6AL22R.com.venuewrangler.app"],
         "components": [
           {
-            "/": "/join",
-            "comment": "Staff invite acceptance. The only surface claimed by the app: every other path on this domain is marketing, legal, or billing content that must stay in the browser, including the Terms and Privacy links rendered inside the app's own signup form."
-          },
-          {
-            "/": "/join/*",
-            "comment": "Sub-paths of the invite flow, e.g. /join/success."
-          },
-          {
             "/": "/billing*",
             "comment": "Stripe Checkout/Customer Portal success_url/cancel_url/return_url (stripe-create-checkout, stripe-create-portal) for the platform app-subscription, matching the legacy API's ${base}/billing?status=... pattern exactly. The `*` covers the query string: AASA path matching ignores query params on its own, but legacy's own rules (packages/api) used a trailing wildcard here too, so this mirrors that rather than relying on undocumented query-string behavior. site/billing/index.html is the static fallback page — it links to the venuewrangler:// scheme if the universal link doesn't reopen the app."
           }

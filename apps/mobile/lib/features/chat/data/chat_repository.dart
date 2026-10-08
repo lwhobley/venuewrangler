@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../domain/chat_message.dart';
 import '../domain/conversation.dart';
 
 abstract class ChatRepository {
+  Stream<void> watchMessages(String conversationId);
   Future<List<Conversation>> getConversations({required String venueId});
   Future<List<ChatMessage>> getMessages({
     required String conversationId,
@@ -27,6 +29,36 @@ class SupabaseChatRepository implements ChatRepository {
   final SupabaseClient _client;
 
   @override
+  Stream<void> watchMessages(String conversationId) {
+    late final RealtimeChannel channel;
+    late final StreamController<void> controller;
+    controller = StreamController<void>(
+      onListen: () {
+        channel = _client
+            .channel('messages:$conversationId')
+            .onPostgresChanges(
+              event: PostgresChangeEvent.all,
+              schema: 'public',
+              table: 'messages',
+              filter: PostgresChangeFilter(
+                type: PostgresChangeFilterType.eq,
+                column: 'conversation_id',
+                value: conversationId,
+              ),
+              callback: (_) {
+                if (!controller.isClosed) controller.add(null);
+              },
+            )
+            .subscribe();
+      },
+      onCancel: () {
+        unawaited(_client.removeChannel(channel));
+      },
+    );
+    return controller.stream;
+  }
+
+  @override
   Future<List<Conversation>> getConversations({required String venueId}) async {
     final response = await _client
         .from('conversations')
@@ -48,10 +80,11 @@ class SupabaseChatRepository implements ChatRepository {
         .from('messages')
         .select()
         .eq('conversation_id', conversationId)
-        .order('created_at', ascending: true)
+        .order('created_at', ascending: false)
         .limit(limit);
 
     return (response as List<dynamic>)
+        .reversed
         .map((row) => ChatMessage.fromJson(row as Map<String, dynamic>))
         .toList();
   }

@@ -72,6 +72,12 @@ insert into public.shifts(id,organization_id,venue_id,staff_id,role_label,start_
  '20000000-0000-0000-0000-000000000011',
  '00000000-0000-0000-0000-000000000012','server',
  now() + interval '1 day',now() + interval '1 day 8 hours');
+-- A historical unassigned shift must not block publication of tomorrow's shift.
+insert into public.shifts(id,organization_id,venue_id,staff_id,role_label,start_time,end_time)
+ values ('30000000-0000-0000-0000-000000000099',
+ '10000000-0000-0000-0000-000000000011',
+ '20000000-0000-0000-0000-000000000011',
+ null,null,now() - interval '3 days',now() - interval '2 days');
 set local role authenticated;
 set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-000000000011';
 select results_eq(

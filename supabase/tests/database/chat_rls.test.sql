@@ -133,6 +133,12 @@ select results_eq(
   $$ select id from public.conversations where venue_id = '20000000-0000-0000-0000-0000000000a1' and type = 'dm' limit 1 $$,
   'calling create_or_get_dm again returns same existing DM'
 );
+select set_config('chat.test_dm_id', public.create_or_get_dm(
+  '20000000-0000-0000-0000-0000000000a1',
+  '00000000-0000-0000-0000-000000000008')::text, true);
+insert into public.messages (conversation_id, sender_id, text)
+values (current_setting('chat.test_dm_id')::uuid,
+  '00000000-0000-0000-0000-000000000005', 'Private fixture');
 
 -- ---------------------------------------------------------------------------
 -- 8, 9 & 10. RLS: Member can read messages; Non-member in venue cannot; Org B cannot
@@ -148,9 +154,8 @@ set local role authenticated;
 set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-000000000004'; -- manager (not in the private DM)
 
 select is_empty(
-  $$ select m.id from public.messages m
-     join public.conversations c on c.id = m.conversation_id
-     where c.type = 'dm' $$,
+  $$ select id from public.messages
+     where conversation_id = current_setting('chat.test_dm_id')::uuid $$,
   'non-member cannot read messages in private DM'
 );
 
@@ -173,7 +178,7 @@ set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-000000000005'; -- 
 select lives_ok(
   $$ insert into public.messages (conversation_id, sender_id, text)
      values (
-       (select id from public.conversations where type = 'dm' limit 1),
+       current_setting('chat.test_dm_id')::uuid,
        '00000000-0000-0000-0000-000000000005',
        'Hey staff 2!'
      ) $$,
@@ -187,7 +192,7 @@ set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-000000000004'; -- 
 select throws_ok(
   $$ insert into public.messages (conversation_id, sender_id, text)
      values (
-       (select id from public.conversations where type = 'dm' limit 1),
+       current_setting('chat.test_dm_id')::uuid,
        '00000000-0000-0000-0000-000000000004',
        'Crashing DM'
      ) $$,

@@ -148,13 +148,27 @@ class CrmLeadDetailScreen extends ConsumerWidget {
   }
 }
 
-class _LeadSummaryCard extends ConsumerWidget {
+class _LeadSummaryCard extends ConsumerStatefulWidget {
   const _LeadSummaryCard({required this.lead});
 
   final CrmLead lead;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_LeadSummaryCard> createState() => _LeadSummaryCardState();
+}
+
+class _LeadSummaryCardState extends ConsumerState<_LeadSummaryCard> {
+  late String _status = widget.lead.status;
+
+  @override
+  void didUpdateWidget(covariant _LeadSummaryCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.lead.id != widget.lead.id) _status = widget.lead.status;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final lead = widget.lead;
     return Card(
       margin: const EdgeInsets.all(12),
       child: Padding(
@@ -175,17 +189,18 @@ class _LeadSummaryCard extends ConsumerWidget {
                   ),
                 ),
                 DropdownButton<String>(
-                  value: lead.status,
+                  value: _status,
                   items: [
                     for (final status in CrmLead.statuses)
                       DropdownMenuItem(value: status, child: Text(status)),
                   ],
                   onChanged: (value) async {
-                    if (value == null || value == lead.status) return;
+                    if (value == null || value == _status) return;
                     try {
                       await ref
                           .read(crmRepositoryProvider)
                           .updateLeadStatus(leadId: lead.id, status: value);
+                      if (mounted) setState(() => _status = value);
                       ref.invalidate(crmLeadsProvider(lead.venueId));
                       ref.invalidate(crmActivityProvider(lead.id));
                     } catch (_) {

@@ -6,7 +6,10 @@ import '../../tasks/domain/operational_task.dart';
 /// The business day (6am–6am) containing [now], as a half-open [start, end) window.
 ({DateTime start, DateTime end}) businessDayWindow(DateTime now) {
   final start = businessDayStart(businessDateFor(now));
-  return (start: start, end: start.add(const Duration(days: 1)));
+  return (
+    start: start,
+    end: DateTime(start.year, start.month, start.day + 1, start.hour)
+  );
 }
 
 bool _inWindow(DateTime t, ({DateTime start, DateTime end}) w) =>

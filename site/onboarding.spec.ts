@@ -54,14 +54,14 @@ describe('website onboarding routes', () => {
     expect(sts[0]).not.toContain('preload');
   });
 
-  it('pins every CDN script with an integrity hash', () => {
-    // CSP allows the unpkg host wholesale because CSP has no path granularity;
-    // SRI is what actually stops a tampered CDN file from executing.
-    for (const file of ['index.html']) {
+  it('does not allow an unpinned third-party script host', () => {
+    const headers = readSite('_headers');
+    expect(headers).not.toContain('https://unpkg.com');
+    for (const file of ['index.html', 'join/index.html', 'billing/index.html']) {
       const source = readSite(file);
-      const tags = source.match(/unpkg\.com[^)'"`]*/g) ?? [];
-      for (const match of source.matchAll(/loadScript\(\s*'([^']*unpkg[^']*)'\s*,\s*'([^']+)'/g)) {
-        expect(match[2]).toMatch(/^sha384-/);
+      const externalScripts = [...source.matchAll(/<script\b[^>]*\bsrc=["']https?:\/\/[^>]*>/g)];
+      for (const [tag] of externalScripts) {
+        expect(tag).toMatch(/\bintegrity=["']sha384-/);
       }
     }
   });

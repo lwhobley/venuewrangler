@@ -81,7 +81,9 @@ class SupabasePosRepository implements PosRepository {
   Future<List<PosConnection>> getConnections({required String venueId}) async {
     final response = await _client
         .from('pos_connections')
-        .select()
+        .select(
+          'id,organization_id,venue_id,provider,product,external_location_id,status,readiness,last_sync_at,created_at,updated_at',
+        )
         .eq('venue_id', venueId)
         .order('provider', ascending: true);
 

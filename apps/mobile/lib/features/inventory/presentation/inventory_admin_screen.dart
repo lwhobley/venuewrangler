@@ -230,7 +230,13 @@ class _MetadataState extends ConsumerState<_MetadataEditor> {
   late bool active = widget.active;
   bool busy = false;
   String? error;
-  late final String? userId = ref.read(currentUserIdProvider);
+  late final String? userId;
+  @override
+  void initState() {
+    super.initState();
+    userId = ref.read(currentUserIdProvider);
+  }
+
   @override
   void dispose() {
     name.dispose();

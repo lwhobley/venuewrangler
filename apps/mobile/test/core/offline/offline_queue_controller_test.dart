@@ -136,8 +136,9 @@ void main() {
 
       await controller.flush();
 
-      expect(controller.state.pending, isEmpty);
+      expect(controller.state.pending, hasLength(1));
       expect(controller.state.conflicts, hasLength(1));
+      expect(store.saved, hasLength(1));
     });
 
     test('a handler that throws is treated as a retryable failure, not a crash',
@@ -207,6 +208,64 @@ void main() {
       expect(store.saved, isEmpty);
     });
 
+    test('sign-out stops handlers for later entries in an active flush',
+        () async {
+      final store = _InMemoryOfflineQueueStore();
+      final gate = Completer<void>();
+      final started = Completer<void>();
+      var calls = 0;
+      String? userId = 'user-a';
+      final controller = OfflineQueueController(
+        store,
+        {
+          'test_kind': (payload) async {
+            calls++;
+            if (!started.isCompleted) started.complete();
+            await gate.future;
+            return const MutationResult(MutationOutcome.applied);
+          },
+        },
+        currentUserId: () => userId,
+      );
+      await controller.ready;
+      await controller.enqueue(_mutation(id: 'first'));
+      await controller.enqueue(_mutation(id: 'second'));
+
+      final flushing = controller.flush();
+      await started.future;
+      await controller.clearAll();
+      userId = null;
+      gate.complete();
+      await flushing;
+
+      expect(calls, 1);
+      expect(store.saved, isEmpty);
+    });
+
+    test('signed-out sessions never replay another user queue', () async {
+      final store = _InMemoryOfflineQueueStore();
+      var calls = 0;
+      String? userId = 'user-a';
+      final controller = OfflineQueueController(
+        store,
+        {
+          'test_kind': (payload) async {
+            calls++;
+            return const MutationResult(MutationOutcome.applied);
+          },
+        },
+        currentUserId: () => userId,
+      );
+      await controller.ready;
+      await controller.enqueue(_mutation());
+      userId = null;
+
+      await controller.flush();
+
+      expect(calls, 0);
+      expect(store.saved, hasLength(1));
+    });
+
     test('overlapping writes persist in order, ending on the latest queue',
         () async {
       final store = _SlowFirstWriteStore();
@@ -233,7 +292,7 @@ void main() {
       await controller.flush();
       expect(controller.state.conflicts, hasLength(1));
 
-      controller.dismissConflict('conflicted');
+      await controller.dismissConflict('conflicted');
 
       expect(controller.state.conflicts, isEmpty);
     });

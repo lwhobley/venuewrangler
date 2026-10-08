@@ -29,6 +29,8 @@ class ScheduleListScreen extends ConsumerWidget {
     final swapsAsync = ref.watch(shiftSwapsForVenueProvider(venue.id));
     final currentUserId =
         ref.watch(supabaseClientProvider).auth.currentUser?.id;
+    final canManage =
+        ref.watch(canManageActiveVenueProvider).valueOrNull ?? false;
 
     return Scaffold(
       appBar: AppBar(
@@ -96,30 +98,36 @@ class ScheduleListScreen extends ConsumerWidget {
                   const Divider(),
                 ],
                 for (final shift in shifts)
-                  _ShiftTile(shift: shift, currentUserId: currentUserId),
+                  _ShiftTile(
+                    shift: shift,
+                    currentUserId: currentUserId,
+                    canManage: canManage,
+                  ),
               ],
             );
           },
         ),
       ),
-      floatingActionButton: Column(
-        mainAxisAlignment: MainAxisAlignment.end,
-        children: [
-          FloatingActionButton.extended(
-            heroTag: 'suggest-coverage',
-            onPressed: () => _showSuggestDialog(context, ref, venue.id),
-            icon: const Icon(Icons.auto_awesome_outlined),
-            label: const Text('Suggest coverage'),
-          ),
-          const SizedBox(height: 12),
-          FloatingActionButton.extended(
-            heroTag: 'add-shift',
-            onPressed: () => _showAddShiftDialog(context, ref, venue.id),
-            icon: const Icon(Icons.add),
-            label: const Text('Add shift'),
-          ),
-        ],
-      ),
+      floatingActionButton: canManage
+          ? Column(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                FloatingActionButton.extended(
+                  heroTag: 'suggest-coverage',
+                  onPressed: () => _showSuggestDialog(context, ref, venue.id),
+                  icon: const Icon(Icons.auto_awesome_outlined),
+                  label: const Text('Suggest coverage'),
+                ),
+                const SizedBox(height: 12),
+                FloatingActionButton.extended(
+                  heroTag: 'add-shift',
+                  onPressed: () => _showAddShiftDialog(context, ref, venue.id),
+                  icon: const Icon(Icons.add),
+                  label: const Text('Add shift'),
+                ),
+              ],
+            )
+          : null,
     );
   }
 
@@ -305,7 +313,7 @@ class ScheduleListScreen extends ConsumerWidget {
 
     await showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Review suggestions'),
         content: SizedBox(
           width: double.maxFinite,
@@ -326,7 +334,7 @@ class ScheduleListScreen extends ConsumerWidget {
                   isThreeLine: true,
                   trailing: TextButton(
                     onPressed: () {
-                      Navigator.of(context).pop();
+                      Navigator.of(dialogContext).pop();
                       _showAddShiftDialog(
                         context,
                         ref,
@@ -345,7 +353,7 @@ class ScheduleListScreen extends ConsumerWidget {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () => Navigator.of(dialogContext).pop(),
             child: const Text('Close'),
           ),
         ],
@@ -355,10 +363,15 @@ class ScheduleListScreen extends ConsumerWidget {
 }
 
 class _ShiftTile extends ConsumerWidget {
-  const _ShiftTile({required this.shift, required this.currentUserId});
+  const _ShiftTile({
+    required this.shift,
+    required this.currentUserId,
+    required this.canManage,
+  });
 
   final Shift shift;
   final String? currentUserId;
+  final bool canManage;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -382,7 +395,7 @@ class _ShiftTile extends ConsumerWidget {
               tooltip: 'Request a swap',
               onPressed: () => _requestSwap(context, ref),
             ),
-          if (shift.status != ShiftStatus.cancelled)
+          if (canManage && shift.status != ShiftStatus.cancelled)
             IconButton(
               icon: const Icon(Icons.event_busy_outlined),
               tooltip: 'Remove or cancel shift',

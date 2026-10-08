@@ -126,10 +126,14 @@ select case lower(trim(coalesce(p_unit,'')))
   when 'can' then 'Can' when 'container' then 'Container' when 'tray' then 'Tray' when 'dozen' then 'Dozen'
   else 'Custom' end;
 $$;
+-- Backfill taxonomy without restamping historical audit metadata. This update
+-- does not change venue_id, so the normal ownership trigger is unnecessary.
+alter table public.inventory_items disable trigger sync_inventory_item_update;
 update public.inventory_items i set
   category_id=(select id from public.inventory_categories where organization_id=i.organization_id and is_default),
   count_unit=app_hidden.inventory_normalize_unit(i.unit),
   custom_count_unit=case when app_hidden.inventory_normalize_unit(i.unit)='Custom' then i.unit end;
+alter table public.inventory_items enable trigger sync_inventory_item_update;
 
 create table public.inventory_stock (
   id uuid primary key default gen_random_uuid(),

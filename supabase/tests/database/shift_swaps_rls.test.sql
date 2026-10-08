@@ -3,7 +3,7 @@
 -- members (...005 and ...008) to exercise accept/offered-to logic.
 
 begin;
-select plan(14);
+select plan(18);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-000000000002', 'org-a-owner@example.com'),
@@ -26,6 +26,11 @@ insert into public.memberships (user_id, organization_id, venue_id, role) values
   ('00000000-0000-0000-0000-000000000005', '10000000-0000-0000-0000-00000000000a', '20000000-0000-0000-0000-0000000000a1', 'staff'),
   ('00000000-0000-0000-0000-000000000008', '10000000-0000-0000-0000-00000000000a', '20000000-0000-0000-0000-0000000000a1', 'staff'),
   ('00000000-0000-0000-0000-000000000006', '10000000-0000-0000-0000-00000000000b', null, 'organization_owner');
+
+-- The requester also manages a free workspace in another organization.
+insert into public.memberships (user_id, organization_id, venue_id, role) values
+  ('00000000-0000-0000-0000-000000000005', '10000000-0000-0000-0000-00000000000b',
+   '20000000-0000-0000-0000-0000000000b1', 'venue_manager');
 
 -- Seeded as table owner: two shifts in venue A1, each assigned to a different staff member.
 insert into public.shifts (id, venue_id, staff_id, start_time, end_time) values
@@ -55,6 +60,10 @@ select lives_ok(
   $$ insert into public.shift_swaps (id, shift_id) values ('50000000-0000-0000-0000-000000000001', '40000000-0000-0000-0000-000000000001') $$,
   'the assigned staff member can request a swap for their own shift'
 );
+select throws_ok(
+  $$ insert into public.shift_swaps (shift_id) values ('40000000-0000-0000-0000-000000000001') $$,
+  '23505', null, 'a second pending request for the same shift is rejected'
+);
 
 select is(
   (select organization_id from public.shift_swaps where id = '50000000-0000-0000-0000-000000000001'),
@@ -66,6 +75,20 @@ select is(
   (select requested_by from public.shift_swaps where id = '50000000-0000-0000-0000-000000000001'),
   '00000000-0000-0000-0000-000000000005'::uuid,
   'requested_by is always the calling user'
+);
+
+select throws_ok(
+  $$ update public.shift_swaps set venue_id = '20000000-0000-0000-0000-0000000000b1',
+     organization_id = '10000000-0000-0000-0000-00000000000b', status = 'accepted',
+     accepted_by = '00000000-0000-0000-0000-000000000008'
+     where id = '50000000-0000-0000-0000-000000000001' $$,
+  '42501', null,
+  'managing another workspace cannot move and accept a swap from this venue'
+);
+select is(
+  (select staff_id from public.shifts where id = '40000000-0000-0000-0000-000000000001'),
+  '00000000-0000-0000-0000-000000000005'::uuid,
+  'rejected cross-venue swap does not reassign the underlying shift'
 );
 
 -- ---------------------------------------------------------------------------
@@ -171,6 +194,27 @@ select is(
   (select status from public.shift_swaps where id = '50000000-0000-0000-0000-000000000003'),
   'declined',
   'the decline was applied'
+);
+
+reset role;
+set local role authenticated;
+set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-000000000005';
+insert into public.shift_swaps(id,shift_id) values
+  ('50000000-0000-0000-0000-000000000004',
+   '40000000-0000-0000-0000-000000000002');
+reset role;
+set local role authenticated;
+set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-000000000004';
+update public.shifts set staff_id = '00000000-0000-0000-0000-000000000008'
+  where id = '40000000-0000-0000-0000-000000000002';
+reset role;
+set local role authenticated;
+set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-000000000008';
+select throws_ok(
+  $$ update public.shift_swaps set status='accepted',
+       accepted_by='00000000-0000-0000-0000-000000000008'
+     where id='50000000-0000-0000-0000-000000000004' $$,
+  '40001', null, 'stale swap cannot reassign a shift that changed owners'
 );
 
 select * from finish();

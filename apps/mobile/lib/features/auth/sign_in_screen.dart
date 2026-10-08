@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/auth/auth_providers.dart';
 import '../../core/errors/app_error.dart';
@@ -45,8 +46,14 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
           );
       // On success, go_router's redirect (app/router.dart) takes over once
       // isSignedInProvider flips to true via the auth-state-change stream.
-    } catch (error) {
-      setState(() => _error = AuthError(error.toString()));
+    } on AuthException catch (error) {
+      if (mounted) setState(() => _error = AuthError(error.message));
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _error = const AuthError('Could not sign in. Please try again.');
+        });
+      }
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }
@@ -221,11 +228,18 @@ class _ForgotPasswordDialogState extends ConsumerState<_ForgotPasswordDialog> {
     try {
       await ref.read(authRepositoryProvider).sendPasswordResetEmail(email);
       if (mounted) Navigator.of(context).pop(true);
-    } catch (error) {
+    } on AuthException catch (error) {
       if (mounted) {
         setState(() {
           _sending = false;
-          _error = AuthError(error.toString()).message;
+          _error = error.message;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _sending = false;
+          _error = 'Could not send the link. Try again.';
         });
       }
     }

@@ -98,13 +98,17 @@ async function handleRequest(req: Request): Promise<Response> {
   // creating a duplicate.
   const { data: existing, error: existingError } = await serviceClient
     .from("subscriptions")
-    .select("stripe_customer_id")
+    .select("stripe_customer_id, stripe_subscription_id, status")
     .eq("organization_id", organizationId)
     .maybeSingle();
 
   if (existingError) {
     console.error("subscription lookup failed", existingError);
     return jsonResponse({ error: "subscription_lookup_failed" }, 500);
+  }
+  if (existing?.stripe_subscription_id &&
+    ["active", "trialing", "past_due", "unpaid"].includes(existing.status)) {
+    return jsonResponse({ error: "subscription_already_exists_use_portal" }, 409);
   }
 
   let stripeCustomerId = existing?.stripe_customer_id as string | undefined;

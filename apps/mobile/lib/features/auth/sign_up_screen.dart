@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/auth/auth_providers.dart';
 import '../../core/auth/auth_repository.dart';
@@ -74,8 +75,16 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
       } else {
         setState(() => _checkYourEmail = true);
       }
-    } catch (error) {
-      setState(() => _error = AuthError(error.toString()));
+    } on AuthException catch (error) {
+      if (mounted) setState(() => _error = AuthError(error.message));
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _error = const AuthError(
+            'Could not create the account. Please try again.',
+          );
+        });
+      }
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }

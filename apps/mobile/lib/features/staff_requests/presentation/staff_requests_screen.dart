@@ -4,6 +4,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/auth/auth_providers.dart';
 import '../../../core/theme/ops_colors.dart';
+import '../../schedules/application/schedules_providers.dart';
+import '../../schedules/domain/shift.dart';
 import '../../venues/application/venues_providers.dart';
 import '../application/staff_requests_providers.dart';
 import '../domain/staff_request.dart';
@@ -123,6 +125,8 @@ class _StaffRequestTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final statusColor = context.ops.of(_statusTone()).fg;
+    final canReview =
+        ref.watch(canManageActiveVenueProvider).valueOrNull ?? false;
 
     return ListTile(
       leading: CircleAvatar(
@@ -168,25 +172,30 @@ class _StaffRequestTile extends ConsumerWidget {
                     onPressed: () => _cancelRequest(context, ref),
                     child: const Text('Cancel'),
                   ),
-                PopupMenuButton<String>(
-                  onSelected: (action) {
-                    if (action == 'approve') {
-                      _reviewRequest(context, ref, StaffRequestStatus.approved);
-                    } else if (action == 'deny') {
-                      _reviewRequest(context, ref, StaffRequestStatus.denied);
-                    }
-                  },
-                  itemBuilder: (context) => [
-                    const PopupMenuItem(
-                      value: 'approve',
-                      child: Text('Approve'),
-                    ),
-                    const PopupMenuItem(
-                      value: 'deny',
-                      child: Text('Deny'),
-                    ),
-                  ],
-                ),
+                if (canReview)
+                  PopupMenuButton<String>(
+                    onSelected: (action) {
+                      if (action == 'approve') {
+                        _reviewRequest(
+                          context,
+                          ref,
+                          StaffRequestStatus.approved,
+                        );
+                      } else if (action == 'deny') {
+                        _reviewRequest(context, ref, StaffRequestStatus.denied);
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      const PopupMenuItem(
+                        value: 'approve',
+                        child: Text('Approve'),
+                      ),
+                      const PopupMenuItem(
+                        value: 'deny',
+                        child: Text('Deny'),
+                      ),
+                    ],
+                  ),
               ],
             )
           : null,
@@ -291,6 +300,7 @@ class _CreateStaffRequestDialogState
   final _detailsController = TextEditingController();
   DateTime? _startDate;
   DateTime? _endDate;
+  String? _selectedShiftId;
   bool _submitting = false;
 
   @override
@@ -323,6 +333,12 @@ class _CreateStaffRequestDialogState
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
+    if (_needsShift && _selectedShiftId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Choose the shift for this request.')),
+      );
+      return;
+    }
 
     setState(() => _submitting = true);
     try {
@@ -334,6 +350,7 @@ class _CreateStaffRequestDialogState
             requestedRangeStart:
                 _startDate == null ? null : _formatDate(_startDate!),
             requestedRangeEnd: _endDate == null ? null : _formatDate(_endDate!),
+            requestedShiftId: _needsShift ? _selectedShiftId : null,
           );
       if (!mounted) return;
       ref.invalidate(staffRequestsForVenueProvider(widget.venueId));
@@ -349,6 +366,11 @@ class _CreateStaffRequestDialogState
       );
     }
   }
+
+  bool get _needsShift =>
+      _kind == StaffRequestKind.addShift ||
+      _kind == StaffRequestKind.dropShift ||
+      _kind == StaffRequestKind.openShift;
 
   @override
   Widget build(BuildContext context) {
@@ -370,9 +392,50 @@ class _CreateStaffRequestDialogState
                   );
                 }).toList(),
                 onChanged: (val) {
-                  if (val != null) setState(() => _kind = val);
+                  if (val != null) {
+                    setState(() {
+                      _kind = val;
+                      _selectedShiftId = null;
+                    });
+                  }
                 },
               ),
+              if (_needsShift) ...[
+                const SizedBox(height: 12),
+                Builder(
+                  builder: (context) {
+                    final userId = ref.watch(currentUserIdProvider);
+                    final shifts = ref
+                            .watch(shiftsForVenueProvider(widget.venueId))
+                            .valueOrNull ??
+                        const <Shift>[];
+                    final choices = shifts.where(
+                      (shift) =>
+                          shift.status != ShiftStatus.cancelled &&
+                          shift.startTime.isAfter(DateTime.now()) &&
+                          (_kind == StaffRequestKind.addShift
+                              ? shift.staffId == null
+                              : shift.staffId == userId),
+                    );
+                    return DropdownButtonFormField<String>(
+                      initialValue: _selectedShiftId,
+                      decoration: const InputDecoration(labelText: 'Shift'),
+                      items: [
+                        for (final shift in choices)
+                          DropdownMenuItem(
+                            value: shift.id,
+                            child: Text(
+                              '${shift.startTime.toLocal()} · ${shift.roleLabel ?? 'Shift'}',
+                            ),
+                          ),
+                      ],
+                      onChanged: (value) => setState(
+                        () => _selectedShiftId = value,
+                      ),
+                    );
+                  },
+                ),
+              ],
               const SizedBox(height: 12),
               TextFormField(
                 controller: _titleController,

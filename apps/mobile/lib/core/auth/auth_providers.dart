@@ -1,8 +1,15 @@
+import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../network/supabase_providers.dart';
+import '../storage/secure_session_storage.dart';
 import 'auth_repository.dart';
+
+const passwordRecoveryStorageKey = 'password_recovery_pending';
+final passwordRecoveryStorageProvider = Provider<SecureSessionStorage>(
+  (ref) => const SecureSessionStorage(),
+);
 
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
   final client = ref.watch(supabaseClientProvider);
@@ -41,8 +48,22 @@ final passwordRecoveryTriggerProvider = Provider<void>((ref) {
     (_, next) {
       final event = next.valueOrNull?.event;
       final pending = ref.read(passwordRecoveryPendingProvider.notifier);
-      if (event == AuthChangeEvent.passwordRecovery) pending.state = true;
-      if (event == AuthChangeEvent.signedOut) pending.state = false;
+      if (event == AuthChangeEvent.passwordRecovery) {
+        pending.state = true;
+        unawaited(
+          ref
+              .read(passwordRecoveryStorageProvider)
+              .write(passwordRecoveryStorageKey, 'true'),
+        );
+      }
+      if (event == AuthChangeEvent.signedOut) {
+        pending.state = false;
+        unawaited(
+          ref
+              .read(passwordRecoveryStorageProvider)
+              .delete(passwordRecoveryStorageKey),
+        );
+      }
     },
     fireImmediately: true,
   );

@@ -18,34 +18,63 @@ abstract interface class OfflineQueueStore {
 }
 
 class FileOfflineQueueStore implements OfflineQueueStore {
-  FileOfflineQueueStore({this.fileName = 'offline_mutation_queue.json'});
+  FileOfflineQueueStore({
+    this.fileName = 'offline_mutation_queue.json',
+    this.directory,
+  });
 
   final String fileName;
+  final Directory? directory;
 
   Future<File> _file() async {
-    final dir = await getApplicationSupportDirectory();
+    final dir = directory ?? await getApplicationSupportDirectory();
     return File('${dir.path}/$fileName');
   }
 
   @override
   Future<List<PendingMutation>> loadAll() async {
     final file = await _file();
-    if (!await file.exists()) return const [];
+    final backup = File('${file.path}.bak');
+    if (!await file.exists() && !await backup.exists()) return const [];
 
-    final raw = await file.readAsString();
-    if (raw.trim().isEmpty) return const [];
+    Future<List<PendingMutation>> decode(File source) async {
+      final raw = await source.readAsString();
+      final decoded = jsonDecode(raw) as List<dynamic>;
+      return decoded
+          .map(
+            (entry) => PendingMutation.fromJson(
+              entry as Map<String, dynamic>,
+            ),
+          )
+          .toList(growable: false);
+    }
 
-    final decoded = jsonDecode(raw) as List<dynamic>;
-    return decoded
-        .map((entry) => PendingMutation.fromJson(entry as Map<String, dynamic>))
-        .toList(growable: false);
+    if (await file.exists()) {
+      try {
+        return await decode(file);
+      } on FormatException {
+        if (!await backup.exists()) rethrow;
+      } on TypeError {
+        if (!await backup.exists()) rethrow;
+      }
+    }
+    // A process kill between replacing the original and renaming the new file
+    // leaves the previous complete queue here. Never silently discard it.
+    return decode(backup);
   }
 
   @override
   Future<void> saveAll(List<PendingMutation> mutations) async {
     final file = await _file();
+    final temp = File('${file.path}.tmp');
+    final backup = File('${file.path}.bak');
     final encoded = jsonEncode(mutations.map((m) => m.toJson()).toList());
-    await file.writeAsString(encoded);
+    await temp.writeAsString(encoded, flush: true);
+    if (await file.exists()) {
+      await file.copy(backup.path);
+      await file.delete();
+    }
+    await temp.rename(file.path);
   }
 }
 
