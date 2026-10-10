@@ -87,24 +87,12 @@ jobs:
           sudo install -m 0755 "rclone-${RCLONE_RELEASE}-linux-amd64/rclone" /usr/local/bin/rclone
           rclone version | head -1
 
-      - name: TEMP try both Supabase S3 endpoints
+      - name: TEMP compare credentials
         shell: bash
         run: |
-          set +e
           clean() { printf '%s' "$1" | tr -d '[:space:]'; }
-          export RCLONE_CONFIG_T_TYPE=s3
-          export RCLONE_CONFIG_T_PROVIDER=Other
-          export RCLONE_CONFIG_T_ACCESS_KEY_ID="$(clean "$SUPABASE_S3_KEY_ID")"
-          export RCLONE_CONFIG_T_SECRET_ACCESS_KEY="$(clean "$SUPABASE_S3_SECRET")"
-          for host in "${SUPABASE_PROJECT_REF}.supabase.co" "${SUPABASE_PROJECT_REF}.storage.supabase.co"; do
-            for region in "$SUPABASE_STORAGE_REGION" us-east-2 us-west-1 eu-west-1; do
-              export RCLONE_CONFIG_T_ENDPOINT="https://${host}/storage/v1/s3"
-              export RCLONE_CONFIG_T_REGION="$region"
-              out="$(rclone lsf T: --dirs-only --config /dev/null 2>&1 | grep -v "Config file" | head -2 | cut -c1-200)"
-              echo "PROBE host=${host} region=${region} -> ${out:-OK}"
-            done
-          done
-          exit 0
+          echo "COMPARE supabase key id == r2 key id: $([ "$(clean "$SUPABASE_S3_KEY_ID")" = "$(clean "$R2_KEY_ID")" ] && echo YES || echo no)"
+          echo "COMPARE supabase secret == r2 secret: $([ "$(clean "$SUPABASE_S3_SECRET")" = "$(clean "$R2_SECRET")" ] && echo YES || echo no)"
 
       - name: Mirror Storage buckets to R2
         shell: bash
