@@ -92,10 +92,16 @@ jobs:
         run: |
           set +e
           clean() { printf '%s' "$1" | tr -d '[:space:]'; }
+          export RCLONE_CONFIG_T_TYPE=s3
+          export RCLONE_CONFIG_T_PROVIDER=Other
+          export RCLONE_CONFIG_T_ACCESS_KEY_ID="$(clean "$SUPABASE_S3_KEY_ID")"
+          export RCLONE_CONFIG_T_SECRET_ACCESS_KEY="$(clean "$SUPABASE_S3_SECRET")"
           for host in "${SUPABASE_PROJECT_REF}.supabase.co" "${SUPABASE_PROJECT_REF}.storage.supabase.co"; do
             for region in "$SUPABASE_STORAGE_REGION" us-east-2 us-west-1 eu-west-1; do
-              out="$(RCLONE_CONFIG_T_TYPE=s3 RCLONE_CONFIG_T_PROVIDER=Other                 RCLONE_CONFIG_T_ENDPOINT="https://${host}/storage/v1/s3" RCLONE_CONFIG_T_REGION="$region"                 RCLONE_CONFIG_T_ACCESS_KEY_ID="$(clean "$SUPABASE_S3_KEY_ID")"                 RCLONE_CONFIG_T_SECRET_ACCESS_KEY="$(clean "$SUPABASE_S3_SECRET")"                 rclone lsf T: --dirs-only 2>&1 | tr -d '' | head -3 | cut -c1-230)"
-              echo "host=${host} region=${region} -> ${out:-OK (no buckets listed)}"
+              export RCLONE_CONFIG_T_ENDPOINT="https://${host}/storage/v1/s3"
+              export RCLONE_CONFIG_T_REGION="$region"
+              out="$(rclone lsf T: --dirs-only 2>&1 | head -2 | cut -c1-200)"
+              echo "PROBE host=${host} region=${region} -> ${out:-OK}"
             done
           done
           exit 0
