@@ -67,6 +67,28 @@ jobs:
           unzip -q /tmp/awscliv2.zip -d /tmp
           sudo /tmp/aws/install --update
 
+      - name: TEMP diagnose R2 access
+        shell: bash
+        run: |
+          set -uo pipefail
+          AWS_ACCESS_KEY_ID="$(printf '%s' "$AWS_ACCESS_KEY_ID" | tr -d '[:space:]')"
+          AWS_SECRET_ACCESS_KEY="$(printf '%s' "$AWS_SECRET_ACCESS_KEY" | tr -d '[:space:]')"
+          export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY
+          echo "key id length: ${#AWS_ACCESS_KEY_ID} (R2 keys are 32); secret length: ${#AWS_SECRET_ACCESS_KEY} (R2 secrets are 64)"
+          echo "bucket: [$BACKUP_BUCKET]  endpoint: [$R2_ENDPOINT]"
+          echo "--- list buckets (needs admin token; denial here is normal)"
+          aws s3api list-buckets --endpoint-url "$R2_ENDPOINT" --query 'Buckets[].Name' 2>&1 | tail -3
+          echo "--- head bucket"
+          aws s3api head-bucket --bucket "$BACKUP_BUCKET" --endpoint-url "$R2_ENDPOINT" 2>&1 | tail -3
+          echo "--- list objects"
+          aws s3api list-objects-v2 --bucket "$BACKUP_BUCKET" --max-items 1 --endpoint-url "$R2_ENDPOINT" 2>&1 | tail -3
+          echo "--- put small object (no checksum)"
+          printf 'probe' > /tmp/probe.txt
+          AWS_REQUEST_CHECKSUM_CALCULATION=when_required aws s3api put-object --bucket "$BACKUP_BUCKET"             --key database-backups/_probe.txt --body /tmp/probe.txt --endpoint-url "$R2_ENDPOINT" 2>&1 | tail -3
+          echo "--- put small object (default checksum)"
+          aws s3api put-object --bucket "$BACKUP_BUCKET" --key database-backups/_probe2.txt             --body /tmp/probe.txt --endpoint-url "$R2_ENDPOINT" 2>&1 | tail -3
+          exit 0
+
       - name: Dump, verify, and upload Supabase database to R2
         shell: bash
         run: |
