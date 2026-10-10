@@ -66,11 +66,12 @@ describe('website onboarding routes', () => {
     }
   });
 
-  it('keeps the join form behind a valid invitation token', () => {
-    const source = readSite('join/index.html');
-    expect(source).toContain('id="join" hidden');
-    expect(source).toContain('/v1/app/invite/');
-    expect(source).toContain('loadInvite().catch');
-    expect(source).toContain('inviteToken: token');
+  it('does not depend on the retired legacy API', () => {
+    // The Cloud Run API was retired; its host must not reappear in pages or the CSP.
+    for (const file of ['join/index.html', 'support/index.html', '_headers', '_worker.js']) {
+      expect(readSite(file)).not.toContain('run.app');
+    }
+    expect(readSite('join/index.html')).not.toContain('fetch(');
+    expect(readSite('support/index.html')).not.toContain('fetch(');
   });
 });

@@ -69,41 +69,8 @@
 
     <div class="card">
       <h2>Contact us</h2>
-      <p>For help with your account, billing, review access, or anything else, send us a message and we'll respond within one business day.</p>
-      <form id="supportForm">
-        <div class="grid">
-          <label>Your name
-            <input name="name" autocomplete="name" required maxlength="120" placeholder="Alex Morgan" />
-          </label>
-          <label>Email
-            <input name="email" type="email" autocomplete="email" required maxlength="200" placeholder="you@example.com" />
-          </label>
-        </div>
-        <div class="grid">
-          <label>Business name
-            <input name="businessName" autocomplete="organization" maxlength="160" placeholder="North Room" />
-          </label>
-          <label>Topic
-            <select name="topic">
-              <option>Account access</option>
-              <option>Billing or subscription</option>
-              <option>App Store review</option>
-              <option>Bug report</option>
-              <option>Feature question</option>
-              <option>General support</option>
-            </select>
-          </label>
-        </div>
-        <label>Message
-          <textarea name="message" required minlength="10" maxlength="4000" placeholder="Tell us what happened and how we can help."></textarea>
-        </label>
-        <label class="hidden-field">Website
-          <input name="website" tabindex="-1" autocomplete="off" />
-        </label>
-        <button class="button" type="submit" id="supportButton">Send to support</button>
-        <div class="status" id="supportStatus" role="status" aria-live="polite"></div>
-      </form>
-      <p>You can also email <a href="mailto:admin@venuewrangler.com">admin@venuewrangler.com</a>.</p>
+      <p>For help with your account, billing, review access, or anything else, email us and we'll respond within one business day. Please include your name, your venue, the device you use, and what you tapped and expected.</p>
+      <p><a class="button" href="mailto:support@venuewrangler.com?subject=Venue%20Wrangler%20support">Email support@venuewrangler.com</a></p>
     </div>
 
     <div class="card">
@@ -122,7 +89,7 @@
         <dd>In the app, go to Profile &rarr; Account and choose Delete account. This permanently removes your profile and personal data. You can also email us to request deletion.</dd>
 
         <dt>I found a bug — where do I report it?</dt>
-        <dd>Use the support form above with the device, what you tapped, and what you expected. Screenshots help a lot.</dd>
+        <dd>Email us with the device, what you tapped, and what you expected. Screenshots help a lot.</dd>
       </dl>
     </div>
 
@@ -136,47 +103,5 @@
 
     <footer>&copy; 2026 Loungeability LLC &middot; Venue Wrangler</footer>
   </div>
-  <script>
-    const API_BASE = "https://venue-wrangler-api-c57mm72zpa-ue.a.run.app/api";
-    const form = document.getElementById("supportForm");
-    const statusEl = document.getElementById("supportStatus");
-    const button = document.getElementById("supportButton");
-
-    form.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      const data = Object.fromEntries(new FormData(form).entries());
-      statusEl.className = "status";
-      statusEl.textContent = "Sending your message...";
-      button.disabled = true;
-
-      try {
-        const response = await fetch(`${API_BASE}/v1/support/contact`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: String(data.name || "").trim(),
-            email: String(data.email || "").trim(),
-            businessName: String(data.businessName || "").trim() || undefined,
-            topic: String(data.topic || "General support").trim(),
-            message: String(data.message || "").trim(),
-            website: String(data.website || "").trim() || undefined,
-          }),
-        });
-        const text = await response.text();
-        const payload = text ? JSON.parse(text) : null;
-        if (!response.ok) {
-          throw new Error(payload?.message || payload?.error || "Could not send your message.");
-        }
-        statusEl.className = "status success";
-        statusEl.textContent = "Message sent. We'll reply by email.";
-        form.reset();
-      } catch (error) {
-        statusEl.className = "status error";
-        statusEl.textContent = error.message || "Could not send your message.";
-      } finally {
-        button.disabled = false;
-      }
-    });
-  </script>
 </body>
 </html>
