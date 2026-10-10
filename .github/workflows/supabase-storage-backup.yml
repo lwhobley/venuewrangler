@@ -12,8 +12,6 @@ name: Supabase Storage Backup
 # storage-changes/ first.
 
 on:
-  push:
-    branches: [storage-backup-r2]
   workflow_dispatch:
   schedule:
     - cron: '0 5 * * *'
