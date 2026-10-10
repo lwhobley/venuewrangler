@@ -24,103 +24,15 @@
 </head>
 <body>
   <main>
-    <section id="loading"><h1>Checking your invitation…</h1><p>Please wait while we validate your secure link.</p></section>
-    <section id="blocked" hidden><h1>Invitation link required</h1><p>This page is available only through a valid, unexpired invitation link. Ask your manager to send a new invite if needed.</p></section>
-    <section id="join" hidden>
-      <p id="kicker">You’re invited to join</p>
-      <h1 id="venueName"></h1>
-      <p id="jobTitle"></p>
-      <form id="joinForm">
-        <label>Your name<input name="fullName" autocomplete="name" required /></label>
-        <label>Invited email<input name="email" type="email" autocomplete="email" required /></label>
-        <label>Password<input name="password" type="password" autocomplete="new-password" minlength="8" required /></label>
-        <label class="terms"><input name="termsAccepted" type="checkbox" required /><span>I agree to the <a href="../terms/">Terms of Service</a> and <a href="../privacy/">Privacy Policy</a>.</span></label>
-        <button id="joinButton" type="submit">Create account and join team</button>
-        <div id="status" class="status" role="status" aria-live="polite"></div>
-      </form>
-    </section>
+    <p>Venue Wrangler</p>
+    <h1>Join your team</h1>
+    <p>Your manager has invited you to Venue Wrangler. To join:</p>
+    <ol>
+      <li>Install the Venue Wrangler app.</li>
+      <li>Create your account using <strong>the same email address your manager invited</strong>.</li>
+      <li>Confirm your email. You&rsquo;ll be connected to your venue automatically.</li>
+    </ol>
+    <p>If you don&rsquo;t see your venue after signing in, ask your manager to check that the invite went to the email you used, or write to <a href="mailto:support@venuewrangler.com">support@venuewrangler.com</a>.</p>
   </main>
-  <script>
-    const API_BASE = "https://venue-wrangler-api-c57mm72zpa-ue.a.run.app/api";
-    // Prefer the URL fragment (#invite=...) — fragments are never sent in the
-    // HTTP request, so the token never reaches server/CDN access logs. Fall
-    // back to the query string for any already-emailed links still using it.
-    const token = (
-      new URLSearchParams(window.location.hash.replace(/^#/, "")).get("invite")
-      || new URLSearchParams(window.location.search).get("invite")
-    )?.trim();
-    const loading = document.getElementById("loading");
-    const blocked = document.getElementById("blocked");
-    const join = document.getElementById("join");
-    const form = document.getElementById("joinForm");
-    const button = document.getElementById("joinButton");
-    const status = document.getElementById("status");
-
-    async function request(path, options = {}) {
-      const response = await fetch(API_BASE + path, {
-        ...options,
-        headers: { "Content-Type": "application/json", ...(options.headers || {}) },
-      });
-      const text = await response.text();
-      const data = text ? JSON.parse(text) : null;
-      if (!response.ok) throw new Error(data?.message || "Request failed.");
-      return data;
-    }
-
-    async function loadInvite() {
-      if (!token) throw new Error("Missing invitation token");
-      const invite = await request("/v1/app/invite/" + encodeURIComponent(token));
-      document.getElementById("venueName").textContent =
-        invite.venueName || invite.venue?.name || "your team";
-      const titleEl = document.getElementById("jobTitle");
-      if (invite.jobTitle) {
-        titleEl.textContent = `Join as ${invite.jobTitle}.`;
-      } else {
-        titleEl.textContent = "Join the team.";
-      }
-      loading.hidden = true;
-      join.hidden = false;
-    }
-
-    form.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      const data = Object.fromEntries(new FormData(form).entries());
-      button.disabled = true;
-      status.className = "status";
-      status.textContent = "Creating your account…";
-      try {
-        const session = await request("/v1/auth/password", {
-          method: "POST",
-          body: JSON.stringify({
-            email: String(data.email || "").trim(),
-            password: String(data.password || ""),
-            fullName: String(data.fullName || "").trim(),
-            flow: "signUp",
-            inviteToken: token,
-            termsAccepted: data.termsAccepted === "on",
-          }),
-        });
-        // Store the session before checking venueId: the account and its
-        // token already exist server-side at this point, so if the invite
-        // redemption failed, the user still needs to be signed in to retry —
-        // re-registering with the same email would just fail as "in use".
-        if (!session.profile) throw new Error("Your account was created, but the invitation could not be redeemed. Ask your manager for a new link.");
-        status.className = "status success";
-        status.textContent = "Your account is ready. Open the Venue Wrangler app and sign in with this email.";
-        form.reset();
-        window.location.assign("./success/");
-      } catch (error) {
-        status.className = "status error";
-        status.textContent = error.message || "Could not create your account.";
-      } finally {
-        button.disabled = false;
-      }
-    });
-
-    loadInvite().catch(() => {
-      loading.hidden = true;
-      blocked.hidden = false;
-    });
-  </script>
 </body>
 </html>
