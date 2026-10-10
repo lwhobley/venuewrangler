@@ -23,6 +23,9 @@ jobs:
       AWS_DEFAULT_REGION: auto
       R2_ACCOUNT_ID: ${{ vars.R2_ACCOUNT_ID }}
       BACKUP_BUCKET: ${{ vars.R2_BACKUP_BUCKET }}
+      # Set when the bucket was created in a jurisdiction (e.g. "us", "eu"); such buckets are
+      # only reachable through <account>.<jurisdiction>.r2.cloudflarestorage.com.
+      R2_JURISDICTION: ${{ vars.R2_JURISDICTION }}
       PGSSLMODE: require
     steps:
       - name: Verify production connection and backup destination
@@ -55,7 +58,13 @@ jobs:
           if len(account) != 32 or not all(c in '0123456789abcdef' for c in account):
               raise SystemExit('R2_ACCOUNT_ID must be the 32-character Cloudflare account ID')
           PY
-          echo "R2_ENDPOINT=https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com" >> "$GITHUB_ENV"
+          R2_JURISDICTION="$(printf '%s' "${R2_JURISDICTION:-}" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')"
+          case "$R2_JURISDICTION" in
+            '') host="${R2_ACCOUNT_ID}.r2.cloudflarestorage.com" ;;
+            *[!a-z]*) echo "::error::R2_JURISDICTION must be letters only (e.g. us, eu)"; exit 1 ;;
+            *) host="${R2_ACCOUNT_ID}.${R2_JURISDICTION}.r2.cloudflarestorage.com" ;;
+          esac
+          echo "R2_ENDPOINT=https://${host}" >> "$GITHUB_ENV"
 
       - name: Install pinned AWS CLI (S3 client for R2)
         shell: bash
