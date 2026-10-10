@@ -1,0 +1,131 @@
+name: Supabase Storage Backup
+
+# Mirrors every Supabase Storage bucket (photos, documents, chat attachments, evidence) to
+# the same Cloudflare R2 bucket the database backup uses. The database dump contains Storage
+# metadata only, not the files themselves.
+#
+#   storage-mirror/<bucket>/...        the current copy of every object
+#   storage-changes/<UTC date>/...     objects that were changed or deleted since the last run
+#
+# Add an R2 lifecycle rule deleting the `storage-changes/` prefix after 30 days. The mirror is
+# never deleted by a rule. Nothing is ever removed from the mirror without a copy landing in
+# storage-changes/ first.
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 5 * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-storage-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PRODUCTION_PROJECT_REF }}
+      SUPABASE_STORAGE_REGION: ${{ vars.SUPABASE_STORAGE_S3_REGION }}
+      # Created in the Supabase dashboard: Project Settings > Storage > S3 Connection.
+      SUPABASE_S3_KEY_ID: ${{ secrets.SUPABASE_STORAGE_S3_ACCESS_KEY_ID }}
+      SUPABASE_S3_SECRET: ${{ secrets.SUPABASE_STORAGE_S3_SECRET_ACCESS_KEY }}
+      R2_KEY_ID: ${{ secrets.R2_BACKUP_ACCESS_KEY_ID }}
+      R2_SECRET: ${{ secrets.R2_BACKUP_SECRET_ACCESS_KEY }}
+      R2_ACCOUNT_ID: ${{ vars.R2_ACCOUNT_ID }}
+      R2_JURISDICTION: ${{ vars.R2_JURISDICTION }}
+      R2_BUCKET: ${{ vars.R2_BACKUP_BUCKET }}
+      RCLONE_VERSION: v1.69.1
+    steps:
+      - name: Verify configuration
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          : "${SUPABASE_PROJECT_REF:?SUPABASE_PRODUCTION_PROJECT_REF is not configured}"
+          : "${SUPABASE_S3_KEY_ID:?SUPABASE_STORAGE_S3_ACCESS_KEY_ID is not configured}"
+          : "${SUPABASE_S3_SECRET:?SUPABASE_STORAGE_S3_SECRET_ACCESS_KEY is not configured}"
+          : "${R2_KEY_ID:?R2_BACKUP_ACCESS_KEY_ID is not configured}"
+          : "${R2_SECRET:?R2_BACKUP_SECRET_ACCESS_KEY is not configured}"
+          : "${R2_ACCOUNT_ID:?R2_ACCOUNT_ID is not configured}"
+          : "${R2_BUCKET:?R2_BACKUP_BUCKET is not configured}"
+          # Pasted settings often carry stray whitespace; strip it (and keep it out of logs).
+          clean() { printf '%s' "$1" | tr -d '[:space:]'; }
+          {
+            echo "SUPABASE_PROJECT_REF=$(clean "$SUPABASE_PROJECT_REF")"
+            echo "SUPABASE_STORAGE_REGION=$(clean "${SUPABASE_STORAGE_REGION:-us-east-1}")"
+            echo "R2_ACCOUNT_ID=$(clean "$R2_ACCOUNT_ID")"
+            echo "R2_BUCKET=$(clean "$R2_BUCKET")"
+          } >> "$GITHUB_ENV"
+          jur="$(clean "${R2_JURISDICTION:-}" | tr '[:upper:]' '[:lower:]')"
+          case "$jur" in
+            '') host="$(clean "$R2_ACCOUNT_ID").r2.cloudflarestorage.com" ;;
+            *[!a-z]*) echo "::error::R2_JURISDICTION must be letters only (e.g. us, eu)"; exit 1 ;;
+            *) host="$(clean "$R2_ACCOUNT_ID").${jur}.r2.cloudflarestorage.com" ;;
+          esac
+          echo "R2_ENDPOINT=https://${host}" >> "$GITHUB_ENV"
+          echo "::add-mask::$(clean "$SUPABASE_S3_KEY_ID")"
+          echo "::add-mask::$(clean "$SUPABASE_S3_SECRET")"
+          echo "::add-mask::$(clean "$R2_KEY_ID")"
+          echo "::add-mask::$(clean "$R2_SECRET")"
+
+      - name: Install rclone
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          base="https://github.com/rclone/rclone/releases/download/${RCLONE_VERSION}"
+          zip="rclone-${RCLONE_VERSION}-linux-amd64.zip"
+          cd /tmp
+          curl --fail --silent --show-error --location -O "${base}/${zip}"
+          curl --fail --silent --show-error --location -O "${base}/SHA256SUMS"
+          grep " ${zip}\$" SHA256SUMS | sha256sum --check --strict -
+          unzip -q "$zip"
+          sudo install -m 0755 "rclone-${RCLONE_VERSION}-linux-amd64/rclone" /usr/local/bin/rclone
+          rclone version | head -1
+
+      - name: Mirror Storage buckets to R2
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          clean() { printf '%s' "$1" | tr -d '[:space:]'; }
+          export RCLONE_CONFIG_SUPA_TYPE=s3
+          export RCLONE_CONFIG_SUPA_PROVIDER=Other
+          export RCLONE_CONFIG_SUPA_ENDPOINT="https://${SUPABASE_PROJECT_REF}.supabase.co/storage/v1/s3"
+          export RCLONE_CONFIG_SUPA_REGION="$SUPABASE_STORAGE_REGION"
+          export RCLONE_CONFIG_SUPA_ACCESS_KEY_ID="$(clean "$SUPABASE_S3_KEY_ID")"
+          export RCLONE_CONFIG_SUPA_SECRET_ACCESS_KEY="$(clean "$SUPABASE_S3_SECRET")"
+          export RCLONE_CONFIG_R2_TYPE=s3
+          export RCLONE_CONFIG_R2_PROVIDER=Cloudflare
+          export RCLONE_CONFIG_R2_ENDPOINT="$R2_ENDPOINT"
+          export RCLONE_CONFIG_R2_ACCESS_KEY_ID="$(clean "$R2_KEY_ID")"
+          export RCLONE_CONFIG_R2_SECRET_ACCESS_KEY="$(clean "$R2_SECRET")"
+          # The R2 token is scoped to objects in one bucket; it cannot create buckets.
+          export RCLONE_CONFIG_R2_NO_CHECK_BUCKET=true
+
+          day="$(date -u +%Y-%m-%d)"
+          buckets="$(rclone lsf SUPA: --dirs-only | tr -d '/')"
+          if [ -z "$buckets" ]; then
+            echo "::error::No Storage buckets were listed; refusing to continue so the mirror is not emptied"
+            exit 1
+          fi
+          echo "Buckets: $(echo $buckets | tr '\n' ' ')"
+          for b in $buckets; do
+            # sync makes the mirror match Supabase; --backup-dir moves anything it would
+            # overwrite or delete into storage-changes/<date>/ instead of destroying it.
+            rclone sync "SUPA:${b}" "R2:${R2_BUCKET}/storage-mirror/${b}" \
+              --backup-dir "R2:${R2_BUCKET}/storage-changes/${day}/${b}" \
+              --transfers 8 --checkers 16 --retries 3 --stats-one-line --stats 30s \
+              --max-delete 1000
+            src="$(rclone size "SUPA:${b}" --json)"
+            dst="$(rclone size "R2:${R2_BUCKET}/storage-mirror/${b}" --json)"
+            echo "${b}: source ${src} | mirror ${dst}"
+            python3 - "$src" "$dst" "$b" <<'PY'
+          import json, sys
+          src, dst, bucket = json.loads(sys.argv[1]), json.loads(sys.argv[2]), sys.argv[3]
+          if (src["count"], src["bytes"]) != (dst["count"], dst["bytes"]):
+              raise SystemExit(f"::error::{bucket}: mirror does not match source "
+                               f"({dst['count']} files/{dst['bytes']} bytes vs {src['count']}/{src['bytes']})")
+          PY
+          done

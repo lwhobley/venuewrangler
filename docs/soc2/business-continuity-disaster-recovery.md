@@ -32,6 +32,7 @@ Venue Wrangler is engineered to ensure continuous business operations and rapid 
 
 ### 3.2 Nightly Logical Backups (Cloudflare R2)
 * Automated GitHub Action (`.github/workflows/supabase-database-backup.yml`) runs nightly logical dumps (`pg_dump`) of the Supabase database to a dedicated Cloudflare R2 bucket, the only backup destination. R2 encrypts all objects at rest.
+* Uploaded files (Supabase Storage) are mirrored daily to the same R2 bucket by `.github/workflows/supabase-storage-backup.yml`; changed or deleted files are retained under `storage-changes/` for 30 days. The run fails if the mirror's file count or size differs from the source.
 * The workflow verifies archive readability and the uploaded object size. Backups expire through a **30-day R2 object lifecycle rule**. Bucket locks are not claimed unless separately enabled and evidenced in Cloudflare.
 
 ### 3.3 Backup Restoration Drill Protocol
