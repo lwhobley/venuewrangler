@@ -100,7 +100,7 @@ jobs:
             for region in "$SUPABASE_STORAGE_REGION" us-east-2 us-west-1 eu-west-1; do
               export RCLONE_CONFIG_T_ENDPOINT="https://${host}/storage/v1/s3"
               export RCLONE_CONFIG_T_REGION="$region"
-              out="$(rclone lsf T: --dirs-only 2>&1 | head -2 | cut -c1-200)"
+              out="$(rclone lsf T: --dirs-only --config /dev/null 2>&1 | grep -v "Config file" | head -2 | cut -c1-200)"
               echo "PROBE host=${host} region=${region} -> ${out:-OK}"
             done
           done
