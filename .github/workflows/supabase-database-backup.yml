@@ -29,6 +29,11 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
+          # Values pasted into GitHub settings often carry a trailing newline or space, which
+          # breaks the endpoint URL and the request signature. Strip all whitespace.
+          R2_ACCOUNT_ID="$(printf '%s' "$R2_ACCOUNT_ID" | tr -d '[:space:]')"
+          BACKUP_BUCKET="$(printf '%s' "$BACKUP_BUCKET" | tr -d '[:space:]')"
+          echo "BACKUP_BUCKET=${BACKUP_BUCKET}" >> "$GITHUB_ENV"
           : "${SUPABASE_DB_URL:?SUPABASE_PRODUCTION_DB_URL is not configured}"
           : "${SUPABASE_PROJECT_REF:?SUPABASE_PRODUCTION_PROJECT_REF is not configured}"
           : "${AWS_ACCESS_KEY_ID:?R2_BACKUP_ACCESS_KEY_ID is not configured}"
@@ -66,6 +71,9 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
+          AWS_ACCESS_KEY_ID="$(printf '%s' "$AWS_ACCESS_KEY_ID" | tr -d '[:space:]')"
+          AWS_SECRET_ACCESS_KEY="$(printf '%s' "$AWS_SECRET_ACCESS_KEY" | tr -d '[:space:]')"
+          export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY
           timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
           dump="/tmp/supabase-${SUPABASE_PROJECT_REF}-${timestamp}.dump"
           archive="${dump}.gz"
