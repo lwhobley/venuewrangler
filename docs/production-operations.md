@@ -80,7 +80,7 @@ or `.pptx` files.
 
 ## Retention cleanup
 
-`.github/workflows/retention-cleanup.yml` executes the preconfigured `venue-wrangler-api-retention` Cloud Run Job daily. Provision it with the same database secrets and network access as the migration job. GitHub must use a dedicated `GCP_RETENTION_SERVICE_ACCOUNT` identity that can execute only this job; do not reuse the production deployment identity. Grant that identity permission to invoke the job and to read its execution result (`run.jobs.run` and `run.executions.get`; the predefined `roles/run.invoker` plus `roles/run.viewer` roles provide these permissions). Without the read permission, `gcloud run jobs execute --wait` can start retention but cannot report whether it succeeded. Deployment preflights the job before migrations, updates it to the same immutable API image, verifies a no-traffic candidate revision, and only then promotes that revision to production. Treat a missed or failed run as an operational alert: audit logs, expired attestation challenges, and statutory wage records are purged only by this external job.
+Retention runs inside the Supabase database: pg_cron calls `app_hidden.run_retention_cleanup()` daily at 06:17 UTC (`supabase/migrations/20261010120000_retention_cleanup_in_database.sql`). It deletes audit log rows older than 365 days, attestation challenges more than an hour past expiry, and retained wage records (`retained_time_entries`) older than three years. No external cloud account is involved. To check it, run `select * from cron.job_run_details where jobid = (select jobid from cron.job where jobname = 'retention-cleanup') order by start_time desc limit 5;` in the Supabase SQL editor. Treat a failed or missing run as an operational alert.
 
 ### Connection budget
 
@@ -97,4 +97,4 @@ Managers can rotate a compromised or stale POS secret with `POST /api/v1/pos/con
 3. Confirm Stripe live checkout creates a subscription for an authenticated venue.
 4. Confirm the alert notification channel is verified.
 5. Record the current revision ID before every deploy for rollback.
-6. Confirm the retention Cloud Run Job was updated and its most recent scheduled execution succeeded.
+6. Confirm the `retention-cleanup` pg_cron job's most recent run succeeded (see Retention cleanup above).
