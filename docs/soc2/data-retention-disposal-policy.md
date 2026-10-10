@@ -28,7 +28,7 @@ This policy defines the data classification tiers, retention periods, and secure
 | Data Category | Retention Window | Storage Medium | Deletion Method |
 |---------------|------------------|----------------|-----------------|
 | **Active Tenant Operational Data** | Duration of active subscription | Supabase PostgreSQL | Hard delete cascade upon tenant offboarding request. |
-| **Nightly Database Backups** | **30 Days** | Encrypted AWS S3 Bucket | Automated S3 Lifecycle Rule (`Expire after 30 days`). |
+| **Nightly Database Backups** | **30 Days** | Cloudflare R2 Bucket (encrypted at rest) | Automated R2 Object Lifecycle Rule (`Delete after 30 days`). |
 | **Security & System Audit Logs** | **365 Days** (1 Year) | PostgreSQL `AuditLog` table | Automated hard deletion by the externally scheduled retention job. No immutable archive is currently claimed. |
 | **Application Error Traces (Sentry)** | **30 Days** | Sentry Cloud | Automated Sentry retention expiration. |
 | **Device Attestation Challenges** | **5 Minutes** | PostgreSQL `AttestationChallenge` | Ephemeral single-use expiration. |

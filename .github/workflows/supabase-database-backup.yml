@@ -15,10 +15,14 @@ jobs:
     env:
       SUPABASE_DB_URL: ${{ secrets.SUPABASE_PRODUCTION_DB_URL }}
       SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PRODUCTION_PROJECT_REF }}
-      AWS_ACCESS_KEY_ID: ${{ secrets.BACKUP_AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.BACKUP_AWS_SECRET_ACCESS_KEY }}
-      AWS_DEFAULT_REGION: ${{ secrets.BACKUP_AWS_REGION }}
-      BACKUP_BUCKET: ${{ secrets.BACKUP_S3_BUCKET }}
+      # Cloudflare R2 is the only backup destination. It speaks the S3 API, so the AWS CLI
+      # is used as the client; these credentials are an R2 API token (Object Read & Write,
+      # scoped to the backup bucket), not AWS keys.
+      AWS_ACCESS_KEY_ID: ${{ secrets.R2_BACKUP_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_BACKUP_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: auto
+      R2_ACCOUNT_ID: ${{ vars.R2_ACCOUNT_ID }}
+      BACKUP_BUCKET: ${{ vars.R2_BACKUP_BUCKET }}
       PGSSLMODE: require
     steps:
       - name: Verify production connection and backup destination
@@ -27,10 +31,10 @@ jobs:
           set -Eeuo pipefail
           : "${SUPABASE_DB_URL:?SUPABASE_PRODUCTION_DB_URL is not configured}"
           : "${SUPABASE_PROJECT_REF:?SUPABASE_PRODUCTION_PROJECT_REF is not configured}"
-          : "${AWS_ACCESS_KEY_ID:?BACKUP_AWS_ACCESS_KEY_ID is not configured}"
-          : "${AWS_SECRET_ACCESS_KEY:?BACKUP_AWS_SECRET_ACCESS_KEY is not configured}"
-          : "${AWS_DEFAULT_REGION:?BACKUP_AWS_REGION is not configured}"
-          : "${BACKUP_BUCKET:?BACKUP_S3_BUCKET is not configured}"
+          : "${AWS_ACCESS_KEY_ID:?R2_BACKUP_ACCESS_KEY_ID is not configured}"
+          : "${AWS_SECRET_ACCESS_KEY:?R2_BACKUP_SECRET_ACCESS_KEY is not configured}"
+          : "${R2_ACCOUNT_ID:?R2_ACCOUNT_ID is not configured}"
+          : "${BACKUP_BUCKET:?R2_BACKUP_BUCKET is not configured}"
           python3 - <<'PY'
           import os
           from urllib.parse import urlparse
@@ -42,9 +46,13 @@ jobs:
               raise SystemExit('Expected an explicit Supabase project reference')
           if url.username != f'postgres.{ref}' and url.hostname != f'db.{ref}.supabase.co':
               raise SystemExit('Database connection does not match the configured project')
+          account = os.environ['R2_ACCOUNT_ID']
+          if len(account) != 32 or not all(c in '0123456789abcdef' for c in account):
+              raise SystemExit('R2_ACCOUNT_ID must be the 32-character Cloudflare account ID')
           PY
+          echo "R2_ENDPOINT=https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com" >> "$GITHUB_ENV"
 
-      - name: Install pinned AWS CLI
+      - name: Install pinned AWS CLI (S3 client for R2)
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -54,7 +62,7 @@ jobs:
           unzip -q /tmp/awscliv2.zip -d /tmp
           sudo /tmp/aws/install --update
 
-      - name: Dump, verify, and upload Supabase database
+      - name: Dump, verify, and upload Supabase database to R2
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -74,7 +82,14 @@ jobs:
           gzip --best "$dump"
           gzip --test "$archive"
           key="database-backups/$(basename "$archive")"
+          # R2 encrypts every object at rest; it does not accept S3's --sse header.
           aws s3 cp "$archive" "s3://${BACKUP_BUCKET}/${key}" \
-            --sse AES256 --only-show-errors
-          aws s3api head-object --bucket "$BACKUP_BUCKET" --key "$key" >/dev/null
+            --endpoint-url "$R2_ENDPOINT" --only-show-errors
+          size="$(aws s3api head-object --bucket "$BACKUP_BUCKET" --key "$key" \
+            --endpoint-url "$R2_ENDPOINT" --query ContentLength --output text)"
+          if [ "$size" != "$(stat -c %s "$archive")" ]; then
+            echo "::error::Uploaded backup size ($size) does not match the local archive"
+            exit 1
+          fi
+          echo "Uploaded ${key} (${size} bytes) to R2 bucket ${BACKUP_BUCKET}"
           rm -f "$archive"
