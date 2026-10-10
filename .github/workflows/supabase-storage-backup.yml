@@ -40,7 +40,7 @@ jobs:
       R2_ACCOUNT_ID: ${{ vars.R2_ACCOUNT_ID }}
       R2_JURISDICTION: ${{ vars.R2_JURISDICTION }}
       R2_BUCKET: ${{ vars.R2_BACKUP_BUCKET }}
-      RCLONE_VERSION: v1.69.1
+      RCLONE_RELEASE: v1.69.1
     steps:
       - name: Verify configuration
         shell: bash
@@ -77,14 +77,14 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          base="https://github.com/rclone/rclone/releases/download/${RCLONE_VERSION}"
-          zip="rclone-${RCLONE_VERSION}-linux-amd64.zip"
+          base="https://github.com/rclone/rclone/releases/download/${RCLONE_RELEASE}"
+          zip="rclone-${RCLONE_RELEASE}-linux-amd64.zip"
           cd /tmp
           curl --fail --silent --show-error --location -O "${base}/${zip}"
           curl --fail --silent --show-error --location -O "${base}/SHA256SUMS"
           grep " ${zip}\$" SHA256SUMS | sha256sum --check --strict -
           unzip -q "$zip"
-          sudo install -m 0755 "rclone-${RCLONE_VERSION}-linux-amd64/rclone" /usr/local/bin/rclone
+          sudo install -m 0755 "rclone-${RCLONE_RELEASE}-linux-amd64/rclone" /usr/local/bin/rclone
           rclone version | head -1
 
       - name: Mirror Storage buckets to R2
