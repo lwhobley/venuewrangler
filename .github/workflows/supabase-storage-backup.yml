@@ -87,14 +87,6 @@ jobs:
           sudo install -m 0755 "rclone-${RCLONE_RELEASE}-linux-amd64/rclone" /usr/local/bin/rclone
           rclone version | head -1
 
-      - name: TEMP compare credentials
-        shell: bash
-        run: |
-          clean() { printf '%s' "$1" | tr -d '[:space:]'; }
-          echo "COMPARE key id equals r2 key id: $([ "$(clean "$SUPABASE_S3_KEY_ID")" = "$(clean "$R2_KEY_ID")" ] && echo YES || echo no)"
-          echo "COMPARE secret equals r2 secret: $([ "$(clean "$SUPABASE_S3_SECRET")" = "$(clean "$R2_SECRET")" ] && echo YES || echo no)"
-          echo "COMPARE lengths: ${#SUPABASE_S3_KEY_ID} / ${#SUPABASE_S3_SECRET}"
-
       - name: Mirror Storage buckets to R2
         shell: bash
         run: |
