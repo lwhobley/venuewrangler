@@ -115,8 +115,9 @@ jobs:
       # =========================================================================
       # AWS SCAN
       # =========================================================================
+      # !cancelled() so a GCP scan failure does not skip the AWS scan.
       - name: Run Prowler AWS Compliance Scan (if credentials provided)
-        if: env.AWS_ACCESS_KEY_ID != '' && env.AWS_SECRET_ACCESS_KEY != ''
+        if: ${{ !cancelled() && env.AWS_ACCESS_KEY_ID != '' && env.AWS_SECRET_ACCESS_KEY != '' }}
         shell: bash
         run: |
           set -e
@@ -136,6 +137,7 @@ jobs:
             --output-filename prowler-aws-report
 
       - name: Verify scan outputs generated
+        if: ${{ !cancelled() }}
         shell: bash
         run: |
           set -Eeuo pipefail

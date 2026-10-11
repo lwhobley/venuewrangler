@@ -29,9 +29,12 @@ updates:
     ignore:
       - dependency-name: "react"
       - dependency-name: "react-dom"
-      - dependency-name: "react-native"
-      - dependency-name: "react-native-*"
-      - dependency-name: "@sentry/react-native"
+
+  - package-ecosystem: pub
+    directory: "/apps/mobile"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
 
   - package-ecosystem: github-actions
     directory: "/"

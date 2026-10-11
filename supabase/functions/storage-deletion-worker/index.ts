@@ -29,8 +29,11 @@ Deno.serve(async (request) => {
     return respond({ error: "unauthorized" }, 401);
   }
 
-  const body = await request.json().catch(() => ({}));
-  const batchSize = Number.isInteger(body.batch_size) ? body.batch_size : 25;
+  // A literal `null` (or array) body parses but has no fields; treat it as an empty body.
+  const parsed: unknown = await request.json().catch(() => null);
+  const body: Record<string, unknown> =
+    parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {};
+  const batchSize = Number.isInteger(body.batch_size) ? body.batch_size as number : 25;
   if (batchSize < 1 || batchSize > 100) return respond({ error: "invalid_batch_size" }, 400);
 
   const admin = createServiceClient();

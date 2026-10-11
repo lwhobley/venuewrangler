@@ -5,11 +5,13 @@ on:
     branches: [main]
     paths:
       - 'apps/mobile/**'
+      - 'flutter-version.txt'
       - '.github/workflows/flutter-ci.yml'
   pull_request:
     branches: [main]
     paths:
       - 'apps/mobile/**'
+      - 'flutter-version.txt'
       - '.github/workflows/flutter-ci.yml'
 
 permissions:
