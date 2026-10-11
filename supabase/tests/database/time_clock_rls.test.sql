@@ -272,7 +272,7 @@ set local role authenticated;
 set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-000000000008';
 
 select throws_ok(
-  $$ select public.correct_time_entry('80000000-0000-0000-0000-000000000003', now(), null, 'self-correction attempt') $$,
+  $$ select public.correct_time_entry('80000000-0000-0000-0000-000000000003', (select clock_in_at from public.time_entries where id = '80000000-0000-0000-0000-000000000003') + interval '1 second', null, 'self-correction attempt') $$,
   '42501',
   null,
   'staff cannot call correct_time_entry on their own punch'
@@ -283,7 +283,7 @@ set local role authenticated;
 set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-000000000004';
 
 select lives_ok(
-  $$ select public.correct_time_entry('80000000-0000-0000-0000-000000000003', now(), null, 'manager correction') $$,
+  $$ select public.correct_time_entry('80000000-0000-0000-0000-000000000003', (select clock_in_at from public.time_entries where id = '80000000-0000-0000-0000-000000000003') + interval '1 second', null, 'manager correction') $$,
   'a venue manager can correct a punch via correct_time_entry'
 );
 
