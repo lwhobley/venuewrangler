@@ -60,10 +60,10 @@ async function handleRequest(req: Request): Promise<Response> {
     return jsonResponse({ error: "invalid_or_expired_session" }, 401);
   }
 
-  // Org-level membership (venue_id is null) with an admin-tier role — RLS
-  // The policy also lets org admins read every membership in the org, so the caller's own
-  // user_id is filtered explicitly: another admin's row must not authorize this caller, and
-  // two admins must not make maybeSingle() fail.
+  // Org-level membership (venue_id is null) with an admin-tier role. The RLS policy also lets
+  // org admins read every membership in the org, so the caller's own user_id is filtered
+  // explicitly: another admin's row must not authorize this caller, and two admins must not
+  // make maybeSingle() fail.
   const { data: membership, error: membershipError } = await userClient
     .from("memberships")
     .select("role")
