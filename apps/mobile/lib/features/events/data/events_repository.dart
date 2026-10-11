@@ -63,7 +63,10 @@ class SupabaseEventsRepository implements EventsRepository {
         .select('id')
         .maybeSingle();
     if (row == null) {
-      throw const PostgrestException(message: 'Event update was not applied', code: '42501');
+      throw const PostgrestException(
+        message: 'Event update was not applied',
+        code: '42501',
+      );
     }
   }
 
@@ -76,7 +79,10 @@ class SupabaseEventsRepository implements EventsRepository {
         .select('id')
         .maybeSingle();
     if (row == null) {
-      throw const PostgrestException(message: 'Event deletion was not applied', code: '42501');
+      throw const PostgrestException(
+        message: 'Event deletion was not applied',
+        code: '42501',
+      );
     }
   }
 }

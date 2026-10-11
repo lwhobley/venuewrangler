@@ -46,7 +46,8 @@ class PendingMutation {
         createdAt: createdAt,
         attemptCount: attemptCount,
         userId: userId,
-        conflictReason: reason ?? 'This change needs your review before it can sync.',
+        conflictReason:
+            reason ?? 'This change needs your review before it can sync.',
       );
 
   Map<String, dynamic> toJson() => {

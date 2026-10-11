@@ -57,17 +57,28 @@ class OfflineQueueController extends StateNotifier<OfflineQueueState> {
 
   Future<void> _load() async {
     final loaded = await _store.loadAll();
-    final pending = loaded
-        .map((m) => m.attemptCount >= kMaxMutationAttempts && !m.isConflict
-            ? m.withConflict('This change reached the retry limit and needs your review.')
-            : m)
-        .toList(growable: false);
+    final conflicts = <PendingMutation>[];
+    final pending = <PendingMutation>[];
+    for (final m in loaded) {
+      if (m.isConflict || m.attemptCount >= kMaxMutationAttempts) {
+        conflicts.add(
+          m.isConflict
+              ? m
+              : m.withConflict(
+                  'This change reached the retry limit and needs your review.',
+                ),
+        );
+      } else {
+        pending.add(m);
+      }
+    }
     state = state.copyWith(
       pending: pending,
-      conflicts: pending.where((m) => m.isConflict).toList(growable: false),
+      conflicts: conflicts,
     );
-    if (pending.any((m) => m.isConflict) &&
-        loaded.any((m) => m.attemptCount >= kMaxMutationAttempts && !m.isConflict)) {
+    if (loaded.any(
+      (m) => m.attemptCount >= kMaxMutationAttempts && !m.isConflict,
+    )) {
       await _persist();
     }
   }
@@ -134,6 +145,7 @@ class OfflineQueueController extends StateNotifier<OfflineQueueState> {
       // cleared by a sign-out) in the meantime must survive the flush.
       final settled = <String>{};
       final retried = <String, PendingMutation>{};
+      final newConflicts = <PendingMutation>[];
       final generation = _queueGeneration;
 
       for (final mutation in List<PendingMutation>.of(state.pending)) {
@@ -162,28 +174,37 @@ class OfflineQueueController extends StateNotifier<OfflineQueueState> {
           case MutationOutcome.applied:
             settled.add(mutation.id);
           case MutationOutcome.conflict:
-            retried[mutation.id] = mutation.withConflict(result.message);
+            settled.add(mutation.id);
+            newConflicts.add(mutation.withConflict(result.message));
           case MutationOutcome.retryableFailure:
             final attempted = mutation.withIncrementedAttempt();
             if (attempted.attemptCount >= kMaxMutationAttempts) {
-              retried[mutation.id] = attempted.withConflict(
+              final conflicted = attempted.withConflict(
                 'This change reached the retry limit and needs your review.',
               );
+              retried[mutation.id] = conflicted;
+              newConflicts.add(conflicted);
             } else {
               retried[mutation.id] = attempted;
             }
         }
       }
 
-      // Persist conflicts in the queue record itself so a process restart cannot lose them.
+      if (generation != _queueGeneration ||
+          (_currentUserId != null && _currentUserId() != effectiveUserId)) {
+        return;
+      }
+
+      final queuedIds = {for (final m in state.pending) m.id};
       state = state.copyWith(
         pending: [
           for (final m in state.pending)
             if (!settled.contains(m.id)) retried[m.id] ?? m,
         ],
         conflicts: [
-          for (final m in state.pending)
-            if ((retried[m.id] ?? m).isConflict) retried[m.id] ?? m,
+          ...state.conflicts,
+          for (final c in newConflicts)
+            if (queuedIds.contains(c.id)) c,
         ],
       );
       await _persist();

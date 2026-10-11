@@ -50,8 +50,8 @@ class PushRegistrationService {
     String token,
     String platform,
   ) async {
-    final pendingRevocation = await _sessionStorage
-        .read(pendingPushTokenRevocationStorageKey);
+    final pendingRevocation =
+        await _sessionStorage.read(pendingPushTokenRevocationStorageKey);
     if (pendingRevocation != null) {
       await _repository.unregisterPushToken(pendingRevocation);
       await _sessionStorage.delete(pendingPushTokenRevocationStorageKey);

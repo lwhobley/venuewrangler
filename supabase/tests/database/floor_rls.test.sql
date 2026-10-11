@@ -146,6 +146,14 @@ select throws_ok(
   'invalid table status raises 22023'
 );
 
+-- The assignment RPC correctly rejects dirty tables. Restore this fixture before the
+-- successful reservation assignment below.
+select public.update_floor_table_status(
+  '20000000-0000-0000-0000-0000000000a1',
+  '60000000-0000-0000-0000-000000000001',
+  'available'
+);
+
 -- ---------------------------------------------------------------------------
 -- 10, 11 & 12. RPC merge_floor_tables and split_floor_tables
 -- ---------------------------------------------------------------------------

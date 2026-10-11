@@ -5,18 +5,23 @@ class Venue {
     required this.id,
     required this.organizationId,
     required this.name,
+    this.timezone = 'UTC',
     required this.createdAt,
   });
 
   final String id;
   final String organizationId;
   final String name;
+  final String timezone;
   final DateTime createdAt;
 
   factory Venue.fromJson(Map<String, dynamic> json) => Venue(
         id: json['id'] as String,
         organizationId: json['organization_id'] as String,
         name: json['name'] as String,
+        timezone: (json['timezone'] as String?)?.isNotEmpty == true
+            ? json['timezone'] as String
+            : 'UTC',
         createdAt: DateTime.parse(json['created_at'] as String),
       );
 

@@ -338,7 +338,8 @@ class FloorEditorController extends StateNotifier<FloorEditorState> {
           table,
     ];
     for (final table in restored.where((table) => table.isNew)) {
-      final n = int.tryParse(table.id.substring(EditorTable.newPrefix.length)) ?? 0;
+      final n =
+          int.tryParse(table.id.substring(EditorTable.newPrefix.length)) ?? 0;
       _newCounter = math.max(_newCounter, n + 1);
     }
     state = state.copyWith(

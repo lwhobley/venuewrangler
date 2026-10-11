@@ -144,7 +144,9 @@ class ProfileScreen extends ConsumerWidget {
               Expanded(
                 child: _Stat(
                   label: 'Scheduled',
-                  value: shiftsAsync.hasError ? 'Unavailable' : formatHours(scheduled),
+                  value: shiftsAsync.hasError
+                      ? 'Unavailable'
+                      : formatHours(scheduled),
                 ),
               ),
               const SizedBox(width: 12),

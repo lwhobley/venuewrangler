@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:venuewrangler_mobile/core/auth/auth_providers.dart';
 import 'package:venuewrangler_mobile/core/offline/offline_queue_providers.dart';
 import 'package:venuewrangler_mobile/core/offline/offline_queue_store.dart';
 import 'package:venuewrangler_mobile/core/offline/pending_mutation.dart';
@@ -104,6 +105,7 @@ void main() {
 
   List<Override> baseOverrides(_FakeIncidentsRepository fakeRepo) => [
         activeVenueProvider.overrideWith((ref) => venue),
+        currentUserIdProvider.overrideWithValue('user-1'),
         incidentsRepositoryProvider.overrideWithValue(fakeRepo),
         offlineQueueStoreProvider
             .overrideWithValue(_InMemoryOfflineQueueStore()),

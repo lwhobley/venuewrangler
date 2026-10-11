@@ -115,26 +115,19 @@ class SupabaseGuestsReservationsRepository
     int limit = 50,
   }) async {
     final now = DateTime.now().toUtc();
-    final windowFrom = from ?? now.subtract(const Duration(days: 30));
-    final windowTo = to ?? now.add(const Duration(days: 365));
-    final useDefaultWindow = from == null && to == null;
-    const pageSize = 500;
-    final reservations = <Reservation>[];
-    for (var offset = 0;; offset += pageSize) {
-      final query = _client
-          .from('reservations')
-          .select()
-          .eq('venue_id', venueId)
-          .gte('reservation_time', windowFrom.toIso8601String())
-          .lte('reservation_time', windowTo.toIso8601String());
-      final rows = await query
-          .order('reservation_time')
-          .order('id')
-          .range(offset, offset + (useDefaultWindow ? pageSize : limit) - 1);
-      reservations.addAll(rows.map(Reservation.fromJson));
-      if (!useDefaultWindow || rows.length < pageSize) break;
-    }
-    return reservations;
+    final windowFrom = from ?? now.subtract(const Duration(days: 1));
+    final windowTo = to ?? now.add(const Duration(days: 7));
+    final query = _client
+        .from('reservations')
+        .select()
+        .eq('venue_id', venueId)
+        .gte('reservation_time', windowFrom.toIso8601String())
+        .lte('reservation_time', windowTo.toIso8601String())
+        .order('reservation_time')
+        .order('id')
+        .limit(limit);
+    final rows = await query;
+    return rows.map(Reservation.fromJson).toList();
   }
 
   @override

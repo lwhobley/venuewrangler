@@ -6,6 +6,7 @@ import '../../../core/theme/ops_colors.dart';
 import '../../../core/widgets/state_views.dart';
 import '../../../core/widgets/status_chip.dart';
 import '../../venues/application/venues_providers.dart';
+import '../../venues/domain/venue_timezone.dart';
 import '../../workforce/application/workforce_providers.dart';
 import '../../workforce/domain/workforce_models.dart';
 import '../application/guests_reservations_providers.dart';
@@ -20,6 +21,7 @@ class ReservationsScreen extends ConsumerStatefulWidget {
 
 class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
   String _statusFilter = 'all';
+  String _dateFilter = 'all';
   final Set<String> _savingReservationIds = {};
 
   Future<void> _assign(Reservation r, List<RosterMember> roster) async {
@@ -55,15 +57,24 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
       ),
     );
     if (!mounted || picked == null || picked.userId == r.assignedTo) return;
-    await _runReservationMutation(r.id, () => ref
-        .read(guestsReservationsRepositoryProvider)
-        .assignReservation(reservationId: r.id, userId: picked.userId));
+    await _runReservationMutation(
+      r.id,
+      () => ref
+          .read(guestsReservationsRepositoryProvider)
+          .assignReservation(reservationId: r.id, userId: picked.userId),
+    );
   }
 
   Future<void> _updateStatus(String reservationId, String status) async {
-    await _runReservationMutation(reservationId, () => ref
-        .read(guestsReservationsRepositoryProvider)
-        .updateReservationStatus(reservationId: reservationId, status: status));
+    await _runReservationMutation(
+      reservationId,
+      () => ref
+          .read(guestsReservationsRepositoryProvider)
+          .updateReservationStatus(
+            reservationId: reservationId,
+            status: status,
+          ),
+    );
   }
 
   Future<void> _runReservationMutation(
@@ -78,7 +89,9 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not update this reservation. Try again.')),
+          const SnackBar(
+            content: Text('Could not update this reservation. Try again.'),
+          ),
         );
       }
     } finally {
@@ -106,8 +119,24 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
       body: Column(
         children: [
           Padding(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+            padding: const EdgeInsets.fromLTRB(16.0, 8.0, 16.0, 4.0),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  _buildDateFilterChip('All Dates', 'all'),
+                  const SizedBox(width: 8),
+                  _buildDateFilterChip('Today', 'today'),
+                  const SizedBox(width: 8),
+                  _buildDateFilterChip('Tomorrow', 'tomorrow'),
+                  const SizedBox(width: 8),
+                  _buildDateFilterChip('This Week', 'week'),
+                ],
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16.0, 0.0, 16.0, 8.0),
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: Row(
@@ -139,9 +168,34 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
                   for (final m in roster)
                     m.userId: m.displayName ?? 'Team member',
                 };
+                final tz = activeVenue?.timezone ?? 'UTC';
+                final today = VenueTimezone.businessDateFor(DateTime.now(), tz);
+                final tomorrow =
+                    DateTime.utc(today.year, today.month, today.day + 1);
+                final weekEnd =
+                    DateTime.utc(today.year, today.month, today.day + 7);
+
+                final dateFiltered = reservations.where((r) {
+                  if (_dateFilter == 'all') return true;
+                  final rDate =
+                      VenueTimezone.businessDateFor(r.reservationTime, tz);
+                  if (_dateFilter == 'today') {
+                    return rDate.year == today.year &&
+                        rDate.month == today.month &&
+                        rDate.day == today.day;
+                  } else if (_dateFilter == 'tomorrow') {
+                    return rDate.year == tomorrow.year &&
+                        rDate.month == tomorrow.month &&
+                        rDate.day == tomorrow.day;
+                  } else if (_dateFilter == 'week') {
+                    return !rDate.isBefore(today) && rDate.isBefore(weekEnd);
+                  }
+                  return true;
+                }).toList();
+
                 final filtered = _statusFilter == 'all'
-                    ? reservations
-                    : reservations
+                    ? dateFiltered
+                    : dateFiltered
                         .where((r) => r.status == _statusFilter)
                         .toList();
 
@@ -155,23 +209,70 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
                 return RefreshIndicator(
                   onRefresh: () async =>
                       ref.refresh(reservationsListProvider.future),
-                  child: ListView.separated(
+                  child: ListView.builder(
                     padding: const EdgeInsets.all(12),
                     itemCount: filtered.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 8),
                     itemBuilder: (context, index) {
                       final item = filtered[index];
-                      return Card(
-                        child: _ReservationListTile(
-                          reservation: item,
-                          busy: _savingReservationIds.contains(item.id),
-                          assigneeName: item.assignedTo == null
-                              ? null
-                              : names[item.assignedTo] ?? 'Team member',
-                          onAssign: () => _assign(item, roster),
-                          onStatusChanged: (newStatus) =>
-                              _updateStatus(item.id, newStatus),
-                        ),
+                      final itemDate = VenueTimezone.businessDateFor(
+                        item.reservationTime,
+                        tz,
+                      );
+                      final showDateHeader = index == 0 ||
+                          VenueTimezone.businessDateFor(
+                                filtered[index - 1].reservationTime,
+                                tz,
+                              ) !=
+                              itemDate;
+
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (showDateHeader)
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(4, 12, 4, 6),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.calendar_today,
+                                    size: 14,
+                                    color:
+                                        Theme.of(context).colorScheme.primary,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    VenueTimezone.formatDayAndDate(
+                                      item.reservationTime,
+                                      tz,
+                                    ),
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleSmall
+                                        ?.copyWith(
+                                          fontWeight: FontWeight.bold,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .primary,
+                                        ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          Card(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            child: _ReservationListTile(
+                              reservation: item,
+                              timezone: tz,
+                              busy: _savingReservationIds.contains(item.id),
+                              assigneeName: item.assignedTo == null
+                                  ? null
+                                  : names[item.assignedTo] ?? 'Team member',
+                              onAssign: () => _assign(item, roster),
+                              onStatusChanged: (newStatus) =>
+                                  _updateStatus(item.id, newStatus),
+                            ),
+                          ),
+                        ],
                       );
                     },
                   ),
@@ -192,14 +293,30 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: FilledButton.icon(
-                  onPressed: () =>
-                      _showCreateReservationDialog(context, activeVenue.id),
+                  onPressed: () => _showCreateReservationDialog(
+                    context,
+                    activeVenue.id,
+                    activeVenue.timezone,
+                  ),
                   label: const Text('New Reservation'),
                   icon: const Icon(Icons.add),
                 ),
               ),
             )
           : null,
+    );
+  }
+
+  Widget _buildDateFilterChip(String label, String value) {
+    final isSelected = _dateFilter == value;
+    return ChoiceChip(
+      label: Text(label),
+      selected: isSelected,
+      onSelected: (selected) {
+        if (selected) {
+          setState(() => _dateFilter = value);
+        }
+      },
     );
   }
 
@@ -219,13 +336,15 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
   Future<void> _showCreateReservationDialog(
     BuildContext context,
     String venueId,
+    String timezone,
   ) async {
     final nameCtrl = TextEditingController();
     final partyCtrl = TextEditingController(text: '2');
     final phoneCtrl = TextEditingController();
     final emailCtrl = TextEditingController();
     final requestsCtrl = TextEditingController();
-    var reservationTime = DateTime.now().add(const Duration(hours: 1));
+    var reservationTime =
+        VenueTimezone.venueNow(timezone).add(const Duration(hours: 1));
     var saving = false;
     String? validationError;
 
@@ -266,13 +385,10 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
                 ListTile(
                   title: const Text('Date and time'),
                   subtitle: Text(
-                    MaterialLocalizations.of(dialogCtx)
-                        .formatMediumDate(reservationTime),
+                    VenueTimezone.formatShortDate(reservationTime, timezone),
                   ),
                   trailing: Text(
-                    MaterialLocalizations.of(dialogCtx).formatTimeOfDay(
-                      TimeOfDay.fromDateTime(reservationTime),
-                    ),
+                    VenueTimezone.formatTime(reservationTime, timezone),
                   ),
                   onTap: saving
                       ? null
@@ -280,19 +396,22 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
                           final date = await showDatePicker(
                             context: dialogCtx,
                             initialDate: reservationTime,
-                            firstDate: DateTime.now(),
+                            firstDate: DateTime.now()
+                                .subtract(const Duration(days: 1)),
                             lastDate:
                                 DateTime.now().add(const Duration(days: 365)),
                           );
                           if (date == null || !dialogCtx.mounted) return;
                           final time = await showTimePicker(
                             context: dialogCtx,
-                            initialTime:
-                                TimeOfDay.fromDateTime(reservationTime),
+                            initialTime: TimeOfDay(
+                              hour: reservationTime.hour,
+                              minute: reservationTime.minute,
+                            ),
                           );
                           if (time == null || !dialogCtx.mounted) return;
                           update(() {
-                            reservationTime = DateTime(
+                            reservationTime = DateTime.utc(
                               date.year,
                               date.month,
                               date.day,
@@ -323,10 +442,12 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
                   : () async {
                       final name = nameCtrl.text.trim();
                       final party = int.tryParse(partyCtrl.text.trim());
+                      final reservationUtc =
+                          VenueTimezone.toUtc(reservationTime, timezone);
                       if (name.isEmpty ||
                           party == null ||
                           party < 1 ||
-                          reservationTime.isBefore(DateTime.now())) {
+                          reservationUtc.isBefore(DateTime.now().toUtc())) {
                         update(() {
                           validationError =
                               'Enter a guest, a valid party size, and a future time.';
@@ -353,7 +474,7 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
                               specialRequests: requestsCtrl.text.trim().isEmpty
                                   ? null
                                   : requestsCtrl.text.trim(),
-                              reservationTime: reservationTime,
+                              reservationTime: reservationUtc,
                             );
                         if (dialogCtx.mounted) {
                           Navigator.of(dialogCtx).pop();
@@ -363,7 +484,7 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
                         if (dialogCtx.mounted) {
                           update(() {
                             validationError =
-                                'Could not create the reservation. Please try again.';
+                                'Could not create reservation. Please try again.';
                           });
                         }
                       } finally {
@@ -391,6 +512,7 @@ class _ReservationListTile extends StatelessWidget {
     required this.reservation,
     required this.onStatusChanged,
     required this.busy,
+    required this.timezone,
     this.assigneeName,
     this.onAssign,
   });
@@ -398,6 +520,7 @@ class _ReservationListTile extends StatelessWidget {
   final Reservation reservation;
   final Future<void> Function(String) onStatusChanged;
   final bool busy;
+  final String timezone;
   final String? assigneeName;
   final VoidCallback? onAssign;
 
@@ -439,7 +562,7 @@ class _ReservationListTile extends StatelessWidget {
         children: [
           const SizedBox(height: 2),
           Text(
-            'Time: ${_formatTime(reservation.reservationTime)} | Source: ${reservation.source}',
+            'Time: ${VenueTimezone.formatTime(reservation.reservationTime, timezone)} | Source: ${reservation.source}',
             style: Theme.of(context).textTheme.bodySmall,
           ),
           if (assigneeName != null)
@@ -500,12 +623,5 @@ class _ReservationListTile extends StatelessWidget {
         ],
       ),
     );
-  }
-
-  String _formatTime(DateTime dt) {
-    final hour = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
-    final minute = dt.minute.toString().padLeft(2, '0');
-    final ampm = dt.hour >= 12 ? 'PM' : 'AM';
-    return '$hour:$minute $ampm';
   }
 }

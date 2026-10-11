@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../../core/auth/auth_providers.dart';
 import '../../../core/offline/offline_queue_providers.dart';
 import '../../../core/network/supabase_providers.dart';
 import '../../media/application/image_picker_service.dart';
@@ -36,7 +37,7 @@ class IncidentListScreen extends ConsumerWidget {
 
     final incidentsAsync = ref.watch(incidentsForVenueProvider(venue.id));
     final queueState = ref.watch(offlineQueueControllerProvider);
-    final currentUserId = ref.watch(supabaseClientProvider).auth.currentUser?.id;
+    final currentUserId = ref.watch(currentUserIdProvider);
     final draftTitlesById = {
       for (final mutation in queueState.pending)
         if (mutation.kind == kIncidentReportMutationKind &&
@@ -501,21 +502,25 @@ class _IncidentTile extends ConsumerWidget {
   }
 
   Future<List<String>> _loadEvidenceUrls(WidgetRef ref) async {
-    final client = ref.read(supabaseClientProvider);
-    final rows = await client
-        .from('incident_attachments')
-        .select('storage_path')
-        .eq('incident_id', incident.id);
-    final urls = <String>[];
-    for (final row in rows) {
-      final path = row['storage_path'] as String?;
-      if (path == null || path.isEmpty) continue;
-      final signed = await client.storage
-          .from('incident-evidence')
-          .createSignedUrl(path, 600);
-      urls.add(signed);
+    try {
+      final client = ref.read(supabaseClientProvider);
+      final rows = await client
+          .from('incident_attachments')
+          .select('storage_path')
+          .eq('incident_id', incident.id);
+      final urls = <String>[];
+      for (final row in rows) {
+        final path = row['storage_path'] as String?;
+        if (path == null || path.isEmpty) continue;
+        final signed = await client.storage
+            .from('incident-evidence')
+            .createSignedUrl(path, 600);
+        urls.add(signed);
+      }
+      return urls;
+    } catch (_) {
+      return const [];
     }
-    return urls;
   }
 
   Future<void> _resolve(BuildContext context, WidgetRef ref) async {

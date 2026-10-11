@@ -196,7 +196,9 @@ class _EmployeeHomeScreenState extends ConsumerState<EmployeeHomeScreen> {
               )
             else if (tablesAsync.hasError)
               const CardShell(
-                child: Text('Section tables are unavailable. Refresh to try again.'),
+                child: Text(
+                  'Section tables are unavailable. Refresh to try again.',
+                ),
               )
             else if (sectionTables.isEmpty)
               CardShell(
@@ -224,7 +226,8 @@ class _EmployeeHomeScreenState extends ConsumerState<EmployeeHomeScreen> {
               )
             else if (reservationsAsync.hasError)
               const CardShell(
-                child: Text('Could not load your reservations. Pull to refresh.'),
+                child:
+                    Text('Could not load your reservations. Pull to refresh.'),
               )
             else if (myReservations.isEmpty)
               const CardShell(

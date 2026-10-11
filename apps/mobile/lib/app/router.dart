@@ -47,27 +47,54 @@ import '../features/workforce/presentation/workforce_roster_screen.dart';
 /// Phase 2 builds them; this is deliberately the only router in the app so deep links and
 /// push-notification routing (ported from the reference app's notification-to-tab mapping)
 /// have one place to register.
-final routerProvider = Provider<GoRouter>((ref) {
+/// Listenable notifier used by [routerProvider] to trigger redirects on auth/venue/role
+/// updates without recreating the entire [GoRouter] and [NavigatorState] key.
+class RouterRefreshNotifier extends ChangeNotifier {
+  void notify() => notifyListeners();
+}
+
+final routerRefreshNotifierProvider = Provider<RouterRefreshNotifier>((ref) {
+  final notifier = RouterRefreshNotifier();
+  ref.listen(isSignedInProvider, (_, __) => notifier.notify());
+  ref.listen(activeVenueProvider, (_, __) => notifier.notify());
+  ref.listen(passwordRecoveryPendingProvider, (_, __) => notifier.notify());
+  ref.listen(myVenueRoleProvider, (_, __) => notifier.notify());
+  ref.onDispose(notifier.dispose);
+  return notifier;
+});
+
+final isEmployeeRoleProvider = Provider<bool>((ref) {
   final isSignedIn = ref.watch(isSignedInProvider);
   final hasActiveVenue = ref.watch(activeVenueProvider) != null;
-  final recoveringPassword = ref.watch(passwordRecoveryPendingProvider);
-  // Which app to show depends on the user's role at the active venue. Until it's known we
-  // hold on a loading screen, so a team member never glimpses the manager app.
-  final roleAsync = isSignedIn && hasActiveVenue
-      ? ref.watch(myVenueRoleProvider)
-      : const AsyncValue<String?>.data(null);
-  final roleLoading = roleAsync.isLoading && !roleAsync.hasValue;
-  // If the role can't be read (e.g. offline at launch), fall back to the least-privileged
-  // view; pulling to refresh on Home retries.
-  final employee = roleAsync.hasError || isEmployeeRole(roleAsync.valueOrNull);
+  if (!isSignedIn || !hasActiveVenue) return false;
+  final roleAsync = ref.watch(myVenueRoleProvider);
+  return roleAsync.hasError || isEmployeeRole(roleAsync.valueOrNull);
+});
 
-  // Fresh per router instance (the router is rebuilt when auth/venue state changes).
+final routerProvider = Provider<GoRouter>((ref) {
+  // Only watch the employee boolean so the router structure stays completely stable across
+  // ordinary venue switches, background refreshes, and role syncs.
+  final employee = ref.watch(isEmployeeRoleProvider);
+  final refreshNotifier = ref.watch(routerRefreshNotifierProvider);
+
+  // Fresh per router instance.
   final rootKey = GlobalKey<NavigatorState>(debugLabel: 'root');
 
   final router = GoRouter(
     navigatorKey: rootKey,
     initialLocation: '/',
+    refreshListenable: refreshNotifier,
     redirect: (context, state) {
+      final isSignedIn = ref.read(isSignedInProvider);
+      final hasActiveVenue = ref.read(activeVenueProvider) != null;
+      final recoveringPassword = ref.read(passwordRecoveryPendingProvider);
+      final roleAsync = isSignedIn && hasActiveVenue
+          ? ref.read(myVenueRoleProvider)
+          : const AsyncValue<String?>.data(null);
+      final roleLoading = roleAsync.isLoading && !roleAsync.hasValue;
+      final isEmployee =
+          roleAsync.hasError || isEmployeeRole(roleAsync.valueOrNull);
+
       final goingToSignIn = state.matchedLocation == '/sign-in';
       final goingToSignUp = state.matchedLocation == '/sign-up';
       final goingToSelectVenue = state.matchedLocation == '/select-venue';
@@ -94,7 +121,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           roleAsync.valueOrNull != 'organization_admin') {
         return '/';
       }
-      if (employee && !employeeCanOpen(path)) return '/';
+      if (isEmployee && !employeeCanOpen(path)) return '/';
       return null;
     },
     routes: [

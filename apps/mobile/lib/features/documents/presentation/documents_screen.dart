@@ -96,78 +96,77 @@ class DocumentsScreen extends ConsumerWidget {
     var category = 'sop';
 
     try {
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: const Text('Upload document'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: titleController,
-                autofocus: true,
-                decoration: const InputDecoration(labelText: 'Title'),
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                initialValue: category,
-                decoration: const InputDecoration(labelText: 'Category'),
-                items: [
-                  for (final value in VenueDocument.categories)
-                    DropdownMenuItem(
-                      value: value,
-                      child: Text(_categoryLabels[value] ?? value),
-                    ),
-                ],
-                onChanged: (value) =>
-                    setState(() => category = value ?? category),
-              ),
-              if (VenueDocument.managerOnlyCategories.contains(category)) ...[
-                const SizedBox(height: 8),
-                const Text(
-                  'Only managers can see documents in this category.',
-                  style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => StatefulBuilder(
+          builder: (context, setState) => AlertDialog(
+            title: const Text('Upload document'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: titleController,
+                  autofocus: true,
+                  decoration: const InputDecoration(labelText: 'Title'),
                 ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: category,
+                  decoration: const InputDecoration(labelText: 'Category'),
+                  items: [
+                    for (final value in VenueDocument.categories)
+                      DropdownMenuItem(
+                        value: value,
+                        child: Text(_categoryLabels[value] ?? value),
+                      ),
+                  ],
+                  onChanged: (value) =>
+                      setState(() => category = value ?? category),
+                ),
+                if (VenueDocument.managerOnlyCategories.contains(category)) ...[
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Only managers can see documents in this category.',
+                    style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
+                  ),
+                ],
               ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('Upload'),
+              ),
             ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Upload'),
-            ),
-          ],
         ),
-      ),
-    );
+      );
 
-    if (confirmed != true ||
-        titleController.text.trim().isEmpty ||
-        !context.mounted) {
-      return;
-    }
+      if (confirmed != true ||
+          titleController.text.trim().isEmpty ||
+          !context.mounted) {
+        return;
+      }
 
-    try {
-      await ref.read(documentsRepositoryProvider).uploadDocument(
-            venueId: venueId,
-            title: titleController.text.trim(),
-            category: category,
-            fileName: picked.name,
-            localFilePath: picked.path,
-            bytes: picked.bytes,
-          );
-      if (context.mounted) ref.invalidate(documentsProvider(venueId));
-    } on AppError catch (error) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(error.message)));
-    }
+      try {
+        await ref.read(documentsRepositoryProvider).uploadDocument(
+              venueId: venueId,
+              title: titleController.text.trim(),
+              category: category,
+              fileName: picked.name,
+              localFilePath: picked.path,
+              bytes: picked.bytes,
+            );
+        if (context.mounted) ref.invalidate(documentsProvider(venueId));
+      } on AppError catch (error) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(error.message)));
+      }
     } finally {
       titleController.dispose();
     }

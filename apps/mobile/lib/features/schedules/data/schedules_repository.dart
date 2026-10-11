@@ -131,7 +131,10 @@ class SupabaseSchedulesRepository implements SchedulesRepository {
         .select('id')
         .maybeSingle();
     if (row == null) {
-      throw const PostgrestException(message: 'Shift update was not applied', code: '42501');
+      throw const PostgrestException(
+        message: 'Shift update was not applied',
+        code: '42501',
+      );
     }
   }
 
@@ -167,11 +170,19 @@ class SupabaseSchedulesRepository implements SchedulesRepository {
     required String swapId,
     required String accepterUserId,
   }) async {
-    final row = await _client.from('shift_swaps').update(
-      {'status': 'accepted', 'accepted_by': accepterUserId},
-    ).eq('id', swapId).select('id').maybeSingle();
+    final row = await _client
+        .from('shift_swaps')
+        .update(
+          {'status': 'accepted', 'accepted_by': accepterUserId},
+        )
+        .eq('id', swapId)
+        .select('id')
+        .maybeSingle();
     if (row == null) {
-      throw const PostgrestException(message: 'Swap acceptance was not applied', code: '42501');
+      throw const PostgrestException(
+        message: 'Swap acceptance was not applied',
+        code: '42501',
+      );
     }
   }
 
@@ -179,9 +190,15 @@ class SupabaseSchedulesRepository implements SchedulesRepository {
   Future<void> cancelSwap(String swapId) async {
     final row = await _client
         .from('shift_swaps')
-        .update({'status': 'cancelled'}).eq('id', swapId).select('id').maybeSingle();
+        .update({'status': 'cancelled'})
+        .eq('id', swapId)
+        .select('id')
+        .maybeSingle();
     if (row == null) {
-      throw const PostgrestException(message: 'Swap cancellation was not applied', code: '42501');
+      throw const PostgrestException(
+        message: 'Swap cancellation was not applied',
+        code: '42501',
+      );
     }
   }
 
@@ -189,9 +206,15 @@ class SupabaseSchedulesRepository implements SchedulesRepository {
   Future<void> declineSwap(String swapId) async {
     final row = await _client
         .from('shift_swaps')
-        .update({'status': 'declined'}).eq('id', swapId).select('id').maybeSingle();
+        .update({'status': 'declined'})
+        .eq('id', swapId)
+        .select('id')
+        .maybeSingle();
     if (row == null) {
-      throw const PostgrestException(message: 'Swap decline was not applied', code: '42501');
+      throw const PostgrestException(
+        message: 'Swap decline was not applied',
+        code: '42501',
+      );
     }
   }
 }

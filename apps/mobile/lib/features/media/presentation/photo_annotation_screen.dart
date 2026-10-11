@@ -388,7 +388,8 @@ class _PhotoAnnotationScreenState extends State<PhotoAnnotationScreen> {
                                 children: [
                                   for (final c in _palette)
                                     Semantics(
-                                      label: 'Colour ${c.toARGB32().toRadixString(16).substring(2)}',
+                                      label:
+                                          'Colour ${c.toARGB32().toRadixString(16).substring(2)}',
                                       selected: c == _color,
                                       button: true,
                                       child: GestureDetector(

@@ -128,9 +128,9 @@ select is(
 );
 
 -- ---------------------------------------------------------------------------
--- 9 & 10. Worker execution: process batch completes valid job
+-- 9 & 10. Worker claim: the API worker claims a job before deleting through Storage API
 -- ---------------------------------------------------------------------------
--- Seed dummy object in storage.objects so deletion can succeed
+-- Seed a dummy object to verify that SQL claiming never deletes Storage bytes directly.
 insert into storage.objects (id, bucket_id, name, owner)
 values (
   'a0000000-0000-0000-0000-000000000001',
@@ -139,15 +139,17 @@ values (
   '00000000-0000-0000-0000-000000000004'
 ) on conflict do nothing;
 
+set local role service_role;
 select lives_ok(
-  $$ select * from app_hidden.process_storage_deletion_batch(10) $$,
-  'worker batch runs without exception'
+  $$ select * from public.claim_storage_deletion_jobs(10) $$,
+  'storage worker claims a batch without exception'
 );
+reset role;
 
 select is(
   (select status from public.storage_deletion_jobs where id = '90000000-0000-0000-0000-000000000001'),
-  'completed',
-  'processed job status is completed'
+  'processing',
+  'claimed job is processing until the API worker finishes'
 );
 
 -- ---------------------------------------------------------------------------
@@ -171,12 +173,12 @@ select is(
 );
 
 -- ---------------------------------------------------------------------------
--- 12. Storage object actually deleted
+-- 12. Storage bytes remain until the API worker removes them
 -- ---------------------------------------------------------------------------
 select is(
   (select count(*)::integer from storage.objects where id = 'a0000000-0000-0000-0000-000000000001'),
-  0,
-  'underlying storage object was deleted by worker'
+  1,
+  'SQL claim leaves object bytes for deletion through the Storage API'
 );
 
 select * from finish();

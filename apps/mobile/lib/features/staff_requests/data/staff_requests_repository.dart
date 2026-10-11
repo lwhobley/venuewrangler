@@ -69,9 +69,15 @@ class SupabaseStaffRequestsRepository implements StaffRequestsRepository {
   Future<void> cancelRequest(String requestId) async {
     final row = await _client
         .from('staff_requests')
-        .update({'status': 'cancelled'}).eq('id', requestId).select('id').maybeSingle();
+        .update({'status': 'cancelled'})
+        .eq('id', requestId)
+        .select('id')
+        .maybeSingle();
     if (row == null) {
-      throw const PostgrestException(message: 'Request cancellation was not applied', code: '42501');
+      throw const PostgrestException(
+        message: 'Request cancellation was not applied',
+        code: '42501',
+      );
     }
   }
 
@@ -81,13 +87,21 @@ class SupabaseStaffRequestsRepository implements StaffRequestsRepository {
     required StaffRequestStatus status,
     String? responseNotes,
   }) async {
-    final row = await _client.from('staff_requests').update({
-      'status': status.toDb(),
-      if (responseNotes != null && responseNotes.isNotEmpty)
-        'response_notes': responseNotes,
-    }).eq('id', requestId).select('id').maybeSingle();
+    final row = await _client
+        .from('staff_requests')
+        .update({
+          'status': status.toDb(),
+          if (responseNotes != null && responseNotes.isNotEmpty)
+            'response_notes': responseNotes,
+        })
+        .eq('id', requestId)
+        .select('id')
+        .maybeSingle();
     if (row == null) {
-      throw const PostgrestException(message: 'Request review was not applied', code: '42501');
+      throw const PostgrestException(
+        message: 'Request review was not applied',
+        code: '42501',
+      );
     }
   }
 }

@@ -269,7 +269,12 @@ class _FloorPlanEditorScreenState extends ConsumerState<FloorPlanEditorScreen> {
       await ref.read(floorEditorProvider.notifier).saveDraft(plan.id);
       if (mounted) _toast('Draft saved on this device.');
     } catch (_) {
-      if (mounted) _toast('Could not save the draft. Check device storage and retry.', error: true);
+      if (mounted) {
+        _toast(
+          'Could not save the draft. Check device storage and retry.',
+          error: true,
+        );
+      }
     }
   }
 
@@ -371,7 +376,12 @@ class _FloorPlanEditorScreenState extends ConsumerState<FloorPlanEditorScreen> {
       try {
         await ref.read(floorEditorProvider.notifier).saveDraft(plan.id);
       } catch (_) {
-        if (mounted) _toast('Could not save the draft. Check device storage and retry.', error: true);
+        if (mounted) {
+          _toast(
+            'Could not save the draft. Check device storage and retry.',
+            error: true,
+          );
+        }
         return false;
       }
     }
