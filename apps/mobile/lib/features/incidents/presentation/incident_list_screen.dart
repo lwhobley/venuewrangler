@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../core/offline/offline_queue_providers.dart';
+import '../../../core/network/supabase_providers.dart';
 import '../../media/application/image_picker_service.dart';
 import '../../media/application/media_providers.dart';
 import '../../media/application/photo_annotator.dart';
@@ -35,9 +36,12 @@ class IncidentListScreen extends ConsumerWidget {
 
     final incidentsAsync = ref.watch(incidentsForVenueProvider(venue.id));
     final queueState = ref.watch(offlineQueueControllerProvider);
+    final currentUserId = ref.watch(supabaseClientProvider).auth.currentUser?.id;
     final draftTitlesById = {
       for (final mutation in queueState.pending)
-        if (mutation.kind == kIncidentReportMutationKind)
+        if (mutation.kind == kIncidentReportMutationKind &&
+            mutation.userId == currentUserId &&
+            mutation.payload['venueId'] == venue.id)
           mutation.payload['incidentId'] as String:
               mutation.payload['title'] as String,
     };
@@ -154,6 +158,7 @@ class IncidentListScreen extends ConsumerWidget {
                       // before it's attached; backing out keeps the original.
                       final annotate = ref.read(photoAnnotatorProvider);
                       final annotated = await annotate(context, picked);
+                      if (!context.mounted) return;
                       setState(() => photoPath = annotated ?? picked);
                     },
                     icon: const Icon(Icons.camera_alt_outlined),
@@ -421,6 +426,7 @@ class _IncidentTile extends ConsumerWidget {
       leading: Icon(_iconForSeverity(incident.severity)),
       title: Text(incident.title),
       subtitle: Text('${incident.severity.name} · ${incident.status.name}'),
+      onTap: () => _showDetails(context, ref),
       trailing: incident.isOpen
           ? TextButton(
               onPressed: () => _resolve(context, ref),
@@ -428,6 +434,88 @@ class _IncidentTile extends ConsumerWidget {
             )
           : null,
     );
+  }
+
+  Future<void> _showDetails(BuildContext context, WidgetRef ref) async {
+    final evidenceFuture = _loadEvidenceUrls(ref);
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(incident.title),
+        content: SizedBox(
+          width: 420,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('${incident.severity.name} · ${incident.status.name}'),
+                if ((incident.description ?? '').trim().isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Text(incident.description!),
+                ],
+                const SizedBox(height: 16),
+                FutureBuilder<List<String>>(
+                  future: evidenceFuture,
+                  builder: (context, snapshot) {
+                    if (snapshot.hasError) {
+                      return const Text('Evidence could not be loaded.');
+                    }
+                    if (!snapshot.hasData) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+                    if (snapshot.data!.isEmpty) {
+                      return const Text('No evidence attached.');
+                    }
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Evidence'),
+                        const SizedBox(height: 8),
+                        for (final url in snapshot.data!)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: Image.network(
+                              url,
+                              errorBuilder: (_, __, ___) => const Text(
+                                'This evidence image is unavailable.',
+                              ),
+                            ),
+                          ),
+                      ],
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<List<String>> _loadEvidenceUrls(WidgetRef ref) async {
+    final client = ref.read(supabaseClientProvider);
+    final rows = await client
+        .from('incident_attachments')
+        .select('storage_path')
+        .eq('incident_id', incident.id);
+    final urls = <String>[];
+    for (final row in rows) {
+      final path = row['storage_path'] as String?;
+      if (path == null || path.isEmpty) continue;
+      final signed = await client.storage
+          .from('incident-evidence')
+          .createSignedUrl(path, 600);
+      urls.add(signed);
+    }
+    return urls;
   }
 
   Future<void> _resolve(BuildContext context, WidgetRef ref) async {

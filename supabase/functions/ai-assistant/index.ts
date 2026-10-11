@@ -41,7 +41,7 @@ Deno.serve(async (req) => {
     return await handleRequest(req, jsonResponse, correlationId);
   } catch (error) {
     console.error(`[${correlationId}]`, "unexpected error", error);
-    captureException(error, { function: "ai-assistant", url: req.url, correlation_id: correlationId });
+    captureException(error, { function: "ai-assistant", path: new URL(req.url).pathname, correlation_id: correlationId });
     await flushObservability();
     return jsonResponse({ error: "internal_error" }, 500);
   }
@@ -248,7 +248,7 @@ async function handleRequest(
   try {
     parsedResult = JSON.parse(groqResult.content);
   } catch (err) {
-    console.error(`[${correlationId}]`, "Groq response was not valid JSON", err, groqResult.content);
+    console.error(`[${correlationId}]`, "Groq response was not valid JSON", err);
     await releaseReservation();
     return jsonResponse({ error: "ai_response_not_valid_json" }, 502);
   }
@@ -257,26 +257,20 @@ async function handleRequest(
     groqResult.promptTokens * pricing.input +
     groqResult.completionTokens * pricing.output;
 
-  const { error: commitError } = await serviceClient
-    .from("ai_budget_reservations")
-    .update({ status: "committed" })
-    .eq("id", reservationId);
-  if (commitError) console.error(`[${correlationId}]`, "failed to commit reservation", commitError);
-
-  const { error: usageInsertError } = await serviceClient
-    .from("ai_usage_events")
-    .insert({
-      organization_id: organizationId,
-      venue_id: venue_id,
-      user_id: userId,
-      task,
-      model,
-      input_tokens: groqResult.promptTokens,
-      output_tokens: groqResult.completionTokens,
-      cost_usd: actualCost,
-    });
-  if (usageInsertError) {
-    console.error(`[${correlationId}]`, "failed to record usage event", usageInsertError);
+  const { error: accountingError } = await serviceClient.rpc("commit_ai_reservation", {
+    p_reservation_id: reservationId,
+    p_organization_id: organizationId,
+    p_venue_id: venue_id,
+    p_user_id: userId,
+    p_task: task,
+    p_model: model,
+    p_input_tokens: groqResult.promptTokens,
+    p_output_tokens: groqResult.completionTokens,
+    p_cost_usd: actualCost,
+  });
+  if (accountingError) {
+    console.error(`[${correlationId}]`, "AI usage accounting failed", accountingError);
+    return jsonResponse({ error: "ai_usage_accounting_failed", correlation_id: correlationId }, 503);
   }
 
   return jsonResponse({

@@ -6,11 +6,9 @@ import 'package:path_provider/path_provider.dart';
 
 import 'pending_mutation.dart';
 
-/// Persists the pending-mutation queue across app restarts. Modeled on the same shape as the
-/// legacy Expo app's `lib/offline-inventory-queue.ts` (a JSON array written to a local file),
-/// per the Phase 0 discovery in docs/migration/flutter-supabase-rebuild-plan.md — a plain
-/// JSON file is enough for a queue that is expected to hold a handful to a few dozen pending
-/// items, not a large dataset.
+/// Legacy file-backed store retained for focused tests and secure-store migration recovery.
+/// Production uses [SecureStorageOfflineQueueStore] so incident narratives and queued payloads
+/// are not persisted as plaintext JSON.
 abstract interface class OfflineQueueStore {
   Future<List<PendingMutation>> loadAll();
 
@@ -78,25 +76,33 @@ class FileOfflineQueueStore implements OfflineQueueStore {
   }
 }
 
-/// Browser-backed queue, used instead of [FileOfflineQueueStore] on web: `path_provider` has no
-/// web implementation and there is no filesystem, so the file store throws during
-/// initialization and no queued action could ever be saved or replayed. flutter_secure_storage
-/// is already a dependency and supports web (encrypted values in `localStorage`), so this adds
-/// no new plugin to the native builds. Cleared along with every other secure-storage value on
-/// sign-out (see core/auth/sign_out_service.dart).
+/// Encrypted queue store used in production on native and web. On native it can import the
+/// previous plaintext file/backup once; successful secure persistence precedes deleting those
+/// copies. Values are cleared with the rest of secure session storage on sign-out.
 class SecureStorageOfflineQueueStore implements OfflineQueueStore {
   const SecureStorageOfflineQueueStore({
     FlutterSecureStorage storage = const FlutterSecureStorage(),
     this.key = 'offline_mutation_queue',
+    this.migrateLegacyFile = false,
   }) : _storage = storage;
 
   final FlutterSecureStorage _storage;
   final String key;
+  final bool migrateLegacyFile;
 
   @override
   Future<List<PendingMutation>> loadAll() async {
     final raw = await _storage.read(key: key);
-    if (raw == null || raw.trim().isEmpty) return const [];
+    if (raw == null || raw.trim().isEmpty) {
+      if (migrateLegacyFile) return _importLegacyFile();
+      return const [];
+    }
+    final queue = _decode(raw, tolerant: !migrateLegacyFile);
+    if (migrateLegacyFile) await _removeLegacyFiles();
+    return queue;
+  }
+
+  List<PendingMutation> _decode(String raw, {bool tolerant = true}) {
     try {
       final decoded = jsonDecode(raw) as List<dynamic>;
       return decoded
@@ -105,9 +111,46 @@ class SecureStorageOfflineQueueStore implements OfflineQueueStore {
           )
           .toList(growable: false);
     } on FormatException {
+      if (!tolerant) rethrow;
       // A blob the browser left half-written is unrecoverable; starting empty is better than
       // throwing from the controller's load and leaving offline writes permanently broken.
       return const [];
+    } on TypeError {
+      if (!tolerant) rethrow;
+      return const [];
+    }
+  }
+
+  Future<List<PendingMutation>> _importLegacyFile() async {
+    final dir = await getApplicationSupportDirectory();
+    final file = File('${dir.path}/offline_mutation_queue.json');
+    final backup = File('${file.path}.bak');
+    File? source = await file.exists() ? file : null;
+    source ??= await backup.exists() ? backup : null;
+    if (source == null) return const [];
+
+    List<PendingMutation> queue;
+    try {
+      queue = _decode(await source.readAsString(), tolerant: false);
+    } on FormatException {
+      if (source.path == backup.path || !await backup.exists()) rethrow;
+      queue = _decode(await backup.readAsString(), tolerant: false);
+    } on TypeError {
+      if (source.path == backup.path || !await backup.exists()) rethrow;
+      queue = _decode(await backup.readAsString(), tolerant: false);
+    }
+    // Persist encrypted data before removing either plaintext copy. If secure storage fails,
+    // leave the recoverable legacy files untouched and surface the error to the caller.
+    await saveAll(queue);
+    await _removeLegacyFiles();
+    return queue;
+  }
+
+  Future<void> _removeLegacyFiles() async {
+    final dir = await getApplicationSupportDirectory();
+    for (final suffix in ['', '.bak', '.tmp']) {
+      final file = File('${dir.path}/offline_mutation_queue.json$suffix');
+      if (await file.exists()) await file.delete();
     }
   }
 

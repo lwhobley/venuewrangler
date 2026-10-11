@@ -814,40 +814,56 @@
     <div class="slide" id="slide-10">
       <div class="badge-bar">
         <span class="slide-chip chip-emerald">Financial Impact</span>
-        <span class="slide-chip chip-amber">Net Savings</span>
+        <span class="slide-chip chip-amber">Illustrative Estimate</span>
       </div>
       <h1 class="slide-title">Interactive ROI & Cost Savings Calculator</h1>
-      <p class="slide-subtitle">Calculate your venue's monthly net savings by consolidating point solutions and eliminating reservation cover commissions.</p>
+      <p class="slide-subtitle">Explore a monthly estimate using assumptions you can change. Confirm provider fees and your Venue Wrangler plan price before making a decision.</p>
 
       <div class="roi-panel">
         <div class="slider-box">
           <div class="slider-info">
-            <span>Monthly Reservation Covers</span>
+            <span>Monthly reservation covers</span>
             <span id="covers-val" style="color: var(--neon-emerald); font-size: 18px;">1,200 covers/mo</span>
           </div>
-          <input type="range" id="covers-slider" class="custom-range" min="200" max="5000" step="100" value="1200" oninput="calcROI()">
+          <input type="range" id="covers-slider" class="custom-range" min="0" max="5000" step="100" value="1200" oninput="calcROI()">
         </div>
 
         <div class="slider-box">
           <div class="slider-info">
-            <span>Staff Roster Size</span>
-            <span id="staff-val" style="color: var(--neon-emerald); font-size: 18px;">35 team members</span>
+            <span>Assumed reservation fee per cover</span>
+            <span id="fee-val" style="color: var(--neon-emerald); font-size: 18px;">$1.00</span>
           </div>
-          <input type="range" id="staff-slider" class="custom-range" min="5" max="150" step="5" value="35" oninput="calcROI()">
+          <input type="range" id="fee-slider" class="custom-range" min="0" max="500" step="25" value="100" oninput="calcROI()">
+        </div>
+
+        <div class="slider-box">
+          <div class="slider-info">
+            <span>Other software costs you expect to replace</span>
+            <span id="software-val" style="color: var(--neon-emerald); font-size: 18px;">$780 / mo</span>
+          </div>
+          <input type="range" id="software-slider" class="custom-range" min="0" max="5000" step="50" value="780" oninput="calcROI()">
+        </div>
+
+        <div class="slider-box">
+          <div class="slider-info">
+            <span>Venue Wrangler monthly plan cost</span>
+            <span id="plan-val" style="color: var(--neon-emerald); font-size: 18px;">$0 / mo</span>
+          </div>
+          <input type="range" id="plan-slider" class="custom-range" min="0" max="2000" step="50" value="0" oninput="calcROI()">
         </div>
 
         <div class="roi-grid">
           <div>
             <div class="roi-val" id="res-savings">$1,200</div>
-            <div class="roi-lbl">Monthly Cover Fee Savings (vs OpenTable)</div>
+            <div class="roi-lbl">Assumed cover fees avoided</div>
           </div>
           <div>
             <div class="roi-val" id="sub-savings">$780</div>
-            <div class="roi-lbl">Software Subscription Consolidation</div>
+            <div class="roi-lbl">Other assumed software costs avoided</div>
           </div>
           <div>
             <div class="roi-val" id="total-savings" style="color: var(--neon-amber);">$1,980 / mo</div>
-            <div class="roi-lbl">Estimated Net Monthly Savings</div>
+            <div class="roi-lbl">Illustrative monthly net after plan cost</div>
           </div>
         </div>
       </div>
@@ -901,18 +917,22 @@
 
     function calcROI() {
       const covers = parseInt(document.getElementById('covers-slider').value);
-      const staff = parseInt(document.getElementById('staff-slider').value);
+      const feeCents = parseInt(document.getElementById('fee-slider').value);
+      const softwareSavings = parseInt(document.getElementById('software-slider').value);
+      const planCost = parseInt(document.getElementById('plan-slider').value);
 
       document.getElementById('covers-val').innerText = `${covers.toLocaleString()} covers/mo`;
-      document.getElementById('staff-val').innerText = `${staff} team members`;
+      document.getElementById('fee-val').innerText = `$${(feeCents / 100).toFixed(2)}`;
+      document.getElementById('software-val').innerText = `$${softwareSavings.toLocaleString()} / mo`;
+      document.getElementById('plan-val').innerText = `$${planCost.toLocaleString()} / mo`;
 
-      const resSavings = covers * 1.00;
-      const subSavings = 780;
-      const total = resSavings + subSavings;
+      const resSavings = covers * (feeCents / 100);
+      const subSavings = softwareSavings;
+      const total = resSavings + subSavings - planCost;
 
       document.getElementById('res-savings').innerText = `$${resSavings.toLocaleString()}`;
       document.getElementById('sub-savings').innerText = `$${subSavings.toLocaleString()}`;
-      document.getElementById('total-savings').innerText = `$${total.toLocaleString()} / mo`;
+      document.getElementById('total-savings').innerText = `${total < 0 ? '−' : ''}$${Math.abs(total).toLocaleString(undefined, { maximumFractionDigits: 0 })} / mo`;
     }
 
     renderDots();

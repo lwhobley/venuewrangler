@@ -165,7 +165,7 @@ Deno.serve(async (req) => {
     // Stripe retries on a non-2xx response. Never acknowledge a subscription
     // change until it has actually been persisted.
     console.error("stripe-webhook handler error", err);
-    captureException(err, { function: "stripe-webhook", url: req.url, event_type: event.type });
+    captureException(err, { function: "stripe-webhook", path: new URL(req.url).pathname, event_type: event.type });
     await flushObservability();
     return new Response(JSON.stringify({ error: "webhook_handler_error" }), { status: 500 });
   }

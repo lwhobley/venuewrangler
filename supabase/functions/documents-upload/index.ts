@@ -49,7 +49,7 @@ Deno.serve(async (req) => {
     return await handleRequest(req);
   } catch (error) {
     console.error("documents-upload: unexpected error", error);
-    captureException(error, { function: "documents-upload", url: req.url });
+    captureException(error, { function: "documents-upload", path: new URL(req.url).pathname });
     await flushObservability();
     return jsonResponse({ error: "internal_error" }, 500);
   }

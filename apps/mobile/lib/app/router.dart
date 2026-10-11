@@ -64,7 +64,7 @@ final routerProvider = Provider<GoRouter>((ref) {
   // Fresh per router instance (the router is rebuilt when auth/venue state changes).
   final rootKey = GlobalKey<NavigatorState>(debugLabel: 'root');
 
-  return GoRouter(
+  final router = GoRouter(
     navigatorKey: rootKey,
     initialLocation: '/',
     redirect: (context, state) {
@@ -122,6 +122,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       if (employee) _employeeShell() else _fullShell(rootKey),
     ],
   );
+  ref.onDispose(router.dispose);
+  return router;
 });
 
 /// Paths a team member may open; anything else sends them home.
@@ -388,7 +390,15 @@ StatefulShellRoute _fullShell(GlobalKey<NavigatorState> rootKey) {
 /// [routeForNotificationKind]. Lives here (not in notifications_providers.dart) specifically
 /// so that file never has to import this one back: this router already depends on every
 /// feature screen, including the notifications one.
-final pendingNotificationRouteProvider = StateProvider<String?>((ref) => null);
+class PendingNotificationRoute {
+  const PendingNotificationRoute({required this.route, this.venueId});
+
+  final String route;
+  final String? venueId;
+}
+
+final pendingNotificationRouteProvider =
+    StateProvider<PendingNotificationRoute?>((ref) => null);
 
 final notificationTapRoutingProvider = Provider<void>((ref) {
   ref.watch(routerProvider);
@@ -401,8 +411,16 @@ final notificationTapRoutingProvider = Provider<void>((ref) {
     if (role.isLoading && !role.hasValue) return;
     final pending = ref.read(pendingNotificationRouteProvider);
     if (pending == null) return;
+    final venue = ref.read(activeVenueProvider);
+    if (pending.venueId != null && venue?.id != pending.venueId) {
+      if (ref.read(routerProvider).routeInformationProvider.value.uri.path !=
+          '/select-venue') {
+        ref.read(routerProvider).go('/select-venue');
+      }
+      return;
+    }
     ref.read(pendingNotificationRouteProvider.notifier).state = null;
-    ref.read(routerProvider).go(pending);
+    ref.read(routerProvider).go(pending.route);
   }
 
   ref.listen(activeVenueProvider, (_, __) => deliverPending());
@@ -417,12 +435,16 @@ final notificationTapRoutingProvider = Provider<void>((ref) {
     final kind = data['kind'] as String? ?? '';
     final route = routeForNotificationKind(kind);
     if (route == null) return;
+    final notification = PendingNotificationRoute(
+      route: route,
+      venueId: data['venue_id'] as String?,
+    );
     if (!ref.read(isSignedInProvider) ||
         ref.read(activeVenueProvider) == null) {
-      ref.read(pendingNotificationRouteProvider.notifier).state = route;
+      ref.read(pendingNotificationRouteProvider.notifier).state = notification;
       return;
     }
-    ref.read(pendingNotificationRouteProvider.notifier).state = route;
+    ref.read(pendingNotificationRouteProvider.notifier).state = notification;
     deliverPending();
   });
 });

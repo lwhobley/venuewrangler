@@ -56,13 +56,27 @@ class SupabaseEventsRepository implements EventsRepository {
 
   @override
   Future<void> updateStatus(String eventId, EventStatus status) async {
-    await _client
+    final row = await _client
         .from('events')
-        .update({'status': status.toDb()}).eq('id', eventId);
+        .update({'status': status.toDb()})
+        .eq('id', eventId)
+        .select('id')
+        .maybeSingle();
+    if (row == null) {
+      throw const PostgrestException(message: 'Event update was not applied', code: '42501');
+    }
   }
 
   @override
   Future<void> deleteEvent(String eventId) async {
-    await _client.from('events').delete().eq('id', eventId);
+    final row = await _client
+        .from('events')
+        .delete()
+        .eq('id', eventId)
+        .select('id')
+        .maybeSingle();
+    if (row == null) {
+      throw const PostgrestException(message: 'Event deletion was not applied', code: '42501');
+    }
   }
 }

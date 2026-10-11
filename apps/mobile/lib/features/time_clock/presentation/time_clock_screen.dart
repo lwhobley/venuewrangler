@@ -25,7 +25,13 @@ class _TimeClockScreenState extends ConsumerState<TimeClockScreen> {
   void initState() {
     super.initState();
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) setState(() {});
+      final venue = ref.read(activeVenueProvider);
+      if (mounted &&
+          _selectedTab == 0 &&
+          venue != null &&
+          ref.read(activeTimeEntryProvider(venue.id)).valueOrNull != null) {
+        setState(() {});
+      }
     });
   }
 
@@ -47,6 +53,7 @@ class _TimeClockScreenState extends ConsumerState<TimeClockScreen> {
         accuracyM: fix.accuracyM,
         mocked: fix.mocked,
       );
+      if (!mounted) return;
       _refresh(venueId);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -82,6 +89,7 @@ class _TimeClockScreenState extends ConsumerState<TimeClockScreen> {
         accuracyM: fix.accuracyM,
         mocked: fix.mocked,
       );
+      if (!mounted) return;
       _refresh(venueId);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -129,12 +137,13 @@ class _TimeClockScreenState extends ConsumerState<TimeClockScreen> {
       ),
     );
 
-    if (type == null) return;
+    if (type == null || !mounted) return;
 
     setState(() => _isProcessing = true);
     try {
       final repo = ref.read(timeClockRepositoryProvider);
       await repo.startBreak(entry: activeEntry, type: type);
+      if (!mounted) return;
       _refresh(venueId);
     } on AppError catch (e) {
       if (mounted) {
@@ -158,6 +167,7 @@ class _TimeClockScreenState extends ConsumerState<TimeClockScreen> {
     try {
       final repo = ref.read(timeClockRepositoryProvider);
       await repo.endBreak(entry: activeEntry);
+      if (!mounted) return;
       _refresh(venueId);
     } on AppError catch (e) {
       if (mounted) {

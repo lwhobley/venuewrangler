@@ -40,3 +40,26 @@ export async function getCallerVenueRoles(
 export function isManager(roles: string[]): boolean {
   return roles.some((r) => MANAGER_ROLES.includes(r));
 }
+
+/** Rechecks manager authority using the service client at sensitive callback time. */
+export async function isCurrentVenueManager(
+  adminClient: SupabaseClient,
+  userId: string,
+  venueId: string,
+): Promise<boolean> {
+  const { data: venue, error: venueError } = await adminClient
+    .from("venues")
+    .select("organization_id")
+    .eq("id", venueId)
+    .maybeSingle();
+  if (venueError || !venue) return false;
+
+  const { data: memberships, error: membershipError } = await adminClient
+    .from("memberships")
+    .select("role")
+    .eq("user_id", userId)
+    .eq("organization_id", venue.organization_id)
+    .or(`venue_id.eq.${venueId},venue_id.is.null`);
+  if (membershipError || !memberships) return false;
+  return isManager(memberships.map((membership) => membership.role));
+}

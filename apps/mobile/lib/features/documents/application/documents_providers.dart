@@ -1,12 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-
 import '../../../core/auth/auth_providers.dart';
+import '../../../core/network/supabase_providers.dart';
 import '../data/documents_repository.dart';
 import '../domain/venue_document.dart';
 
 final documentsRepositoryProvider = Provider<DocumentsRepository>((ref) {
-  return SupabaseDocumentsRepository(Supabase.instance.client);
+  return SupabaseDocumentsRepository(ref.watch(supabaseClientProvider));
 });
 
 final documentsProvider =

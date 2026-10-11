@@ -65,7 +65,7 @@ Deno.serve(async (req) => {
     return respond({ ok: true, ...result });
   } catch (err) {
     console.error("notifications-dispatch failed", err);
-    captureException(err, { function: "notifications-dispatch", url: req.url });
+    captureException(err, { function: "notifications-dispatch", path: new URL(req.url).pathname });
     await flushObservability();
     return respond({ error: "dispatch_failed" }, 500);
   }

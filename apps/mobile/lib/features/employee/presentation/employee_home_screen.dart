@@ -76,8 +76,8 @@ class _EmployeeHomeScreenState extends ConsumerState<EmployeeHomeScreen> {
     final tasksAsync = ref.watch(tasksForVenueProvider(venue.id));
     final clockAsync = ref.watch(activeTimeEntryProvider(venue.id));
     final reservationsAsync = ref.watch(todaysReservationsProvider);
-    final tables = ref.watch(floorTablesStreamProvider).valueOrNull ??
-        const <FloorTable>[];
+    final tablesAsync = ref.watch(floorTablesStreamProvider);
+    final tables = tablesAsync.valueOrNull ?? const <FloorTable>[];
     final section = ref.watch(mySectionProvider);
     final unread = ref.watch(unreadNotificationsCountProvider);
     final pending =
@@ -161,7 +161,9 @@ class _EmployeeHomeScreenState extends ConsumerState<EmployeeHomeScreen> {
                 _Kpi(
                   icon: Icons.groups_outlined,
                   label: 'Covers served',
-                  value: '${coversToday(myReservations)}',
+                  value: reservationsAsync.hasError
+                      ? 'Unavailable'
+                      : '${coversToday(myReservations)}',
                 ),
                 _Kpi(
                   icon: Icons.task_alt,
@@ -192,6 +194,10 @@ class _EmployeeHomeScreenState extends ConsumerState<EmployeeHomeScreen> {
                   message: 'No section assigned on your current shift.',
                 ),
               )
+            else if (tablesAsync.hasError)
+              const CardShell(
+                child: Text('Section tables are unavailable. Refresh to try again.'),
+              )
             else if (sectionTables.isEmpty)
               CardShell(
                 child: Text(
@@ -216,6 +222,10 @@ class _EmployeeHomeScreenState extends ConsumerState<EmployeeHomeScreen> {
                 padding: EdgeInsets.all(16),
                 child: Center(child: CircularProgressIndicator()),
               )
+            else if (reservationsAsync.hasError)
+              const CardShell(
+                child: Text('Could not load your reservations. Pull to refresh.'),
+              )
             else if (myReservations.isEmpty)
               const CardShell(
                 child: EmptyState(
@@ -231,6 +241,10 @@ class _EmployeeHomeScreenState extends ConsumerState<EmployeeHomeScreen> {
               const Padding(
                 padding: EdgeInsets.all(16),
                 child: Center(child: CircularProgressIndicator()),
+              )
+            else if (tasksAsync.hasError)
+              const CardShell(
+                child: Text('Could not load your tasks. Pull to refresh.'),
               )
             else if (openTasks.isEmpty)
               const CardShell(

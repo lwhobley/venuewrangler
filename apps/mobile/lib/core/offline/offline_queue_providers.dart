@@ -8,9 +8,9 @@ import 'offline_queue_store.dart';
 import 'pending_mutation.dart';
 
 final offlineQueueStoreProvider = Provider<OfflineQueueStore>((ref) {
-  // No filesystem on web (path_provider has no web implementation).
-  if (kIsWeb) return const SecureStorageOfflineQueueStore();
-  return FileOfflineQueueStore();
+  // Native stores the queue encrypted with flutter_secure_storage. Existing plaintext queue
+  // files are imported once and removed only after secure storage confirms the encrypted copy.
+  return SecureStorageOfflineQueueStore(migrateLegacyFile: !kIsWeb);
 });
 
 /// Empty by default. The app composition root (app/bootstrap.dart) overrides this with the

@@ -26,7 +26,7 @@ Deno.serve(async (req) => {
     return await handleRequest(req);
   } catch (error) {
     console.error("stripe-create-checkout: unexpected error", error);
-    captureException(error, { function: "stripe-create-checkout", url: req.url });
+    captureException(error, { function: "stripe-create-checkout", path: new URL(req.url).pathname });
     await flushObservability();
     return jsonResponse({ error: "internal_error" }, 500);
   }
@@ -134,6 +134,32 @@ async function handleRequest(req: Request): Promise<Response> {
     }
   }
 
+  const claimAttempt = async (forceNew = false) => {
+    const { data, error } = await serviceClient.rpc("claim_subscription_checkout_attempt", {
+      p_organization_id: organizationId,
+      p_force_new: forceNew,
+    });
+    if (error) throw error;
+    const attempt = Array.isArray(data) ? data[0] : null;
+    if (!attempt?.idempotency_key) throw new Error("Checkout attempt could not be claimed");
+    return attempt as { idempotency_key: string; stripe_session_id: string | null };
+  };
+
+  let attempt = await claimAttempt();
+  if (attempt.stripe_session_id) {
+    // An open Checkout Session is the single session all concurrent/retried clients share.
+    // If Stripe completed it but its webhook is still in flight, wait for subscription state
+    // instead of opening another payment flow.
+    const previous = await stripe.checkout.sessions.retrieve(attempt.stripe_session_id);
+    if (previous.status === "open" && previous.url) {
+      return jsonResponse({ url: previous.url });
+    }
+    if (previous.status === "complete") {
+      return jsonResponse({ error: "checkout_completed_processing" }, 409);
+    }
+    attempt = await claimAttempt(true);
+  }
+
   const session = await stripe.checkout.sessions.create({
     mode: "subscription",
     customer: stripeCustomerId,
@@ -141,7 +167,24 @@ async function handleRequest(req: Request): Promise<Response> {
     success_url: successUrl,
     cancel_url: cancelUrl,
     metadata: { organization_id: organizationId },
-  });
+  }, { idempotencyKey: attempt.idempotency_key });
+
+  if (!session.url || !session.expires_at) {
+    return jsonResponse({ error: "checkout_session_unavailable" }, 502);
+  }
+  const { data: recorded, error: recordError } = await serviceClient.rpc(
+    "record_subscription_checkout_session",
+    {
+      p_organization_id: organizationId,
+      p_idempotency_key: attempt.idempotency_key,
+      p_stripe_session_id: session.id,
+      p_expires_at: new Date(session.expires_at * 1000).toISOString(),
+    },
+  );
+  if (recordError || recorded !== true) {
+    console.error("checkout session persistence failed", recordError?.code ?? "claim_lost");
+    return jsonResponse({ error: "checkout_session_persistence_failed" }, 503);
+  }
 
   return jsonResponse({ url: session.url });
 }

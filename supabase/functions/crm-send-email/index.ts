@@ -31,7 +31,7 @@ Deno.serve(async (req) => {
     return await handleRequest(req);
   } catch (error) {
     console.error("crm-send-email: unexpected error", error);
-    captureException(error, { function: "crm-send-email", url: req.url });
+    captureException(error, { function: "crm-send-email", path: new URL(req.url).pathname });
     await flushObservability();
     return jsonResponse({ error: "internal_error" }, 500);
   }

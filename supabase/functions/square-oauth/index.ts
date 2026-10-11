@@ -10,7 +10,7 @@
 // production, and adjust SQUARE_OAUTH_SCOPES to exactly what the payroll-push feature needs.
 import { corsHeaders, handleCorsPreflight } from "../_shared/cors.ts";
 import { createServiceClient, createUserClient } from "../_shared/supabase-clients.ts";
-import { getCallerVenueRoles, isManager } from "../_shared/venue-auth.ts";
+import { getCallerVenueRoles, isCurrentVenueManager, isManager } from "../_shared/venue-auth.ts";
 import { encryptToken, signOAuthState, verifyOAuthState } from "../_shared/crypto.ts";
 import { initObservability, captureException, flushObservability } from "../_shared/observability.ts";
 
@@ -58,7 +58,7 @@ Deno.serve(async (req) => {
     return await handleRequest(req);
   } catch (error) {
     console.error("square-oauth: unexpected error", error);
-    captureException(error, { function: "square-oauth", url: req.url });
+    captureException(error, { function: "square-oauth", path: new URL(req.url).pathname });
     await flushObservability();
     return jsonResponse({ error: "internal_error" }, 500);
   }
@@ -125,6 +125,11 @@ async function handleRequest(req: Request): Promise<Response> {
     const statePayload = await verifyOAuthState(state, stateSigningKey);
     if (!statePayload) return redirectResponse(`${errorUrl}?provider=square&reason=invalid_state`);
 
+    const serviceClient = createServiceClient();
+    if (!await isCurrentVenueManager(serviceClient, statePayload.user_id, statePayload.venue_id)) {
+      return redirectResponse(`${errorUrl}?provider=square&reason=authorization_revoked`);
+    }
+
     const tokenResponse = await fetch(`${apiBase}/oauth2/token`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -143,7 +148,9 @@ async function handleRequest(req: Request): Promise<Response> {
     }
 
     const tokenData = await tokenResponse.json();
-    const serviceClient = createServiceClient();
+    if (!await isCurrentVenueManager(serviceClient, statePayload.user_id, statePayload.venue_id)) {
+      return redirectResponse(`${errorUrl}?provider=square&reason=authorization_revoked`);
+    }
     const { error } = await serviceClient.from("payroll_connections").upsert(
       {
         venue_id: statePayload.venue_id,

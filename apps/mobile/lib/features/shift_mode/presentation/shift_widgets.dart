@@ -173,6 +173,12 @@ class ClockCard extends StatelessWidget {
     final active = entry.valueOrNull;
     final loading = entry.isLoading && active == null;
 
+    if (entry.hasError) {
+      return const CardShell(
+        child: Text('Time clock status is unavailable. Refresh to try again.'),
+      );
+    }
+
     final (Tone tone, String title, String detail, String action) =
         active == null
             ? (

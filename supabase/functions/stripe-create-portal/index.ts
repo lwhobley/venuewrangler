@@ -23,7 +23,7 @@ Deno.serve(async (req) => {
     return await handleRequest(req);
   } catch (error) {
     console.error("stripe-create-portal: unexpected error", error);
-    captureException(error, { function: "stripe-create-portal", url: req.url });
+    captureException(error, { function: "stripe-create-portal", path: new URL(req.url).pathname });
     await flushObservability();
     return jsonResponse({ error: "internal_error" }, 500);
   }

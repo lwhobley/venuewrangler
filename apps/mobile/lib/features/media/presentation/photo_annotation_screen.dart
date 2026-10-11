@@ -381,31 +381,46 @@ class _PhotoAnnotationScreenState extends State<PhotoAnnotationScreen> {
                       padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
                       child: Row(
                         children: [
-                          for (final c in _palette)
-                            Semantics(
-                              label: 'Colour',
-                              selected: c == _color,
-                              button: true,
-                              child: GestureDetector(
-                                onTap: () => setState(() => _color = c),
-                                child: Container(
-                                  width: 36,
-                                  height: 36,
-                                  margin: const EdgeInsets.only(right: 8),
-                                  decoration: BoxDecoration(
-                                    color: c,
-                                    shape: BoxShape.circle,
-                                    border: Border.all(
-                                      color: c == _color
-                                          ? scheme.primary
-                                          : scheme.outlineVariant,
-                                      width: c == _color ? 3 : 1,
+                          Expanded(
+                            child: SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              child: Row(
+                                children: [
+                                  for (final c in _palette)
+                                    Semantics(
+                                      label: 'Colour ${c.toARGB32().toRadixString(16).substring(2)}',
+                                      selected: c == _color,
+                                      button: true,
+                                      child: GestureDetector(
+                                        behavior: HitTestBehavior.opaque,
+                                        onTap: () => setState(() => _color = c),
+                                        child: SizedBox(
+                                          width: 48,
+                                          height: 48,
+                                          child: Center(
+                                            child: Container(
+                                              width: 32,
+                                              height: 32,
+                                              decoration: BoxDecoration(
+                                                color: c,
+                                                shape: BoxShape.circle,
+                                                border: Border.all(
+                                                  color: c == _color
+                                                      ? scheme.primary
+                                                      : scheme.outlineVariant,
+                                                  width: c == _color ? 3 : 1,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
                                     ),
-                                  ),
-                                ),
+                                ],
                               ),
                             ),
-                          const Spacer(),
+                          ),
+                          const SizedBox(width: 8),
                           SegmentedButton<double>(
                             showSelectedIcon: false,
                             style: const ButtonStyle(

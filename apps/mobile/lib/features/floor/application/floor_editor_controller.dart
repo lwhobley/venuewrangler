@@ -299,12 +299,13 @@ class FloorEditorController extends StateNotifier<FloorEditorState> {
   String _draftKey(String planId) => 'floor_draft_$planId';
 
   Future<void> saveDraft(String planId) async {
-    try {
-      await _storage.write(
-        key: _draftKey(planId),
-        value: jsonEncode([for (final t in state.tables) t.toJson()]),
-      );
-    } catch (_) {}
+    await _storage.write(
+      key: _draftKey(planId),
+      value: jsonEncode({
+        'tables': [for (final t in state.tables) t.toJson()],
+        'base_ids': state.published.keys.toList(growable: false),
+      }),
+    );
   }
 
   Future<bool> hasDraft(String planId) async {
@@ -316,35 +317,39 @@ class FloorEditorController extends StateNotifier<FloorEditorState> {
   }
 
   Future<void> restoreDraft(String planId) async {
-    try {
-      final raw = await _storage.read(key: _draftKey(planId));
-      if (raw == null) return;
-      final list = (jsonDecode(raw) as List)
-          .map((e) => EditorTable.fromJson(e as Map<String, dynamic>))
-          .toList();
-      // Tables deleted on the server since the draft was saved shouldn't resurrect.
-      final live = state.published;
-      final kept = [
-        for (final t in list)
-          if (t.isNew || live.containsKey(t.id)) t,
-      ];
-      for (final t in kept.where((t) => t.isNew)) {
-        final n =
-            int.tryParse(t.id.substring(EditorTable.newPrefix.length)) ?? 0;
-        _newCounter = math.max(_newCounter, n + 1);
-      }
-      state = state.copyWith(
-        tables: kept,
-        history: const [],
-        clearSelection: true,
-      );
-    } catch (_) {}
+    final raw = await _storage.read(key: _draftKey(planId));
+    if (raw == null) return;
+    final decoded = jsonDecode(raw);
+    final draft = decoded is List ? {'tables': decoded} : decoded as Map;
+    final saved = (draft['tables'] as List)
+        .map((e) => EditorTable.fromJson(Map<String, dynamic>.from(e as Map)))
+        .toList();
+    final baseIds = (draft['base_ids'] as List?)?.cast<String>().toSet();
+    final live = state.published;
+    final savedById = {for (final table in saved) table.id: table};
+    final restored = <EditorTable>[
+      for (final table in saved)
+        if (table.isNew || live.containsKey(table.id)) table,
+      // Preserve tables created by another manager after this draft's base snapshot. For
+      // legacy drafts without a snapshot, preserving missing live rows is the safe recovery.
+      for (final table in live.values)
+        if (!savedById.containsKey(table.id) &&
+            (baseIds == null || !baseIds.contains(table.id)))
+          table,
+    ];
+    for (final table in restored.where((table) => table.isNew)) {
+      final n = int.tryParse(table.id.substring(EditorTable.newPrefix.length)) ?? 0;
+      _newCounter = math.max(_newCounter, n + 1);
+    }
+    state = state.copyWith(
+      tables: restored,
+      history: const [],
+      clearSelection: true,
+    );
   }
 
   Future<void> discardDraft(String planId) async {
-    try {
-      await _storage.delete(key: _draftKey(planId));
-    } catch (_) {}
+    await _storage.delete(key: _draftKey(planId));
   }
 
   // ---- publish -------------------------------------------------------------

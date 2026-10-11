@@ -185,7 +185,7 @@ serve(async (req: Request) => {
     });
   } catch (error) {
     console.error("notifications-send failed", error);
-    captureException(error, { function: "notifications-send", url: req.url });
+    captureException(error, { function: "notifications-send", path: new URL(req.url).pathname });
     await flushObservability();
     return new Response(JSON.stringify({ error: "notification_send_failed" }), {
       status: 500,

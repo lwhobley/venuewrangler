@@ -95,6 +95,8 @@ class DocumentsScreen extends ConsumerWidget {
     final titleController = TextEditingController(text: picked.name);
     var category = 'sop';
 
+    try {
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => StatefulBuilder(
@@ -160,11 +162,14 @@ class DocumentsScreen extends ConsumerWidget {
             localFilePath: picked.path,
             bytes: picked.bytes,
           );
-      ref.invalidate(documentsProvider(venueId));
+      if (context.mounted) ref.invalidate(documentsProvider(venueId));
     } on AppError catch (error) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(error.message)));
+    }
+    } finally {
+      titleController.dispose();
     }
   }
 }
@@ -233,6 +238,7 @@ class _DocumentTile extends ConsumerWidget {
       await ref
           .read(documentsRepositoryProvider)
           .deleteDocument(documentId: document.id);
+      if (!context.mounted) return;
       ref.invalidate(documentsProvider(venueId));
     } on AppError catch (error) {
       if (!context.mounted) return;

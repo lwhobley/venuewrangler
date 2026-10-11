@@ -47,15 +47,13 @@ Deno.serve(async (req) => {
 
   const admin = createServiceClient();
 
-  let job: { id: string; user_id: string; status: string; attempts: number } | null;
+  let job: { id: string; user_id: string; attempts: number } | null;
   try {
-    const { data, error: fetchError } = await admin
-      .from("account_deletion_jobs")
-      .select("id, user_id, status, attempts")
-      .eq("id", job_id)
-      .maybeSingle();
+    const { data, error: fetchError } = await admin.rpc("claim_account_deletion_job", {
+      p_job_id: job_id,
+    });
     if (fetchError) throw fetchError;
-    job = data;
+    job = Array.isArray(data) ? data[0] ?? null : null;
   } catch (err) {
     // Can't read the queue at all: nothing to mark failed. The retry sweep will pick the job
     // up again once the database is reachable.
@@ -64,19 +62,20 @@ Deno.serve(async (req) => {
     await flushObservability();
     return respond({ error: "job_lookup_failed" }, 500);
   }
-  if (!job) return respond({ error: "job_not_found" }, 404);
-  if (job.status === "completed" || job.status === "dead") {
-    return respond({ ok: true, already: job.status });
+  if (!job) {
+    const { data: current, error } = await admin
+      .from("account_deletion_jobs")
+      .select("status")
+      .eq("id", job_id)
+      .maybeSingle();
+    if (error) return respond({ error: "job_lookup_failed" }, 500);
+    if (!current) return respond({ error: "job_not_found" }, 404);
+    if (current.status === "completed" || current.status === "dead") {
+      return respond({ ok: true, already: current.status });
+    }
+    return respond({ error: "job_not_claimable" }, 409);
   }
-
-  // 'processing' is only a lease: if this invocation dies before reporting a result, the
-  // retry sweep (app_hidden.sweep_account_deletion_jobs) reclaims the job after 15 minutes.
-  const nextAttempts = job.attempts + 1;
-  const claimedAt = new Date().toISOString();
-  await admin
-    .from("account_deletion_jobs")
-    .update({ status: "processing", attempts: nextAttempts, updated_at: claimedAt })
-    .eq("id", job_id);
+  const nextAttempts = job.attempts;
 
   try {
     // Not-found is treated as success: the account may already have been deleted by a prior
@@ -84,22 +83,33 @@ Deno.serve(async (req) => {
     const { error } = await admin.auth.admin.deleteUser(job.user_id);
     if (error && error.status !== 404) throw error;
 
-    await admin
+    const { data: completed, error: completionError } = await admin
       .from("account_deletion_jobs")
       .update({ status: "completed", completed_at: new Date().toISOString(), last_error: null,
         updated_at: new Date().toISOString() })
-      .eq("id", job_id);
+      .eq("id", job_id)
+      .eq("status", "processing")
+      .select("id")
+      .maybeSingle();
+    if (completionError) throw completionError;
+    if (!completed) throw new Error("Deletion job claim was lost before completion");
     return respond({ ok: true });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    await admin
+    const { data: failed, error: failureError } = await admin
       .from("account_deletion_jobs")
       .update({
         status: nextAttempts >= 10 ? "dead" : "failed",
         last_error: message.slice(0, 1000),
         updated_at: new Date().toISOString(),
       })
-      .eq("id", job_id);
+      .eq("id", job_id)
+      .eq("status", "processing")
+      .select("id")
+      .maybeSingle();
+    if (failureError || !failed) {
+      console.error("account-deletion-worker could not persist failure state", failureError ?? "claim no longer held");
+    }
     console.error("account-deletion-worker failed", err);
     captureException(err, { function: "account-deletion-worker", job_id });
     await flushObservability();

@@ -10,6 +10,7 @@ class PendingMutation {
     required this.createdAt,
     this.attemptCount = 0,
     this.userId,
+    this.conflictReason,
   });
 
   final String id;
@@ -23,6 +24,11 @@ class PendingMutation {
   /// writes as user B. Null = legacy entry written before this field existed.
   final String? userId;
 
+  /// A definitive conflict remains in the persisted queue until a user resolves it.
+  final String? conflictReason;
+
+  bool get isConflict => conflictReason != null;
+
   PendingMutation withIncrementedAttempt() => PendingMutation(
         id: id,
         kind: kind,
@@ -30,6 +36,17 @@ class PendingMutation {
         createdAt: createdAt,
         attemptCount: attemptCount + 1,
         userId: userId,
+        conflictReason: conflictReason,
+      );
+
+  PendingMutation withConflict(String? reason) => PendingMutation(
+        id: id,
+        kind: kind,
+        payload: payload,
+        createdAt: createdAt,
+        attemptCount: attemptCount,
+        userId: userId,
+        conflictReason: reason ?? 'This change needs your review before it can sync.',
       );
 
   Map<String, dynamic> toJson() => {
@@ -39,6 +56,7 @@ class PendingMutation {
         'created_at': createdAt.toIso8601String(),
         'attempt_count': attemptCount,
         if (userId != null) 'user_id': userId,
+        if (conflictReason != null) 'conflict_reason': conflictReason,
       };
 
   factory PendingMutation.fromJson(Map<String, dynamic> json) =>
@@ -49,6 +67,7 @@ class PendingMutation {
         createdAt: DateTime.parse(json['created_at'] as String),
         attemptCount: json['attempt_count'] as int? ?? 0,
         userId: json['user_id'] as String?,
+        conflictReason: json['conflict_reason'] as String?,
       );
 }
 

@@ -1,6 +1,7 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 const registeredPushTokenStorageKey = 'registered_push_token';
+const pendingPushTokenRevocationStorageKey = 'pending_push_token_revocation';
 
 /// Thin wrapper over `flutter_secure_storage` for session-sensitive values, including
 /// the Supabase session itself (wired as the auth local-storage backend in
@@ -25,6 +26,7 @@ class SecureSessionStorage {
       'theme_mode',
       'app_attest.device_id',
       'app_attest.key_id',
+      pendingPushTokenRevocationStorageKey,
     ];
     final retained = <String, String>{};
     for (final key in deviceKeys) {

@@ -67,9 +67,12 @@ class SupabaseStaffRequestsRepository implements StaffRequestsRepository {
 
   @override
   Future<void> cancelRequest(String requestId) async {
-    await _client
+    final row = await _client
         .from('staff_requests')
-        .update({'status': 'cancelled'}).eq('id', requestId);
+        .update({'status': 'cancelled'}).eq('id', requestId).select('id').maybeSingle();
+    if (row == null) {
+      throw const PostgrestException(message: 'Request cancellation was not applied', code: '42501');
+    }
   }
 
   @override
@@ -78,10 +81,13 @@ class SupabaseStaffRequestsRepository implements StaffRequestsRepository {
     required StaffRequestStatus status,
     String? responseNotes,
   }) async {
-    await _client.from('staff_requests').update({
+    final row = await _client.from('staff_requests').update({
       'status': status.toDb(),
       if (responseNotes != null && responseNotes.isNotEmpty)
         'response_notes': responseNotes,
-    }).eq('id', requestId);
+    }).eq('id', requestId).select('id').maybeSingle();
+    if (row == null) {
+      throw const PostgrestException(message: 'Request review was not applied', code: '42501');
+    }
   }
 }

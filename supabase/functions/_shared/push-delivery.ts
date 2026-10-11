@@ -37,18 +37,41 @@ export async function deliverPush(adminClient: SupabaseClient, req: PushRequest)
     .eq("venue_id", venueId)
     .eq("enabled", true);
 
+  // Revalidate every recipient at delivery time. Push-token registrations can outlive a
+  // membership, and direct user targets are not an authorization decision.
+  let membershipQuery = adminClient
+    .from("memberships")
+    .select("user_id, venue_id, role")
+    .eq("organization_id", organizationId)
+    .or(`venue_id.eq.${venueId},venue_id.is.null`);
   if (audience === "user") {
-    tokensQuery = tokensQuery.in("user_id", targetUserIds ?? []);
-  } else if (audience === "venue_managers" || audience === "organization_owners") {
-    // Org owners/admins hold org-level memberships (venue_id null), never venue rows — a
-    // venue_id-only lookup can never find them. venue_staff is intentionally unfiltered.
-    const orgFilter = audience === "venue_managers"
-      ? `and(venue_id.eq.${venueId},role.eq.venue_manager),and(venue_id.is.null,organization_id.eq.${organizationId},role.in.(organization_owner,organization_admin))`
-      : `and(venue_id.is.null,organization_id.eq.${organizationId},role.eq.organization_owner)`;
-    const { data: recipients } = await adminClient.from("memberships").select("user_id").or(orgFilter);
-    const recipientIds = (recipients || []).map((m: { user_id: string }) => m.user_id);
-    tokensQuery = tokensQuery.in("user_id", recipientIds);
+    membershipQuery = membershipQuery.in("user_id", targetUserIds ?? []);
   }
+
+  const { data: memberships, error: membershipError } = await membershipQuery;
+  if (membershipError || !memberships) {
+    console.error("Failed to resolve current push recipients", membershipError);
+    return { targeted_tokens: 0, delivered_count: 0, dead_tokens_disabled: 0, reason: "Could not verify recipient membership" };
+  }
+
+  const allowedUsers = new Set<string>();
+  for (const membership of memberships as { user_id: string; venue_id: string | null; role: string }[]) {
+    const isOrgManager = membership.venue_id === null &&
+      ["organization_owner", "organization_admin"].includes(membership.role);
+    const isVenueManager = membership.venue_id === venueId && membership.role === "venue_manager";
+    const isVenueStaff = isOrgManager || (membership.venue_id === venueId &&
+      ["staff", "supervisor", "venue_manager"].includes(membership.role));
+    if (
+      audience === "user" ||
+      (audience === "venue_staff" && isVenueStaff) ||
+      (audience === "venue_managers" && (isVenueManager || isOrgManager)) ||
+      (audience === "organization_owners" && membership.venue_id === null &&
+        membership.role === "organization_owner")
+    ) {
+      allowedUsers.add(membership.user_id);
+    }
+  }
+  tokensQuery = tokensQuery.in("user_id", [...allowedUsers]);
 
   const { data: tokens, error: tokensError } = await tokensQuery;
   if (tokensError || !tokens || tokens.length === 0) {
@@ -79,7 +102,8 @@ export async function deliverPush(adminClient: SupabaseClient, req: PushRequest)
   for (const { token, platform } of tokens as { token: string; platform: string }[]) {
     if (platform === "ios" && apnsConfig) {
       try {
-        const message = { deviceToken: token, title, body, data: { kind, ...data } };
+        const payload = { ...data, kind, venue_id: venueId, organization_id: organizationId };
+        const message = { deviceToken: token, title, body, data: payload };
         let result = await sendApnsPush(apnsConfig, message);
         // Xcode debug builds register sandbox tokens; TestFlight/App Store builds register
         // production ones, and each gateway rejects the other's as BadDeviceToken — try the
@@ -112,7 +136,10 @@ export async function deliverPush(adminClient: SupabaseClient, req: PushRequest)
             message: {
               token,
               notification: { title, body },
-              data: { kind, ...Object.fromEntries(Object.entries(data).map(([k, v]) => [k, String(v)])) },
+              data: Object.fromEntries(
+                Object.entries({ ...data, kind, venue_id: venueId, organization_id: organizationId })
+                  .map(([k, v]) => [k, String(v)]),
+              ),
             },
           }),
           signal: AbortSignal.timeout(5000),

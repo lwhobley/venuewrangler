@@ -4,8 +4,10 @@ Implemented: a feature-agnostic offline mutation queue.
 
 - `pending_mutation.dart` — the queued-write data shape and `MutationOutcome`
   (applied/conflict/retryableFailure).
-- `offline_queue_store.dart` — JSON-file persistence across app restarts (modeled on the
-  reference implementation's `lib/offline-inventory-queue.ts`, per Phase 0 discovery).
+- `offline_queue_store.dart` — queue persistence across app restarts. Production uses
+  `flutter_secure_storage`; native installs migrate any existing plaintext JSON queue and its
+  backup into secure storage before removing those files. The file store remains available for
+  isolated tests and migration compatibility.
 - `offline_queue_controller.dart` — the retry/conflict-surfacing state machine. A mutation is
   retried up to `kMaxMutationAttempts` times; past that, or on an explicit conflict from its
   handler, it moves to `OfflineQueueState.conflicts` and is **never retried automatically

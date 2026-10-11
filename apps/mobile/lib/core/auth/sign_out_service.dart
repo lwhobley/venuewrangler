@@ -13,9 +13,20 @@ Future<void> signOutAndClearScopedData(WidgetRef ref) async {
     final token =
         await const SecureSessionStorage().read(registeredPushTokenStorageKey);
     if (token != null) {
-      await ref
-          .read(notificationsRepositoryProvider)
-          .unregisterPushToken(token);
+      try {
+        await ref
+            .read(notificationsRepositoryProvider)
+            .unregisterPushToken(token);
+        await const SecureSessionStorage()
+            .delete(pendingPushTokenRevocationStorageKey);
+      } catch (_) {
+        // Preserve the device token across secure-session cleanup so the next signed-in
+        // session can revoke it before registering this device for another account.
+        await const SecureSessionStorage().write(
+          pendingPushTokenRevocationStorageKey,
+          token,
+        );
+      }
     }
   } catch (_) {
     // Network failure must not trap a person in the previous account.

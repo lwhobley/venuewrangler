@@ -28,7 +28,7 @@ Deno.serve(async (req) => {
     return await handleRequest(req);
   } catch (error) {
     console.error("toast-pos: unexpected error", error);
-    captureException(error, { function: "toast-pos", url: req.url });
+    captureException(error, { function: "toast-pos", path: new URL(req.url).pathname });
     await flushObservability();
     return jsonResponse({ error: "internal_error" }, 500);
   }

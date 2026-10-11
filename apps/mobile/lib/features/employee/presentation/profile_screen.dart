@@ -12,6 +12,7 @@ import '../../schedules/application/schedules_providers.dart';
 import '../../schedules/domain/schedule_timeline.dart';
 import '../../schedules/domain/shift.dart';
 import '../../settings/application/settings_providers.dart';
+import '../../settings/presentation/delete_account_button.dart';
 import '../../shift_mode/presentation/shift_widgets.dart';
 import '../../time_clock/application/time_clock_providers.dart';
 import '../../time_clock/domain/time_entry.dart';
@@ -59,13 +60,14 @@ class ProfileScreen extends ConsumerWidget {
     final email = ref.watch(supabaseClientProvider).auth.currentUser?.email;
     final profile = ref.watch(myProfileProvider).valueOrNull;
     final role = ref.watch(myVenueRoleProvider).valueOrNull;
-    final shifts = venue == null
-        ? const <Shift>[]
-        : ref.watch(shiftsForVenueProvider(venue.id)).valueOrNull ??
-            const <Shift>[];
-    final entries = venue == null
-        ? null
-        : ref.watch(myTimeEntriesProvider(venue.id)).valueOrNull;
+    final shiftsAsync = venue == null
+        ? const AsyncValue<List<Shift>>.data([])
+        : ref.watch(shiftsForVenueProvider(venue.id));
+    final shifts = shiftsAsync.valueOrNull ?? const <Shift>[];
+    final entriesAsync = venue == null
+        ? const AsyncValue<List<TimeEntry>>.data([])
+        : ref.watch(myTimeEntriesProvider(venue.id));
+    final entries = entriesAsync.valueOrNull;
 
     final now = DateTime.now();
     final weekFrom = weekStart(now);
@@ -140,21 +142,37 @@ class ProfileScreen extends ConsumerWidget {
           Row(
             children: [
               Expanded(
-                child: _Stat(label: 'Scheduled', value: formatHours(scheduled)),
+                child: _Stat(
+                  label: 'Scheduled',
+                  value: shiftsAsync.hasError ? 'Unavailable' : formatHours(scheduled),
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: _Stat(
                   label: 'Worked',
-                  value:
-                      entries == null ? '—' : formatHours(workedMinutes / 60),
+                  value: entriesAsync.hasError
+                      ? 'Unavailable'
+                      : formatHours(workedMinutes / 60),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 20),
           const SectionTitle('Upcoming shifts'),
-          if (upcoming.isEmpty)
+          if (shiftsAsync.hasError || entriesAsync.hasError)
+            CardShell(
+              child: TextButton(
+                onPressed: () {
+                  if (venue != null) {
+                    ref.invalidate(shiftsForVenueProvider(venue.id));
+                    ref.invalidate(myTimeEntriesProvider(venue.id));
+                  }
+                },
+                child: const Text('Could not load all time records. Retry.'),
+              ),
+            )
+          else if (upcoming.isEmpty)
             const CardShell(child: Text('No upcoming shifts scheduled.'))
           else
             CardShell(
@@ -232,6 +250,7 @@ class ProfileScreen extends ConsumerWidget {
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => _changePassword(context, ref),
                 ),
+                const DeleteAccountButton(),
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   leading: Icon(Icons.logout, color: context.ops.danger.fg),

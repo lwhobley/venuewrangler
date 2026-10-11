@@ -19,7 +19,19 @@ export interface DerNode {
   end: number;
 }
 
+const MAX_DER_BYTES = 1_048_576;
+const MAX_CHILDREN = 10_000;
+
+function requireRange(bytes: Uint8Array, offset: number, count: number): void {
+  if (!Number.isSafeInteger(offset) || !Number.isSafeInteger(count) ||
+      offset < 0 || count < 0 || offset + count > bytes.length) {
+    throw new Error("der: truncated or out-of-range input");
+  }
+}
+
 export function parseDerNode(bytes: Uint8Array, offset: number): DerNode {
+  if (bytes.length > MAX_DER_BYTES) throw new Error("der: input is too large");
+  requireRange(bytes, offset, 2);
   const start = offset;
   const first = bytes[offset];
   const tagClass = (first >> 6) & 0x03;
@@ -32,13 +44,19 @@ export function parseDerNode(bytes: Uint8Array, offset: number): DerNode {
     // it so an unexpected cert doesn't just silently misparse).
     tagNumber = 0;
     let byte: number;
+    let tagBytes = 0;
     do {
+      requireRange(bytes, offset, 1);
       byte = bytes[offset];
-      tagNumber = (tagNumber << 7) | (byte & 0x7f);
+      if (++tagBytes > 5 || tagNumber > Math.floor((Number.MAX_SAFE_INTEGER - 127) / 128)) {
+        throw new Error("der: tag number is too large");
+      }
+      tagNumber = tagNumber * 128 + (byte & 0x7f);
       offset += 1;
     } while (byte & 0x80);
   }
 
+  requireRange(bytes, offset, 1);
   const lengthByte = bytes[offset];
   offset += 1;
   let length: number;
@@ -46,27 +64,35 @@ export function parseDerNode(bytes: Uint8Array, offset: number): DerNode {
     length = lengthByte;
   } else {
     const numLengthBytes = lengthByte & 0x7f;
-    if (numLengthBytes === 0) {
+    if (numLengthBytes === 0 || numLengthBytes > 4) {
       throw new Error("der: indefinite-length encoding is not supported");
     }
+    requireRange(bytes, offset, numLengthBytes);
     length = 0;
     for (let i = 0; i < numLengthBytes; i++) {
-      length = (length << 8) | bytes[offset + i];
+      length = length * 256 + bytes[offset + i];
     }
     offset += numLengthBytes;
   }
 
   const contentStart = offset;
   const contentEnd = offset + length;
+  requireRange(bytes, contentStart, length);
   return { tagClass, constructed, tagNumber, contentStart, contentEnd, start, end: contentEnd };
 }
 
 // Parses every top-level TLV within [start, end) — used to walk a SEQUENCE's/SET's children.
 export function parseDerChildren(bytes: Uint8Array, start: number, end: number): DerNode[] {
+  if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) ||
+      start < 0 || end < start || end > bytes.length || bytes.length > MAX_DER_BYTES) {
+    throw new Error("der: invalid child range");
+  }
   const nodes: DerNode[] = [];
   let offset = start;
   while (offset < end) {
+    if (nodes.length >= MAX_CHILDREN) throw new Error("der: too many child nodes");
     const node = parseDerNode(bytes, offset);
+    if (node.end <= offset || node.end > end) throw new Error("der: invalid child length");
     nodes.push(node);
     offset = node.end;
   }

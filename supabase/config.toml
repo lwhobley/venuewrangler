@@ -58,5 +58,8 @@ enable_confirmations = true
 enabled = true
 policy = "oneshot"
 
+[functions.storage-deletion-worker]
+verify_jwt = false
+
 [analytics]
 enabled = false

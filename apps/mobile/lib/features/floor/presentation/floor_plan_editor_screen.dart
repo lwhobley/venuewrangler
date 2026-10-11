@@ -265,8 +265,12 @@ class _FloorPlanEditorScreenState extends ConsumerState<FloorPlanEditorScreen> {
   Future<void> _saveDraft() async {
     final plan = _plan;
     if (plan == null) return;
-    await ref.read(floorEditorProvider.notifier).saveDraft(plan.id);
-    _toast('Draft saved on this device.');
+    try {
+      await ref.read(floorEditorProvider.notifier).saveDraft(plan.id);
+      if (mounted) _toast('Draft saved on this device.');
+    } catch (_) {
+      if (mounted) _toast('Could not save the draft. Check device storage and retry.', error: true);
+    }
   }
 
   Future<void> _publish() async {
@@ -362,8 +366,14 @@ class _FloorPlanEditorScreenState extends ConsumerState<FloorPlanEditorScreen> {
         ],
       ),
     );
+    if (!mounted) return false;
     if (choice == 'draft' && plan != null) {
-      await ref.read(floorEditorProvider.notifier).saveDraft(plan.id);
+      try {
+        await ref.read(floorEditorProvider.notifier).saveDraft(plan.id);
+      } catch (_) {
+        if (mounted) _toast('Could not save the draft. Check device storage and retry.', error: true);
+        return false;
+      }
     }
     return choice == 'draft' || choice == 'discard';
   }

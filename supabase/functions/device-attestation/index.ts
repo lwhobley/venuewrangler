@@ -15,8 +15,8 @@
 // Both platforms use a signed challenge bound to the caller and device. The
 // attestation_challenges table records the nonce for one-time consumption. iOS
 // sends it to App Attest; Android binds it to Play Integrity's requestHash or
-// classic nonce. The iOS path remains fail-open if recording the challenge
-// fails, consistent with observe mode; Android requires a recorded nonce.
+// classic nonce. Both paths require a recorded, single-use challenge before a
+// successful verdict can be recorded; observe mode still never blocks sign-in.
 import { corsHeaders, handleCorsPreflight } from "../_shared/cors.ts";
 import {
   createServiceClient,
@@ -92,7 +92,7 @@ Deno.serve(async (req) => {
     return await handleRequest(req);
   } catch (error) {
     console.error("unexpected error", error);
-    captureException(error, { function: "device-attestation", url: req.url });
+    captureException(error, { function: "device-attestation", path: new URL(req.url).pathname });
     await flushObservability();
     return jsonResponse({ error: "internal_error" }, 500);
   }
@@ -295,36 +295,36 @@ async function handleRequest(req: Request): Promise<Response> {
       if (!nonceBytes) {
         status = "invalid";
         detail = { error: "challenge_invalid_or_expired" };
-      } else if (
-        (await consumeAttestationChallenge(
+      } else {
+        const challengeState = await consumeAttestationChallenge(
           serviceClient,
           await sha256Hex(nonceBytes),
-        )) === "already_used"
-      ) {
-        // The signed token itself is still valid and unexpired, but this exact nonce was already
-        // consumed by a prior verification attempt — the actual replay case this table exists to
-        // catch. A row that was never found (e.g. the insert at issuance time failed) is treated
-        // as pass-through rather than a hard failure, matching this function's fail-open,
-        // observe-only posture elsewhere.
-        status = "invalid";
-        detail = { error: "challenge_already_used" };
-      } else {
-        try {
-          const result = await verifyAppAttest({
-            attestationObject: base64ToBytes(payload.attestation_object),
-            challenge: nonceBytes,
-            keyId: payload.key_id,
-            bundleIdentifier: bundleId,
-            teamIdentifier: teamId,
-            // Non-production builds (TestFlight/dev) attest with the development AAGUID;
-            // allowed in observe/log mode only — enforce mode requires production.
-            allowDevelopmentEnvironment: mode !== "enforce",
-          });
-          status = "valid";
-          detail = { environment: result.environment, key_id: result.keyId };
-        } catch (err) {
+        );
+        if (challengeState !== "consumed") {
           status = "invalid";
-          detail = { error: err instanceof Error ? err.message : String(err) };
+          detail = {
+            error: challengeState === "already_used"
+              ? "challenge_already_used"
+              : "challenge_not_recorded_or_expired",
+          };
+        } else {
+          try {
+            const result = await verifyAppAttest({
+              attestationObject: base64ToBytes(payload.attestation_object),
+              challenge: nonceBytes,
+              keyId: payload.key_id,
+              bundleIdentifier: bundleId,
+              teamIdentifier: teamId,
+              // Non-production builds (TestFlight/dev) attest with the development AAGUID;
+              // allowed in observe/log mode only — enforce mode requires production.
+              allowDevelopmentEnvironment: mode !== "enforce",
+            });
+            status = "valid";
+            detail = { environment: result.environment, key_id: result.keyId };
+          } catch (err) {
+            status = "invalid";
+            detail = { error: err instanceof Error ? err.message : String(err) };
+          }
         }
       }
     }

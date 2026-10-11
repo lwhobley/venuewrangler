@@ -22,22 +22,37 @@ interface DecodeResult {
   offset: number;
 }
 
+const MAX_CBOR_BYTES = 1_048_576;
+const MAX_CONTAINER_ITEMS = 10_000;
+const MAX_NESTING_DEPTH = 32;
+
+function requireBytes(bytes: Uint8Array, offset: number, count: number): void {
+  if (!Number.isSafeInteger(offset) || !Number.isSafeInteger(count) ||
+      offset < 0 || count < 0 || offset + count > bytes.length) {
+    throw new Error("cbor: truncated or out-of-range input");
+  }
+}
+
 function readLength(bytes: Uint8Array, offset: number, additionalInfo: number): { length: number; offset: number } {
   if (additionalInfo < 24) {
     return { length: additionalInfo, offset };
   }
   if (additionalInfo === 24) {
+    requireBytes(bytes, offset, 1);
     return { length: bytes[offset], offset: offset + 1 };
   }
   if (additionalInfo === 25) {
+    requireBytes(bytes, offset, 2);
     const view = new DataView(bytes.buffer, bytes.byteOffset + offset, 2);
     return { length: view.getUint16(0, false), offset: offset + 2 };
   }
   if (additionalInfo === 26) {
+    requireBytes(bytes, offset, 4);
     const view = new DataView(bytes.buffer, bytes.byteOffset + offset, 4);
     return { length: view.getUint32(0, false), offset: offset + 4 };
   }
   if (additionalInfo === 27) {
+    requireBytes(bytes, offset, 8);
     const view = new DataView(bytes.buffer, bytes.byteOffset + offset, 8);
     const length = view.getBigUint64(0, false);
     if (length > BigInt(Number.MAX_SAFE_INTEGER)) {
@@ -48,7 +63,11 @@ function readLength(bytes: Uint8Array, offset: number, additionalInfo: number): 
   throw new Error("cbor: indefinite-length encoding is not supported");
 }
 
-function decodeValue(bytes: Uint8Array, offset: number): DecodeResult {
+function decodeValue(bytes: Uint8Array, offset: number, depth: number, budget: { nodes: number }): DecodeResult {
+  requireBytes(bytes, offset, 1);
+  if (depth > MAX_NESTING_DEPTH || ++budget.nodes > MAX_CONTAINER_ITEMS) {
+    throw new Error("cbor: complexity limit exceeded");
+  }
   const initialByte = bytes[offset];
   const majorType = initialByte >> 5;
   const additionalInfo = initialByte & 0x1f;
@@ -63,21 +82,24 @@ function decodeValue(bytes: Uint8Array, offset: number): DecodeResult {
     case 2: {
       // byte string
       const { length, offset: next } = readLength(bytes, offset, additionalInfo);
+      requireBytes(bytes, next, length);
       return { value: bytes.subarray(next, next + length), offset: next + length };
     }
     case 3: {
       // text string
       const { length, offset: next } = readLength(bytes, offset, additionalInfo);
+      requireBytes(bytes, next, length);
       const strBytes = bytes.subarray(next, next + length);
       return { value: new TextDecoder().decode(strBytes), offset: next + length };
     }
     case 4: {
       // array
       const { length, offset: next } = readLength(bytes, offset, additionalInfo);
+      if (length > MAX_CONTAINER_ITEMS) throw new Error("cbor: array is too large");
       const arr: CborValue[] = [];
       let cursor = next;
       for (let i = 0; i < length; i++) {
-        const result = decodeValue(bytes, cursor);
+        const result = decodeValue(bytes, cursor, depth + 1, budget);
         arr.push(result.value);
         cursor = result.offset;
       }
@@ -86,12 +108,13 @@ function decodeValue(bytes: Uint8Array, offset: number): DecodeResult {
     case 5: {
       // map
       const { length, offset: next } = readLength(bytes, offset, additionalInfo);
+      if (length > MAX_CONTAINER_ITEMS) throw new Error("cbor: map is too large");
       const obj: { [key: string]: CborValue } = {};
       let cursor = next;
       for (let i = 0; i < length; i++) {
-        const keyResult = decodeValue(bytes, cursor);
+        const keyResult = decodeValue(bytes, cursor, depth + 1, budget);
         cursor = keyResult.offset;
-        const valueResult = decodeValue(bytes, cursor);
+        const valueResult = decodeValue(bytes, cursor, depth + 1, budget);
         cursor = valueResult.offset;
         if (typeof keyResult.value !== "string") {
           throw new Error("cbor: only text-string map keys are supported");
@@ -106,6 +129,10 @@ function decodeValue(bytes: Uint8Array, offset: number): DecodeResult {
 }
 
 export function decodeCbor(bytes: Uint8Array): CborValue {
-  const { value } = decodeValue(bytes, 0);
-  return value;
+  if (bytes.length === 0 || bytes.length > MAX_CBOR_BYTES) {
+    throw new Error("cbor: input size is invalid");
+  }
+  const result = decodeValue(bytes, 0, 0, { nodes: 0 });
+  if (result.offset !== bytes.length) throw new Error("cbor: trailing data");
+  return result.value;
 }

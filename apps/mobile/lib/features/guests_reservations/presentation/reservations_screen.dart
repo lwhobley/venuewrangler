@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/ops_colors.dart';
@@ -18,6 +20,7 @@ class ReservationsScreen extends ConsumerStatefulWidget {
 
 class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
   String _statusFilter = 'all';
+  final Set<String> _savingReservationIds = {};
 
   Future<void> _assign(Reservation r, List<RosterMember> roster) async {
     final picked = await showModalBottomSheet<({String? userId})>(
@@ -51,11 +54,38 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
         ),
       ),
     );
-    if (picked == null || picked.userId == r.assignedTo) return;
-    await ref
+    if (!mounted || picked == null || picked.userId == r.assignedTo) return;
+    await _runReservationMutation(r.id, () => ref
         .read(guestsReservationsRepositoryProvider)
-        .assignReservation(reservationId: r.id, userId: picked.userId);
-    ref.invalidate(reservationsListProvider);
+        .assignReservation(reservationId: r.id, userId: picked.userId));
+  }
+
+  Future<void> _updateStatus(String reservationId, String status) async {
+    await _runReservationMutation(reservationId, () => ref
+        .read(guestsReservationsRepositoryProvider)
+        .updateReservationStatus(reservationId: reservationId, status: status));
+  }
+
+  Future<void> _runReservationMutation(
+    String reservationId,
+    Future<void> Function() mutation,
+  ) async {
+    if (!mounted || !_savingReservationIds.add(reservationId)) return;
+    setState(() {});
+    try {
+      await mutation();
+      if (mounted) ref.invalidate(reservationsListProvider);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not update this reservation. Try again.')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _savingReservationIds.remove(reservationId));
+      }
+    }
   }
 
   @override
@@ -134,19 +164,13 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
                       return Card(
                         child: _ReservationListTile(
                           reservation: item,
+                          busy: _savingReservationIds.contains(item.id),
                           assigneeName: item.assignedTo == null
                               ? null
                               : names[item.assignedTo] ?? 'Team member',
                           onAssign: () => _assign(item, roster),
-                          onStatusChanged: (newStatus) async {
-                            await ref
-                                .read(guestsReservationsRepositoryProvider)
-                                .updateReservationStatus(
-                                  reservationId: item.id,
-                                  status: newStatus,
-                                );
-                            ref.invalidate(reservationsListProvider);
-                          },
+                          onStatusChanged: (newStatus) =>
+                              _updateStatus(item.id, newStatus),
                         ),
                       );
                     },
@@ -366,12 +390,14 @@ class _ReservationListTile extends StatelessWidget {
   const _ReservationListTile({
     required this.reservation,
     required this.onStatusChanged,
+    required this.busy,
     this.assigneeName,
     this.onAssign,
   });
 
   final Reservation reservation;
-  final ValueChanged<String> onStatusChanged;
+  final Future<void> Function(String) onStatusChanged;
+  final bool busy;
   final String? assigneeName;
   final VoidCallback? onAssign;
 
@@ -449,8 +475,14 @@ class _ReservationListTile extends StatelessWidget {
           const SizedBox(width: 4),
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert),
-            onSelected: (value) =>
-                value == 'assign' ? onAssign?.call() : onStatusChanged(value),
+            enabled: !busy,
+            onSelected: (value) {
+              if (value == 'assign') {
+                onAssign?.call();
+              } else {
+                unawaited(onStatusChanged(value));
+              }
+            },
             itemBuilder: (context) => [
               if (onAssign != null)
                 const PopupMenuItem(value: 'assign', child: Text('Assign to…')),

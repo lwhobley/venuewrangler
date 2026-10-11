@@ -20,15 +20,8 @@
   </main>
   <script>
     const params = new URLSearchParams(window.location.search);
-    if (params.has('connect')) {
-      document.getElementById('title').textContent = 'Stripe account setup';
-      document.getElementById('message').textContent = params.get('connect') === 'refresh'
-        ? 'Your setup link expired. Open Billing in the Venue Wrangler app and tap Continue Stripe setup for a new link.'
-        : 'Open Billing in the Venue Wrangler app and refresh your deposit account status. If Stripe needs more information, tap Continue Stripe setup.';
-    } else if (params.has('deposit')) {
-      document.getElementById('title').textContent = 'Event deposit checkout';
-      document.getElementById('message').textContent = 'Open the Venue Wrangler app to review the deposit status. A payment is marked paid only after Stripe confirms it.';
-    }
+    // Stripe is used for subscriptions only. Return and cancel URLs share this neutral,
+    // subscription-specific confirmation page.
   </script>
 </body>
 </html>
