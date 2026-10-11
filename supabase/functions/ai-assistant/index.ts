@@ -156,12 +156,17 @@ async function handleRequest(
     Deno.env.get("AI_MAX_OUTPUT_TOKENS") ?? "2048",
     10,
   );
-  const maxOutputTokens = Math.min(
-    payload.max_output_tokens && payload.max_output_tokens > 0
-      ? payload.max_output_tokens
-      : configuredMaxOutputTokens,
-    configuredMaxOutputTokens,
-  );
+  // Token limits must be whole numbers in [1, configured cap]; a fractional or out-of-range
+  // value is rejected here, before any budget reservation is taken.
+  const requestedMaxOutputTokens = payload.max_output_tokens;
+  if (
+    requestedMaxOutputTokens !== undefined && requestedMaxOutputTokens !== null &&
+    (!Number.isInteger(requestedMaxOutputTokens) || requestedMaxOutputTokens < 1 ||
+      requestedMaxOutputTokens > configuredMaxOutputTokens)
+  ) {
+    return jsonResponse({ error: "invalid_max_output_tokens" }, 400);
+  }
+  const maxOutputTokens = requestedMaxOutputTokens ?? configuredMaxOutputTokens;
 
   const systemPrompt = systemPromptFor(task as TaskType);
   const estimatedInputTokens = estimateInputTokens(systemPrompt + input);

@@ -61,13 +61,17 @@ class DeleteAccountButton extends ConsumerWidget {
 
     try {
       await ref.read(settingsRepositoryProvider).deleteAccount();
-      if (!context.mounted) return;
-      await signOutAndClearScopedData(ref);
     } on PostgrestException catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(e.message)),
       );
+      return;
     }
+
+    // The account is deleted server-side, so local sign-out and scoped-data clearing must run
+    // even if this widget was unmounted while the request was in flight. Only UI work below
+    // needs a mounted check, and there is none after this point.
+    await signOutAndClearScopedData(ref);
   }
 }

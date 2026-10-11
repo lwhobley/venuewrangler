@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -49,7 +51,9 @@ class _FakeChecklistsRepository implements ChecklistsRepository {
     required List<ItemResult> itemResults,
     String? notes,
   }) async {
-    if (simulateOffline) throw Exception('network unreachable');
+    if (simulateOffline) {
+      throw const SocketException('network unreachable');
+    }
     lastSubmittedResults = itemResults;
   }
 }

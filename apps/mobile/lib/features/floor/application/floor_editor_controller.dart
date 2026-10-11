@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -382,9 +383,15 @@ class FloorEditorController extends StateNotifier<FloorEditorState> {
         ],
         removedIds: removed,
       );
-      await discardDraft(planId);
     } finally {
       state = state.copyWith(saving: false);
+    }
+    // The layout is live once saveLayout commits. Failing to delete the local draft afterwards
+    // must not be reported as a failed publish ("Nothing was changed"), so it is only logged.
+    try {
+      await discardDraft(planId);
+    } catch (error) {
+      debugPrint('Floor draft cleanup failed after publish: $error');
     }
   }
 }

@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../core/auth/auth_providers.dart';
+import '../../../core/errors/transport_failure.dart';
 import '../../../core/offline/offline_queue_providers.dart';
 import '../../../core/network/supabase_providers.dart';
 import '../../media/application/image_picker_service.dart';
@@ -224,8 +225,8 @@ class IncidentListScreen extends ConsumerWidget {
             severity: severity,
           );
       ref.invalidate(incidentsForVenueProvider(venue.id));
-    } on PostgrestException catch (error) {
-      if (error.code == '42501') {
+    } catch (error) {
+      if (error is PostgrestException && error.code == '42501') {
         messenger.showSnackBar(
           const SnackBar(
             content:
@@ -234,25 +235,15 @@ class IncidentListScreen extends ConsumerWidget {
         );
         return; // the incident was never created; there is nothing to attach a photo to.
       }
-      await _queueIncidentOffline(
-        messenger,
-        ref,
-        incidentId,
-        venue,
-        title,
-        description,
-        severity,
-      );
-      if (photoPath != null) {
-        await _attachPhotoOffline(
-          ref,
-          incidentId: incidentId,
-          venue: venue,
-          photoPath: photoPath,
+      if (!isTransportFailure(error)) {
+        // A deterministic rejection would never succeed on retry, so do not queue it.
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text("Couldn't report the incident. Please try again."),
+          ),
         );
+        return;
       }
-      return;
-    } catch (_) {
       await _queueIncidentOffline(
         messenger,
         ref,
@@ -304,8 +295,8 @@ class IncidentListScreen extends ConsumerWidget {
             objectPath: objectPath,
             localFilePath: photoPath,
           );
-    } on PostgrestException catch (error) {
-      if (error.code == '42501') {
+    } catch (error) {
+      if (error is PostgrestException && error.code == '42501') {
         messenger.showSnackBar(
           const SnackBar(
             content: Text(
@@ -315,22 +306,16 @@ class IncidentListScreen extends ConsumerWidget {
         );
         return;
       }
-      await _attachPhotoOffline(
-        ref,
-        incidentId: incidentId,
-        venue: venue,
-        photoPath: photoPath,
-        attachmentId: attachmentId,
-        objectPath: objectPath,
-      );
-      messenger.showSnackBar(
-        const SnackBar(
-          content: Text(
-            "Incident reported. The photo will upload once you're back online.",
+      if (!isTransportFailure(error)) {
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Incident reported, but the photo could not be attached. Please try again.',
+            ),
           ),
-        ),
-      );
-    } catch (_) {
+        );
+        return;
+      }
       await _attachPhotoOffline(
         ref,
         incidentId: incidentId,

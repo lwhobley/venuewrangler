@@ -155,7 +155,7 @@ class VenueTimezone {
       case 'America/Denver':
       case 'America/Los_Angeles':
       case 'America/Anchorage':
-        return _isUsDst(utc);
+        return _isUsDst(timezoneId, utc);
       case 'Europe/London':
       case 'Europe/Paris':
         return _isEuDst(utc);
@@ -169,18 +169,25 @@ class VenueTimezone {
     }
   }
 
-  /// US Daylight Saving Time: 2nd Sunday in March to 1st Sunday in November.
-  static bool _isUsDst(DateTime utc) {
+  /// US Daylight Saving Time (since 2007): starts at 02:00 local standard time on the 2nd
+  /// Sunday of March and ends at 02:00 local daylight time on the 1st Sunday of November.
+  /// The UTC instants depend on each zone's standard offset, so they are computed per zone
+  /// (e.g. America/Los_Angeles changes at 10:00 UTC in March, not 07:00 UTC).
+  static bool _isUsDst(String timezoneId, DateTime utc) {
     final year = utc.year;
-    // 2nd Sunday in March at ~07:00 UTC
+    final stdHours = _standardOffsetsHours[timezoneId] ?? 0;
+
+    // 02:00 standard time = 02:00 - stdHours (UTC).
     final marchSecondSunday = _nthSundayOfMonth(year, 3, 2);
-    final dstStart = DateTime.utc(year, 3, marchSecondSunday, 7);
+    final dstStart = DateTime.utc(year, 3, marchSecondSunday, 2)
+        .subtract(Duration(hours: stdHours));
 
-    // 1st Sunday in November at ~06:00 UTC
+    // 02:00 daylight time = 02:00 - (stdHours + 1) (UTC).
     final novFirstSunday = _nthSundayOfMonth(year, 11, 1);
-    final dstEnd = DateTime.utc(year, 11, novFirstSunday, 6);
+    final dstEnd = DateTime.utc(year, 11, novFirstSunday, 2)
+        .subtract(Duration(hours: stdHours + 1));
 
-    return utc.isAfter(dstStart) && utc.isBefore(dstEnd);
+    return !utc.isBefore(dstStart) && utc.isBefore(dstEnd);
   }
 
   /// EU Summer Time: Last Sunday in March to last Sunday in October (01:00 UTC).

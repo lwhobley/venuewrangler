@@ -128,8 +128,11 @@ async function handleRequest(req: Request): Promise<Response> {
     return jsonResponse({ error: "invalid_json_body" }, 400);
   }
 
-  if (!payload.device_id) {
+  if (!payload?.device_id) {
     return jsonResponse({ error: "missing_device_id" }, 400);
+  }
+  if (typeof payload.device_id !== "string" || payload.device_id.length > 128) {
+    return jsonResponse({ error: "invalid_device_id" }, 400);
   }
 
   // Step 1 of the iOS flow: issue a signed challenge. Not gated by DEVICE_ATTESTATION_MODE

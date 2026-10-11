@@ -102,6 +102,14 @@ class _WranglerAssistantScreenState
     } on AppError catch (error) {
       if (!mounted) return;
       setState(() => _error = error);
+    } catch (_) {
+      // Anything not already mapped to an AppError (an unexpected failure) gets a generic
+      // message rather than a raw exception string.
+      if (!mounted) return;
+      setState(
+        () => _error =
+            const UnknownError('Something went wrong. Please try again.'),
+      );
     } finally {
       if (mounted) setState(() => _isAsking = false);
     }

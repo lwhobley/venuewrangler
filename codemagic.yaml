@@ -8,7 +8,7 @@ workflows:
       # Team-wide App Store Connect API key (Codemagic → Integrations → Developer Portal).
       app_store_connect: Venue Wrangler Wine
     environment:
-      flutter: 3.47.5
+      flutter: 3.47.7
       xcode: latest
       cocoapods: default
       # Signs with the original app's App Store distribution certificate + profile, both

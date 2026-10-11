@@ -19,8 +19,9 @@ class LocalFileMissingException implements Exception {
 /// does not duplicate role checks.
 abstract interface class MediaRepository {
   /// Uploads a local image file as evidence for [incidentId] and records its metadata in
-  /// `incident_attachments`. Idempotent for the same [attachmentId]/[objectPath]: both the
-  /// Storage upload (via `upsert: true`) and the metadata insert (duplicate-key-is-success,
+  /// `incident_attachments`. Idempotent for the same [attachmentId]/[objectPath]: the Storage
+  /// upload treats an already-existing object as success (no upsert, since the bucket has no
+  /// UPDATE policy) and the metadata insert (duplicate-key-is-success,
   /// same pattern as ChecklistsRepository.submitCompletion) are safe to retry, which matters
   /// because this is exactly what the offline queue does on reconnect.
   Future<void> uploadIncidentEvidence({
@@ -48,11 +49,18 @@ class SupabaseMediaRepository implements MediaRepository {
       throw LocalFileMissingException(localFilePath);
     }
 
-    await _client.storage.from('incident-evidence').upload(
-          objectPath,
-          file,
-          fileOptions: const FileOptions(upsert: true),
-        );
+    // upsert: false on purpose. The incident-evidence bucket has no UPDATE policy (evidence is
+    // immutable), and an upsert needs UPDATE, so a retry would fail with 403. A duplicate on a
+    // retry means an earlier attempt already stored this object, which is success here.
+    try {
+      await _client.storage.from('incident-evidence').upload(
+            objectPath,
+            file,
+            fileOptions: const FileOptions(upsert: false),
+          );
+    } on StorageException catch (error) {
+      if (!_isAlreadyUploaded(error)) rethrow;
+    }
 
     try {
       await _client.from('incident_attachments').insert({
@@ -66,5 +74,14 @@ class SupabaseMediaRepository implements MediaRepository {
       }
       rethrow;
     }
+  }
+
+  /// Storage answers 409 / "Duplicate" when the object key already exists.
+  bool _isAlreadyUploaded(StorageException error) {
+    final code = error.statusCode;
+    final name = error.error ?? '';
+    return code == '409' ||
+        name == 'Duplicate' ||
+        error.message.toLowerCase().contains('already exists');
   }
 }

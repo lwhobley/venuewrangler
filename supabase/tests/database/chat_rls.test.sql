@@ -27,6 +27,11 @@ insert into public.memberships (user_id, organization_id, venue_id, role) values
 -- ---------------------------------------------------------------------------
 -- 1. Trigger test: conversations derives organization_id
 -- ---------------------------------------------------------------------------
+-- Venues get an All Staff channel automatically (one per venue); this fixture supplies its
+-- own, so drop the automatic one first.
+delete from public.conversations
+where venue_id = '20000000-0000-0000-0000-0000000000a1' and type = 'all_staff';
+
 insert into public.conversations (
   id, venue_id, organization_id, type, name
 ) values (

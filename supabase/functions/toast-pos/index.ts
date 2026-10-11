@@ -111,9 +111,21 @@ async function handleRequest(req: Request): Promise<Response> {
     const incomingStatus = (payload.status as string | undefined) ?? "closed";
     const status = incomingStatus === "paid" ? "closed" :
       incomingStatus === "void" ? "voided" : incomingStatus;
+    // Timestamps and shapes are checked here so a bad value is a 400 the gateway does not
+    // retry, not a Postgres type error surfacing as a 500.
+    const isIsoTimestamp = (value: unknown): value is string =>
+      typeof value === "string" && /^\d{4}-\d{2}-\d{2}/.test(value) && !Number.isNaN(Date.parse(value));
+    const guestCount = payload.guest_count ?? 1;
+    const openedAt = payload.opened_at || new Date().toISOString();
+    const closedAtInput = payload.closed_at ?? null;
+    const menuItems = payload.menu_items ?? [];
     if (
       subtotal === null || tax === null || tip === null || total === null ||
-      !["open", "closed", "voided"].includes(status)
+      !["open", "closed", "voided"].includes(status) ||
+      typeof guestCount !== "number" || !Number.isInteger(guestCount) || guestCount < 0 || guestCount > 100_000 ||
+      !isIsoTimestamp(openedAt) ||
+      (closedAtInput !== null && !isIsoTimestamp(closedAtInput)) ||
+      !Array.isArray(menuItems)
     ) {
       return jsonResponse({ error: "invalid_check_fields" }, 400);
     }
@@ -130,8 +142,17 @@ async function handleRequest(req: Request): Promise<Response> {
     if (existingError) {
       return jsonResponse({ error: "failed_to_read_check" }, 500);
     }
-    if (existingCheck && existingCheck.closed_at && existingCheck.status !== "open") {
+    // A void that arrives after the close is honoured: it is the refund/cancel of a closed check.
+    const isVoidAfterClose = status === "voided" && existingCheck?.status === "closed";
+    if (existingCheck && existingCheck.closed_at && existingCheck.status !== "open" && !isVoidAfterClose) {
       return jsonResponse({ ok: true, external_check_id: externalCheckId, ignored: "check_already_closed" });
+    }
+
+    // A closed or voided check must carry a close time. Fall back to the stored one (a void
+    // may omit it) so a null closed_at is never written for a final check.
+    const closedAt = (closedAtInput as string | null) ?? existingCheck?.closed_at ?? null;
+    if (status !== "open" && !closedAt) {
+      return jsonResponse({ error: "missing_closed_at" }, 400);
     }
 
     // Idempotent upsert of the check into pos_checks
@@ -143,15 +164,15 @@ async function handleRequest(req: Request): Promise<Response> {
         table_label: payload.table_label as string | null,
         server_name: payload.server_name as string | null,
         guest_name: payload.guest_name as string | null,
-        guest_count: (payload.guest_count as number) ?? 1,
-        opened_at: (payload.opened_at as string) || new Date().toISOString(),
-        closed_at: payload.closed_at as string | null,
+        guest_count: guestCount,
+        opened_at: openedAt,
+        closed_at: closedAt,
         subtotal_cents: subtotal,
         tax_cents: tax,
         tip_cents: tip,
         total_cents: total,
         status,
-        menu_items: payload.menu_items || [],
+        menu_items: menuItems,
         raw_payload: payload,
         updated_at: new Date().toISOString(),
       },

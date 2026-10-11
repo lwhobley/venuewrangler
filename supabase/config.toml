@@ -58,7 +58,32 @@ enable_confirmations = true
 enabled = true
 policy = "oneshot"
 
+# Functions below run with verify_jwt=false because their callers have no Supabase user JWT
+# (provider webhooks, pg_net dispatch, or browser OAuth redirects). Each authenticates itself:
+# Stripe signature, per-venue webhook secret hash, or a shared dispatch secret; the OAuth
+# /connect routes check the caller's session in-function and /callback verifies signed state.
 [functions.storage-deletion-worker]
+verify_jwt = false
+
+[functions.stripe-webhook]
+verify_jwt = false
+
+[functions.toast-pos]
+verify_jwt = false
+
+[functions.notifications-dispatch]
+verify_jwt = false
+
+[functions.account-deletion-worker]
+verify_jwt = false
+
+[functions.square-oauth]
+verify_jwt = false
+
+[functions.quickbooks-oauth]
+verify_jwt = false
+
+[functions.gusto-oauth]
 verify_jwt = false
 
 [analytics]

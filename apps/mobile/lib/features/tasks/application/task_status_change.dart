@@ -2,15 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../core/errors/transport_failure.dart';
 import '../../../core/offline/offline_queue_providers.dart';
 import '../../../core/offline/pending_mutation.dart';
 import '../domain/operational_task.dart';
 import 'tasks_providers.dart';
 
-/// Status changes still queued for sync, by task id (latest wins).
+/// Status changes still queued for sync, by task id (latest wins). Conflicts are excluded: they
+/// are no longer retried and are shown to the person separately.
 Map<String, TaskStatus> pendingTaskStatuses(List<PendingMutation> pending) {
   final result = <String, TaskStatus>{};
   for (final m in pending) {
+    if (m.isConflict) continue;
     if (m.kind != kTaskStatusUpdateMutationKind) continue;
     result[m.payload['taskId'] as String] =
         TaskStatus.fromDb(m.payload['status'] as String);
@@ -30,15 +33,21 @@ Future<void> changeTaskStatus(
   try {
     await ref.read(tasksRepositoryProvider).updateStatus(task.id, newStatus);
     ref.invalidate(tasksForVenueProvider(task.venueId));
-  } on PostgrestException catch (error) {
-    if (error.code == '42501') {
+  } catch (error) {
+    if (error is PostgrestException && error.code == '42501') {
       messenger.showSnackBar(
         const SnackBar(content: Text("You don't have permission to do that.")),
       );
       return;
     }
-    await _queue(ref, messenger, task, newStatus);
-  } catch (_) {
+    if (!isTransportFailure(error)) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text("Couldn't update the task. Please try again."),
+        ),
+      );
+      return;
+    }
     await _queue(ref, messenger, task, newStatus);
   }
 }

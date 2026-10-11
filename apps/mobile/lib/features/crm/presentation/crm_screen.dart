@@ -391,6 +391,18 @@ class _BeoTileState extends ConsumerState<_BeoTile> {
               if (beo.status != 'confirmed' && beo.status != 'cancelled')
                 OutlinedButton(
                   onPressed: () async {
+                    // The database rejects confirming a BEO with no start time (22023), so
+                    // explain that here instead of showing a generic failure.
+                    if (beo.eventDate == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Set an event date before confirming this BEO.',
+                          ),
+                        ),
+                      );
+                      return;
+                    }
                     try {
                       await ref
                           .read(crmRepositoryProvider)
@@ -426,39 +438,42 @@ class _BeoTileState extends ConsumerState<_BeoTile> {
                   },
                   child: const Text('Cancel'),
                 ),
-              FilledButton(
-                onPressed: converting
-                    ? null
-                    : () async {
-                        setState(() => converting = true);
-                        try {
-                          final result = await ref
-                              .read(crmRepositoryProvider)
-                              .convertBeoToContract(beoId: beo.id);
-                          ref.invalidate(crmContractsProvider(venueId));
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  result.alreadyExisted
-                                      ? 'A contract already exists for this BEO.'
-                                      : 'Contract created.',
+              // Only a confirmed BEO can become a contract; draft/sent/cancelled ones cannot.
+              if (beo.status == 'confirmed')
+                FilledButton(
+                  onPressed: converting
+                      ? null
+                      : () async {
+                          setState(() => converting = true);
+                          try {
+                            final result = await ref
+                                .read(crmRepositoryProvider)
+                                .convertBeoToContract(beoId: beo.id);
+                            ref.invalidate(crmContractsProvider(venueId));
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    result.alreadyExisted
+                                        ? 'A contract already exists for this BEO.'
+                                        : 'Contract created.',
+                                  ),
                                 ),
-                              ),
-                            );
+                              );
+                            }
+                          } catch (e) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text(_friendlyError(e))),
+                              );
+                            }
+                          } finally {
+                            if (mounted) setState(() => converting = false);
                           }
-                        } catch (e) {
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text(_friendlyError(e))),
-                            );
-                          }
-                        } finally {
-                          if (mounted) setState(() => converting = false);
-                        }
-                      },
-                child: Text(converting ? 'Converting…' : 'Convert to contract'),
-              ),
+                        },
+                  child:
+                      Text(converting ? 'Converting…' : 'Convert to contract'),
+                ),
             ],
           ),
         ),

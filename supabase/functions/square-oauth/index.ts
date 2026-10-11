@@ -60,6 +60,11 @@ Deno.serve(async (req) => {
     console.error("square-oauth: unexpected error", error);
     captureException(error, { function: "square-oauth", path: new URL(req.url).pathname });
     await flushObservability();
+    // The browser is waiting on /callback, so send it to the error page rather than JSON.
+    const oauthErrorUrl = Deno.env.get("PAYROLL_OAUTH_ERROR_URL");
+    if (oauthErrorUrl && new URL(req.url).pathname.endsWith("/callback")) {
+      return redirectResponse(`${oauthErrorUrl}?provider=square&reason=internal_error`);
+    }
     return jsonResponse({ error: "internal_error" }, 500);
   }
 });
@@ -148,6 +153,10 @@ async function handleRequest(req: Request): Promise<Response> {
     }
 
     const tokenData = await tokenResponse.json();
+    if (!tokenData?.access_token) {
+      console.error("Square token exchange returned no access_token");
+      return redirectResponse(`${errorUrl}?provider=square&reason=token_exchange_failed`);
+    }
     if (!await isCurrentVenueManager(serviceClient, statePayload.user_id, statePayload.venue_id)) {
       return redirectResponse(`${errorUrl}?provider=square&reason=authorization_revoked`);
     }
