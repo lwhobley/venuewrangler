@@ -2,7 +2,7 @@
 -- Fixtures: Org A, Venue A1 (manager 004, staff 005), Org B, Venue B1 (owner 006).
 
 begin;
-select plan(24);
+select plan(27);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-000000000004', 'venue-a1-manager@example.com'),
@@ -267,6 +267,36 @@ select results_eq(
   $$ values (true) $$,
   'a second conversion of the same BEO is idempotent, not a duplicate'
 );
+
+-- ---------------------------------------------------------------------------
+-- 24-26. Authorization is checked before existence: callers without a manager role, callers
+-- from another tenant, and callers asking about a nonexistent BEO all get the identical error,
+-- so BEO ids cannot be probed.
+-- ---------------------------------------------------------------------------
+set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-000000000005'; -- staff
+select throws_ok(
+  $$ select * from public.convert_beo_to_contract('70000000-0000-0000-0000-000000000003') $$,
+  '42501',
+  'forbidden: insufficient venue permissions',
+  'staff cannot convert a BEO'
+);
+
+set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-000000000006'; -- other org owner
+select throws_ok(
+  $$ select * from public.convert_beo_to_contract('70000000-0000-0000-0000-000000000003') $$,
+  '42501',
+  'forbidden: insufficient venue permissions',
+  'another tenant gets a forbidden error for an existing BEO'
+);
+
+select throws_ok(
+  $$ select * from public.convert_beo_to_contract('70000000-0000-0000-0000-0000000000ff') $$,
+  '42501',
+  'forbidden: insufficient venue permissions',
+  'a nonexistent BEO returns the same forbidden error, not "does not exist"'
+);
+
+set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-000000000004'; -- back to manager
 
 -- BEO deposit collection (deposit_cents/deposit_status/waive_beo_deposit) was removed
 -- entirely by 20261004010000_remove_beo_deposit_and_stripe_connect.sql: Stripe is
