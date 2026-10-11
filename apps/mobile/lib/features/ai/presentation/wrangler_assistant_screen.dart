@@ -107,7 +107,8 @@ class _WranglerAssistantScreenState
       // message rather than a raw exception string.
       if (!mounted) return;
       setState(
-        () => _error = const UnknownError('Something went wrong. Please try again.'),
+        () => _error =
+            const UnknownError('Something went wrong. Please try again.'),
       );
     } finally {
       if (mounted) setState(() => _isAsking = false);
