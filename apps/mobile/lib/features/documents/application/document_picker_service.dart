@@ -43,7 +43,7 @@ class DeviceDocumentPickerService implements DocumentPickerService {
 
   @override
   Future<PickedDocument?> pickDocument() async {
-    final result = await FilePicker.platform.pickFiles(
+    final result = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: _allowedExtensions,
       withData: kIsWeb,
