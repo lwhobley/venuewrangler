@@ -101,7 +101,11 @@ class OfflineQueueController extends StateNotifier<OfflineQueueState> {
   }
 
   Future<void> _persist() {
-    final write = _writeChain.then((_) => _store.saveAll(state.pending));
+    // Conflicts are persisted alongside pending so they survive an app restart; _load() splits
+    // them back apart via isConflict.
+    final write = _writeChain.then(
+      (_) => _store.saveAll([...state.pending, ...state.conflicts]),
+    );
     // A failed write must not wedge every later one; the caller still sees its own error.
     _writeChain = write.then((_) {}, onError: (_) {});
     return write;
@@ -179,10 +183,11 @@ class OfflineQueueController extends StateNotifier<OfflineQueueState> {
           case MutationOutcome.retryableFailure:
             final attempted = mutation.withIncrementedAttempt();
             if (attempted.attemptCount >= kMaxMutationAttempts) {
+              // Moves out of pending (settled) and into conflicts, never both.
               final conflicted = attempted.withConflict(
                 'This change reached the retry limit and needs your review.',
               );
-              retried[mutation.id] = conflicted;
+              settled.add(mutation.id);
               newConflicts.add(conflicted);
             } else {
               retried[mutation.id] = attempted;

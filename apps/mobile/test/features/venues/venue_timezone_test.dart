@@ -19,6 +19,28 @@ void main() {
       );
     });
 
+    test('America/Los_Angeles switches DST at 02:00 local, per its own offset', () {
+      // 2026: DST starts Sunday 8 March (02:00 PST = 10:00 UTC) and ends Sunday 1 November
+      // (02:00 PDT = 09:00 UTC).
+      const tz = 'America/Los_Angeles';
+      expect(
+        VenueTimezone.offsetFor(tz, DateTime.utc(2026, 3, 8, 9, 59)),
+        const Duration(hours: -8),
+      );
+      expect(
+        VenueTimezone.offsetFor(tz, DateTime.utc(2026, 3, 8, 10, 0)),
+        const Duration(hours: -7),
+      );
+      expect(
+        VenueTimezone.offsetFor(tz, DateTime.utc(2026, 11, 1, 8, 59)),
+        const Duration(hours: -7),
+      );
+      expect(
+        VenueTimezone.offsetFor(tz, DateTime.utc(2026, 11, 1, 9, 0)),
+        const Duration(hours: -8),
+      );
+    });
+
     test('Phoenix does not observe daylight saving time', () {
       final summerUtc = DateTime.utc(2026, 7, 15, 12, 0);
       final winterUtc = DateTime.utc(2026, 1, 15, 12, 0);

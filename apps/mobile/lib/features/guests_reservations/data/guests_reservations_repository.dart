@@ -18,7 +18,7 @@ abstract class GuestsReservationsRepository {
     required String venueId,
     DateTime? from,
     DateTime? to,
-    int limit = 50,
+    int limit = 500,
   });
 
   Future<Reservation> createReservation({
@@ -112,7 +112,7 @@ class SupabaseGuestsReservationsRepository
     required String venueId,
     DateTime? from,
     DateTime? to,
-    int limit = 50,
+    int limit = 500,
   }) async {
     final now = DateTime.now().toUtc();
     final windowFrom = from ?? now.subtract(const Duration(days: 1));

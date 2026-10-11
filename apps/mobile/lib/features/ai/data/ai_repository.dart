@@ -2,6 +2,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/errors/app_error.dart';
 import '../../../core/errors/error_reporter.dart';
+import '../../../core/errors/transport_failure.dart';
 import '../domain/ai_models.dart';
 
 /// Calls the `ai-assistant` Edge Function (supabase/functions/ai-assistant). The function
@@ -49,12 +50,12 @@ class SupabaseAiRepository implements AiRepository {
     required String venueId,
     required String pastedText,
   }) async {
-    final result = await _invoke(
+    return _invoke(
       task: 'staff_import_parse',
       venueId: venueId,
       input: pastedText,
+      parse: StaffImportResult.fromJson,
     );
-    return StaffImportResult.fromJson(result);
   }
 
   @override
@@ -62,12 +63,12 @@ class SupabaseAiRepository implements AiRepository {
     required String venueId,
     required String pastedText,
   }) async {
-    final result = await _invoke(
+    return _invoke(
       task: 'inventory_parse',
       venueId: venueId,
       input: pastedText,
+      parse: InventoryParseResult.fromJson,
     );
-    return InventoryParseResult.fromJson(result);
   }
 
   @override
@@ -75,12 +76,12 @@ class SupabaseAiRepository implements AiRepository {
     required String venueId,
     required String context,
   }) async {
-    final result = await _invoke(
+    return _invoke(
       task: 'scheduling_suggestion',
       venueId: venueId,
       input: context,
+      parse: SchedulingSuggestionResult.fromJson,
     );
-    return SchedulingSuggestionResult.fromJson(result);
   }
 
   @override
@@ -88,9 +89,12 @@ class SupabaseAiRepository implements AiRepository {
     required String venueId,
     required String question,
   }) async {
-    final result =
-        await _invoke(task: 'wrangler_ask', venueId: venueId, input: question);
-    return WranglerAskResult.fromJson(result);
+    return _invoke(
+      task: 'wrangler_ask',
+      venueId: venueId,
+      input: question,
+      parse: WranglerAskResult.fromJson,
+    );
   }
 
   @override
@@ -98,18 +102,25 @@ class SupabaseAiRepository implements AiRepository {
     required String venueId,
     required String context,
   }) async {
-    final result =
-        await _invoke(task: 'shift_insights', venueId: venueId, input: context);
-    return ShiftInsightsResult.fromJson(result);
+    return _invoke(
+      task: 'shift_insights',
+      venueId: venueId,
+      input: context,
+      parse: ShiftInsightsResult.fromJson,
+    );
   }
 
   /// Shared call path for all four task types. Maps the Edge Function's error-code JSON
   /// bodies (see supabase/functions/ai-assistant/index.ts) to the app's [AppError] types so
   /// every screen gets a consistent, user-facing message rather than a raw exception.
-  Future<Map<String, dynamic>> _invoke({
+  ///
+  /// [parse] runs inside the same try, so a malformed response surfaces as an [AppError] instead
+  /// of a raw TypeError reaching the screen.
+  Future<T> _invoke<T>({
     required String task,
     required String venueId,
     required String input,
+    required T Function(Map<String, dynamic> json) parse,
   }) async {
     final correlationId = newCorrelationId();
 
@@ -132,13 +143,17 @@ class SupabaseAiRepository implements AiRepository {
           'The AI assistant returned an unexpected response.',
         );
       }
-      return result;
+      return parse(result);
     } on FunctionException catch (error) {
       throw _mapFunctionException(error);
     } on AppError {
       rethrow;
-    } catch (_) {
-      throw const NetworkError();
+    } catch (error) {
+      if (isTransportFailure(error)) throw const NetworkError();
+      // A parse or type failure on the response is not a network problem.
+      throw const UnknownError(
+        'The AI assistant returned an unexpected response.',
+      );
     }
   }
 

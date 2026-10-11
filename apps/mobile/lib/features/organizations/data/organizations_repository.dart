@@ -52,6 +52,10 @@ class SupabaseOrganizationsRepository implements OrganizationsRepository {
       },
     );
     final row = (response as List<dynamic>).first as Map<String, dynamic>;
+    // create_workspace does not return the zone it stored, so carry the requested one through
+    // (normalized the same way the RPC does: trimmed, blank means UTC). Otherwise the venue
+    // would silently report UTC.
+    final storedTimezone = timezone.trim().isEmpty ? 'UTC' : timezone.trim();
 
     return (
       organization: Organization.fromJson({
@@ -63,6 +67,7 @@ class SupabaseOrganizationsRepository implements OrganizationsRepository {
         'id': row['venue_id'],
         'organization_id': row['organization_id'],
         'name': row['venue_name'],
+        'timezone': storedTimezone,
         'created_at': row['venue_created_at'],
       }),
     );

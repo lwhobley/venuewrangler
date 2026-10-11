@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
 import '../../../core/theme/ops_colors.dart';
 import '../../../core/widgets/state_views.dart';
 import '../../../core/widgets/status_chip.dart';
@@ -11,6 +13,18 @@ import '../../workforce/application/workforce_providers.dart';
 import '../../workforce/domain/workforce_models.dart';
 import '../application/guests_reservations_providers.dart';
 import '../domain/reservation.dart';
+
+/// The BEO hold trigger (guard_reservation_against_confirmed_beos) raises 23505 with a
+/// `reservation_hold_conflict` message when a time overlaps a confirmed event. Give that case a
+/// message the person can act on; anything else keeps the caller's generic [fallback].
+String _reservationWriteErrorMessage(Object error, {required String fallback}) {
+  if (error is PostgrestException &&
+      error.code == '23505' &&
+      error.message.contains('reservation_hold_conflict')) {
+    return 'This time overlaps a confirmed event. Choose another time.';
+  }
+  return fallback;
+}
 
 class ReservationsScreen extends ConsumerStatefulWidget {
   const ReservationsScreen({super.key});
@@ -86,11 +100,16 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
     try {
       await mutation();
       if (mounted) ref.invalidate(reservationsListProvider);
-    } catch (_) {
+    } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Could not update this reservation. Try again.'),
+          SnackBar(
+            content: Text(
+              _reservationWriteErrorMessage(
+                error,
+                fallback: 'Could not update this reservation. Try again.',
+              ),
+            ),
           ),
         );
       }
@@ -480,11 +499,14 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
                           Navigator.of(dialogCtx).pop();
                           ref.invalidate(reservationsListProvider);
                         }
-                      } catch (_) {
+                      } catch (error) {
                         if (dialogCtx.mounted) {
                           update(() {
-                            validationError =
-                                'Could not create reservation. Please try again.';
+                            validationError = _reservationWriteErrorMessage(
+                              error,
+                              fallback:
+                                  'Could not create reservation. Please try again.',
+                            );
                           });
                         }
                       } finally {

@@ -360,6 +360,9 @@ class _GenerateInsightsDialogState
       _errorMessage = null;
     });
 
+    // Captured before the await: the write can land after this dialog has closed, and the
+    // provider refresh must still happen. `ref` itself is unsafe once the widget is disposed.
+    final container = ProviderScope.containerOf(context, listen: false);
     try {
       final repo = ref.read(insightsRepositoryProvider);
       await repo.generateAndSaveShiftInsights(
@@ -369,13 +372,13 @@ class _GenerateInsightsDialogState
       );
 
       if (widget.shiftId != null) {
-        ref.invalidate(
+        container.invalidate(
           shiftInsightsForShiftProvider(
             (venueId: widget.venueId, shiftId: widget.shiftId!),
           ),
         );
       } else {
-        ref.invalidate(shiftInsightsForVenueProvider(widget.venueId));
+        container.invalidate(shiftInsightsForVenueProvider(widget.venueId));
       }
 
       if (mounted) {
@@ -387,11 +390,13 @@ class _GenerateInsightsDialogState
         );
       }
     } on AppError catch (e) {
+      if (!mounted) return;
       setState(() {
         _errorMessage = e.message;
         _isGenerating = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _errorMessage = 'Could not generate shift insights: $e';
         _isGenerating = false;
