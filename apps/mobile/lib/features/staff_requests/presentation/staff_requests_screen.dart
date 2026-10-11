@@ -219,9 +219,11 @@ class _StaffRequestTile extends ConsumerWidget {
     try {
       await ref.read(staffRequestsRepositoryProvider).cancelRequest(request.id);
       ref.invalidate(staffRequestsForVenueProvider(request.venueId));
-    } on PostgrestException catch (error) {
+    } catch (error) {
+      // Any failure (permission, constraint, or network) must surface; silence would leave the
+      // person unsure whether the cancel happened.
       if (!context.mounted) return;
-      final message = error.code == '42501'
+      final message = error is PostgrestException && error.code == '42501'
           ? 'You do not have permission to cancel this request.'
           : 'Could not cancel request. Please try again.';
       ScaffoldMessenger.of(context).showSnackBar(
@@ -270,9 +272,9 @@ class _StaffRequestTile extends ConsumerWidget {
             responseNotes: notesController.text.trim(),
           );
       ref.invalidate(staffRequestsForVenueProvider(request.venueId));
-    } on PostgrestException catch (error) {
+    } catch (error) {
       if (!context.mounted) return;
-      final message = error.code == '42501'
+      final message = error is PostgrestException && error.code == '42501'
           ? 'You do not have permission to review staff requests.'
           : 'Could not review request. Please try again.';
       ScaffoldMessenger.of(context).showSnackBar(
@@ -355,10 +357,11 @@ class _CreateStaffRequestDialogState
       if (!mounted) return;
       ref.invalidate(staffRequestsForVenueProvider(widget.venueId));
       Navigator.of(context).pop();
-    } on PostgrestException catch (error) {
+    } catch (error) {
+      // Reset on every failure so the form is usable again (network errors included).
       if (!mounted) return;
       setState(() => _submitting = false);
-      final message = error.code == '42501'
+      final message = error is PostgrestException && error.code == '42501'
           ? 'You do not have permission to submit requests for this venue.'
           : 'Could not submit request. Please try again.';
       ScaffoldMessenger.of(context).showSnackBar(

@@ -152,6 +152,8 @@ class DocumentsScreen extends ConsumerWidget {
         return;
       }
 
+      // Captured while mounted, so the list refreshes even if this screen closes mid-upload.
+      final container = ProviderScope.containerOf(context, listen: false);
       try {
         await ref.read(documentsRepositoryProvider).uploadDocument(
               venueId: venueId,
@@ -161,7 +163,7 @@ class DocumentsScreen extends ConsumerWidget {
               localFilePath: picked.path,
               bytes: picked.bytes,
             );
-        if (context.mounted) ref.invalidate(documentsProvider(venueId));
+        container.invalidate(documentsProvider(venueId));
       } on AppError catch (error) {
         if (!context.mounted) return;
         ScaffoldMessenger.of(context)
@@ -233,12 +235,13 @@ class _DocumentTile extends ConsumerWidget {
     );
     if (confirmed != true || !context.mounted) return;
 
+    // Captured while mounted, so the list refreshes even if this screen closes mid-delete.
+    final container = ProviderScope.containerOf(context, listen: false);
     try {
       await ref
           .read(documentsRepositoryProvider)
           .deleteDocument(documentId: document.id);
-      if (!context.mounted) return;
-      ref.invalidate(documentsProvider(venueId));
+      container.invalidate(documentsProvider(venueId));
     } on AppError catch (error) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context)

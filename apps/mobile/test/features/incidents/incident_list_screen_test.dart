@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -49,7 +51,9 @@ class _FakeIncidentsRepository implements IncidentsRepository {
     String? description,
     required IncidentSeverity severity,
   }) async {
-    if (simulateOffline) throw Exception('network unreachable');
+    if (simulateOffline) {
+      throw const SocketException('network unreachable');
+    }
     lastReportedTitle = title;
   }
 

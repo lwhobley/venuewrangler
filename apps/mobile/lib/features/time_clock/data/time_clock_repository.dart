@@ -4,6 +4,10 @@ import '../../../core/errors/app_error.dart';
 import '../domain/time_entry.dart';
 
 abstract interface class TimeClockRepository {
+  /// Returns the user's open entry. The database allows only one open entry per user (see
+  /// time_entries_one_open_per_user_idx), so this may belong to a *different* venue than
+  /// [venueId]. Callers must compare `entry.venueId` before treating the user as clocked in
+  /// here; filtering by venue would hide that entry and make clock-in fail with "already clocked in".
   Future<TimeEntry?> getActiveEntry({required String venueId});
 
   Future<List<TimeEntry>> getMyEntries({

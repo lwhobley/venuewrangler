@@ -391,6 +391,18 @@ class _BeoTileState extends ConsumerState<_BeoTile> {
               if (beo.status != 'confirmed' && beo.status != 'cancelled')
                 OutlinedButton(
                   onPressed: () async {
+                    // The database rejects confirming a BEO with no start time (22023), so
+                    // explain that here instead of showing a generic failure.
+                    if (beo.eventDate == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Set an event date before confirming this BEO.',
+                          ),
+                        ),
+                      );
+                      return;
+                    }
                     try {
                       await ref
                           .read(crmRepositoryProvider)
@@ -426,6 +438,8 @@ class _BeoTileState extends ConsumerState<_BeoTile> {
                   },
                   child: const Text('Cancel'),
                 ),
+              // Only a confirmed BEO can become a contract; draft/sent/cancelled ones cannot.
+              if (beo.status == 'confirmed')
               FilledButton(
                 onPressed: converting
                     ? null

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -42,8 +43,38 @@ class PushRegistrationService {
   final FirebaseMessaging? _firebaseMessagingOverride;
   final SecureSessionStorage _sessionStorage = const SecureSessionStorage();
 
+  /// Venue the Android token was last registered for; a rotated FCM token is re-registered
+  /// against it. Null until the first successful Android registration.
+  String? _androidVenueId;
+  StreamSubscription<String>? _tokenRefreshSubscription;
+
   FirebaseMessaging get _firebaseMessaging =>
       _firebaseMessagingOverride ?? FirebaseMessaging.instance;
+
+  /// Cancels the FCM token-refresh listener. Called when the provider is disposed.
+  Future<void> dispose() async {
+    await _tokenRefreshSubscription?.cancel();
+    _tokenRefreshSubscription = null;
+  }
+
+  void _listenForTokenRefresh() {
+    _tokenRefreshSubscription ??= _firebaseMessaging.onTokenRefresh.listen(
+      (token) => unawaited(_onAndroidTokenRefreshed(token)),
+      onError: (Object _) {},
+    );
+  }
+
+  /// FCM rotates tokens (app restore, reinstall, periodic refresh). Without this the server
+  /// keeps only the old token and Android pushes silently stop until the next app launch.
+  Future<void> _onAndroidTokenRefreshed(String token) async {
+    final venueId = _androidVenueId;
+    if (venueId == null || token.isEmpty) return;
+    try {
+      await _registerAndRemember(venueId, token, 'android');
+    } catch (_) {
+      // Same fire-and-forget posture as registerForVenue: the next launch retries.
+    }
+  }
 
   Future<void> _registerAndRemember(
     String venueId,
@@ -111,6 +142,8 @@ class PushRegistrationService {
     if (token == null || token.isEmpty) return false;
 
     await _registerAndRemember(venueId, token, 'android');
+    _androidVenueId = venueId;
+    _listenForTokenRefresh();
     return true;
   }
 }

@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/errors/app_error.dart';
+import '../../../core/errors/transport_failure.dart';
 import '../../ai/data/ai_repository.dart';
 import '../domain/shift_insight.dart';
 
@@ -59,8 +60,11 @@ class SupabaseInsightsRepository implements InsightsRepository {
           .toList(growable: false);
     } on PostgrestException catch (e) {
       throw _mapPostgrestException(e);
-    } catch (_) {
-      throw const NetworkError();
+    } catch (error) {
+      // Only genuine transport failures are "network" errors. Anything else (e.g. a parse
+      // TypeError) is a bug and must surface unchanged instead of being relabelled.
+      if (isTransportFailure(error)) throw const NetworkError();
+      rethrow;
     }
   }
 
@@ -88,8 +92,11 @@ class SupabaseInsightsRepository implements InsightsRepository {
       return ShiftInsight.fromJson(row);
     } on PostgrestException catch (e) {
       throw _mapPostgrestException(e);
-    } catch (_) {
-      throw const NetworkError();
+    } catch (error) {
+      // Only genuine transport failures are "network" errors. Anything else (e.g. a parse
+      // TypeError) is a bug and must surface unchanged instead of being relabelled.
+      if (isTransportFailure(error)) throw const NetworkError();
+      rethrow;
     }
   }
 
@@ -119,8 +126,11 @@ class SupabaseInsightsRepository implements InsightsRepository {
       return rows.map(ShiftInsight.fromJson).toList();
     } on PostgrestException catch (e) {
       throw _mapPostgrestException(e);
-    } catch (_) {
-      throw const NetworkError();
+    } catch (error) {
+      // Only genuine transport failures are "network" errors. Anything else (e.g. a parse
+      // TypeError) is a bug and must surface unchanged instead of being relabelled.
+      if (isTransportFailure(error)) throw const NetworkError();
+      rethrow;
     }
   }
 
@@ -130,8 +140,11 @@ class SupabaseInsightsRepository implements InsightsRepository {
       await _client.from('shift_insights').delete().eq('id', insightId);
     } on PostgrestException catch (e) {
       throw _mapPostgrestException(e);
-    } catch (_) {
-      throw const NetworkError();
+    } catch (error) {
+      // Only genuine transport failures are "network" errors. Anything else (e.g. a parse
+      // TypeError) is a bug and must surface unchanged instead of being relabelled.
+      if (isTransportFailure(error)) throw const NetworkError();
+      rethrow;
     }
   }
 

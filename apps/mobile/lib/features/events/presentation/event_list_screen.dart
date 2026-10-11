@@ -156,9 +156,10 @@ class EventListScreen extends ConsumerWidget {
                 : notesController.text.trim(),
           );
       ref.invalidate(eventsForVenueProvider(venueId));
-    } on PostgrestException catch (error) {
+    } catch (error) {
       if (!context.mounted) return;
-      final message = switch (error.code) {
+      final code = error is PostgrestException ? error.code : null;
+      final message = switch (code) {
         '42501' => "You don't have permission to add events here.",
         '23514' => 'The event end time must be after its start time.',
         _ => 'Something went wrong. Please try again.',
@@ -240,9 +241,9 @@ class _EventTile extends ConsumerWidget {
     try {
       await ref.read(eventsRepositoryProvider).deleteEvent(event.id);
       ref.invalidate(eventsForVenueProvider(event.venueId));
-    } on PostgrestException catch (error) {
+    } catch (error) {
       if (!context.mounted) return;
-      final message = error.code == '42501'
+      final message = error is PostgrestException && error.code == '42501'
           ? "You don't have permission to delete this event."
           : 'Something went wrong. Please try again.';
       ScaffoldMessenger.of(context)

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../core/errors/transport_failure.dart';
 import '../../../core/offline/offline_queue_providers.dart';
 import '../../../core/offline/pending_mutation.dart';
 import '../../venues/application/venues_providers.dart';
@@ -220,17 +221,21 @@ class _TaskTile extends ConsumerWidget {
     try {
       await ref.read(tasksRepositoryProvider).updateStatus(task.id, newStatus);
       ref.invalidate(tasksForVenueProvider(venueId));
-    } on PostgrestException catch (error) {
-      if (error.code == '42501') {
+    } catch (error) {
+      if (error is PostgrestException && error.code == '42501') {
         messenger.showSnackBar(
           SnackBar(content: Text(_messageForPostgrestError(error))),
         );
         return;
       }
-      await _queueOffline(messenger, ref, newStatus);
-    } catch (_) {
-      // Anything else (no connectivity, a timeout, a transient 5xx) is treated as "try again
-      // later" rather than shown as an error.
+      if (!isTransportFailure(error)) {
+        // A deterministic rejection would never succeed on retry, so do not queue it.
+        messenger.showSnackBar(
+          const SnackBar(content: Text("Couldn't update the task. Please try again.")),
+        );
+        return;
+      }
+      // No connectivity, a timeout, or a transient 5xx: try again later.
       await _queueOffline(messenger, ref, newStatus);
     }
   }

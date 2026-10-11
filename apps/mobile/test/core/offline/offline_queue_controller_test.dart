@@ -136,9 +136,28 @@ void main() {
 
       await controller.flush();
 
-      expect(controller.state.pending, hasLength(1));
+      // Moved out of pending, not duplicated into both lists.
+      expect(controller.state.pending, isEmpty);
       expect(controller.state.conflicts, hasLength(1));
       expect(store.saved, hasLength(1));
+    });
+
+    test('conflicts are persisted and restored after a restart', () async {
+      final store = _InMemoryOfflineQueueStore();
+      final first = OfflineQueueController(store, {
+        'test_kind': (payload) async =>
+            const MutationResult(MutationOutcome.conflict),
+      });
+      await first.ready;
+      await first.enqueue(_mutation(id: 'conflicted'));
+      await first.flush();
+      expect(first.state.conflicts, hasLength(1));
+
+      final restarted = OfflineQueueController(store, const {});
+      await restarted.ready;
+
+      expect(restarted.state.conflicts.map((m) => m.id), ['conflicted']);
+      expect(restarted.state.pending, isEmpty);
     });
 
     test('a handler that throws is treated as a retryable failure, not a crash',

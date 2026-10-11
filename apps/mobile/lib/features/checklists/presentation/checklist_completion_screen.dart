@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../../core/errors/transport_failure.dart';
 import '../../../core/offline/offline_queue_providers.dart';
 import '../application/checklists_providers.dart';
 import '../domain/item_result.dart';
@@ -117,8 +118,8 @@ class _ChecklistCompletionScreenState
           );
       if (!mounted) return;
       context.pop();
-    } on PostgrestException catch (error) {
-      if (error.code == '42501') {
+    } catch (error) {
+      if (error is PostgrestException && error.code == '42501') {
         if (!mounted) return;
         setState(() => _submitting = false);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -129,8 +130,17 @@ class _ChecklistCompletionScreenState
         );
         return;
       }
-      await _queueOffline(completionId, itemResults);
-    } catch (_) {
+      if (!isTransportFailure(error)) {
+        // A deterministic rejection would never succeed on retry, so do not queue it.
+        if (!mounted) return;
+        setState(() => _submitting = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Couldn't submit this checklist. Please try again."),
+          ),
+        );
+        return;
+      }
       await _queueOffline(completionId, itemResults);
     }
   }

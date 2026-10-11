@@ -17,9 +17,11 @@ final notificationsRepositoryProvider =
 
 final pushRegistrationServiceProvider =
     Provider<PushRegistrationService>((ref) {
-  return PushRegistrationService(
+  final service = PushRegistrationService(
     repository: ref.watch(notificationsRepositoryProvider),
   );
+  ref.onDispose(() => unawaited(service.dispose()));
+  return service;
 });
 
 /// Stateless bridge to the tapped-notification payload — see its own doc comment. Routing the
