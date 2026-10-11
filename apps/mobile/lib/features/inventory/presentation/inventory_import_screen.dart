@@ -1,20 +1,22 @@
 import 'dart:convert';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
+
 import '../../../core/auth/auth_providers.dart';
 import '../../ai/application/ai_providers.dart';
 import '../../ai/domain/ai_models.dart';
 import '../application/inventory_providers.dart';
 import '../domain/inventory_v2.dart';
-import '../domain/inventory_item.dart';
 import 'inventory_widgets.dart';
-import 'inventory_item_screen.dart';
 
 class InventoryImportScreen extends ConsumerStatefulWidget {
   const InventoryImportScreen({super.key, required this.scope});
+
   final InventoryScope scope;
+
   @override
   ConsumerState<InventoryImportScreen> createState() => _ImportState();
 }
@@ -27,6 +29,7 @@ class _ImportState extends ConsumerState<InventoryImportScreen> {
   final applied = <int>{};
   String mode = 'RECEIVE';
   late final String? userId;
+
   @override
   void initState() {
     super.initState();
@@ -65,9 +68,7 @@ class _ImportState extends ConsumerState<InventoryImportScreen> {
               ),
               ButtonSegment(value: 'COUNT', label: Text('Count sheet')),
             ],
-            selected: {
-              mode,
-            },
+            selected: {mode},
             onSelectionChanged: applied.isNotEmpty
                 ? null
                 : (v) => setState(() => mode = v.single),
@@ -132,7 +133,7 @@ class _ImportState extends ConsumerState<InventoryImportScreen> {
       contentPadding: const EdgeInsets.symmetric(vertical: 8),
       title: Text(line.name),
       subtitle: Text(
-        '${line.quantity ?? '?'} ${line.unit ?? 'unit unknown'}${line.sizeAmount == null ? '' : ' • ${line.sizeAmount} ${line.sizeUnit ?? ''}'}\n${match.label}${match.item == null ? '' : ' (${match.confidence}% name confidence)'}',
+        '${line.quantity ?? '?'} ${line.unit ?? 'unit unknown'}${line.sizeAmount == null ? '' : ' • ${line.sizeAmount} ${line.sizeUnit ?? ''}'}\n${match.label}${match.item == null ? '' : ' (${match.item!.name})'}',
       ),
       trailing: applied.contains(index)
           ? const Icon(Icons.check_circle_outline)
@@ -145,7 +146,7 @@ class _ImportState extends ConsumerState<InventoryImportScreen> {
 
   Future<void> _upload() async {
     try {
-      final picked = await FilePicker.pickFiles(
+      final picked = await FilePicker.instance.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['txt', 'csv'],
         withData: true,
@@ -160,13 +161,11 @@ class _ImportState extends ConsumerState<InventoryImportScreen> {
           'Could not read this file. Paste its text instead.',
         );
       }
+
       String decoded;
       try {
         decoded = utf8.decode(file.bytes!);
       } on FormatException {
-        // Some supplier CSV exports use ISO-8859-1. Keep accented item names
-        // readable, but reject Windows-1252 control bytes rather than silently
-        // turning punctuation into invisible characters.
         decoded = latin1.decode(file.bytes!);
         if (decoded.runes.any((r) => r >= 0x80 && r <= 0x9f)) {
           throw const FormatException(
@@ -174,11 +173,13 @@ class _ImportState extends ConsumerState<InventoryImportScreen> {
           );
         }
       }
+
       if (decoded.trim().length > 20000) {
         throw const FormatException(
           'This import is too long for AI parsing. Use a file under 20,000 characters or split it into smaller parts.',
         );
       }
+
       input.text = decoded;
       if (mounted) setState(() => error = null);
     } catch (e) {
@@ -190,3 +191,122 @@ class _ImportState extends ConsumerState<InventoryImportScreen> {
     final text = input.text.trim();
     if (text.isEmpty) {
       setState(() => error = 'Paste text or upload a text file first.');
+      return;
+    }
+    if (text.length > 20000) {
+      setState(() {
+        error = 'AI parsing accepts up to 20,000 characters. '
+            'Split the import into smaller parts.';
+      });
+      return;
+    }
+
+    setState(() {
+      busy = true;
+      error = null;
+    });
+
+    try {
+      assertInventoryScope(ref, widget.scope, userId);
+      final result = await ref.read(aiRepositoryProvider).parseInventory(
+        venueId: widget.scope.venueId,
+        pastedText: text,
+      );
+      if (mounted) setState(() => lines = result.items);
+    } catch (e) {
+      if (mounted) setState(() => error = inventoryError(e));
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  Future<void> _review(InventoryLineItem line, int index) async {
+    final result = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => _ImportReview(
+          scope: widget.scope,
+          line: line,
+          action: mode,
+        ),
+      ),
+    );
+    if (result == true && mounted) {
+      setState(() => applied.add(index));
+    }
+  }
+}
+
+class _ImportReview extends ConsumerStatefulWidget {
+  const _ImportReview({
+    required this.scope,
+    required this.line,
+    required this.action,
+  });
+
+  final InventoryScope scope;
+  final InventoryLineItem line;
+  final String action;
+
+  @override
+  ConsumerState<_ImportReview> createState() => _ReviewState();
+}
+
+class _ReviewState extends ConsumerState<_ImportReview> {
+  final form = GlobalKey<FormState>();
+  late final quantity =
+      TextEditingController(text: widget.line.quantity?.toString());
+  final notes = TextEditingController();
+  late final String? userId;
+  final operationId = const Uuid().v4();
+  String? itemId, stockId, error;
+  bool initialized = false, busy = false, verified = false;
+
+  @override
+  void initState() {
+    super.initState();
+    userId = ref.read(currentUserIdProvider);
+  }
+
+  @override
+  void dispose() {
+    quantity.dispose();
+    notes.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Confirm parsed line')),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Form(
+          key: form,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(widget.line.name),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: quantity,
+                decoration: const InputDecoration(labelText: 'Quantity'),
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: notes,
+                maxLines: 4,
+                decoration: const InputDecoration(labelText: 'Notes'),
+              ),
+              const SizedBox(height: 16),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('Confirm'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
