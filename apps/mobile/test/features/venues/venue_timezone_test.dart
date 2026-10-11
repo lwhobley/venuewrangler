@@ -19,7 +19,8 @@ void main() {
       );
     });
 
-    test('America/Los_Angeles switches DST at 02:00 local, per its own offset', () {
+    test('America/Los_Angeles switches DST at 02:00 local, per its own offset',
+        () {
       // 2026: DST starts Sunday 8 March (02:00 PST = 10:00 UTC) and ends Sunday 1 November
       // (02:00 PDT = 09:00 UTC).
       const tz = 'America/Los_Angeles';

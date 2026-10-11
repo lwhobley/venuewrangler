@@ -310,7 +310,7 @@ class IncidentListScreen extends ConsumerWidget {
         messenger.showSnackBar(
           const SnackBar(
             content: Text(
-              "Incident reported, but the photo could not be attached. Please try again.",
+              'Incident reported, but the photo could not be attached. Please try again.',
             ),
           ),
         );

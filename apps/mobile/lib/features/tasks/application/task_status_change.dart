@@ -42,7 +42,9 @@ Future<void> changeTaskStatus(
     }
     if (!isTransportFailure(error)) {
       messenger.showSnackBar(
-        const SnackBar(content: Text("Couldn't update the task. Please try again.")),
+        const SnackBar(
+          content: Text("Couldn't update the task. Please try again."),
+        ),
       );
       return;
     }

@@ -440,39 +440,40 @@ class _BeoTileState extends ConsumerState<_BeoTile> {
                 ),
               // Only a confirmed BEO can become a contract; draft/sent/cancelled ones cannot.
               if (beo.status == 'confirmed')
-              FilledButton(
-                onPressed: converting
-                    ? null
-                    : () async {
-                        setState(() => converting = true);
-                        try {
-                          final result = await ref
-                              .read(crmRepositoryProvider)
-                              .convertBeoToContract(beoId: beo.id);
-                          ref.invalidate(crmContractsProvider(venueId));
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  result.alreadyExisted
-                                      ? 'A contract already exists for this BEO.'
-                                      : 'Contract created.',
+                FilledButton(
+                  onPressed: converting
+                      ? null
+                      : () async {
+                          setState(() => converting = true);
+                          try {
+                            final result = await ref
+                                .read(crmRepositoryProvider)
+                                .convertBeoToContract(beoId: beo.id);
+                            ref.invalidate(crmContractsProvider(venueId));
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    result.alreadyExisted
+                                        ? 'A contract already exists for this BEO.'
+                                        : 'Contract created.',
+                                  ),
                                 ),
-                              ),
-                            );
+                              );
+                            }
+                          } catch (e) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text(_friendlyError(e))),
+                              );
+                            }
+                          } finally {
+                            if (mounted) setState(() => converting = false);
                           }
-                        } catch (e) {
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text(_friendlyError(e))),
-                            );
-                          }
-                        } finally {
-                          if (mounted) setState(() => converting = false);
-                        }
-                      },
-                child: Text(converting ? 'Converting…' : 'Convert to contract'),
-              ),
+                        },
+                  child:
+                      Text(converting ? 'Converting…' : 'Convert to contract'),
+                ),
             ],
           ),
         ),
