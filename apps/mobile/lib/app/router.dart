@@ -113,6 +113,17 @@ final routerProvider = Provider<GoRouter>((ref) {
       if (!hasActiveVenue && !goingToSelectVenue) return '/select-venue';
       if (!hasActiveVenue) return null;
 
+      // Choosing a venue (or creating a workspace) only sets the active venue; this router is
+      // not rebuilt for it, so leave the switcher here. Stay only while a tapped notification
+      // for a different venue is waiting for the person to switch to it.
+      if (goingToSelectVenue) {
+        final pending = ref.read(pendingNotificationRouteProvider);
+        final awaitingSwitch = pending?.venueId != null &&
+            pending!.venueId != ref.read(activeVenueProvider)?.id;
+        if (!awaitingSwitch) return roleLoading ? '/loading' : '/';
+        return null;
+      }
+
       final path = state.uri.path;
       if (roleLoading) return path == '/loading' ? null : '/loading';
       if (path == '/loading') return '/';
