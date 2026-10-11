@@ -44,7 +44,7 @@ dependencies:
   # features/checklists/data/checklists_repository.dart)
   uuid: ^4.5.1
 
-  cupertino_icons: ^1.0.8
+  cupertino_icons: ^2.0.0
 
   # Android push token acquisition only — iOS uses native APNs directly (see
   # ios/Runner/PushNotificationsPlugin.swift) via notifications-send's APNS_KEY/APNS_KEY_ID/
