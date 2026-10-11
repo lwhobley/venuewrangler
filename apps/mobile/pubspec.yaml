@@ -64,7 +64,7 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^5.0.0
+  flutter_lints: ^6.0.0
   # Test-only: mocking the HTTP layer under SupabaseClient (app_attest_service_test.dart) and
   # the platform-interface singletons for url_launcher/flutter_secure_storage, so tests can
   # fake a plugin's behavior instead of hitting a real platform channel that doesn't exist on
