@@ -5,8 +5,9 @@ import { spawnSync } from 'node:child_process';
 import { shouldCopySiteSource } from './site-build-files.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const marketing = spawnSync(process.execPath, [join(root, 'node_modules/vite/bin/vite.js'), 'build'], {
-  cwd: join(root, 'packages/marketing'), stdio: 'inherit',
+// Runs packages/marketing's "build" script (tsc --noEmit && vite build), not vite alone.
+const marketing = spawnSync('npm', ['run', 'build', '-w', '@venue-wrangler/marketing'], {
+  cwd: root, stdio: 'inherit', shell: process.platform === 'win32',
 });
 if (marketing.error) throw marketing.error;
 if (marketing.status !== 0) process.exit(marketing.status ?? 1);

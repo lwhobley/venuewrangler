@@ -144,7 +144,8 @@ serve(async (req: Request) => {
 
     // 1. Write in-app notification event(s) first (independent of push delivery success)
     if (audience === "user") {
-      const rows = target_user_ids!.map((uid) => ({
+      // De-duplicated so a repeated id does not create a second notification row.
+      const rows = [...new Set(target_user_ids!)].map((uid) => ({
         venue_id,
         target_user_id: uid,
         audience: "user" as const,

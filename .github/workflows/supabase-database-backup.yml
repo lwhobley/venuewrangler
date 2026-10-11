@@ -90,7 +90,7 @@ jobs:
             --env SUPABASE_DB_URL --env PGSSLMODE \
             --volume /tmp:/backup \
             postgres:17-alpine@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193 \
-            pg_dump "$SUPABASE_DB_URL" --format=custom --no-owner --no-acl \
+            pg_dump "$SUPABASE_DB_URL" --format=custom --no-owner \
             --schema=public --schema=app_hidden --schema=auth --schema=storage \
             --file="/backup/$(basename "$dump")"
           docker run --rm --user "$(id -u):$(id -g)" --volume /tmp:/backup \
