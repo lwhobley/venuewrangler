@@ -22,20 +22,19 @@ begin
     for update skip locked
   loop
     if not app_hidden.is_safe_storage_deletion_path(v_job.bucket_id, v_job.object_path) then
-      update public.storage_deletion_jobs
-      set status = 'dead', attempts = attempts + 1,
+      update public.storage_deletion_jobs as j
+      set status = 'dead', attempts = j.attempts + 1,
           last_error = 'Refusing to delete key not matching the expected storage-path format',
           updated_at = now()
-      where storage_deletion_jobs.id = v_job.id;
+      where j.id = v_job.id;
       continue;
     end if;
 
     return query
-    update public.storage_deletion_jobs
-    set status = 'processing', attempts = attempts + 1, updated_at = now()
-    where storage_deletion_jobs.id = v_job.id
-    returning storage_deletion_jobs.id, storage_deletion_jobs.bucket_id,
-      storage_deletion_jobs.object_path, storage_deletion_jobs.attempts;
+    update public.storage_deletion_jobs as j
+    set status = 'processing', attempts = j.attempts + 1, updated_at = now()
+    where j.id = v_job.id
+    returning j.id, j.bucket_id, j.object_path, j.attempts;
   end loop;
 end;
 $$;

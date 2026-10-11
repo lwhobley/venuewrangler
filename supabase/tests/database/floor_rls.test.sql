@@ -58,14 +58,15 @@ select results_eq(
 -- 3. Trigger test: floor_table_assignments derives venue_id and organization_id
 -- ---------------------------------------------------------------------------
 insert into public.floor_table_assignments (
-  id, table_id, venue_id, organization_id, starts_at, ends_at
+  id, table_id, venue_id, organization_id, starts_at, ends_at, released_at
 ) values (
   '70000000-0000-0000-0000-000000000001',
   '60000000-0000-0000-0000-000000000001',
   '20000000-0000-0000-0000-00000000000b',
   '10000000-0000-0000-0000-00000000000b',
   now(),
-  now() + interval '2 hours'
+  now() + interval '2 hours',
+  now()
 );
 
 select results_eq(
