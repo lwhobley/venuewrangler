@@ -78,20 +78,22 @@ select is(
 );
 
 -- ---------------------------------------------------------------------------
--- 5. Possessing the live device token transfers its registration: a shared venue
--- tablet must let the next person who signs in register pushes for themselves even
--- if the previous user signed out offline and their own unregister call never reached
--- the server (see register_push_token's comment, supabase/migrations/20261007202000).
+-- 5. Review fix (20261013100200): a live token owned by an active member cannot be taken over
+-- by another member of the venue. Previously presenting the token transferred it. Only a
+-- disabled registration, or one whose owner has left the organization, can move (see
+-- supabase/tests/database/review_fixes_db_part3.test.sql for those cases).
 -- ---------------------------------------------------------------------------
-select lives_ok(
+select throws_ok(
   $$ select public.register_push_token('20000000-0000-0000-0000-0000000000a1', 'fcm-device-token-111', 'android') $$,
-  'a different profile presenting the same device token transfers its registration'
+  '42501',
+  null,
+  'another active member cannot take over a live device token registered to staff 1'
 );
 
 select is(
   (select user_id from public.push_tokens where token = 'fcm-device-token-111'),
-  '00000000-0000-0000-0000-000000000008'::uuid,
-  'the token now belongs to whoever last registered it, not the original registrant'
+  '00000000-0000-0000-0000-000000000005'::uuid,
+  'the token still belongs to its active registrant'
 );
 
 -- ---------------------------------------------------------------------------
