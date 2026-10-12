@@ -130,6 +130,18 @@ $$;
 -- is a conversation id the caller is a member of. Anything without a conversation id is not
 -- readable through this policy.
 -- -----------------------------------------------------------------------------
+-- The venue of a conversation is read by a definer helper, so the storage policy's venue check
+-- does not depend on the caller's own RLS visibility of public.conversations.
+create or replace function app_hidden.conversation_venue_id(p_conv_id uuid)
+returns uuid
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select c.venue_id from public.conversations c where c.id = p_conv_id;
+$$;
+
 drop policy if exists "chat_select_conversation_members" on storage.objects;
 create policy "chat_select_conversation_members" on storage.objects
   for select to authenticated
@@ -152,10 +164,8 @@ create policy "chat_select_conversation_members" on storage.objects
         )
         -- Path venue must match the conversation's actual venue (no cross-venue aliasing).
         and (
-          app_hidden.storage_path_venue_id(name) = (
-            select c.venue_id from public.conversations c
-            where c.id = app_hidden.storage_path_conversation_id(name)
-          )
+          app_hidden.storage_path_venue_id(name)
+            = app_hidden.conversation_venue_id(app_hidden.storage_path_conversation_id(name))
         )
       )
       or (
