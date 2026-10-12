@@ -36,7 +36,7 @@ dependencies:
 
   # Generic document picker (PDF/Office/text) for features/documents — image_picker alone
   # can't select non-image files. See features/documents/README.md.
-  file_picker: ^13.1.0
+  file_picker: ^8.3.7
 
   # Opening Stripe's hosted Checkout/Customer Portal URLs in an external browser — the app
   # never embeds a payment form or touches Stripe secret material (see features/billing/README.md)
@@ -58,7 +58,7 @@ dependencies:
   # app/bootstrap.dart) — iOS has no google-services equivalent file and doesn't need one here.
   firebase_core: ^3.8.0
   firebase_messaging: ^15.1.5
-  geolocator: ^14.1.1
+  geolocator: ^14.0.2
 
   # App-open intro video (app/intro_video_screen.dart)
   video_player: ^2.9.2
