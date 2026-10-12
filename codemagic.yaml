@@ -37,7 +37,9 @@ workflows:
       # to TestFlight. Refuse to build unless the tagged commit is already merged to main.
       - name: Verify tagged commit is on origin/main
         script: |
-          git fetch origin main
+          # Fetch main into refs/remotes/origin/main explicitly: a plain `git fetch origin main`
+          # only writes FETCH_HEAD in Codemagic's single-branch clone, so origin/main would not exist.
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
           if ! git merge-base --is-ancestor HEAD origin/main; then
             echo "Tagged commit $(git rev-parse HEAD) is not on origin/main; refusing to build." >&2
             exit 1
