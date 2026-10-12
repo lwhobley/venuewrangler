@@ -1,5 +1,7 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../errors/transport_failure.dart';
 import 'offline_queue_store.dart';
 import 'pending_mutation.dart';
 
@@ -53,10 +55,19 @@ class OfflineQueueController extends StateNotifier<OfflineQueueState> {
   // Each link saves whatever state.pending is *when it runs*, not a snapshot taken earlier.
   Future<void> _writeChain = Future<void>.value();
 
+  /// Completes once the stored queue has been read. Never completes with an error: an
+  /// unreadable store starts the queue empty (see [_load]).
   Future<void> get ready => _loaded;
 
   Future<void> _load() async {
-    final loaded = await _store.loadAll();
+    List<PendingMutation> loaded;
+    try {
+      loaded = await _store.loadAll();
+    } catch (error) {
+      // A corrupt or unreadable queue must never wedge offline writes for the whole session.
+      debugPrint('Offline queue could not be read; starting empty: $error');
+      loaded = const [];
+    }
     final conflicts = <PendingMutation>[];
     final pending = <PendingMutation>[];
     for (final m in loaded) {
@@ -79,7 +90,11 @@ class OfflineQueueController extends StateNotifier<OfflineQueueState> {
     if (loaded.any(
       (m) => m.attemptCount >= kMaxMutationAttempts && !m.isConflict,
     )) {
-      await _persist();
+      try {
+        await _persist();
+      } catch (error) {
+        debugPrint('Offline queue could not be re-saved after load: $error');
+      }
     }
   }
 
@@ -111,10 +126,20 @@ class OfflineQueueController extends StateNotifier<OfflineQueueState> {
     return write;
   }
 
+  /// Sign-out: removes only the signed-out user's pending writes and conflicts. Entries owned
+  /// by anyone else (or legacy entries without an owner) stay queued, so a shared device never
+  /// discards another person's unsynced work or unresolved conflicts.
   Future<void> clearAll() async {
     await _loaded;
     _queueGeneration++;
-    state = const OfflineQueueState();
+    final signedOut = _currentUserId?.call();
+    bool isSignedOut(PendingMutation m) => m.userId == signedOut;
+    state = OfflineQueueState(
+      pending:
+          state.pending.where((m) => !isSignedOut(m)).toList(growable: false),
+      conflicts:
+          state.conflicts.where((m) => !isSignedOut(m)).toList(growable: false),
+    );
     await _persist();
   }
 
@@ -174,6 +199,11 @@ class OfflineQueueController extends StateNotifier<OfflineQueueState> {
         }
 
         final result = await _tryApply(handler, mutation);
+        if (result == null) {
+          // No answer from the server (still offline or the connection dropped). That is not
+          // an attempt: the mutation stays exactly as it was.
+          continue;
+        }
         switch (result.outcome) {
           case MutationOutcome.applied:
             settled.add(mutation.id);
@@ -195,11 +225,9 @@ class OfflineQueueController extends StateNotifier<OfflineQueueState> {
         }
       }
 
-      if (generation != _queueGeneration ||
-          (_currentUserId != null && _currentUserId() != effectiveUserId)) {
-        return;
-      }
-
+      // Runs even when the user or the queue generation changed mid-flush: whatever the server
+      // already applied must be removed now, or the next flush would replay it. Ids that a
+      // sign-out already cleared are simply absent from state and ignored below.
       final queuedIds = {for (final m in state.pending) m.id};
       state = state.copyWith(
         pending: [
@@ -218,13 +246,18 @@ class OfflineQueueController extends StateNotifier<OfflineQueueState> {
     }
   }
 
-  Future<MutationResult> _tryApply(
+  /// Returns the handler's result, or a thrown error converted to a retryable failure. Returns
+  /// null when the error was a transport failure: the server never answered, so the attempt
+  /// must not count toward [kMaxMutationAttempts].
+  Future<MutationResult?> _tryApply(
     MutationHandler handler,
     PendingMutation mutation,
   ) async {
     try {
       return await handler(mutation.payload);
-    } catch (_) {
+    } catch (error) {
+      if (isTransportFailure(error)) return null;
+      // The server responded with an error, so this counts as a real attempt.
       return const MutationResult(MutationOutcome.retryableFailure);
     }
   }

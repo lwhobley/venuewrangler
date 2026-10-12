@@ -17,6 +17,9 @@ class _FakeTimeClockRepository implements TimeClockRepository {
   }) : entries = entries ?? [];
 
   TimeEntry? activeEntry;
+
+  /// An open entry at a different venue (reported by getOpenEntryElsewhere only).
+  TimeEntry? openElsewhere;
   List<TimeEntry> entries;
 
   bool clockInCalled = false;
@@ -27,6 +30,10 @@ class _FakeTimeClockRepository implements TimeClockRepository {
   @override
   Future<TimeEntry?> getActiveEntry({required String venueId}) async =>
       activeEntry;
+
+  @override
+  Future<TimeEntry?> getOpenEntryElsewhere({required String venueId}) async =>
+      openElsewhere;
 
   @override
   Future<List<TimeEntry>> getMyEntries({
@@ -232,6 +239,44 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('CLOCKED OUT'), findsOneWidget);
+  });
+
+  testWidgets('an open entry at another venue is not shown as clocked in here',
+      (tester) async {
+    final fakeRepo = _FakeTimeClockRepository()
+      ..openElsewhere = TimeEntry(
+        id: 'e-other',
+        organizationId: 'o1',
+        venueId: 'v2',
+        userId: 'user-12345678',
+        clockInAt: DateTime.now().subtract(const Duration(hours: 1)),
+        clockInLat: 40.0,
+        clockInLng: -74.0,
+        clockInAccuracyM: 8,
+        isOpen: true,
+        createdAt: DateTime(2026),
+        updatedAt: DateTime(2026),
+      );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          activeVenueProvider.overrideWith((ref) => _testVenue),
+          timeClockRepositoryProvider.overrideWithValue(fakeRepo),
+          locationServiceProvider.overrideWithValue(_FakeLocationService()),
+        ],
+        child: const MaterialApp(home: TimeClockScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('CLOCKED OUT'), findsOneWidget);
+    expect(find.textContaining('clocked in at another venue'), findsOneWidget);
+    expect(find.text('Clock Out'), findsNothing);
+    final clockIn = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Clock In'),
+    );
+    expect(clockIn.onPressed, isNull);
   });
 
   testWidgets('handles break workflow (start and end break)', (tester) async {

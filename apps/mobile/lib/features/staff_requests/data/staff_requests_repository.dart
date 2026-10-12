@@ -1,5 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../core/errors/unapplied_update.dart';
+
 import '../domain/staff_request.dart';
 
 abstract interface class StaffRequestsRepository {
@@ -74,9 +76,9 @@ class SupabaseStaffRequestsRepository implements StaffRequestsRepository {
         .select('id')
         .maybeSingle();
     if (row == null) {
-      throw const PostgrestException(
-        message: 'Request cancellation was not applied',
-        code: '42501',
+      await throwForUnappliedUpdate(
+        rowExists: () => rowExistsById(_client, 'staff_requests', requestId),
+        denialMessage: 'Request cancellation was not applied',
       );
     }
   }
@@ -98,9 +100,9 @@ class SupabaseStaffRequestsRepository implements StaffRequestsRepository {
         .select('id')
         .maybeSingle();
     if (row == null) {
-      throw const PostgrestException(
-        message: 'Request review was not applied',
-        code: '42501',
+      await throwForUnappliedUpdate(
+        rowExists: () => rowExistsById(_client, 'staff_requests', requestId),
+        denialMessage: 'Request review was not applied',
       );
     }
   }

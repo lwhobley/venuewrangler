@@ -1,6 +1,37 @@
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../domain/guest.dart';
 import '../domain/reservation.dart';
+
+/// The reservation window used when no explicit bounds are given: 30 days back through a year
+/// ahead, which covers the "All Dates" default of the reservations screen.
+@visibleForTesting
+({DateTime from, DateTime to}) defaultReservationWindow(DateTime now) {
+  final utc = now.toUtc();
+  return (
+    from: utc.subtract(const Duration(days: 30)),
+    to: utc.add(const Duration(days: 365)),
+  );
+}
+
+/// Collects every page of a range-paged query. Requests pages of [pageSize] rows through
+/// `fetchPage(from, to)` (inclusive offsets, as `.range()` takes them) and stops at the first
+/// short page, so nothing is silently cut off at a single page's size.
+@visibleForTesting
+Future<List<T>> fetchAllPages<T>(
+  Future<List<T>> Function(int from, int to) fetchPage, {
+  int pageSize = 500,
+}) async {
+  assert(pageSize > 0);
+  final all = <T>[];
+  var offset = 0;
+  while (true) {
+    final page = await fetchPage(offset, offset + pageSize - 1);
+    all.addAll(page);
+    if (page.length < pageSize) return all;
+    offset += pageSize;
+  }
+}
 
 abstract class GuestsReservationsRepository {
   Future<List<Guest>> getGuests({required String venueId, int limit = 50});
@@ -114,20 +145,24 @@ class SupabaseGuestsReservationsRepository
     DateTime? to,
     int limit = 500,
   }) async {
-    final now = DateTime.now().toUtc();
-    final windowFrom = from ?? now.subtract(const Duration(days: 1));
-    final windowTo = to ?? now.add(const Duration(days: 7));
-    final query = _client
-        .from('reservations')
-        .select()
-        .eq('venue_id', venueId)
-        .gte('reservation_time', windowFrom.toIso8601String())
-        .lte('reservation_time', windowTo.toIso8601String())
-        .order('reservation_time')
-        .order('id')
-        .limit(limit);
-    final rows = await query;
-    return rows.map(Reservation.fromJson).toList();
+    final window = defaultReservationWindow(DateTime.now());
+    final windowFrom = from ?? window.from;
+    final windowTo = to ?? window.to;
+    return fetchAllPages(
+      (rangeFrom, rangeTo) async {
+        final rows = await _client
+            .from('reservations')
+            .select()
+            .eq('venue_id', venueId)
+            .gte('reservation_time', windowFrom.toIso8601String())
+            .lte('reservation_time', windowTo.toIso8601String())
+            .order('reservation_time')
+            .order('id')
+            .range(rangeFrom, rangeTo);
+        return rows.map(Reservation.fromJson).toList();
+      },
+      pageSize: limit,
+    );
   }
 
   @override

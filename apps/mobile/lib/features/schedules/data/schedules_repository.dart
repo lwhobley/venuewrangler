@@ -1,5 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../core/errors/unapplied_update.dart';
+
 import '../domain/shift.dart';
 
 /// As with the other Phase 2/3 repositories, RLS is the actual authority (see
@@ -131,9 +133,9 @@ class SupabaseSchedulesRepository implements SchedulesRepository {
         .select('id')
         .maybeSingle();
     if (row == null) {
-      throw const PostgrestException(
-        message: 'Shift update was not applied',
-        code: '42501',
+      await throwForUnappliedUpdate(
+        rowExists: () => rowExistsById(_client, 'shifts', shiftId),
+        denialMessage: 'Shift update was not applied',
       );
     }
   }
@@ -179,9 +181,9 @@ class SupabaseSchedulesRepository implements SchedulesRepository {
         .select('id')
         .maybeSingle();
     if (row == null) {
-      throw const PostgrestException(
-        message: 'Swap acceptance was not applied',
-        code: '42501',
+      await throwForUnappliedUpdate(
+        rowExists: () => rowExistsById(_client, 'shift_swaps', swapId),
+        denialMessage: 'Swap acceptance was not applied',
       );
     }
   }
@@ -195,9 +197,9 @@ class SupabaseSchedulesRepository implements SchedulesRepository {
         .select('id')
         .maybeSingle();
     if (row == null) {
-      throw const PostgrestException(
-        message: 'Swap cancellation was not applied',
-        code: '42501',
+      await throwForUnappliedUpdate(
+        rowExists: () => rowExistsById(_client, 'shift_swaps', swapId),
+        denialMessage: 'Swap cancellation was not applied',
       );
     }
   }
@@ -211,9 +213,9 @@ class SupabaseSchedulesRepository implements SchedulesRepository {
         .select('id')
         .maybeSingle();
     if (row == null) {
-      throw const PostgrestException(
-        message: 'Swap decline was not applied',
-        code: '42501',
+      await throwForUnappliedUpdate(
+        rowExists: () => rowExistsById(_client, 'shift_swaps', swapId),
+        denialMessage: 'Swap decline was not applied',
       );
     }
   }

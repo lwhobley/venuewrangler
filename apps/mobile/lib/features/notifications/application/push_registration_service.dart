@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:flutter/services.dart';
 
 import '../../../core/storage/secure_session_storage.dart';
@@ -81,11 +81,18 @@ class PushRegistrationService {
     String token,
     String platform,
   ) async {
-    final pendingRevocation =
-        await _sessionStorage.read(pendingPushTokenRevocationStorageKey);
-    if (pendingRevocation != null) {
-      await _repository.unregisterPushToken(pendingRevocation);
-      await _sessionStorage.delete(pendingPushTokenRevocationStorageKey);
+    // Revoking a previous account's token is best effort. If it fails (offline, or secure storage
+    // unavailable) the pending marker stays and is retried on a later registration, but it must
+    // not stop this device from registering for the current venue.
+    try {
+      final pendingRevocation =
+          await _sessionStorage.read(pendingPushTokenRevocationStorageKey);
+      if (pendingRevocation != null) {
+        await _repository.unregisterPushToken(pendingRevocation);
+        await _sessionStorage.delete(pendingPushTokenRevocationStorageKey);
+      }
+    } catch (error) {
+      debugPrint('Push: pending token revocation failed, continuing: $error');
     }
     await _repository.registerPushToken(
       venueId: venueId,

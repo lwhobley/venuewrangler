@@ -317,9 +317,44 @@ class FloorEditorController extends StateNotifier<FloorEditorState> {
     }
   }
 
-  Future<void> restoreDraft(String planId) async {
-    final raw = await _storage.read(key: _draftKey(planId));
-    if (raw == null) return;
+  /// Restores the saved draft for [planId] over the live layout. Returns false when there was no
+  /// draft or it could not be read (corrupt, or written by an older schema): the unusable draft
+  /// is then deleted and the editor keeps the live layout, so it still opens normally.
+  Future<bool> restoreDraft(String planId) async {
+    final String? raw;
+    try {
+      raw = await _storage.read(key: _draftKey(planId));
+    } catch (error) {
+      debugPrint('Floor draft could not be read: $error');
+      return false;
+    }
+    if (raw == null) return false;
+    try {
+      final restored = _restoredTables(raw);
+      for (final table in restored.where((table) => table.isNew)) {
+        final n =
+            int.tryParse(table.id.substring(EditorTable.newPrefix.length)) ?? 0;
+        _newCounter = math.max(_newCounter, n + 1);
+      }
+      state = state.copyWith(
+        tables: restored,
+        history: const [],
+        clearSelection: true,
+      );
+      return true;
+    } catch (error) {
+      debugPrint('Floor draft is unusable and was discarded: $error');
+      try {
+        await discardDraft(planId);
+      } catch (deleteError) {
+        debugPrint('Floor draft could not be deleted: $deleteError');
+      }
+      return false;
+    }
+  }
+
+  /// Parses [raw] and merges it with the live layout. Throws on any malformed draft.
+  List<EditorTable> _restoredTables(String raw) {
     final decoded = jsonDecode(raw);
     final draft = decoded is List ? {'tables': decoded} : decoded as Map;
     final saved = (draft['tables'] as List)
@@ -328,7 +363,7 @@ class FloorEditorController extends StateNotifier<FloorEditorState> {
     final baseIds = (draft['base_ids'] as List?)?.cast<String>().toSet();
     final live = state.published;
     final savedById = {for (final table in saved) table.id: table};
-    final restored = <EditorTable>[
+    return <EditorTable>[
       for (final table in saved)
         if (table.isNew || live.containsKey(table.id)) table,
       // Preserve tables created by another manager after this draft's base snapshot. For
@@ -338,16 +373,6 @@ class FloorEditorController extends StateNotifier<FloorEditorState> {
             (baseIds == null || !baseIds.contains(table.id)))
           table,
     ];
-    for (final table in restored.where((table) => table.isNew)) {
-      final n =
-          int.tryParse(table.id.substring(EditorTable.newPrefix.length)) ?? 0;
-      _newCounter = math.max(_newCounter, n + 1);
-    }
-    state = state.copyWith(
-      tables: restored,
-      history: const [],
-      clearSelection: true,
-    );
   }
 
   Future<void> discardDraft(String planId) async {

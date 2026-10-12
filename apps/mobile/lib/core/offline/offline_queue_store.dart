@@ -1,9 +1,11 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../storage/secure_session_storage.dart';
 import 'pending_mutation.dart';
 
 /// Legacy file-backed store retained for focused tests and secure-store migration recovery.
@@ -82,7 +84,7 @@ class FileOfflineQueueStore implements OfflineQueueStore {
 class SecureStorageOfflineQueueStore implements OfflineQueueStore {
   const SecureStorageOfflineQueueStore({
     FlutterSecureStorage storage = const FlutterSecureStorage(),
-    this.key = 'offline_mutation_queue',
+    this.key = offlineMutationQueueStorageKey,
     this.migrateLegacyFile = false,
   }) : _storage = storage;
 
@@ -97,28 +99,46 @@ class SecureStorageOfflineQueueStore implements OfflineQueueStore {
       if (migrateLegacyFile) return _importLegacyFile();
       return const [];
     }
-    final queue = _decode(raw, tolerant: !migrateLegacyFile);
+    final queue = await _decodeStored(raw);
     if (migrateLegacyFile) await _removeLegacyFiles();
     return queue;
   }
 
-  List<PendingMutation> _decode(String raw, {bool tolerant = true}) {
+  /// Decodes the encrypted blob. A corrupt blob is never fatal: the raw text is kept under a
+  /// `<key>.corrupt.<timestamp>` key (best effort) for diagnosis, and the queue starts empty.
+  Future<List<PendingMutation>> _decodeStored(String raw) async {
     try {
-      final decoded = jsonDecode(raw) as List<dynamic>;
-      return decoded
-          .map(
-            (entry) => PendingMutation.fromJson(entry as Map<String, dynamic>),
-          )
-          .toList(growable: false);
-    } on FormatException {
-      if (!tolerant) rethrow;
-      // A blob the browser left half-written is unrecoverable; starting empty is better than
-      // throwing from the controller's load and leaving offline writes permanently broken.
+      return _decode(raw);
+    } on FormatException catch (error) {
+      await _backUpCorrupt(raw, error);
       return const [];
-    } on TypeError {
-      if (!tolerant) rethrow;
+    } on TypeError catch (error) {
+      await _backUpCorrupt(raw, error);
       return const [];
     }
+  }
+
+  Future<void> _backUpCorrupt(String raw, Object error) async {
+    debugPrint('Offline queue blob is unreadable; starting empty: $error');
+    try {
+      await _storage.write(
+        key: '$key.corrupt.${DateTime.now().toUtc().millisecondsSinceEpoch}',
+        value: raw,
+      );
+    } catch (backupError) {
+      debugPrint(
+        'Offline queue corrupt blob could not be backed up: $backupError',
+      );
+    }
+  }
+
+  List<PendingMutation> _decode(String raw) {
+    final decoded = jsonDecode(raw) as List<dynamic>;
+    return decoded
+        .map(
+          (entry) => PendingMutation.fromJson(entry as Map<String, dynamic>),
+        )
+        .toList(growable: false);
   }
 
   Future<List<PendingMutation>> _importLegacyFile() async {
@@ -131,13 +151,13 @@ class SecureStorageOfflineQueueStore implements OfflineQueueStore {
 
     List<PendingMutation> queue;
     try {
-      queue = _decode(await source.readAsString(), tolerant: false);
+      queue = _decode(await source.readAsString());
     } on FormatException {
       if (source.path == backup.path || !await backup.exists()) rethrow;
-      queue = _decode(await backup.readAsString(), tolerant: false);
+      queue = _decode(await backup.readAsString());
     } on TypeError {
       if (source.path == backup.path || !await backup.exists()) rethrow;
-      queue = _decode(await backup.readAsString(), tolerant: false);
+      queue = _decode(await backup.readAsString());
     }
     // Persist encrypted data before removing either plaintext copy. If secure storage fails,
     // leave the recoverable legacy files untouched and surface the error to the caller.

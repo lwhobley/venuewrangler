@@ -107,7 +107,10 @@ class _FloorPlanEditorScreenState extends ConsumerState<FloorPlanEditorScreen> {
           ),
         );
         if (resume == true) {
-          await editor.restoreDraft(plan.id);
+          final restored = await editor.restoreDraft(plan.id);
+          if (!restored && mounted) {
+            _toast('Saved draft could not be restored.');
+          }
         } else if (resume == false) {
           await editor.discardDraft(plan.id);
         }

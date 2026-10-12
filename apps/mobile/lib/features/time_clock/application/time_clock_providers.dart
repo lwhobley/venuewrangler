@@ -20,6 +20,14 @@ final activeTimeEntryProvider =
       .getActiveEntry(venueId: venueId);
 });
 
+/// The user's open entry when it is at a different venue than [venueId] (null otherwise).
+final openElsewhereTimeEntryProvider =
+    FutureProvider.autoDispose.family<TimeEntry?, String>((ref, venueId) {
+  return ref
+      .watch(timeClockRepositoryProvider)
+      .getOpenEntryElsewhere(venueId: venueId);
+});
+
 final myTimeEntriesProvider =
     FutureProvider.autoDispose.family<List<TimeEntry>, String>((ref, venueId) {
   return ref.watch(timeClockRepositoryProvider).getMyEntries(venueId: venueId);

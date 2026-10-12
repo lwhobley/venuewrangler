@@ -190,4 +190,31 @@ void main() {
     await fresh.discardDraft('plan');
     expect(await fresh.hasDraft('plan'), isFalse);
   });
+
+  test('a corrupt draft is discarded and the live layout is kept', () async {
+    FlutterSecureStorage.setMockInitialValues(
+      {'floor_draft_plan': '{"tables": [{"id": '},
+    );
+    final fresh = FloorEditorController()
+      ..load(live: [_live('a', 'T1')], planWidth: 1000, planHeight: 800);
+
+    final restored = await fresh.restoreDraft('plan');
+
+    expect(restored, isFalse);
+    expect(fresh.state.tables.map((t) => t.label), ['T1']);
+    expect(await fresh.hasDraft('plan'), isFalse);
+  });
+
+  test('a draft in an old schema is discarded instead of breaking the editor',
+      () async {
+    FlutterSecureStorage.setMockInitialValues(
+      {'floor_draft_plan': '{"tables": [{"legacy_field": true}]}'},
+    );
+    final fresh = FloorEditorController()
+      ..load(live: [_live('a', 'T1')], planWidth: 1000, planHeight: 800);
+
+    expect(await fresh.restoreDraft('plan'), isFalse);
+    expect(fresh.state.tables.map((t) => t.label), ['T1']);
+    expect(await fresh.hasDraft('plan'), isFalse);
+  });
 }

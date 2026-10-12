@@ -1,7 +1,12 @@
+import 'package:flutter/foundation.dart';
+
 /// Utilities for translating UTC instants into venue wall-clock time and business days.
 /// Handles standard Daylight Saving Time (DST) rules for supported IANA timezones.
 class VenueTimezone {
   const VenueTimezone._();
+
+  /// Unknown ids already reported, so each one is logged once rather than on every format.
+  static final Set<String> _unknownZonesLogged = <String>{};
 
   /// Standard offsets from UTC (in hours) without daylight saving.
   static const Map<String, int> _standardOffsetsHours = {
@@ -21,7 +26,7 @@ class VenueTimezone {
   /// Returns the offset for [timezoneId] at the given UTC [instant] (defaults to now).
   static Duration offsetFor(String timezoneId, [DateTime? instant]) {
     final utc = instant?.toUtc() ?? DateTime.now().toUtc();
-    final stdOffset = _standardOffsetsHours[timezoneId];
+    final stdOffset = _standardOffsetFor(timezoneId);
     if (stdOffset == null) {
       // Fallback: if unrecognized timezone, default to UTC
       return Duration.zero;
@@ -51,8 +56,15 @@ class VenueTimezone {
   }
 
   /// Converts a venue wall-clock [DateTime] back to a UTC instant.
+  ///
+  /// The offset in force depends on the instant being looked for, so each candidate is checked
+  /// against the offset it was computed with (round trip):
+  /// - Daylight candidate valid: the wall time occurs during DST (or, in a fall-back overlap,
+  ///   both candidates are valid and the earlier, daylight, instant is chosen).
+  /// - Otherwise the wall time is in a spring-forward gap, which resolves with the standard
+  ///   offset (the way a clock jumping forward would read it).
   static DateTime toUtc(DateTime venueTime, String timezoneId) {
-    final tentativeUtc = DateTime.utc(
+    final wall = DateTime.utc(
       venueTime.year,
       venueTime.month,
       venueTime.day,
@@ -61,8 +73,16 @@ class VenueTimezone {
       venueTime.second,
       venueTime.millisecond,
     );
-    final offset = offsetFor(timezoneId, tentativeUtc);
-    return tentativeUtc.subtract(offset);
+    final stdHours = _standardOffsetFor(timezoneId);
+    if (stdHours == null) return wall; // Unknown zone: UTC fallback.
+
+    final standard = Duration(hours: stdHours);
+    final daylight = Duration(hours: stdHours + 1);
+    final daylightCandidate = wall.subtract(daylight);
+    if (offsetFor(timezoneId, daylightCandidate) == daylight) {
+      return daylightCandidate;
+    }
+    return wall.subtract(standard);
   }
 
   /// Returns the current wall-clock date and time at the venue.
@@ -148,6 +168,19 @@ class VenueTimezone {
     return '$dayName, $monthName ${vt.day}';
   }
 
+  /// Standard offset in hours for [timezoneId], or null for an id outside the table (which is
+  /// treated as UTC). Logs each unknown id once so a misconfigured venue is visible in debug
+  /// output rather than silently shifted.
+  static int? _standardOffsetFor(String timezoneId) {
+    final hours = _standardOffsetsHours[timezoneId];
+    if (hours == null && _unknownZonesLogged.add(timezoneId)) {
+      debugPrint(
+        'VenueTimezone: unknown timezone "$timezoneId", falling back to UTC.',
+      );
+    }
+    return hours;
+  }
+
   static bool _isDaylightSaving(String timezoneId, DateTime utc) {
     switch (timezoneId) {
       case 'America/New_York':
@@ -199,7 +232,7 @@ class VenueTimezone {
     final octLastSunday = _lastSundayOfMonth(year, 10);
     final dstEnd = DateTime.utc(year, 10, octLastSunday, 1);
 
-    return utc.isAfter(dstStart) && utc.isBefore(dstEnd);
+    return !utc.isBefore(dstStart) && utc.isBefore(dstEnd);
   }
 
   /// Australia DST: 1st Sunday in October to 1st Sunday in April (16:00 UTC prior day).
@@ -213,7 +246,7 @@ class VenueTimezone {
 
     // Southern hemisphere: DST spans calendar year boundary (Oct through Apr)
     if (utc.month >= 10) {
-      return utc.isAfter(dstStart);
+      return !utc.isBefore(dstStart);
     } else if (utc.month <= 4) {
       return utc.isBefore(dstEnd);
     }

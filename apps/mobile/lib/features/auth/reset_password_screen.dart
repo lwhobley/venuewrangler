@@ -70,7 +70,11 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
         title: const Text('Choose a new password'),
         actions: [
           TextButton(
-            onPressed: _saving ? null : () => signOutAndClearScopedData(ref),
+            onPressed: _saving
+                ? null
+                : () => signOutAndClearScopedData(
+                      ProviderScope.containerOf(context, listen: false),
+                    ),
             child: const Text('Cancel'),
           ),
         ],

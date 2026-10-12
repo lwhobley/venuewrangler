@@ -40,6 +40,7 @@ import '../features/tasks/presentation/task_board_screen.dart';
 import '../features/tasks/presentation/task_list_screen.dart';
 import '../features/time_clock/presentation/time_clock_screen.dart';
 import '../features/venues/application/venues_providers.dart';
+import '../features/venues/domain/venue.dart';
 import '../features/workforce/presentation/workforce_roster_screen.dart';
 
 /// Redirects between the auth flow, venue selection, and the authenticated app shell based
@@ -440,7 +441,11 @@ final pendingNotificationRouteProvider =
 
 final notificationTapRoutingProvider = Provider<void>((ref) {
   ref.watch(routerProvider);
-  void deliverPending() {
+
+  /// Delivers the pending notification when its venue is active. [fromTap] is true only for a
+  /// freshly tapped notification: a different venue then sends the person to the switcher once.
+  /// Re-delivery after a venue or role change never forces the switcher open again.
+  void deliverPending({bool fromTap = false}) {
     if (!ref.read(isSignedInProvider) ||
         ref.read(activeVenueProvider) == null) {
       return;
@@ -451,9 +456,10 @@ final notificationTapRoutingProvider = Provider<void>((ref) {
     if (pending == null) return;
     final venue = ref.read(activeVenueProvider);
     if (pending.venueId != null && venue?.id != pending.venueId) {
-      if (ref.read(routerProvider).routeInformationProvider.value.uri.path !=
-          '/select-venue') {
-        ref.read(routerProvider).go('/select-venue');
+      final router = ref.read(routerProvider);
+      if (fromTap &&
+          router.routeInformationProvider.value.uri.path != '/select-venue') {
+        router.go('/select-venue');
       }
       return;
     }
@@ -461,7 +467,24 @@ final notificationTapRoutingProvider = Provider<void>((ref) {
     ref.read(routerProvider).go(pending.route);
   }
 
-  ref.listen(activeVenueProvider, (_, __) => deliverPending());
+  ref.listen<Venue?>(activeVenueProvider, (previous, next) {
+    final pending = ref.read(pendingNotificationRouteProvider);
+    // The person switched to a venue other than the one the notification belongs to: that
+    // notification is no longer awaited, so drop it and let the switcher close.
+    if (pending != null &&
+        previous != null &&
+        next != null &&
+        pending.venueId != null &&
+        next.id != pending.venueId) {
+      ref.read(pendingNotificationRouteProvider.notifier).state = null;
+      final router = ref.read(routerProvider);
+      if (router.routeInformationProvider.value.uri.path == '/select-venue') {
+        router.go('/');
+      }
+      return;
+    }
+    deliverPending();
+  });
   ref.listen(myVenueRoleProvider, (_, __) => deliverPending());
   ref.listen(isSignedInProvider, (_, signedIn) {
     if (!signedIn) {
@@ -483,6 +506,6 @@ final notificationTapRoutingProvider = Provider<void>((ref) {
       return;
     }
     ref.read(pendingNotificationRouteProvider.notifier).state = notification;
-    deliverPending();
+    deliverPending(fromTap: true);
   });
 });
