@@ -29,6 +29,12 @@ cpSync(join(root, 'site'), output, { recursive: true, filter: (source) => should
 // correctly under that subpath instead of the site root. Needs env/production.json (gitignored,
 // see apps/mobile/README.md) — same requirement the Codemagic iOS build already has.
 const mobileDir = join(root, 'apps/mobile');
+// Site CI sets SITE_SKIP_FLUTTER=1: it checks and builds the marketing pages without a Flutter
+// SDK or env/production.json. The deploy workflow still builds the full site.
+if (process.env.SITE_SKIP_FLUTTER === '1') {
+  console.log('Built marketing site only (SITE_SKIP_FLUTTER=1; /app not included).');
+  process.exit(0);
+}
 const flutterWeb = spawnSync('flutter', [
   'build', 'web',
   '-t', 'lib/main_production.dart',
