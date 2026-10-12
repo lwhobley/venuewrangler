@@ -1,5 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../core/errors/unapplied_update.dart';
+
 import '../domain/event.dart';
 
 /// As with the other Phase 2/3 repositories, RLS is the actual authority (see
@@ -63,9 +65,9 @@ class SupabaseEventsRepository implements EventsRepository {
         .select('id')
         .maybeSingle();
     if (row == null) {
-      throw const PostgrestException(
-        message: 'Event update was not applied',
-        code: '42501',
+      await throwForUnappliedUpdate(
+        rowExists: () => rowExistsById(_client, 'events', eventId),
+        denialMessage: 'Event update was not applied',
       );
     }
   }
@@ -79,9 +81,9 @@ class SupabaseEventsRepository implements EventsRepository {
         .select('id')
         .maybeSingle();
     if (row == null) {
-      throw const PostgrestException(
-        message: 'Event deletion was not applied',
-        code: '42501',
+      await throwForUnappliedUpdate(
+        rowExists: () => rowExistsById(_client, 'events', eventId),
+        denialMessage: 'Event deletion was not applied',
       );
     }
   }

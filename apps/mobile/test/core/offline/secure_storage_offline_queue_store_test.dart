@@ -44,4 +44,19 @@ void main() {
 
     expect(await const SecureStorageOfflineQueueStore().loadAll(), isEmpty);
   });
+
+  test('a corrupt blob is kept under a corrupt-backup key', () async {
+    const corrupt = '[{"id": ';
+    FlutterSecureStorage.setMockInitialValues(
+      {'offline_mutation_queue': corrupt},
+    );
+
+    await const SecureStorageOfflineQueueStore().loadAll();
+
+    final all = await const FlutterSecureStorage().readAll();
+    final backups = all.entries.where(
+      (e) => e.key.startsWith('offline_mutation_queue.corrupt.'),
+    );
+    expect(backups.map((e) => e.value), [corrupt]);
+  });
 }

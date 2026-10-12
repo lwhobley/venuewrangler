@@ -125,4 +125,110 @@ void main() {
       expect(VenueTimezone.formatDayAndDate(utcInstant, tz), 'Sat, Oct 10');
     });
   });
+
+  group('VenueTimezone.toUtc across DST transitions', () {
+    test('Los Angeles spring-forward day resolves with the daylight offset',
+        () {
+      // DST starts 2026-03-08 at 02:00 PST (10:00Z).
+      expect(
+        VenueTimezone.toUtc(DateTime.utc(2026, 3, 8, 6), 'America/Los_Angeles'),
+        DateTime.utc(2026, 3, 8, 13),
+      );
+    });
+
+    test('New York spring-forward day resolves with the daylight offset', () {
+      // DST starts 2026-03-08 at 02:00 EST (07:00Z).
+      expect(
+        VenueTimezone.toUtc(
+          DateTime.utc(2026, 3, 8, 3, 30),
+          'America/New_York',
+        ),
+        DateTime.utc(2026, 3, 8, 7, 30),
+      );
+    });
+
+    test('a wall time in the spring-forward gap resolves to the later instant',
+        () {
+      // 02:30 does not exist on 2026-03-08 in Los Angeles; it reads as 03:30 PDT.
+      expect(
+        VenueTimezone.toUtc(
+          DateTime.utc(2026, 3, 8, 2, 30),
+          'America/Los_Angeles',
+        ),
+        DateTime.utc(2026, 3, 8, 10, 30),
+      );
+    });
+
+    test(
+        'Los Angeles fall-back day: the ambiguous hour takes the earlier instant',
+        () {
+      // 01:30 happens twice on 2026-11-01; the first occurrence is PDT (08:30Z).
+      expect(
+        VenueTimezone.toUtc(
+          DateTime.utc(2026, 11, 1, 1, 30),
+          'America/Los_Angeles',
+        ),
+        DateTime.utc(2026, 11, 1, 8, 30),
+      );
+      // After the transition at 09:00Z, the same wall hour is PST.
+      expect(
+        VenueTimezone.toUtc(
+          DateTime.utc(2026, 11, 1, 6),
+          'America/Los_Angeles',
+        ),
+        DateTime.utc(2026, 11, 1, 14),
+      );
+    });
+
+    test('New York fall-back day round trips through toVenueTime', () {
+      final wall = DateTime.utc(2026, 11, 1, 12);
+      final utc = VenueTimezone.toUtc(wall, 'America/New_York');
+      expect(utc, DateTime.utc(2026, 11, 1, 17));
+      expect(VenueTimezone.toVenueTime(utc, 'America/New_York'), wall);
+    });
+
+    test('Phoenix (no DST) is a fixed -7 offset on both transition days', () {
+      expect(
+        VenueTimezone.toUtc(DateTime.utc(2026, 3, 8, 6), 'America/Phoenix'),
+        DateTime.utc(2026, 3, 8, 13),
+      );
+      expect(
+        VenueTimezone.toUtc(DateTime.utc(2026, 11, 1, 6), 'America/Phoenix'),
+        DateTime.utc(2026, 11, 1, 13),
+      );
+    });
+
+    test('Honolulu (no DST) is a fixed -10 offset', () {
+      expect(
+        VenueTimezone.toUtc(DateTime.utc(2026, 3, 8, 6), 'Pacific/Honolulu'),
+        DateTime.utc(2026, 3, 8, 16),
+      );
+      expect(
+        VenueTimezone.toUtc(DateTime.utc(2026, 11, 1, 6), 'Pacific/Honolulu'),
+        DateTime.utc(2026, 11, 1, 16),
+      );
+    });
+
+    test('an unknown timezone id falls back to UTC', () {
+      expect(
+        VenueTimezone.toUtc(DateTime.utc(2026, 6, 1, 12), 'Mars/Olympus_Mons'),
+        DateTime.utc(2026, 6, 1, 12),
+      );
+    });
+
+    test('EU summer time starts at the transition instant itself', () {
+      // London switches at 01:00Z on the last Sunday of March (2026-03-29).
+      expect(
+        VenueTimezone.offsetFor('Europe/London', DateTime.utc(2026, 3, 29, 1)),
+        const Duration(hours: 1),
+      );
+      expect(
+        VenueTimezone.offsetFor(
+          'Europe/London',
+          DateTime.utc(2026, 3, 29, 0, 59, 59),
+        ),
+        Duration.zero,
+      );
+    });
+  });
 }

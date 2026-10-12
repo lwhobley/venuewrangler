@@ -1,3 +1,6 @@
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -42,10 +45,13 @@ class _FakeAuthRepository implements AuthRepository {
 }
 
 class _FakeSettingsRepository implements SettingsRepository {
-  _FakeSettingsRepository({this.deletionError});
+  _FakeSettingsRepository({this.deletionError, this.deleteGate});
 
   /// Thrown by [deleteAccount] if set — e.g. the sole-owner guard's 42501.
   final PostgrestException? deletionError;
+
+  /// When set, [deleteAccount] holds until this completes (simulates an in-flight request).
+  final Completer<void>? deleteGate;
   bool deleteAccountCalled = false;
 
   @override
@@ -58,6 +64,7 @@ class _FakeSettingsRepository implements SettingsRepository {
   @override
   Future<void> deleteAccount({String? reason}) async {
     deleteAccountCalled = true;
+    if (deleteGate != null) await deleteGate!.future;
     if (deletionError != null) throw deletionError!;
   }
 }
@@ -129,6 +136,49 @@ void main() {
     });
 
     expect(settingsRepo.deleteAccountCalled, isTrue);
+    expect(authRepo.signOutCalled, isTrue);
+  });
+
+  testWidgets('signs out even if the widget is unmounted while deleting',
+      (tester) async {
+    FlutterSecureStorage.setMockInitialValues({});
+    final gate = Completer<void>();
+    final settingsRepo = _FakeSettingsRepository(deleteGate: gate);
+    final authRepo = _FakeAuthRepository();
+    // A long-lived root container (as the app's ProviderScope is), so unmounting only the
+    // button does not dispose the container sign-out needs.
+    final container = ProviderContainer(
+      overrides: [
+        settingsRepositoryProvider.overrideWithValue(settingsRepo),
+        authRepositoryProvider.overrideWithValue(authRepo),
+      ],
+    );
+    addTearDown(container.dispose);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(
+          home: Scaffold(body: DeleteAccountButton()),
+        ),
+      ),
+    );
+
+    await tester.runAsync(() async {
+      await tester.tap(find.text('Delete account'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Delete account').last);
+      await tester.pumpAndSettle();
+      // Unmount the button while the deletion request is still in flight.
+      await tester.pumpWidget(const SizedBox());
+      gate.complete();
+      for (var i = 0; i < 10 && !authRepo.signOutCalled; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
+    });
+
+    expect(settingsRepo.deleteAccountCalled, isTrue);
+    expect(tester.takeException(), isNull);
     expect(authRepo.signOutCalled, isTrue);
   });
 

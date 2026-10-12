@@ -32,7 +32,9 @@ class OrganizationVenueSwitcherScreen extends ConsumerWidget {
           IconButton(
             icon: const Icon(Icons.logout),
             tooltip: 'Sign out',
-            onPressed: () => signOutAndClearScopedData(ref),
+            onPressed: () => signOutAndClearScopedData(
+              ProviderScope.containerOf(context, listen: false),
+            ),
           ),
         ],
       ),
@@ -205,7 +207,9 @@ class _WorkspaceFailed extends ConsumerWidget {
               child: const Text('Try again'),
             ),
             TextButton(
-              onPressed: () => signOutAndClearScopedData(ref),
+              onPressed: () => signOutAndClearScopedData(
+                ProviderScope.containerOf(context, listen: false),
+              ),
               child: const Text('Sign out'),
             ),
           ],

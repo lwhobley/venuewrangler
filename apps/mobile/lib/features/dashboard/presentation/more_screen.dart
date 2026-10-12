@@ -126,7 +126,9 @@ class MoreScreen extends ConsumerWidget {
                   'Sign out',
                   style: TextStyle(color: context.ops.danger.fg),
                 ),
-                onTap: () => signOutAndClearScopedData(ref),
+                onTap: () => signOutAndClearScopedData(
+                  ProviderScope.containerOf(context, listen: false),
+                ),
               ),
             ],
           ),

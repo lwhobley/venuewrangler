@@ -188,6 +188,7 @@ class _TimeClockScreenState extends ConsumerState<TimeClockScreen> {
 
   void _refresh(String venueId) {
     ref.invalidate(activeTimeEntryProvider(venueId));
+    ref.invalidate(openElsewhereTimeEntryProvider(venueId));
     ref.invalidate(myTimeEntriesProvider(venueId));
     ref.invalidate(venueClockBoardProvider(venueId));
   }
@@ -209,6 +210,8 @@ class _TimeClockScreenState extends ConsumerState<TimeClockScreen> {
     }
 
     final activeEntryAsync = ref.watch(activeTimeEntryProvider(venue.id));
+    final openElsewhere =
+        ref.watch(openElsewhereTimeEntryProvider(venue.id)).valueOrNull;
     final myEntriesAsync = ref.watch(myTimeEntriesProvider(venue.id));
     final boardAsync = ref.watch(venueClockBoardProvider(venue.id));
 
@@ -357,10 +360,23 @@ class _TimeClockScreenState extends ConsumerState<TimeClockScreen> {
                             const SizedBox(height: 24),
                             // Action Buttons
                             if (!isClockedIn) ...[
+                              if (openElsewhere != null) ...[
+                                Text(
+                                  'You are clocked in at another venue. '
+                                  'Clock out there before clocking in here.',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    color: context.ops.warning.fg,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                              ],
                               FilledButton.icon(
-                                onPressed: _isProcessing
-                                    ? null
-                                    : () => _handleClockIn(venue.id),
+                                onPressed:
+                                    _isProcessing || openElsewhere != null
+                                        ? null
+                                        : () => _handleClockIn(venue.id),
                                 icon: const Icon(Icons.login),
                                 label: const Text('Clock In'),
                                 style: FilledButton.styleFrom(

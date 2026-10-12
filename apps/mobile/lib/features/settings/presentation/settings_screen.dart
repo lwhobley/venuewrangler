@@ -112,7 +112,9 @@ class SettingsScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 24),
             OutlinedButton.icon(
-              onPressed: () => signOutAndClearScopedData(ref),
+              onPressed: () => signOutAndClearScopedData(
+                ProviderScope.containerOf(context, listen: false),
+              ),
               icon: const Icon(Icons.logout),
               label: const Text('Sign out'),
             ),

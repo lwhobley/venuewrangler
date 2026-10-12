@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../offline/offline_queue_providers.dart';
@@ -8,13 +9,18 @@ import 'auth_providers.dart';
 /// Single sign-out path every screen must use: clears the per-user offline queue
 /// and secure session values *before* signing out, so a shared tablet can never
 /// replay user A's queued writes as user B.
-Future<void> signOutAndClearScopedData(WidgetRef ref) async {
+///
+/// Takes a [ProviderContainer] rather than a widget ref, so a caller that awaits something
+/// first (and may be unmounted when it resumes) can capture the container before the await.
+/// Each cleanup step is isolated: a failure in one never prevents the others, and the final
+/// `signOut()` always runs.
+Future<void> signOutAndClearScopedData(ProviderContainer container) async {
   try {
     final token =
         await const SecureSessionStorage().read(registeredPushTokenStorageKey);
     if (token != null) {
       try {
-        await ref
+        await container
             .read(notificationsRepositoryProvider)
             .unregisterPushToken(token);
         await const SecureSessionStorage()
@@ -28,18 +34,21 @@ Future<void> signOutAndClearScopedData(WidgetRef ref) async {
         );
       }
     }
-  } catch (_) {
+  } catch (error) {
     // Network failure must not trap a person in the previous account.
+    debugPrint('Sign-out: push token revocation skipped: $error');
   }
   try {
-    await ref.read(offlineQueueControllerProvider.notifier).clearAll();
-  } catch (_) {
+    await container.read(offlineQueueControllerProvider.notifier).clearAll();
+  } catch (error) {
     // Queue clear must never block sign-out.
+    debugPrint('Sign-out: offline queue clear failed: $error');
   }
   try {
     await const SecureSessionStorage().clearAll();
-  } catch (_) {
+  } catch (error) {
     // Secure-storage clear must never block sign-out.
+    debugPrint('Sign-out: secure storage clear failed: $error');
   }
-  await ref.read(authRepositoryProvider).signOut();
+  await container.read(authRepositoryProvider).signOut();
 }

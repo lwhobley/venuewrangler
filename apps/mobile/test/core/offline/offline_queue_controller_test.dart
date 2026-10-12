@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:venuewrangler_mobile/core/offline/offline_queue_controller.dart';
@@ -328,5 +329,131 @@ void main() {
 
       expect(controller.state.pending, hasLength(1));
     });
+
+    test('an unreadable store starts empty and enqueue still works', () async {
+      final controller =
+          OfflineQueueController(_UnreadableOfflineQueueStore(), const {});
+
+      await controller.ready;
+      await controller.enqueue(_mutation(id: 'after-corruption'));
+
+      expect(controller.state.pending.map((m) => m.id), ['after-corruption']);
+    });
+
+    test(
+        'transport failures do not count toward the retry limit: the mutation '
+        'stays pending and is never moved to conflicts', () async {
+      final store = _InMemoryOfflineQueueStore();
+      final controller = OfflineQueueController(store, {
+        'test_kind': (payload) async => throw const SocketException('offline'),
+      });
+      await controller.ready;
+      await controller.enqueue(_mutation(id: 'offline-write'));
+
+      for (var i = 0; i < kMaxMutationAttempts + 3; i++) {
+        await controller.flush();
+      }
+
+      expect(controller.state.conflicts, isEmpty);
+      expect(controller.state.pending, hasLength(1));
+      expect(controller.state.pending.single.attemptCount, 0);
+    });
+
+    test('a thrown non-transport error counts as a server-answered attempt',
+        () async {
+      final store = _InMemoryOfflineQueueStore();
+      final controller = OfflineQueueController(store, {
+        'test_kind': (payload) async => throw StateError('server said no'),
+      });
+      await controller.ready;
+      await controller.enqueue(_mutation(id: 'rejected'));
+
+      for (var i = 0; i < kMaxMutationAttempts; i++) {
+        await controller.flush();
+      }
+
+      expect(controller.state.pending, isEmpty);
+      expect(controller.state.conflicts.single.id, 'rejected');
+    });
+
+    test(
+        'sign-out removes only the signed-out user and keeps other users\' '
+        'conflicts and pending writes', () async {
+      final store = _InMemoryOfflineQueueStore();
+      String? userId = 'user-a';
+      final controller = OfflineQueueController(
+        store,
+        {
+          'test_kind': (payload) async =>
+              const MutationResult(MutationOutcome.conflict),
+        },
+        currentUserId: () => userId,
+      );
+      await controller.ready;
+      await controller.enqueue(_mutation(id: 'a-conflict'));
+      await controller.flush();
+      userId = 'user-b';
+      await controller.enqueue(_mutation(id: 'b-pending'));
+
+      await controller.clearAll();
+
+      expect(controller.state.conflicts.map((m) => m.id), ['a-conflict']);
+      expect(controller.state.pending, isEmpty);
+      expect(store.saved.map((m) => m.id), ['a-conflict']);
+    });
+
+    test(
+        'when the user changes mid-flush, mutations already applied are removed '
+        'before returning so they are not replayed', () async {
+      final store = _InMemoryOfflineQueueStore();
+      final gate = Completer<void>();
+      final started = Completer<void>();
+      String? userId = 'user-a';
+      var calls = 0;
+      final controller = OfflineQueueController(
+        store,
+        {
+          'test_kind': (payload) async {
+            calls++;
+            if (payload['value'] == 2) {
+              if (!started.isCompleted) started.complete();
+              await gate.future;
+            }
+            return const MutationResult(MutationOutcome.applied);
+          },
+        },
+        currentUserId: () => userId,
+      );
+      await controller.ready;
+      await controller.enqueue(_mutation(id: 'first'));
+      await controller.enqueue(
+        PendingMutation(
+          id: 'second',
+          kind: 'test_kind',
+          payload: const {'value': 2},
+          createdAt: DateTime(2026),
+        ),
+      );
+      await controller.enqueue(_mutation(id: 'third'));
+
+      final flushing = controller.flush();
+      await started.future;
+      userId = 'user-b';
+      gate.complete();
+      await flushing;
+
+      expect(calls, 2);
+      expect(controller.state.pending.map((m) => m.id), ['third']);
+      expect(store.saved.map((m) => m.id), ['third']);
+    });
   });
+}
+
+class _UnreadableOfflineQueueStore implements OfflineQueueStore {
+  @override
+  Future<List<PendingMutation>> loadAll() async =>
+      throw const FormatException('corrupt blob');
+
+  @override
+  Future<void> saveAll(List<PendingMutation> mutations) async {}
 }

@@ -4,11 +4,16 @@ import '../../../core/errors/app_error.dart';
 import '../domain/time_entry.dart';
 
 abstract interface class TimeClockRepository {
-  /// Returns the user's open entry. The database allows only one open entry per user (see
-  /// time_entries_one_open_per_user_idx), so this may belong to a *different* venue than
-  /// [venueId]. Callers must compare `entry.venueId` before treating the user as clocked in
-  /// here; filtering by venue would hide that entry and make clock-in fail with "already clocked in".
+  /// Returns the user's open entry *at [venueId]*, or null. The database allows only one open
+  /// entry per user (time_entries_one_open_per_user_idx), so an entry open at another venue is
+  /// not reported here; use [getOpenEntryElsewhere] to detect it. Clock-out operates on the
+  /// entry returned here, i.e. always on the entry for the venue it was started at.
   Future<TimeEntry?> getActiveEntry({required String venueId});
+
+  /// Returns the user's open entry when it belongs to a venue other than [venueId], else null.
+  /// The UI must show it as "clocked in at another venue" and must not clock in, out, or take
+  /// breaks on it from this venue.
+  Future<TimeEntry?> getOpenEntryElsewhere({required String venueId});
 
   Future<List<TimeEntry>> getMyEntries({
     required String venueId,
@@ -54,6 +59,18 @@ class SupabaseTimeClockRepository implements TimeClockRepository {
 
   @override
   Future<TimeEntry?> getActiveEntry({required String venueId}) async {
+    final open = await _openEntry();
+    return open != null && open.venueId == venueId ? open : null;
+  }
+
+  @override
+  Future<TimeEntry?> getOpenEntryElsewhere({required String venueId}) async {
+    final open = await _openEntry();
+    return open != null && open.venueId != venueId ? open : null;
+  }
+
+  /// The user's single open entry across all venues, if any.
+  Future<TimeEntry?> _openEntry() async {
     try {
       final user = _client.auth.currentUser;
       if (user == null) return null;
