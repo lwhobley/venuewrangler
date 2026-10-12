@@ -8,6 +8,16 @@
 // against a real clamd instance in this environment (none is reachable here). The protocol
 // itself (zINSTREAM + 4-byte-BE-length-prefixed chunks + a zero-length terminator chunk) is
 // clamd's standard wire format, unchanged from the Node implementation this was ported from.
+//
+// Transport gate. This module does not implement TLS. The scanner must be reached over a link
+// that is already encrypted, e.g. a private network or a TLS-terminating tunnel sidecar.
+//   CLAMAV_HOST            scanner host (required; unset means uploads are refused)
+//   CLAMAV_PORT            optional, default 3310
+//   CLAMAV_TIMEOUT_MS      optional, default 10000
+//   CLAMAV_TLS             must be "true" to assert the link above is encrypted. Any other value
+//                          makes the TCP path refuse every scan (fail closed).
+//   CLAMAV_ALLOW_PLAINTEXT "true" overrides the CLAMAV_TLS gate. Local development only. Never
+//                          set it in a hosted environment.
 
 const DEFAULT_CLAMAV_PORT = 3310;
 const DEFAULT_CLAMAV_TIMEOUT_MS = 10_000;
@@ -100,6 +110,12 @@ export async function assertDocumentClean(data: Uint8Array): Promise<void> {
   const host = Deno.env.get("CLAMAV_HOST")?.trim();
   if (!host) {
     throw new DocumentScanUnavailableError("Document malware scanning is not configured.");
+  }
+  const tlsAsserted = Deno.env.get("CLAMAV_TLS")?.trim() === "true";
+  const plaintextAllowed = Deno.env.get("CLAMAV_ALLOW_PLAINTEXT")?.trim() === "true";
+  if (!tlsAsserted && !plaintextAllowed) {
+    console.error("clamav: refusing plaintext scanner connection (CLAMAV_TLS is not true)");
+    throw new DocumentScanUnavailableError("Document malware scanning is not configured for a secure connection.");
   }
   const port = positiveInteger(Deno.env.get("CLAMAV_PORT"), DEFAULT_CLAMAV_PORT);
   const timeoutMs = positiveInteger(Deno.env.get("CLAMAV_TIMEOUT_MS"), DEFAULT_CLAMAV_TIMEOUT_MS);

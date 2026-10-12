@@ -1,7 +1,3 @@
-// deno.land/std's bare-URL import doesn't resolve via deno.json's import map the way
-// npm:/jsr: specifiers do once nodeModulesDir is "auto" (see deno.json).
-// deno-lint-ignore no-import-prefix
-import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { corsHeaders } from "../_shared/cors.ts";
 import { createServiceClient, createUserClient } from "../_shared/supabase-clients.ts";
 import { deliverPush } from "../_shared/push-delivery.ts";
@@ -11,6 +7,10 @@ initObservability();
 
 const MANAGER_ROLES = ["venue_manager", "organization_owner", "organization_admin"];
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// Keeps each payload well inside FCM/APNs limits (APNs caps the whole push at 4KB).
+const MAX_TITLE_CHARS = 200;
+const MAX_BODY_CHARS = 1000;
+const MAX_DATA_JSON_BYTES = 2048;
 
 interface NotificationRequest {
   venue_id: string;
@@ -22,7 +22,7 @@ interface NotificationRequest {
   data?: Record<string, unknown>;
 }
 
-serve(async (req: Request) => {
+Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
@@ -51,6 +51,15 @@ serve(async (req: Request) => {
 
     if (!venue_id || !kind || !title || !body) {
       return new Response(JSON.stringify({ error: "Missing required fields: venue_id, kind, title, body" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const dataJsonBytes = new TextEncoder().encode(JSON.stringify(data ?? {})).length;
+    if (title.length > MAX_TITLE_CHARS || body.length > MAX_BODY_CHARS ||
+      dataJsonBytes > MAX_DATA_JSON_BYTES) {
+      return new Response(JSON.stringify({ error: "payload_too_large" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });

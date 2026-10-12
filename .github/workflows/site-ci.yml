@@ -1,0 +1,38 @@
+name: Site CI
+
+on:
+  pull_request:
+    paths:
+      - 'package.json'
+      - 'package-lock.json'
+      - 'packages/marketing/**'
+      - 'site/**'
+      - 'scripts/**'
+      - '.github/**'
+
+permissions:
+  contents: read
+
+jobs:
+  build-site:
+    name: Build and test marketing site
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Test
+        run: npm test
+
+      - name: Build site
+        run: npm run build:site
