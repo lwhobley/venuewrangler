@@ -90,10 +90,15 @@ select throws_ok(
   'another active member cannot take over a live device token registered to staff 1'
 );
 
+-- Read the owner as the table owner: push_tokens RLS hides other users' rows from staff 2, so
+-- running this as authenticated returned NULL regardless of who owns the token.
+reset role;
 select is(
-  (select user_id from public.push_tokens where token = 'fcm-device-token-111'),
+  (select user_id from public.push_tokens
+    where token = 'fcm-device-token-111'
+      and venue_id = '20000000-0000-0000-0000-0000000000a1'),
   '00000000-0000-0000-0000-000000000005'::uuid,
-  'the token still belongs to its active registrant'
+  'the token still belongs to its active registrant (takeover refused, owner unchanged)'
 );
 
 -- ---------------------------------------------------------------------------

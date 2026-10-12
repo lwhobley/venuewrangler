@@ -36,15 +36,25 @@ insert into public.conversation_members (conversation_id, user_id) values
 
 -- ---------------------------------------------------------------------------
 -- 4. All Staff read state: a venue staff member can record a read; a non-member cannot.
+-- The All Staff id is resolved as the owner, before switching roles. A non-member cannot see
+-- the channel through RLS, so a subquery as that user would return NULL and the derive trigger
+-- would fail with 23503 before the policy ran. The fixture must not depend on RLS visibility.
 -- ---------------------------------------------------------------------------
+do $$
+begin
+  perform set_config('p3.all_staff_id', (
+    select c.id::text from public.conversations c
+    where c.venue_id = '20000000-0000-0000-0000-0000000003a1' and c.type = 'all_staff'
+  ), true);
+end
+$$;
+
 set local role authenticated;
 set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-0000000003a1';
 
 select lives_ok(
   $$ insert into public.conversation_reads (conversation_id, user_id)
-     values ((select c.id from public.conversations c
-              where c.venue_id = '20000000-0000-0000-0000-0000000003a1' and c.type = 'all_staff'),
-             '00000000-0000-0000-0000-0000000003a1')
+     values (current_setting('p3.all_staff_id')::uuid, '00000000-0000-0000-0000-0000000003a1')
      on conflict (conversation_id, user_id) do update set read_at = now() $$,
   'R4: a staff member can record a read for the venue All Staff channel'
 );
@@ -60,9 +70,7 @@ select is(
 set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-0000000003b1';
 select throws_ok(
   $$ insert into public.conversation_reads (conversation_id, user_id)
-     values ((select c.id from public.conversations c
-              where c.venue_id = '20000000-0000-0000-0000-0000000003a1' and c.type = 'all_staff'),
-             '00000000-0000-0000-0000-0000000003b1') $$,
+     values (current_setting('p3.all_staff_id')::uuid, '00000000-0000-0000-0000-0000000003b1') $$,
   '42501', null,
   'R4: a user with no role in the venue cannot record a read for its All Staff channel'
 );
