@@ -33,6 +33,15 @@ workflows:
         - pattern: "ios-v*"
       cancel_previous_builds: false
     scripts:
+      # The tag trigger above has no branch filter, so a tag on any branch would otherwise ship
+      # to TestFlight. Refuse to build unless the tagged commit is already merged to main.
+      - name: Verify tagged commit is on origin/main
+        script: |
+          git fetch origin main
+          if ! git merge-base --is-ancestor HEAD origin/main; then
+            echo "Tagged commit $(git rev-parse HEAD) is not on origin/main; refusing to build." >&2
+            exit 1
+          fi
       - name: Install Flutter dependencies
         script: flutter packages pub get
       - name: Verify formatting

@@ -10,13 +10,19 @@
 import { corsHeaders, handleCorsPreflight } from "../_shared/cors.ts";
 import { createServiceClient, createUserClient } from "../_shared/supabase-clients.ts";
 import { getCallerVenueRoles, isCurrentVenueManager, isManager } from "../_shared/venue-auth.ts";
-import { encryptToken, signOAuthState, verifyOAuthState } from "../_shared/crypto.ts";
+import {
+  decryptToken,
+  encryptToken,
+  signOAuthState,
+  verifyOAuthState,
+} from "../_shared/crypto.ts";
 import { initObservability, captureException, flushObservability } from "../_shared/observability.ts";
 
 initObservability();
 
 const AUTHORIZE_URL = "https://appcenter.intuit.com/connect/oauth2";
 const TOKEN_URL = "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer";
+const REVOKE_URL = "https://developer.api.intuit.com/v2/oauth2/tokens/revoke";
 
 function jsonResponse(body: Record<string, unknown>, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -27,6 +33,45 @@ function jsonResponse(body: Record<string, unknown>, status = 200): Response {
 
 function redirectResponse(url: string): Response {
   return new Response(null, { status: 302, headers: { ...corsHeaders, Location: url } });
+}
+
+// Best-effort revoke of the stored QuickBooks refresh token (Intuit revokes the access token it
+// issued along with it). Never throws and never blocks disconnect: returns false on failure.
+async function revokeQuickBooksRefreshToken(
+  serviceClient: ReturnType<typeof createServiceClient>,
+  venueId: string,
+  encryptionKey: string,
+  clientId: string,
+  clientSecret: string,
+): Promise<boolean> {
+  try {
+    const { data: connection, error } = await serviceClient
+      .from("payroll_connections")
+      .select("encrypted_refresh_token")
+      .eq("venue_id", venueId)
+      .eq("provider", "quickbooks")
+      .maybeSingle();
+    if (error || !connection?.encrypted_refresh_token) return false;
+
+    const refreshToken = await decryptToken(connection.encrypted_refresh_token, encryptionKey);
+    const response = await fetch(REVOKE_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        Authorization: `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
+      },
+      body: JSON.stringify({ token: refreshToken }),
+    });
+    if (!response.ok) {
+      console.error("QuickBooks token revoke failed", response.status, await response.text());
+      return false;
+    }
+    return true;
+  } catch (error) {
+    console.error("QuickBooks token revoke threw", error);
+    return false;
+  }
 }
 
 async function requireVenueManager(
@@ -74,7 +119,9 @@ Deno.serve(async (req) => {
 async function handleRequest(req: Request): Promise<Response> {
   const url = new URL(req.url);
   const encryptionKey = Deno.env.get("PAYROLL_TOKEN_ENCRYPTION_KEY");
-  const stateSigningKey = Deno.env.get("OAUTH_STATE_SIGNING_KEY") ?? encryptionKey;
+  // Separate HMAC key for OAuth state signing, never the AES-GCM data key. No fallback to
+  // PAYROLL_TOKEN_ENCRYPTION_KEY: a missing key fails closed with the not-configured error.
+  const stateSigningKey = Deno.env.get("OAUTH_STATE_SIGNING_KEY");
   const clientId = Deno.env.get("QUICKBOOKS_CLIENT_ID");
   const clientSecret = Deno.env.get("QUICKBOOKS_CLIENT_SECRET");
   const redirectUri = Deno.env.get("QUICKBOOKS_REDIRECT_URI");
@@ -102,7 +149,7 @@ async function handleRequest(req: Request): Promise<Response> {
     if ("error" in auth) return auth.error;
 
     const state = await signOAuthState(
-      { venue_id: payload.venue_id, user_id: auth.userId },
+      { venue_id: payload.venue_id, user_id: auth.userId, aud: "quickbooks" },
       stateSigningKey,
     );
     const authorizeUrl = new URL(AUTHORIZE_URL);
@@ -127,7 +174,7 @@ async function handleRequest(req: Request): Promise<Response> {
       return redirectResponse(`${errorUrl}?provider=quickbooks&reason=missing_code_or_state`);
     }
 
-    const statePayload = await verifyOAuthState(state, stateSigningKey);
+    const statePayload = await verifyOAuthState(state, stateSigningKey, "quickbooks");
     if (!statePayload) {
       return redirectResponse(`${errorUrl}?provider=quickbooks&reason=invalid_state`);
     }
@@ -203,6 +250,14 @@ async function handleRequest(req: Request): Promise<Response> {
     if ("error" in auth) return auth.error;
 
     const serviceClient = createServiceClient();
+    // Revoke before clearing our copy; a failed revoke still lets the disconnect proceed.
+    const revoked = await revokeQuickBooksRefreshToken(
+      serviceClient,
+      payload.venue_id,
+      encryptionKey,
+      clientId,
+      clientSecret,
+    );
     const { error } = await serviceClient
       .from("payroll_connections")
       .update({
@@ -218,7 +273,7 @@ async function handleRequest(req: Request): Promise<Response> {
       console.error("failed to disconnect QuickBooks", error);
       return jsonResponse({ error: "disconnect_failed" }, 500);
     }
-    return jsonResponse({ disconnected: true });
+    return jsonResponse({ disconnected: true, revoked });
   }
 
   return jsonResponse({ error: "not_found" }, 404);

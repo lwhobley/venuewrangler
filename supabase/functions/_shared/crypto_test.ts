@@ -8,12 +8,19 @@ import {
 const key = btoa("k".repeat(32));
 
 Deno.test("OAuth state verifier treats malformed tokens as invalid", async () => {
-  const state = await signOAuthState({ venue_id: "venue", user_id: "user" }, key);
-  if ((await verifyOAuthState(state, key))?.venue_id !== "venue") {
+  const state = await signOAuthState({ venue_id: "venue", user_id: "user", aud: "square" }, key);
+  if ((await verifyOAuthState(state, key, "square"))?.venue_id !== "venue") {
     throw new Error("valid state rejected");
   }
-  if (await verifyOAuthState("not-base64.%%%%", key) !== null) {
+  if (await verifyOAuthState("not-base64.%%%%", key, "square") !== null) {
     throw new Error("malformed state accepted");
+  }
+});
+
+Deno.test("OAuth state is rejected at a different provider's callback", async () => {
+  const state = await signOAuthState({ venue_id: "venue", user_id: "user", aud: "gusto" }, key);
+  if (await verifyOAuthState(state, key, "square") !== null) {
+    throw new Error("state for gusto accepted at square callback");
   }
 });
 

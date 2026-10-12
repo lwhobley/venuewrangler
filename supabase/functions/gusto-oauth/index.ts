@@ -4,12 +4,16 @@
 // NOT independently verified against a live Gusto sandbox app (none was available in this
 // environment). Endpoint shapes follow Gusto's published OAuth2 docs; confirm against
 // https://docs.gusto.com/authentication-authorization/docs/oauth2-overview before relying on
-// this in production. GUSTO_API_BASE defaults to the demo/sandbox host, not production,
-// mirroring the same safety-first default as SQUARE_API_BASE in supabase/.env.example.
+// this in production. GUSTO_API_BASE has no default and must be set explicitly.
 import { corsHeaders, handleCorsPreflight } from "../_shared/cors.ts";
 import { createServiceClient, createUserClient } from "../_shared/supabase-clients.ts";
 import { getCallerVenueRoles, isCurrentVenueManager, isManager } from "../_shared/venue-auth.ts";
-import { encryptToken, signOAuthState, verifyOAuthState } from "../_shared/crypto.ts";
+import {
+  decryptToken,
+  encryptToken,
+  signOAuthState,
+  verifyOAuthState,
+} from "../_shared/crypto.ts";
 import { initObservability, captureException, flushObservability } from "../_shared/observability.ts";
 
 initObservability();
@@ -23,6 +27,42 @@ function jsonResponse(body: Record<string, unknown>, status = 200): Response {
 
 function redirectResponse(url: string): Response {
   return new Response(null, { status: 302, headers: { ...corsHeaders, Location: url } });
+}
+
+// Best-effort provider-side revoke of the stored Gusto access token. Never throws and never
+// blocks disconnect: returns false on any failure and the caller reports it as `revoked: false`.
+async function revokeGustoAccessToken(
+  serviceClient: ReturnType<typeof createServiceClient>,
+  venueId: string,
+  encryptionKey: string,
+  apiBase: string,
+  clientId: string,
+  clientSecret: string,
+): Promise<boolean> {
+  try {
+    const { data: connection, error } = await serviceClient
+      .from("payroll_connections")
+      .select("encrypted_access_token")
+      .eq("venue_id", venueId)
+      .eq("provider", "gusto")
+      .maybeSingle();
+    if (error || !connection?.encrypted_access_token) return false;
+
+    const accessToken = await decryptToken(connection.encrypted_access_token, encryptionKey);
+    const response = await fetch(`${apiBase}/oauth/revoke`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ client_id: clientId, client_secret: clientSecret, token: accessToken }),
+    });
+    if (!response.ok) {
+      console.error("Gusto token revoke failed", response.status, await response.text());
+      return false;
+    }
+    return true;
+  } catch (error) {
+    console.error("Gusto token revoke threw", error);
+    return false;
+  }
 }
 
 async function requireVenueManager(
@@ -70,13 +110,16 @@ Deno.serve(async (req) => {
 async function handleRequest(req: Request): Promise<Response> {
   const url = new URL(req.url);
   const encryptionKey = Deno.env.get("PAYROLL_TOKEN_ENCRYPTION_KEY");
-  const stateSigningKey = Deno.env.get("OAUTH_STATE_SIGNING_KEY") ?? encryptionKey;
-  const apiBase = Deno.env.get("GUSTO_API_BASE") ?? "https://api.gusto-demo.com";
+  // Separate HMAC key for OAuth state signing, never the AES-GCM data key. No fallback to
+  // PAYROLL_TOKEN_ENCRYPTION_KEY: a missing key fails closed with the not-configured error.
+  const stateSigningKey = Deno.env.get("OAUTH_STATE_SIGNING_KEY");
+  // No sandbox default: GUSTO_API_BASE must be set explicitly (demo or production).
+  const apiBase = Deno.env.get("GUSTO_API_BASE");
   const clientId = Deno.env.get("GUSTO_CLIENT_ID");
   const clientSecret = Deno.env.get("GUSTO_CLIENT_SECRET");
   const redirectUri = Deno.env.get("GUSTO_REDIRECT_URI");
 
-  if (!encryptionKey || !stateSigningKey || !clientId || !clientSecret || !redirectUri) {
+  if (!encryptionKey || !stateSigningKey || !apiBase || !clientId || !clientSecret || !redirectUri) {
     console.error("gusto-oauth is not fully configured");
     if (url.pathname.endsWith("/callback")) {
       const errorUrl = Deno.env.get("PAYROLL_OAUTH_ERROR_URL") ?? "venuewrangler://integrations/error";
@@ -98,7 +141,7 @@ async function handleRequest(req: Request): Promise<Response> {
     if ("error" in auth) return auth.error;
 
     const state = await signOAuthState(
-      { venue_id: payload.venue_id, user_id: auth.userId },
+      { venue_id: payload.venue_id, user_id: auth.userId, aud: "gusto" },
       stateSigningKey,
     );
     const authorizeUrl = new URL(`${apiBase}/oauth/authorize`);
@@ -119,7 +162,7 @@ async function handleRequest(req: Request): Promise<Response> {
 
     if (!code || !state) return redirectResponse(`${errorUrl}?provider=gusto&reason=missing_code_or_state`);
 
-    const statePayload = await verifyOAuthState(state, stateSigningKey);
+    const statePayload = await verifyOAuthState(state, stateSigningKey, "gusto");
     if (!statePayload) return redirectResponse(`${errorUrl}?provider=gusto&reason=invalid_state`);
 
     const serviceClient = createServiceClient();
@@ -195,6 +238,15 @@ async function handleRequest(req: Request): Promise<Response> {
     if ("error" in auth) return auth.error;
 
     const serviceClient = createServiceClient();
+    // Revoke before clearing our copy; a failed revoke still lets the disconnect proceed.
+    const revoked = await revokeGustoAccessToken(
+      serviceClient,
+      payload.venue_id,
+      encryptionKey,
+      apiBase,
+      clientId,
+      clientSecret,
+    );
     const { error } = await serviceClient
       .from("payroll_connections")
       .update({
@@ -210,7 +262,7 @@ async function handleRequest(req: Request): Promise<Response> {
       console.error("failed to disconnect Gusto", error);
       return jsonResponse({ error: "disconnect_failed" }, 500);
     }
-    return jsonResponse({ disconnected: true });
+    return jsonResponse({ disconnected: true, revoked });
   }
 
   return jsonResponse({ error: "not_found" }, 404);

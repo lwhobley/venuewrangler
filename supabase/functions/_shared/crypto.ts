@@ -67,9 +67,18 @@ export async function decryptToken(encoded: string, base64Key: string): Promise<
   return new TextDecoder().decode(plaintext);
 }
 
+export type OAuthProvider = "square" | "quickbooks" | "gusto";
+
+// `aud` names the one provider callback a state may be redeemed at, and `purpose` names the flow,
+// so a state minted for one provider can never be replayed at another provider's callback even
+// though they share OAUTH_STATE_SIGNING_KEY.
+const OAUTH_STATE_PURPOSE = "payroll_connect";
+
 export interface OAuthStatePayload {
   venue_id: string;
   user_id: string;
+  aud: OAuthProvider;
+  purpose: typeof OAUTH_STATE_PURPOSE;
   issued_at: number;
 }
 
@@ -78,20 +87,29 @@ const STATE_TTL_MS = 10 * 60 * 1000; // 10 minutes — long enough for a provide
 // Signed, not encrypted: venue_id/user_id aren't secret, but the signature stops a forged
 // state value from redirecting a token exchange onto a venue the requester was never checked
 // against in the first place.
+// The key must be OAUTH_STATE_SIGNING_KEY, never PAYROLL_TOKEN_ENCRYPTION_KEY. Rotating it
+// invalidates in-flight authorizations (users must restart the connect flow), which is accepted.
 export async function signOAuthState(
-  payload: Omit<OAuthStatePayload, "issued_at">,
+  payload: { venue_id: string; user_id: string; aud: OAuthProvider },
   base64Key: string,
 ): Promise<string> {
-  const fullPayload: OAuthStatePayload = { ...payload, issued_at: Date.now() };
+  const fullPayload: OAuthStatePayload = {
+    ...payload,
+    purpose: OAUTH_STATE_PURPOSE,
+    issued_at: Date.now(),
+  };
   const payloadB64 = btoa(JSON.stringify(fullPayload));
   const key = await importHmacKey(base64Key);
   const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payloadB64));
   return `${payloadB64}.${bytesToBase64(new Uint8Array(signature))}`;
 }
 
+// `expectedAud` is the provider whose callback is verifying the state; a state minted for any
+// other provider is rejected.
 export async function verifyOAuthState(
   token: string,
   base64Key: string,
+  expectedAud: OAuthProvider,
 ): Promise<OAuthStatePayload | null> {
   const [payloadB64, signatureB64] = token.split(".");
   if (!payloadB64 || !signatureB64) return null;
@@ -111,7 +129,9 @@ export async function verifyOAuthState(
       payload.issued_at > Date.now() ||
       Date.now() - payload.issued_at > STATE_TTL_MS ||
       typeof payload.venue_id !== "string" ||
-      typeof payload.user_id !== "string") return null;
+      typeof payload.user_id !== "string" ||
+      payload.aud !== expectedAud ||
+      payload.purpose !== OAUTH_STATE_PURPOSE) return null;
     return payload;
   } catch {
     return null;
