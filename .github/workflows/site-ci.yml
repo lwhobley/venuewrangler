@@ -35,4 +35,8 @@ jobs:
         run: npm test
 
       - name: Build site
+        # The Flutter web app (/app) is built only by the deploy workflow, which installs Flutter
+        # and provides env/production.json.
+        env:
+          SITE_SKIP_FLUTTER: '1'
         run: npm run build:site
