@@ -20,10 +20,10 @@ dependencies:
 
   # Immutable models / serialization
   # Secure local storage for session-sensitive values
-  flutter_secure_storage: ^9.2.4
+  flutter_secure_storage: ^10.3.4
 
   # Offline/connectivity
-  connectivity_plus: ^6.1.0
+  connectivity_plus: ^7.3.1
   path_provider: ^2.1.5
 
   # Error monitoring
@@ -44,7 +44,7 @@ dependencies:
   # features/checklists/data/checklists_repository.dart)
   uuid: ^4.5.1
 
-  cupertino_icons: ^1.0.8
+  cupertino_icons: ^2.0.0
 
   # Android push token acquisition only — iOS uses native APNs directly (see
   # ios/Runner/PushNotificationsPlugin.swift) via notifications-send's APNS_KEY/APNS_KEY_ID/
@@ -64,7 +64,7 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^5.0.0
+  flutter_lints: ^6.0.0
   # Test-only: mocking the HTTP layer under SupabaseClient (app_attest_service_test.dart) and
   # the platform-interface singletons for url_launcher/flutter_secure_storage, so tests can
   # fake a plugin's behavior instead of hitting a real platform channel that doesn't exist on
@@ -72,7 +72,7 @@ dev_dependencies:
   # flutter_secure_storage; pinned here explicitly rather than relying on that.
   http: ^1.6.0
   url_launcher_platform_interface: ^2.3.2
-  flutter_secure_storage_platform_interface: ^1.1.2
+  flutter_secure_storage_platform_interface: ^2.1.1
 
 flutter:
   uses-material-design: true

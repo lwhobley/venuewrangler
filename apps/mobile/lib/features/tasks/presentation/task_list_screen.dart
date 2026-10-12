@@ -232,7 +232,8 @@ class _TaskTile extends ConsumerWidget {
         // A deterministic rejection would never succeed on retry, so do not queue it.
         messenger.showSnackBar(
           const SnackBar(
-              content: Text("Couldn't update the task. Please try again.")),
+            content: Text("Couldn't update the task. Please try again."),
+          ),
         );
         return;
       }

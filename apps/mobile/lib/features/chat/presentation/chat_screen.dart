@@ -2,9 +2,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../application/chat_providers.dart';
+import '../domain/chat_contact.dart';
 import '../domain/chat_message.dart';
 import '../../../core/theme/ops_colors.dart';
 import '../../../core/widgets/state_views.dart';
+import '../../venues/application/venues_providers.dart';
 
 class ChatScreen extends ConsumerWidget {
   const ChatScreen({super.key});
@@ -38,12 +40,17 @@ class _ConversationListView extends ConsumerWidget {
           ),
         ],
       ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _startDirectMessage(context, ref),
+        icon: const Icon(Icons.edit_outlined),
+        label: const Text('New message'),
+      ),
       body: conversationsAsync.when(
         data: (conversations) {
           if (conversations.isEmpty) {
             return const EmptyState(
               icon: Icons.chat_bubble_outline,
-              message: 'No conversations yet',
+              message: 'No conversations yet. Tap New message to start one.',
             );
           }
 
@@ -86,6 +93,89 @@ class _ConversationListView extends ConsumerWidget {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (err, _) =>
             ErrorState(message: 'Failed to load conversations: $err'),
+      ),
+    );
+  }
+}
+
+Future<void> _startDirectMessage(BuildContext context, WidgetRef ref) async {
+  final venue = ref.read(activeVenueProvider);
+  if (venue == null) return;
+  // Captured before any await: this widget may be gone by the time the sheet or the server
+  // call returns, and the container outlives it.
+  final container = ProviderScope.containerOf(context, listen: false);
+  final messenger = ScaffoldMessenger.of(context);
+  final contact = await showModalBottomSheet<ChatContact>(
+    context: context,
+    showDragHandle: true,
+    builder: (_) => const _ContactPicker(),
+  );
+  if (contact == null) return;
+  try {
+    final id = await container.read(chatRepositoryProvider).createOrGetDm(
+          venueId: venue.id,
+          targetUserId: contact.userId,
+        );
+    container.invalidate(conversationsListProvider);
+    container.read(activeConversationIdProvider.notifier).state = id;
+  } catch (_) {
+    messenger.showSnackBar(
+      const SnackBar(
+        content: Text("Couldn't start the conversation. Please try again."),
+      ),
+    );
+  }
+}
+
+class _ContactPicker extends ConsumerWidget {
+  const _ContactPicker();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final contactsAsync = ref.watch(chatContactsProvider);
+    return SafeArea(
+      child: SizedBox(
+        height: MediaQuery.sizeOf(context).height * 0.6,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Text(
+                'New message',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ),
+            Expanded(
+              child: contactsAsync.when(
+                data: (contacts) {
+                  if (contacts.isEmpty) {
+                    return const EmptyState(
+                      icon: Icons.people_outline,
+                      message: 'No one else is in this venue yet.',
+                    );
+                  }
+                  return ListView.builder(
+                    itemCount: contacts.length,
+                    itemBuilder: (context, index) {
+                      final contact = contacts[index];
+                      return ListTile(
+                        leading: const CircleAvatar(child: Icon(Icons.person)),
+                        title: Text(contact.label),
+                        onTap: () => Navigator.of(context).pop(contact),
+                      );
+                    },
+                  );
+                },
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (_, __) => ErrorState(
+                  message: "Couldn't load your team.",
+                  onRetry: () => ref.invalidate(chatContactsProvider),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

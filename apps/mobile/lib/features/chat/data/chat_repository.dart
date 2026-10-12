@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../domain/chat_contact.dart';
 import '../domain/chat_message.dart';
 import '../domain/conversation.dart';
 
@@ -20,6 +21,14 @@ abstract class ChatRepository {
   Future<String> createOrGetDm({
     required String venueId,
     required String targetUserId,
+  });
+
+  /// People in the venue the signed-in user can message (excludes the user).
+  Future<List<ChatContact>> fetchContacts({required String venueId});
+
+  /// For each direct-message conversation, the other participant's user id.
+  Future<Map<String, String>> fetchDmPeers({
+    required List<String> conversationIds,
   });
 }
 
@@ -159,5 +168,34 @@ class SupabaseChatRepository implements ChatRepository {
       },
     );
     return result as String;
+  }
+
+  @override
+  Future<List<ChatContact>> fetchContacts({required String venueId}) async {
+    final rows = await _client.rpc(
+      'chat_contacts',
+      params: {'p_venue_id': venueId},
+    ) as List<dynamic>;
+    return rows
+        .cast<Map<String, dynamic>>()
+        .map(ChatContact.fromJson)
+        .toList(growable: false);
+  }
+
+  @override
+  Future<Map<String, String>> fetchDmPeers({
+    required List<String> conversationIds,
+  }) async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null || conversationIds.isEmpty) return const {};
+    final rows = await _client
+        .from('conversation_members')
+        .select('conversation_id, user_id')
+        .inFilter('conversation_id', conversationIds)
+        .neq('user_id', userId);
+    return {
+      for (final row in rows)
+        row['conversation_id'] as String: row['user_id'] as String,
+    };
   }
 }

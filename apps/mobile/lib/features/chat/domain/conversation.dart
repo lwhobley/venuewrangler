@@ -10,6 +10,7 @@ class Conversation {
     this.lastMessageText,
     required this.createdAt,
     required this.updatedAt,
+    this.peerName,
   });
 
   factory Conversation.fromJson(Map<String, dynamic> json) {
@@ -40,6 +41,24 @@ class Conversation {
   final DateTime createdAt;
   final DateTime updatedAt;
 
+  /// For a direct message, the other person's name (resolved by the list provider).
+  final String? peerName;
+
+  Conversation withPeerName(String? peerName) => Conversation(
+        id: id,
+        organizationId: organizationId,
+        venueId: venueId,
+        type: type,
+        name: name,
+        isSystem: isSystem,
+        lastMessageAt: lastMessageAt,
+        lastMessageText: lastMessageText,
+        createdAt: createdAt,
+        updatedAt: updatedAt,
+        peerName: peerName,
+      );
+
   String get displayName =>
-      name ?? (type == 'all_staff' ? 'All Staff' : 'Direct Message');
+      name ??
+      (type == 'all_staff' ? 'All Staff' : (peerName ?? 'Direct Message'));
 }
