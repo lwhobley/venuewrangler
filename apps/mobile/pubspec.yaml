@@ -17,6 +17,8 @@ dependencies:
 
   # Supabase
   supabase_flutter: ^2.8.0
+  # Classify HTTP transport failures for offline retries on every platform.
+  http: ^1.6.0
 
   # Immutable models / serialization
   # Secure local storage for session-sensitive values
@@ -65,12 +67,11 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
-  # Test-only: mocking the HTTP layer under SupabaseClient (app_attest_service_test.dart) and
-  # the platform-interface singletons for url_launcher/flutter_secure_storage, so tests can
+  # Test-only: mocking the platform-interface singletons for
+  # url_launcher/flutter_secure_storage, so tests can
   # fake a plugin's behavior instead of hitting a real platform channel that doesn't exist on
   # a test host. Already present transitively via supabase_flutter/url_launcher/
   # flutter_secure_storage; pinned here explicitly rather than relying on that.
-  http: ^1.6.0
   url_launcher_platform_interface: ^2.3.2
   flutter_secure_storage_platform_interface: ^2.1.1
 

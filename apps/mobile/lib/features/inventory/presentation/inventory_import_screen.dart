@@ -25,6 +25,8 @@ class _ImportState extends ConsumerState<InventoryImportScreen> {
   bool busy = false;
   String? error;
   final applied = <int>{};
+  final operationIds = <int, String>{};
+  bool reviewing = false;
   String mode = 'RECEIVE';
   late final String? userId;
   @override
@@ -187,6 +189,7 @@ class _ImportState extends ConsumerState<InventoryImportScreen> {
   }
 
   Future<void> _parse() async {
+    if (busy || reviewing || applied.isNotEmpty) return;
     final text = input.text.trim();
     if (text.isEmpty) {
       setState(() => error = 'Paste text or upload a text file first.');
@@ -209,7 +212,12 @@ class _ImportState extends ConsumerState<InventoryImportScreen> {
             venueId: widget.scope.venueId,
             pastedText: text,
           );
-      if (mounted) setState(() => lines = result.items);
+      if (mounted) {
+        setState(() {
+          lines = result.items;
+          operationIds.clear();
+        });
+      }
     } catch (e) {
       if (mounted) setState(() => error = inventoryError(e));
     } finally {
@@ -218,14 +226,25 @@ class _ImportState extends ConsumerState<InventoryImportScreen> {
   }
 
   Future<void> _review(InventoryLineItem line, int index) async {
-    final result = await Navigator.push<bool>(
-      context,
-      MaterialPageRoute(
-        builder: (_) =>
-            _ImportReview(scope: widget.scope, line: line, action: mode),
-      ),
-    );
-    if (result == true && mounted) setState(() => applied.add(index));
+    if (busy || reviewing || applied.contains(index)) return;
+    reviewing = true;
+    try {
+      final result = await Navigator.push<bool>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => _ImportReview(
+            scope: widget.scope,
+            line: line,
+            action: mode,
+            operationId:
+                operationIds.putIfAbsent(index, () => const Uuid().v4()),
+          ),
+        ),
+      );
+      if (result == true && mounted) setState(() => applied.add(index));
+    } finally {
+      reviewing = false;
+    }
   }
 }
 
@@ -234,10 +253,12 @@ class _ImportReview extends ConsumerStatefulWidget {
     required this.scope,
     required this.line,
     required this.action,
+    required this.operationId,
   });
   final InventoryScope scope;
   final InventoryLineItem line;
   final String action;
+  final String operationId;
   @override
   ConsumerState<_ImportReview> createState() => _ReviewState();
 }
@@ -254,7 +275,6 @@ class _ReviewState extends ConsumerState<_ImportReview> {
     userId = ref.read(currentUserIdProvider);
   }
 
-  final operationId = const Uuid().v4();
   String? itemId, stockId, error;
   bool initialized = false, busy = false, verified = false;
   @override
@@ -265,176 +285,181 @@ class _ReviewState extends ConsumerState<_ImportReview> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text('Confirm parsed line')),
-        body: ref.watch(inventorySnapshotProvider(widget.scope)).when(
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (_, __) => InventoryLoadError(
-                retry: () => refreshInventory(ref, widget.scope),
-              ),
-              data: (s) {
-                if (!initialized) {
-                  itemId =
-                      matchInventoryItem(widget.line.name, s.items).item?.id;
-                  initialized = true;
-                }
-                final item = itemId == null ? null : s.item(itemId!);
-                final positions =
-                    s.activePositions.where((p) => p.itemId == itemId).toList();
-                if (!positions.any((p) => p.id == stockId)) stockId = null;
-                return Form(
-                  key: form,
-                  child: ListView(
-                    padding: const EdgeInsets.all(16),
-                    children: [
-                      Text(
-                        widget.line.name,
-                        style: Theme.of(context).textTheme.headlineSmall,
-                      ),
-                      Text(
-                        'Parsed: ${widget.line.quantity ?? '?'} ${widget.line.unit ?? 'unknown unit'} • Cost ${widget.line.unitCostUsd ?? 'unknown'} per unit',
-                      ),
-                      if (widget.line.sizeAmount != null)
+  Widget build(BuildContext context) => PopScope(
+        canPop: !busy,
+        child: Scaffold(
+          appBar: AppBar(title: const Text('Confirm parsed line')),
+          body: ref.watch(inventorySnapshotProvider(widget.scope)).when(
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (_, __) => InventoryLoadError(
+                  retry: () => refreshInventory(ref, widget.scope),
+                ),
+                data: (s) {
+                  if (!initialized) {
+                    itemId =
+                        matchInventoryItem(widget.line.name, s.items).item?.id;
+                    initialized = true;
+                  }
+                  final item = itemId == null ? null : s.item(itemId!);
+                  final positions = s.activePositions
+                      .where((p) => p.itemId == itemId)
+                      .toList();
+                  if (!positions.any((p) => p.id == stockId)) stockId = null;
+                  return Form(
+                    key: form,
+                    child: ListView(
+                      padding: const EdgeInsets.all(16),
+                      children: [
                         Text(
-                          'Parsed size: ${widget.line.sizeAmount} ${widget.line.sizeUnit ?? 'unknown'}',
+                          widget.line.name,
+                          style: Theme.of(context).textTheme.headlineSmall,
                         ),
-                      if (widget.line.category != null)
                         Text(
-                          'Suggested category: ${widget.line.category}${widget.line.subcategory == null ? '' : ' → ${widget.line.subcategory}'}',
+                          'Parsed: ${widget.line.quantity ?? '?'} ${widget.line.unit ?? 'unknown unit'} • Cost ${widget.line.unitCostUsd ?? 'unknown'} per unit',
                         ),
-                      const SizedBox(height: 16),
-                      DropdownButtonFormField<String>(
-                        key: ValueKey('item:$itemId'),
-                        initialValue: itemId,
-                        isExpanded: true,
-                        decoration: const InputDecoration(
-                          labelText: 'Match existing item',
-                        ),
-                        items: [
-                          for (final i in s.items.where((i) => i.active))
-                            DropdownMenuItem(
-                              value: i.id,
-                              child: Text(
-                                '${i.name} • ${i.sizeLabel}',
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                        ],
-                        validator: (v) =>
-                            v == null ? 'Choose or create an item' : null,
-                        onChanged: busy
-                            ? null
-                            : (v) => setState(() {
-                                  itemId = v;
-                                  stockId = null;
-                                  verified = false;
-                                }),
-                      ),
-                      TextButton.icon(
-                        onPressed: busy
-                            ? null
-                            : () => _createOrEdit(
-                                  itemId == null ? null : s.item(itemId!),
-                                  s,
-                                ),
-                        icon: const Icon(Icons.edit_outlined),
-                        label: Text(
-                          item == null
-                              ? 'Create a new item'
-                              : 'Edit size, unit, cost or category',
-                        ),
-                      ),
-                      if (item != null) ...[
-                        Text(
-                          '${s.categoryName(item.categoryId)} • ${item.sizeLabel}\nCost: ${item.unitCostUsd == null ? 'not set' : inventoryMoney(inventoryValue(1, item.unitCostUsd))} per ${item.displayUnit}',
-                        ),
+                        if (widget.line.sizeAmount != null)
+                          Text(
+                            'Parsed size: ${widget.line.sizeAmount} ${widget.line.sizeUnit ?? 'unknown'}',
+                          ),
+                        if (widget.line.category != null)
+                          Text(
+                            'Suggested category: ${widget.line.category}${widget.line.subcategory == null ? '' : ' → ${widget.line.subcategory}'}',
+                          ),
                         const SizedBox(height: 16),
                         DropdownButtonFormField<String>(
-                          key: ValueKey('stock:$itemId:$stockId'),
-                          initialValue: stockId,
+                          key: ValueKey('item:$itemId'),
+                          initialValue: itemId,
                           isExpanded: true,
-                          decoration:
-                              const InputDecoration(labelText: 'Location'),
+                          decoration: const InputDecoration(
+                            labelText: 'Match existing item',
+                          ),
                           items: [
-                            for (final p in positions)
+                            for (final i in s.items.where((i) => i.active))
                               DropdownMenuItem(
-                                value: p.id,
+                                value: i.id,
                                 child: Text(
-                                  '${s.location(p)} • ${p.quantity ?? 'unknown'}',
+                                  '${i.name} • ${i.sizeLabel}',
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
                           ],
                           validator: (v) =>
-                              v == null ? 'Choose a location' : null,
-                          onChanged:
-                              busy ? null : (v) => setState(() => stockId = v),
+                              v == null ? 'Choose or create an item' : null,
+                          onChanged: busy
+                              ? null
+                              : (v) => setState(() {
+                                    itemId = v;
+                                    stockId = null;
+                                    verified = false;
+                                  }),
                         ),
                         TextButton.icon(
                           onPressed: busy
                               ? null
-                              : () => showInventoryLocation(
-                                    context,
-                                    widget.scope,
+                              : () => _createOrEdit(
+                                    itemId == null ? null : s.item(itemId!),
                                     s,
-                                    item,
                                   ),
-                          icon: const Icon(Icons.add_location_alt_outlined),
-                          label: const Text('Add location / set par'),
-                        ),
-                      ],
-                      const SizedBox(height: 16),
-                      inventoryNumberField(
-                        quantity,
-                        widget.action == 'COUNT'
-                            ? 'Counted quantity'
-                            : 'Receive quantity',
-                        positive: widget.action == 'RECEIVE',
-                      ),
-                      const SizedBox(height: 16),
-                      TextField(
-                        controller: notes,
-                        decoration: const InputDecoration(
-                          labelText: 'Notes / invoice reference (optional)',
-                        ),
-                        maxLines: 2,
-                      ),
-                      CheckboxListTile(
-                        contentPadding: EdgeInsets.zero,
-                        value: verified,
-                        onChanged: busy
-                            ? null
-                            : (v) => setState(() => verified = v ?? false),
-                        title: const Text(
-                          'I verified the item, size, count unit, quantity, cost, and location.',
-                        ),
-                        subtitle: const Text(
-                          'Cases and bottles are not converted. Correct mismatches before confirming.',
-                        ),
-                      ),
-                      if (error != null)
-                        Text(
-                          error!,
-                          style: TextStyle(
-                            color: Theme.of(context).colorScheme.error,
+                          icon: const Icon(Icons.edit_outlined),
+                          label: Text(
+                            item == null
+                                ? 'Create a new item'
+                                : 'Edit size, unit, cost or category',
                           ),
                         ),
-                    ],
-                  ),
-                );
-              },
-            ),
-        bottomNavigationBar: SafeArea(
-          top: false,
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: FilledButton(
-              onPressed: busy ? null : _apply,
-              child: Text(
-                busy
-                    ? 'Saving…'
-                    : widget.action == 'COUNT'
-                        ? 'Confirm physical count'
-                        : 'Confirm receiving',
+                        if (item != null) ...[
+                          Text(
+                            '${s.categoryName(item.categoryId)} • ${item.sizeLabel}\nCost: ${item.unitCostUsd == null ? 'not set' : inventoryMoney(inventoryValue(1, item.unitCostUsd))} per ${item.displayUnit}',
+                          ),
+                          const SizedBox(height: 16),
+                          DropdownButtonFormField<String>(
+                            key: ValueKey('stock:$itemId:$stockId'),
+                            initialValue: stockId,
+                            isExpanded: true,
+                            decoration:
+                                const InputDecoration(labelText: 'Location'),
+                            items: [
+                              for (final p in positions)
+                                DropdownMenuItem(
+                                  value: p.id,
+                                  child: Text(
+                                    '${s.location(p)} • ${p.quantity ?? 'unknown'}',
+                                  ),
+                                ),
+                            ],
+                            validator: (v) =>
+                                v == null ? 'Choose a location' : null,
+                            onChanged: busy
+                                ? null
+                                : (v) => setState(() => stockId = v),
+                          ),
+                          TextButton.icon(
+                            onPressed: busy
+                                ? null
+                                : () => showInventoryLocation(
+                                      context,
+                                      widget.scope,
+                                      s,
+                                      item,
+                                    ),
+                            icon: const Icon(Icons.add_location_alt_outlined),
+                            label: const Text('Add location / set par'),
+                          ),
+                        ],
+                        const SizedBox(height: 16),
+                        inventoryNumberField(
+                          quantity,
+                          widget.action == 'COUNT'
+                              ? 'Counted quantity'
+                              : 'Receive quantity',
+                          positive: widget.action == 'RECEIVE',
+                        ),
+                        const SizedBox(height: 16),
+                        TextField(
+                          controller: notes,
+                          decoration: const InputDecoration(
+                            labelText: 'Notes / invoice reference (optional)',
+                          ),
+                          maxLines: 2,
+                        ),
+                        CheckboxListTile(
+                          contentPadding: EdgeInsets.zero,
+                          value: verified,
+                          onChanged: busy
+                              ? null
+                              : (v) => setState(() => verified = v ?? false),
+                          title: const Text(
+                            'I verified the item, size, count unit, quantity, cost, and location.',
+                          ),
+                          subtitle: const Text(
+                            'Cases and bottles are not converted. Correct mismatches before confirming.',
+                          ),
+                        ),
+                        if (error != null)
+                          Text(
+                            error!,
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.error,
+                            ),
+                          ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+          bottomNavigationBar: SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: FilledButton(
+                onPressed: busy ? null : _apply,
+                child: Text(
+                  busy
+                      ? 'Saving…'
+                      : widget.action == 'COUNT'
+                          ? 'Confirm physical count'
+                          : 'Confirm receiving',
+                ),
               ),
             ),
           ),
@@ -474,6 +499,7 @@ class _ReviewState extends ConsumerState<_ImportReview> {
   }
 
   Future<void> _apply() async {
+    if (busy) return;
     if (form.currentState?.validate() != true) return;
     if (!verified) {
       setState(() => error = 'Verify the parsed details before confirming.');
@@ -489,7 +515,7 @@ class _ReviewState extends ConsumerState<_ImportReview> {
             stockId!,
             widget.action,
             quantity.text.trim(),
-            operationId: operationId,
+            operationId: widget.operationId,
             reason: widget.action == 'COUNT'
                 ? 'Reviewed count-sheet import'
                 : 'Reviewed invoice import',

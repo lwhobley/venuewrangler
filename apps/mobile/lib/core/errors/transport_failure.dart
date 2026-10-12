@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:http/http.dart' show ClientException;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// True when [error] means the write never got a definitive answer from the server: no
@@ -11,9 +12,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 /// and report a failed change as "Saved offline".
 bool isTransportFailure(Object error) {
   if (error is SocketException || error is TimeoutException) return true;
-  // package:http's ClientException is what the Supabase HTTP stack throws when the connection
-  // drops. It is matched by name because package:http is only a dev dependency of this app.
-  if (error.runtimeType.toString() == 'ClientException') return true;
+  // A type check also works with subclasses and minified release-web builds.
+  if (error is ClientException) return true;
   if (error is PostgrestException) {
     final code = error.code ?? '';
     // Empty code: a non-JSON body (e.g. a proxy 502 page). 08xxx: connection exception.

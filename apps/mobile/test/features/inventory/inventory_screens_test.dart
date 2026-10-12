@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -126,6 +128,25 @@ class InventoryTestAi extends Fake implements AiRepository {
   }
 }
 
+class ImportTestRepository extends InventoryTestRepository {
+  final operationIds = <String>[];
+  Future<void> Function()? result;
+
+  @override
+  Future<void> applyAction(
+    String stockId,
+    String action,
+    String quantity, {
+    required String operationId,
+    String? destinationId,
+    String? reason,
+    String? notes,
+  }) async {
+    operationIds.add(operationId);
+    await result?.call();
+  }
+}
+
 Widget app(
   Widget child,
   InventoryTestRepository repo, {
@@ -154,6 +175,79 @@ Widget app(
     );
 
 void main() {
+  Future<void> parseImport(
+    WidgetTester tester,
+    ImportTestRepository repo,
+  ) async {
+    tester.view.physicalSize = const Size(1024, 1366);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester
+        .pumpWidget(app(const InventoryImportScreen(scope: scope), repo));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).first, '12 bottles of vodka');
+    await tester.tap(find.text('Parse for review'));
+    await tester.pumpAndSettle();
+  }
+
+  Future<void> reviewImport(WidgetTester tester) async {
+    await tester.tap(find.text('Review'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(DropdownButtonFormField<String>).last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.textContaining('Main Bar').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(CheckboxListTile));
+    await tester.pump();
+  }
+
+  testWidgets('pending import blocks back and same-frame double submission',
+      (tester) async {
+    final repo = ImportTestRepository();
+    final pending = Completer<void>();
+    repo.result = () => pending.future;
+    await parseImport(tester, repo);
+    await reviewImport(tester);
+    final submit = tester
+        .widget<FilledButton>(
+          find.widgetWithText(FilledButton, 'Confirm receiving'),
+        )
+        .onPressed!;
+    submit();
+    submit();
+    await tester.pump();
+    expect(repo.operationIds, hasLength(1));
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text('Confirm parsed line'), findsOneWidget);
+    pending.complete();
+    await tester.pumpAndSettle();
+    expect(find.text('Confirm parsed line'), findsNothing);
+    expect(find.byIcon(Icons.check_circle_outline), findsOneWidget);
+    expect(find.text('Review'), findsNothing);
+  });
+
+  testWidgets(
+      'reopening a line after an uncertain save reuses its operation ID',
+      (tester) async {
+    final repo = ImportTestRepository();
+    repo.result = () async => throw TimeoutException('Response lost');
+    await parseImport(tester, repo);
+    await reviewImport(tester);
+    await tester.tap(find.text('Confirm receiving'));
+    await tester.pumpAndSettle();
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    repo.result = null;
+    await reviewImport(tester);
+    await tester.tap(find.text('Confirm receiving'));
+    await tester.pumpAndSettle();
+    expect(repo.operationIds, hasLength(2));
+    expect(repo.operationIds[1], repo.operationIds[0]);
+    expect(find.byIcon(Icons.check_circle_outline), findsOneWidget);
+  });
+
   testWidgets('tablet dark theme dashboard and count layout remain usable',
       (tester) async {
     tester.view.physicalSize = const Size(1024, 1366);
