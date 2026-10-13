@@ -5,10 +5,48 @@
 <style>
   html, body { margin: 0; height: 100%; overflow: hidden; background: #dfe6e3; }
   #app { width: 100%; height: 100%; display: block; }
+  #scene-error { display: none; position: absolute; left: 8px; right: 8px; bottom: 8px; padding: 8px 10px;
+    border-radius: 6px; background: rgba(120, 20, 20, 0.88); color: #fff; font: 12px/1.4 -apple-system, sans-serif; }
 </style>
 </head>
 <body>
 <div id="app"></div>
+<div id="scene-error"></div>
+<script>
+  // Classic script: runs even when the module below fails to load, so failures reach the
+  // host app (mobile channel) and show on screen instead of leaving a blank canvas.
+  window.__eventtwinReport = function (kind, detail) {
+    var text = detail == null ? '' : String(detail);
+    try {
+      if (window.EventTwinHost) {
+        window.EventTwinHost.postMessage(JSON.stringify({ kind: kind, detail: text }));
+      }
+    } catch (_) {}
+    if (kind === 'error') {
+      var el = document.getElementById('scene-error');
+      if (el) {
+        el.style.display = 'block';
+        el.style.whiteSpace = 'pre-line';
+        el.textContent = (el.textContent ? el.textContent + String.fromCharCode(10) : '') + text;
+      }
+    }
+  };
+  window.addEventListener('error', function (event) {
+    var target = event.target;
+    var detail = event.message ||
+      ('Failed to load ' + ((target && (target.src || target.href)) || 'a resource'));
+    window.__eventtwinReport('error', detail);
+  }, true);
+  window.addEventListener('unhandledrejection', function (event) {
+    var reason = event.reason;
+    window.__eventtwinReport('error', (reason && reason.message) || reason);
+  });
+  setTimeout(function () {
+    if (!window.__eventtwinBooted) {
+      window.__eventtwinReport('error', 'The 3D scene script did not start (a module failed to load).');
+    }
+  }, 8000);
+</script>
 <script type="importmap">
 {
   "imports": {
@@ -21,6 +59,9 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+window.__eventtwinBooted = true;
+const report = (kind, detail) => window.__eventtwinReport?.(kind, detail);
 
 const container = document.getElementById('app');
 
@@ -400,6 +441,7 @@ async function render(data) {
   await modelsReady;
   if (token !== renderToken) return; // A newer render replaced this one while models loaded.
   addRoomDecor(data.widthMeters, data.heightMeters);
+  report('rendered');
 }
 
 function resize() {
@@ -415,7 +457,7 @@ resize();
 window.addEventListener('message', (event) => {
   const data = event.data;
   if (data && data.type === 'eventtwin-room-scene') {
-    render(data.payload);
+    renderSafely(data.payload);
   }
 });
 
@@ -427,8 +469,25 @@ function animate() {
 animate();
 
 // Let the host page know we're ready to receive scene data.
-window.parent.postMessage({ type: 'eventtwin-room-scene-ready' }, '*');
-if (window.EventTwinReady) window.EventTwinReady.postMessage('ready'); // Mobile WebView channel.
+function renderSafely(data) {
+  render(data).catch((error) => report('error', (error && error.message) || error));
+}
+
+// Mobile hosts store the scene in a global and fire `eventtwin-scene`. Checking the global
+// at startup as well means the order of page load and data delivery doesn't matter.
+function applyPendingScene() {
+  const data = window.__eventtwinScene;
+  if (!data) return;
+  window.__eventtwinScene = null;
+  renderSafely(data);
+}
+window.addEventListener('eventtwin-scene', applyPendingScene);
+applyPendingScene();
+
+// `frame` lets a host with several previews tell which iframe is ready.
+const frameId = new URLSearchParams(window.location.search).get('frame');
+window.parent.postMessage({ type: 'eventtwin-room-scene-ready', frame: frameId }, '*');
+report('ready');
 </script>
 </body>
 </html>

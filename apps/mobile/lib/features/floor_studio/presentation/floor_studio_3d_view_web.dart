@@ -33,14 +33,18 @@ class _FloorStudio3DViewState extends State<FloorStudio3DView> {
       ..style.border = '0'
       ..style.width = '100%'
       ..style.height = '100%'
-      ..src = 'assets/assets/three/scene.html';
+      ..src =
+          'assets/assets/three/scene.html?frame=${Uri.encodeQueryComponent(_viewType)}';
     ui_web.platformViewRegistry
         .registerViewFactory(_viewType, (int viewId) => _iframe);
     _messageListener = (event) {
       final message = event as html.MessageEvent;
       final data = message.data;
-      if (message.source != _iframe.contentWindow) return;
-      if (data is Map && data['type'] == 'eventtwin-room-scene-ready') {
+      // Match on the frame id the scene echoes back: dart:html wraps cross-frame windows in a
+      // new object on every access, so comparing event.source to contentWindow never matches.
+      if (data is Map &&
+          data['type'] == 'eventtwin-room-scene-ready' &&
+          data['frame'] == _viewType) {
         _ready = true;
         _sendScene();
       }
