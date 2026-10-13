@@ -1,0 +1,4 @@
+# Vendored third-party code, pinned and unmodified. Scanning it reports upstream library
+# internals (e.g. three.js object UUIDs from Math.random) as if they were app code.
+paths-ignore:
+  - apps/mobile/assets/three/lib
