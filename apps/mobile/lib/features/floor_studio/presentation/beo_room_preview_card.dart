@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../crm/domain/crm_beo.dart';
-import '../../floor/application/floor_providers.dart';
 import '../application/floor_studio_providers.dart';
 import '../domain/floor_studio.dart';
 import 'floor_studio_3d_view.dart';
@@ -30,7 +29,8 @@ class _BeoRoomPreviewCardState extends ConsumerState<BeoRoomPreviewCard> {
     final theme = Theme.of(context);
     final layoutsAsync = ref.watch(floorStudioLayoutsProvider(beo.venueId));
     final partySizeAsync = ref.watch(beoReservationPartySizeProvider(beo.id));
-    final plans = ref.watch(floorPlansProvider).valueOrNull ?? const [];
+    final plans =
+        ref.watch(venueFloorPlansProvider(beo.venueId)).valueOrNull ?? const [];
     final layouts = layoutsAsync.valueOrNull ?? const <FloorStudioLayout>[];
 
     final confirmed = beo.status == 'confirmed';
@@ -50,9 +50,14 @@ class _BeoRoomPreviewCardState extends ConsumerState<BeoRoomPreviewCard> {
         )
         .map((p) => p.id)
         .firstOrNull;
-    final selectedId = layouts.any((l) => l.floorPlanId == _selectedFloorPlanId)
+    // The dropdown only offers plans that have a saved layout, so the selection
+    // and the default must come from that same set.
+    final layoutPlanIds = {for (final l in layouts) l.floorPlanId};
+    final selectedId = layoutPlanIds.contains(_selectedFloorPlanId)
         ? _selectedFloorPlanId
-        : (defaultPlanId ?? layouts.firstOrNull?.floorPlanId);
+        : layoutPlanIds.contains(defaultPlanId)
+            ? defaultPlanId
+            : layouts.firstOrNull?.floorPlanId;
     final layout =
         layouts.where((l) => l.floorPlanId == selectedId).firstOrNull;
 
@@ -85,7 +90,25 @@ class _BeoRoomPreviewCardState extends ConsumerState<BeoRoomPreviewCard> {
                 ),
               ),
             const SizedBox(height: 12),
-            if (layouts.isEmpty)
+            if (layoutsAsync.hasError && !layoutsAsync.hasValue)
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Could not load room layouts: ${layoutsAsync.error}',
+                      style: TextStyle(color: theme.colorScheme.error),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () =>
+                        ref.invalidate(floorStudioLayoutsProvider(beo.venueId)),
+                    child: const Text('Retry'),
+                  ),
+                ],
+              )
+            else if (layoutsAsync.isLoading && !layoutsAsync.hasValue)
+              const LinearProgressIndicator()
+            else if (layouts.isEmpty)
               Row(
                 children: [
                   const Expanded(
@@ -101,6 +124,7 @@ class _BeoRoomPreviewCardState extends ConsumerState<BeoRoomPreviewCard> {
               )
             else ...[
               DropdownButtonFormField<String>(
+                key: ValueKey(selectedId),
                 initialValue: selectedId,
                 decoration: const InputDecoration(labelText: 'Room layout'),
                 items: [

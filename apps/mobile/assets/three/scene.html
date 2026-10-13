@@ -12,8 +12,8 @@
 <script type="importmap">
 {
   "imports": {
-    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    "three": "./lib/three.module.js",
+    "three/addons/": "./lib/addons/"
   }
 }
 </script>
@@ -375,7 +375,10 @@ function addRoomDecor(width, depth) {
   }
 }
 
+let renderToken = 0;
+
 async function render(data) {
+  const token = ++renderToken;
   clearRoom();
   addFloorAndWalls(data.widthMeters, data.heightMeters);
   data.tables.forEach((table, index) => {
@@ -395,6 +398,7 @@ async function render(data) {
   controls.update();
 
   await modelsReady;
+  if (token !== renderToken) return; // A newer render replaced this one while models loaded.
   addRoomDecor(data.widthMeters, data.heightMeters);
 }
 
@@ -424,6 +428,7 @@ animate();
 
 // Let the host page know we're ready to receive scene data.
 window.parent.postMessage({ type: 'eventtwin-room-scene-ready' }, '*');
+if (window.EventTwinReady) window.EventTwinReady.postMessage('ready'); // Mobile WebView channel.
 </script>
 </body>
 </html>

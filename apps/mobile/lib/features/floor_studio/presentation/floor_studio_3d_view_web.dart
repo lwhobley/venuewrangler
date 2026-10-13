@@ -1,5 +1,6 @@
 // dart:html is needed for the iframe embed; this file is only compiled for web builds.
 // ignore_for_file: avoid_web_libraries_in_flutter, deprecated_member_use
+import 'dart:convert';
 import 'dart:html' as html;
 import 'dart:ui_web' as ui_web;
 
@@ -23,6 +24,7 @@ class _FloorStudio3DViewState extends State<FloorStudio3DView> {
   late final html.IFrameElement _iframe;
   html.EventListener? _messageListener;
   var _ready = false;
+  String? _lastSent;
 
   @override
   void initState() {
@@ -37,6 +39,7 @@ class _FloorStudio3DViewState extends State<FloorStudio3DView> {
     _messageListener = (event) {
       final message = event as html.MessageEvent;
       final data = message.data;
+      if (message.source != _iframe.contentWindow) return;
       if (data is Map && data['type'] == 'eventtwin-room-scene-ready') {
         _ready = true;
         _sendScene();
@@ -48,12 +51,13 @@ class _FloorStudio3DViewState extends State<FloorStudio3DView> {
   @override
   void didUpdateWidget(covariant FloorStudio3DView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.sceneData != widget.sceneData && _ready) {
-      _sendScene();
-    }
+    if (_ready) _sendScene();
   }
 
   void _sendScene() {
+    final encoded = jsonEncode(widget.sceneData);
+    if (encoded == _lastSent) return;
+    _lastSent = encoded;
     _iframe.contentWindow?.postMessage(
       {
         'type': 'eventtwin-room-scene',

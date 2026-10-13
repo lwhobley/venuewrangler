@@ -40,6 +40,15 @@ void main() {
       }
     });
 
+    test('fits an odd table count into an even number of rows', () {
+      final options =
+          generateStudioLayouts(widthFeet: 40, depthFeet: 60, guestCount: 105);
+      expect(options, isNotEmpty);
+      for (final option in options) {
+        expect(option.tables.length, 11);
+      }
+    });
+
     test('rejects a room too small for any table with clearance', () {
       expect(
         () => generateStudioLayouts(widthFeet: 5, depthFeet: 5, guestCount: 20),

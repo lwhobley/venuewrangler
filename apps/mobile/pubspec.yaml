@@ -84,6 +84,10 @@ flutter:
   assets:
     - assets/video/intro.mp4
     - assets/three/scene.html
+    - assets/three/lib/
+    - assets/three/lib/addons/controls/
+    - assets/three/lib/addons/loaders/
+    - assets/three/lib/addons/utils/
     - assets/three/models/antique_ceramic_vase_01/
     - assets/three/models/antique_ceramic_vase_01/textures/
     - assets/three/models/ArmChair_01/
