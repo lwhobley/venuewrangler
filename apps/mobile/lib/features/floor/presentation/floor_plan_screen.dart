@@ -65,12 +65,18 @@ class _FloorPlanScreenState extends ConsumerState<FloorPlanScreen> {
                 _selectedTableIds.clear();
               }),
             ),
-          if (ref.watch(canManageActiveVenueProvider).valueOrNull ?? false)
+          if (ref.watch(canManageActiveVenueProvider).valueOrNull ?? false) ...[
             IconButton(
               icon: const Icon(Icons.edit_location_alt_outlined),
               tooltip: 'Edit layout',
               onPressed: () => context.push('/floor/edit'),
             ),
+            IconButton(
+              icon: const Icon(Icons.view_in_ar_outlined),
+              tooltip: 'Floor plan studio',
+              onPressed: () => context.push('/floor/studio'),
+            ),
+          ],
           if (_selectedTableIds.length >= 2 && activeVenue != null)
             IconButton(
               icon: const Icon(Icons.merge_type),

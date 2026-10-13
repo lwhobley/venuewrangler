@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../crm/domain/crm_beo.dart';
+import '../../venues/application/venues_providers.dart';
 import '../application/floor_studio_providers.dart';
 import '../domain/floor_studio.dart';
 import 'floor_studio_3d_view.dart';
@@ -32,6 +33,8 @@ class _BeoRoomPreviewCardState extends ConsumerState<BeoRoomPreviewCard> {
     final plans =
         ref.watch(venueFloorPlansProvider(beo.venueId)).valueOrNull ?? const [];
     final layouts = layoutsAsync.valueOrNull ?? const <FloorStudioLayout>[];
+    final canManage =
+        ref.watch(canManageActiveVenueProvider).valueOrNull ?? false;
 
     final confirmed = beo.status == 'confirmed';
     final reservationGuests = partySizeAsync.valueOrNull;
@@ -67,7 +70,20 @@ class _BeoRoomPreviewCardState extends ConsumerState<BeoRoomPreviewCard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Room preview', style: theme.textTheme.titleLarge),
+            Row(
+              children: [
+                Expanded(
+                  child:
+                      Text('Room preview', style: theme.textTheme.titleLarge),
+                ),
+                if (canManage && layouts.isNotEmpty)
+                  TextButton.icon(
+                    onPressed: () => context.push('/floor/studio'),
+                    icon: const Icon(Icons.edit_outlined, size: 18),
+                    label: const Text('Edit in studio'),
+                  ),
+              ],
+            ),
             const SizedBox(height: 8),
             if (guests == null)
               const Text('No guest count set for this order yet.')
