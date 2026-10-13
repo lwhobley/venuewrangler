@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../floor_studio/presentation/beo_room_preview_card.dart';
 import '../application/crm_providers.dart';
 import '../domain/crm_beo.dart';
 import '../domain/crm_beo_charge.dart';
@@ -58,6 +59,8 @@ class CrmBeoDetailScreen extends ConsumerWidget {
                       _detail('Special requirements', beo.specialRequirements),
                       _detail('Internal notes', beo.internalNotes),
                     ]),
+                    const SizedBox(height: 16),
+                    BeoRoomPreviewCard(beo: beo),
                     const SizedBox(height: 16),
                     Card(
                       child: Padding(

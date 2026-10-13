@@ -63,6 +63,10 @@ dependencies:
   # App-open intro video (app/intro_video_screen.dart)
   video_player: ^2.9.2
 
+  # Hosts the bundled Three.js room preview on iOS and Android (features/floor_studio). Web uses
+  # an iframe instead, see floor_studio_3d_view_web.dart.
+  webview_flutter: ^4.14.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -79,3 +83,60 @@ flutter:
   uses-material-design: true
   assets:
     - assets/video/intro.mp4
+    - assets/three/scene.html
+    - assets/three/models/antique_ceramic_vase_01/
+    - assets/three/models/antique_ceramic_vase_01/textures/
+    - assets/three/models/ArmChair_01/
+    - assets/three/models/ArmChair_01/textures/
+    - assets/three/models/bar_chair_round_01/
+    - assets/three/models/bar_chair_round_01/textures/
+    - assets/three/models/brass_candleholders/
+    - assets/three/models/brass_candleholders/textures/
+    - assets/three/models/brass_goblets/
+    - assets/three/models/brass_goblets/textures/
+    - assets/three/models/brass_vase_02/
+    - assets/three/models/brass_vase_02/textures/
+    - assets/three/models/carrot_cake/
+    - assets/three/models/carrot_cake/textures/
+    - assets/three/models/ceramic_vase_01/
+    - assets/three/models/ceramic_vase_01/textures/
+    - assets/three/models/Chandelier_01/
+    - assets/three/models/Chandelier_01/textures/
+    - assets/three/models/Chandelier_02/
+    - assets/three/models/Chandelier_02/textures/
+    - assets/three/models/Chandelier_03/
+    - assets/three/models/Chandelier_03/textures/
+    - assets/three/models/CheeseBox_01/
+    - assets/three/models/CheeseBox_01/textures/
+    - assets/three/models/chinese_chandelier/
+    - assets/three/models/chinese_chandelier/textures/
+    - assets/three/models/CoffeeTable_01/
+    - assets/three/models/CoffeeTable_01/textures/
+    - assets/three/models/croissant/
+    - assets/three/models/croissant/textures/
+    - assets/three/models/dining_table/
+    - assets/three/models/dining_table/textures/
+    - assets/three/models/fern_02/
+    - assets/three/models/fern_02/textures/
+    - assets/three/models/flower_gazania/
+    - assets/three/models/flower_gazania/textures/
+    - assets/three/models/lantern_chandelier_01/
+    - assets/three/models/lantern_chandelier_01/textures/
+    - assets/three/models/ornate_mirror_01/
+    - assets/three/models/ornate_mirror_01/textures/
+    - assets/three/models/Ottoman_01/
+    - assets/three/models/Ottoman_01/textures/
+    - assets/three/models/pachira_aquatica_01/
+    - assets/three/models/pachira_aquatica_01/textures/
+    - assets/three/models/Sofa_01/
+    - assets/three/models/Sofa_01/textures/
+    - assets/three/models/strawberry_chocolate_cake/
+    - assets/three/models/strawberry_chocolate_cake/textures/
+    - assets/three/models/tea_set_01/
+    - assets/three/models/tea_set_01/textures/
+    - assets/three/models/wine_bottles_01/
+    - assets/three/models/wine_bottles_01/textures/
+    - assets/three/models/wooden_cutting_board/
+    - assets/three/models/wooden_cutting_board/textures/
+    - assets/three/models/WoodenTable_02/
+    - assets/three/models/WoodenTable_02/textures/

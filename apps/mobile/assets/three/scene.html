@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #dfe6e3; }
+  #app { width: 100%; height: 100%; display: block; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+const container = document.getElementById('app');
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+container.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xdfe6e3);
+scene.fog = new THREE.Fog(0xdfe6e3, 20, 60);
+
+const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 200);
+camera.position.set(8, 9, 12);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.maxPolarAngle = Math.PI * 0.49;
+controls.minDistance = 2;
+controls.maxDistance = 60;
+
+scene.add(new THREE.HemisphereLight(0xf5f7f5, 0x4b4536, 0.65));
+const sun = new THREE.DirectionalLight(0xfff4e0, 1.4);
+sun.position.set(10, 16, 6);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.left = -20;
+sun.shadow.camera.right = 20;
+sun.shadow.camera.top = 20;
+sun.shadow.camera.bottom = -20;
+sun.shadow.bias = -0.0015;
+scene.add(sun);
+
+const floorMaterial = new THREE.MeshStandardMaterial({
+  color: 0xc9b89a,
+  roughness: 0.75,
+  metalness: 0.05,
+});
+const wallMaterial = new THREE.MeshStandardMaterial({
+  color: 0xf2efe8,
+  roughness: 0.9,
+  metalness: 0.0,
+});
+const tableTopMaterial = new THREE.MeshStandardMaterial({
+  color: 0xf5f2ea,
+  roughness: 0.4,
+  metalness: 0.0,
+});
+const tableSkirtMaterial = new THREE.MeshStandardMaterial({
+  color: 0x8f2d35,
+  roughness: 0.6,
+  metalness: 0.0,
+});
+const chairMaterial = new THREE.MeshStandardMaterial({
+  color: 0x3a3f4b,
+  roughness: 0.55,
+  metalness: 0.1,
+});
+const plateMaterial = new THREE.MeshStandardMaterial({
+  color: 0xffffff,
+  roughness: 0.25,
+  metalness: 0.05,
+});
+const personPalette = [0x4c6b8a, 0x8a5a44, 0x5c8a5f, 0x7a5c8a, 0x8a7a4c, 0x4c8a84];
+const foodPalette = [0xc97b3c, 0x8a9a4c, 0xb04c4c, 0xd9a441];
+
+const WALL_HEIGHT = 2.7;
+const CHAIR_GAP = 0.45;
+
+// Free CC0 props from Poly Haven (polyhaven.com), bundled under models/.
+const DECOR_MODELS = {
+  vaseA: ['ceramic_vase_01', 'ceramic_vase_01_1k.gltf'],
+  vaseB: ['brass_vase_02', 'brass_vase_02_1k.gltf'],
+  chandelier: ['Chandelier_01', 'Chandelier_01_1k.gltf'],
+  fern: ['fern_02', 'fern_02_1k.gltf'],
+  plant: ['pachira_aquatica_01', 'pachira_aquatica_01_1k.gltf'],
+  sofa: ['Sofa_01', 'Sofa_01_1k.gltf'],
+  armchair: ['ArmChair_01', 'ArmChair_01_1k.gltf'],
+  ottoman: ['Ottoman_01', 'Ottoman_01_1k.gltf'],
+  coffeeTable: ['CoffeeTable_01', 'CoffeeTable_01_1k.gltf'],
+  buffetTable: ['WoodenTable_02', 'WoodenTable_02_1k.gltf'],
+  cheese: ['CheeseBox_01', 'CheeseBox_01_1k.gltf'],
+  croissant: ['croissant', 'croissant_1k.gltf'],
+  cake: ['strawberry_chocolate_cake', 'strawberry_chocolate_cake_1k.gltf'],
+  wine: ['wine_bottles_01', 'wine_bottles_01_1k.gltf'],
+  mirror: ['ornate_mirror_01', 'ornate_mirror_01_1k.gltf'],
+};
+
+const gltfLoader = new GLTFLoader();
+const modelTemplates = {};
+const modelsReady = Promise.all(
+  Object.entries(DECOR_MODELS).map(
+    ([key, [id, filename]]) =>
+      new Promise((resolve) => {
+        gltfLoader.load(
+          `models/${id}/${filename}`,
+          (gltf) => {
+            modelTemplates[key] = gltf.scene;
+            resolve();
+          },
+          undefined,
+          () => resolve(), // Missing/failed prop: skip it, don't block the scene.
+        );
+      }),
+  ),
+);
+
+function decorInstance(key) {
+  const template = modelTemplates[key];
+  if (!template) return null;
+  const instance = template.clone(true);
+  instance.traverse((node) => {
+    if (node.isMesh) {
+      node.castShadow = true;
+      node.receiveShadow = true;
+    }
+  });
+  return instance;
+}
+
+let roomGroup = null;
+
+function clearRoom() {
+  if (roomGroup) {
+    scene.remove(roomGroup);
+    roomGroup.traverse((obj) => {
+      if (obj.geometry) obj.geometry.dispose();
+    });
+  }
+  roomGroup = new THREE.Group();
+  scene.add(roomGroup);
+}
+
+function addFloorAndWalls(width, depth) {
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(width, depth), floorMaterial);
+  floor.rotation.x = -Math.PI / 2;
+  floor.position.set(width / 2, 0, depth / 2);
+  floor.receiveShadow = true;
+  roomGroup.add(floor);
+
+  const backWall = new THREE.Mesh(
+    new THREE.BoxGeometry(width, WALL_HEIGHT, 0.12),
+    wallMaterial,
+  );
+  backWall.position.set(width / 2, WALL_HEIGHT / 2, 0);
+  backWall.receiveShadow = true;
+  roomGroup.add(backWall);
+
+  const leftWall = new THREE.Mesh(
+    new THREE.BoxGeometry(0.12, WALL_HEIGHT, depth),
+    wallMaterial,
+  );
+  leftWall.position.set(0, WALL_HEIGHT / 2, depth / 2);
+  leftWall.receiveShadow = true;
+  roomGroup.add(leftWall);
+
+  const rightWall = leftWall.clone();
+  rightWall.position.set(width, WALL_HEIGHT / 2, depth / 2);
+  roomGroup.add(rightWall);
+}
+
+function addTable(x, z, diameter, seatsPerTable, occupiedSeats, index) {
+  const radius = diameter / 2;
+  const table = new THREE.Group();
+  table.position.set(x, 0, z);
+
+  const centerpiece = decorInstance(index % 2 === 0 ? 'vaseA' : 'vaseB');
+  if (centerpiece) {
+    centerpiece.position.set(0, 0.775, 0);
+    table.add(centerpiece);
+  }
+
+  const top = new THREE.Mesh(
+    new THREE.CylinderGeometry(radius, radius, 0.05, 48),
+    tableTopMaterial,
+  );
+  top.position.y = 0.75;
+  top.castShadow = true;
+  top.receiveShadow = true;
+  table.add(top);
+
+  const skirt = new THREE.Mesh(
+    new THREE.CylinderGeometry(radius * 0.98, radius * 0.98, 0.72, 48, 1, true),
+    tableSkirtMaterial,
+  );
+  skirt.position.y = 0.75 - 0.72 / 2;
+  skirt.castShadow = true;
+  table.add(skirt);
+
+  for (let i = 0; i < seatsPerTable; i++) {
+    const angle = (i / seatsPerTable) * Math.PI * 2;
+    const seatRadius = radius + CHAIR_GAP;
+    const sx = Math.sin(angle) * seatRadius;
+    const sz = Math.cos(angle) * seatRadius;
+    const occupied = i < occupiedSeats;
+
+    const chair = new THREE.Mesh(
+      new THREE.BoxGeometry(0.42, 0.85, 0.42),
+      chairMaterial,
+    );
+    chair.position.set(sx, 0.425, sz);
+    chair.lookAt(table.position.x, 0.425, table.position.z);
+    chair.castShadow = true;
+    table.add(chair);
+
+    const plateAngle = angle + Math.PI;
+    const px = Math.sin(plateAngle) * (radius - 0.22);
+    const pz = Math.cos(plateAngle) * (radius - 0.22);
+    const plate = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.13, 0.13, 0.015, 24),
+      plateMaterial,
+    );
+    plate.position.set(px, 0.78, pz);
+    plate.castShadow = true;
+    table.add(plate);
+
+    if (occupied) {
+      const food = new THREE.Mesh(
+        new THREE.SphereGeometry(0.06, 16, 12),
+        new THREE.MeshStandardMaterial({
+          color: foodPalette[i % foodPalette.length],
+          roughness: 0.6,
+        }),
+      );
+      food.position.set(px, 0.82, pz);
+      food.castShadow = true;
+      table.add(food);
+
+      const person = buildPerson(personPalette[i % personPalette.length]);
+      const seatAngle = angle;
+      const personRadius = seatRadius + 0.05;
+      person.position.set(
+        Math.sin(seatAngle) * personRadius,
+        0,
+        Math.cos(seatAngle) * personRadius,
+      );
+      person.lookAt(table.position.x, 0, table.position.z);
+      table.add(person);
+    }
+  }
+
+  roomGroup.add(table);
+}
+
+function buildPerson(color) {
+  const group = new THREE.Group();
+  const bodyMaterial = new THREE.MeshStandardMaterial({ color, roughness: 0.7 });
+  const skinMaterial = new THREE.MeshStandardMaterial({ color: 0xe0b089, roughness: 0.6 });
+
+  const torso = new THREE.Mesh(
+    new THREE.CapsuleGeometry(0.17, 0.5, 4, 8),
+    bodyMaterial,
+  );
+  torso.position.y = 0.95;
+  torso.castShadow = true;
+  group.add(torso);
+
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.11, 16, 16), skinMaterial);
+  head.position.y = 1.38;
+  head.castShadow = true;
+  group.add(head);
+
+  return group;
+}
+
+function addRoomDecor(width, depth) {
+  const chandelier = decorInstance('chandelier');
+  if (chandelier) {
+    chandelier.position.set(width / 2, WALL_HEIGHT - 0.1, depth / 2);
+    roomGroup.add(chandelier);
+  }
+
+  const fern = decorInstance('fern');
+  if (fern) {
+    fern.position.set(0.8, 0, 0.8);
+    roomGroup.add(fern);
+  }
+  const plant = decorInstance('plant');
+  if (plant) {
+    plant.position.set(width - 0.8, 0, 0.8);
+    roomGroup.add(plant);
+  }
+
+  const mirror = decorInstance('mirror');
+  if (mirror) {
+    mirror.position.set(width / 2, 1.6, 0.05);
+    mirror.rotation.y = Math.PI;
+    roomGroup.add(mirror);
+  }
+
+  // A lounge nook and buffet spread only fit in rooms with enough spare floor space.
+  if (width >= 9 && depth >= 7) {
+    const sofa = decorInstance('sofa');
+    if (sofa) {
+      sofa.position.set(width - 1.6, 0, depth - 1.1);
+      sofa.rotation.y = Math.PI;
+      roomGroup.add(sofa);
+    }
+    const coffeeTable = decorInstance('coffeeTable');
+    if (coffeeTable) {
+      coffeeTable.position.set(width - 1.6, 0, depth - 2.2);
+      roomGroup.add(coffeeTable);
+    }
+    const armchairLeft = decorInstance('armchair');
+    if (armchairLeft) {
+      armchairLeft.position.set(width - 2.6, 0, depth - 2.4);
+      armchairLeft.rotation.y = Math.PI / 4;
+      roomGroup.add(armchairLeft);
+    }
+    const armchairRight = decorInstance('armchair');
+    if (armchairRight) {
+      armchairRight.position.set(width - 0.6, 0, depth - 2.4);
+      armchairRight.rotation.y = -Math.PI / 4;
+      roomGroup.add(armchairRight);
+    }
+    const ottoman = decorInstance('ottoman');
+    if (ottoman) {
+      ottoman.position.set(width - 1.6, 0, depth - 3.1);
+      roomGroup.add(ottoman);
+    }
+
+    const buffetTable = decorInstance('buffetTable');
+    if (buffetTable) {
+      buffetTable.position.set(1.4, 0, depth - 1.0);
+      roomGroup.add(buffetTable);
+      const buffetTopY = 0.75;
+      const cake = decorInstance('cake');
+      if (cake) {
+        cake.position.set(0.9, buffetTopY, depth - 1.0);
+        roomGroup.add(cake);
+      }
+      const cheese = decorInstance('cheese');
+      if (cheese) {
+        cheese.position.set(1.4, buffetTopY, depth - 0.7);
+        roomGroup.add(cheese);
+      }
+      const croissant = decorInstance('croissant');
+      if (croissant) {
+        croissant.position.set(1.7, buffetTopY, depth - 1.25);
+        roomGroup.add(croissant);
+      }
+      const wine = decorInstance('wine');
+      if (wine) {
+        wine.position.set(1.9, buffetTopY, depth - 0.9);
+        roomGroup.add(wine);
+      }
+    }
+  }
+}
+
+async function render(data) {
+  clearRoom();
+  addFloorAndWalls(data.widthMeters, data.heightMeters);
+  data.tables.forEach((table, index) => {
+    addTable(
+      table.x,
+      table.y,
+      data.tableDiameterMeters,
+      data.seatsPerTable,
+      table.occupiedSeats,
+      index,
+    );
+  });
+  const cx = data.widthMeters / 2;
+  const cz = data.heightMeters / 2;
+  controls.target.set(cx, 0.9, cz);
+  camera.position.set(cx + data.widthMeters * 0.5, Math.max(6, data.widthMeters * 0.4), cz + data.heightMeters * 0.6);
+  controls.update();
+
+  await modelsReady;
+  addRoomDecor(data.widthMeters, data.heightMeters);
+}
+
+function resize() {
+  const w = container.clientWidth || 1;
+  const h = container.clientHeight || 1;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', resize);
+resize();
+
+window.addEventListener('message', (event) => {
+  const data = event.data;
+  if (data && data.type === 'eventtwin-room-scene') {
+    render(data.payload);
+  }
+});
+
+function animate() {
+  requestAnimationFrame(animate);
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+
+// Let the host page know we're ready to receive scene data.
+window.parent.postMessage({ type: 'eventtwin-room-scene-ready' }, '*');
+</script>
+</body>
+</html>

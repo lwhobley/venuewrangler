@@ -20,6 +20,7 @@ import '../features/employee/presentation/employee_home_screen.dart';
 import '../features/employee/presentation/profile_screen.dart';
 import '../features/events/presentation/event_list_screen.dart';
 import '../features/floor/presentation/floor_plan_editor_screen.dart';
+import '../features/floor_studio/presentation/floor_studio_screen.dart';
 import '../features/floor/presentation/floor_plan_screen.dart';
 import '../features/guests_reservations/presentation/reservations_screen.dart';
 import '../features/incidents/presentation/incident_list_screen.dart';
@@ -298,6 +299,11 @@ StatefulShellRoute _fullShell(GlobalKey<NavigatorState> rootKey) {
                 path: 'edit',
                 parentNavigatorKey: rootKey,
                 builder: (context, state) => const FloorPlanEditorScreen(),
+              ),
+              GoRoute(
+                path: 'studio',
+                parentNavigatorKey: rootKey,
+                builder: (context, state) => const FloorStudioScreen(),
               ),
             ],
           ),
