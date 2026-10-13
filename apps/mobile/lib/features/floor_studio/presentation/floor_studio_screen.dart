@@ -96,6 +96,18 @@ class _FloorStudioScreenState extends ConsumerState<FloorStudioScreen> {
       setState(() => _error = 'Generate a layout before saving.');
       return;
     }
+    final tables = _options[_selectedOption].tables;
+    final issues = validateStudioLayout(
+      widthFeet: width,
+      depthFeet: depth,
+      tableDiameterFeet: saved?.tableDiameterFeet ?? defaultTableDiameterFeet,
+      tables: tables,
+    );
+    if (issues.isNotEmpty) {
+      const message = 'Measurements changed since generating. Generate again.';
+      setState(() => _error = message);
+      return;
+    }
     setState(() {
       _saving = true;
       _error = null;
@@ -112,7 +124,7 @@ class _FloorStudioScreenState extends ConsumerState<FloorStudioScreen> {
               tableDiameterFeet:
                   saved?.tableDiameterFeet ?? defaultTableDiameterFeet,
               seatsPerTable: saved?.seatsPerTable ?? defaultSeatsPerTable,
-              tables: _options[_selectedOption].tables,
+              tables: tables,
             ),
           );
       ref.invalidate(floorStudioLayoutsProvider(venueId));
@@ -166,7 +178,11 @@ class _FloorStudioScreenState extends ConsumerState<FloorStudioScreen> {
         final saved = layouts.valueOrNull
             ?.where((l) => l.floorPlanId == selected)
             .firstOrNull;
-        _loadFromSaved(saved, selected);
+        // Wait for the saved layouts: latching on a still-loading (null) result would
+        // skip populating the fields once the real layout arrives.
+        if (layouts.hasValue || layouts.hasError) {
+          _loadFromSaved(saved, selected);
+        }
         final previewTables = _options.isNotEmpty
             ? _options[_selectedOption].tables
             : saved?.tables ?? const <StudioTable>[];

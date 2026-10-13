@@ -234,16 +234,17 @@ List<StudioTable> _centeredTables(
   double xSpacing,
   double ySpacing,
 ) {
+  // Rows differ by at most one table, so no row exceeds ceil(needed / rows). The
+  // extra tables go to the rows nearest the center.
   final perRow = List<int>.filled(rows, needed ~/ rows);
-  var extra = needed % rows;
-  for (var offset = 0; offset < rows ~/ 2 && extra >= 2; offset++) {
-    final left = rows ~/ 2 - 1 - offset;
-    final right = rows - 1 - left;
-    perRow[left]++;
-    perRow[right]++;
-    extra -= 2;
+  final byCenter = List<int>.generate(rows, (i) => i)
+    ..sort(
+      (a, b) =>
+          ((a - (rows - 1) / 2).abs()).compareTo((b - (rows - 1) / 2).abs()),
+    );
+  for (var i = 0; i < needed % rows; i++) {
+    perRow[byCenter[i]]++;
   }
-  if (extra == 1) perRow[(rows - 1) ~/ 2]++;
 
   return [
     for (var row = 0; row < rows; row++)
