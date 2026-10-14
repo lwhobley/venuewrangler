@@ -18,6 +18,191 @@ class StudioTable {
   Map<String, dynamic> toJson() => {'x': x, 'y': y};
 }
 
+/// The fixed set of custom objects a manager can place in a room. [value] is the stored name.
+enum StudioObjectKind {
+  stage('stage', 'Stage', 16, 12),
+  bar('bar', 'Bar', 12, 3),
+  danceFloor('dance_floor', 'Dance floor', 20, 20),
+  djBooth('dj_booth', 'DJ booth', 6, 3),
+  podium('podium', 'Podium', 2, 2),
+  buffet('buffet', 'Buffet', 10, 3),
+  backdrop('backdrop', 'Backdrop', 12, 1),
+  planter('planter', 'Planter', 3, 3),
+  placeholder('placeholder', 'Placeholder', 4, 4);
+
+  const StudioObjectKind(
+    this.value,
+    this.label,
+    this.defaultWidthFeet,
+    this.defaultDepthFeet,
+  );
+
+  final String value;
+  final String label;
+  final double defaultWidthFeet;
+  final double defaultDepthFeet;
+
+  /// Unknown or missing values fall back to [placeholder], so newer kinds still load.
+  static StudioObjectKind fromValue(String? value) => values.firstWhere(
+        (kind) => kind.value == value,
+        orElse: () => placeholder,
+      );
+}
+
+final _studioObjectKindKeywords = <(StudioObjectKind, RegExp)>[
+  (
+    StudioObjectKind.stage,
+    RegExp(r'\b(stages?|platforms?)\b', caseSensitive: false)
+  ),
+  (
+    StudioObjectKind.danceFloor,
+    RegExp(r'\bdance[\s-]*floors?\b', caseSensitive: false)
+  ),
+  (StudioObjectKind.djBooth, RegExp(r'\bdj\b', caseSensitive: false)),
+  (StudioObjectKind.bar, RegExp(r'\bbars?\b', caseSensitive: false)),
+  (
+    StudioObjectKind.podium,
+    RegExp(r'\b(podiums?|lecterns?)\b', caseSensitive: false)
+  ),
+  (StudioObjectKind.buffet, RegExp(r'\bbuffets?\b', caseSensitive: false)),
+  (
+    StudioObjectKind.backdrop,
+    RegExp(r'\b(backdrops?|screens?)\b', caseSensitive: false)
+  ),
+  (
+    StudioObjectKind.planter,
+    RegExp(r'\bplant(s|er|ers)?\b', caseSensitive: false)
+  ),
+];
+
+/// Maps a free-text description to a kind by case-insensitive keyword match. Keywords are
+/// whole words, so "adjacent" is not a DJ booth. When a description matches several kinds,
+/// the first in the list above wins. Anything unmatched is a placeholder.
+StudioObjectKind studioObjectKindFor(String description) {
+  for (final (kind, pattern) in _studioObjectKindKeywords) {
+    if (pattern.hasMatch(description)) return kind;
+  }
+  return StudioObjectKind.placeholder;
+}
+
+/// A custom object (stage, bar, dance floor, ...) placed in the room. [x] and [y] are the
+/// centre in feet, on the same coordinate system as [StudioTable].
+class StudioObject {
+  const StudioObject({
+    required this.id,
+    required this.kind,
+    required this.description,
+    required this.x,
+    required this.y,
+    required this.widthFeet,
+    required this.depthFeet,
+    this.rotationDegrees = 0,
+  });
+
+  final String id;
+  final StudioObjectKind kind;
+  final String description;
+  final double x;
+  final double y;
+  final double widthFeet;
+  final double depthFeet;
+  final double rotationDegrees;
+
+  factory StudioObject.fromJson(Map<String, dynamic> json) => StudioObject(
+        id: json['id'] as String,
+        kind: StudioObjectKind.fromValue(json['kind'] as String?),
+        description: json['description'] as String? ?? '',
+        x: (json['x'] as num).toDouble(),
+        y: (json['y'] as num).toDouble(),
+        widthFeet: (json['widthFeet'] as num).toDouble(),
+        depthFeet: (json['depthFeet'] as num).toDouble(),
+        rotationDegrees: (json['rotationDegrees'] as num?)?.toDouble() ?? 0,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'kind': kind.value,
+        'description': description,
+        'x': x,
+        'y': y,
+        'widthFeet': widthFeet,
+        'depthFeet': depthFeet,
+        'rotationDegrees': rotationDegrees,
+      };
+
+  StudioObject copyWith({
+    String? description,
+    StudioObjectKind? kind,
+    double? x,
+    double? y,
+    double? widthFeet,
+    double? depthFeet,
+    double? rotationDegrees,
+  }) =>
+      StudioObject(
+        id: id,
+        kind: kind ?? this.kind,
+        description: description ?? this.description,
+        x: x ?? this.x,
+        y: y ?? this.y,
+        widthFeet: widthFeet ?? this.widthFeet,
+        depthFeet: depthFeet ?? this.depthFeet,
+        rotationDegrees: rotationDegrees ?? this.rotationDegrees,
+      );
+}
+
+/// Half-widths of a rotated object's axis-aligned footprint, in feet.
+({double x, double y}) studioObjectHalfExtents(StudioObject object) {
+  final radians = object.rotationDegrees * math.pi / 180;
+  final cos = math.cos(radians).abs();
+  final sin = math.sin(radians).abs();
+  final halfWidth = object.widthFeet / 2;
+  final halfDepth = object.depthFeet / 2;
+  return (
+    x: halfWidth * cos + halfDepth * sin,
+    y: halfWidth * sin + halfDepth * cos,
+  );
+}
+
+/// Keeps an object's whole footprint inside the room. An object wider than the room is
+/// centred on that axis.
+StudioObject clampStudioObject(
+  StudioObject object, {
+  required double widthFeet,
+  required double depthFeet,
+}) {
+  final extents = studioObjectHalfExtents(object);
+  double clampAxis(double value, double half, double size) {
+    if (half * 2 >= size) return size / 2;
+    return value.clamp(half, size - half).toDouble();
+  }
+
+  return object.copyWith(
+    x: clampAxis(object.x, extents.x, widthFeet),
+    y: clampAxis(object.y, extents.y, depthFeet),
+  );
+}
+
+/// Snaps a plan coordinate to the nearest half foot, which keeps dragged objects tidy.
+double snapStudioFeet(double feet) => (feet * 2).roundToDouble() / 2;
+
+/// Which object, if any, covers [point] (in feet). Later objects are on top.
+StudioObject? studioObjectAt(List<StudioObject> objects, double px, double py) {
+  for (final object in objects.reversed) {
+    final dx = px - object.x;
+    final dy = py - object.y;
+    final radians = object.rotationDegrees * math.pi / 180;
+    // Inverse of the scene's rotation about the vertical axis: local x runs along the width.
+    final localX = dx * math.cos(radians) - dy * math.sin(radians);
+    final localY = dx * math.sin(radians) + dy * math.cos(radians);
+    if (localX.abs() <= object.widthFeet / 2 &&
+        localY.abs() <= object.depthFeet / 2) {
+      return object;
+    }
+  }
+  return null;
+}
+
 /// Measured dimensions and generated table layout for one floor plan. Absent until saved.
 class FloorStudioLayout {
   const FloorStudioLayout({
@@ -30,6 +215,7 @@ class FloorStudioLayout {
     this.tableDiameterFeet = defaultTableDiameterFeet,
     this.seatsPerTable = defaultSeatsPerTable,
     this.tables = const [],
+    this.objects = const [],
   });
 
   final String? id;
@@ -41,6 +227,9 @@ class FloorStudioLayout {
   final double tableDiameterFeet;
   final int seatsPerTable;
   final List<StudioTable> tables;
+
+  /// Custom objects (stage, bar, ...). Stored beside [tables], never inside them.
+  final List<StudioObject> objects;
 
   /// The most guests this layout can seat.
   int get capacity => tables.length * seatsPerTable;
@@ -59,6 +248,10 @@ class FloorStudioLayout {
           for (final e in (json['layout'] as List? ?? const []))
             StudioTable.fromJson(e as Map<String, dynamic>),
         ],
+        objects: [
+          for (final e in (json['objects'] as List? ?? const []))
+            StudioObject.fromJson(e as Map<String, dynamic>),
+        ],
       );
 
   /// Upsert payload. `id`, `organization_id`, `created_at` are set by the database.
@@ -71,6 +264,7 @@ class FloorStudioLayout {
         'table_diameter_feet': tableDiameterFeet,
         'seats_per_table': seatsPerTable,
         'layout': [for (final t in tables) t.toJson()],
+        'objects': [for (final o in objects) o.toJson()],
       };
 }
 
@@ -282,5 +476,18 @@ Map<String, Object?> buildStudioSceneData({
     'tableDiameterMeters': layout.tableDiameterFeet * _feetToMeters,
     'seatsPerTable': layout.seatsPerTable,
     'tables': tableData,
+    'objects': [
+      for (final object in layout.objects)
+        {
+          'id': object.id,
+          'kind': object.kind.value,
+          'description': object.description,
+          'x': object.x * _feetToMeters,
+          'y': object.y * _feetToMeters,
+          'widthMeters': object.widthFeet * _feetToMeters,
+          'depthMeters': object.depthFeet * _feetToMeters,
+          'rotationDegrees': object.rotationDegrees,
+        },
+    ],
   };
 }

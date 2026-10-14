@@ -5,10 +5,12 @@ import '../../floor/application/floor_providers.dart';
 import '../../venues/application/venues_providers.dart';
 import '../application/floor_studio_providers.dart';
 import '../domain/floor_studio.dart';
+import 'add_studio_object_dialog.dart';
 import 'floor_studio_3d_view.dart';
+import 'studio_object_plan.dart';
 
-/// Measure a floor plan's room, generate a round-table layout for a guest count, save it,
-/// and preview it in 3D. Managers only.
+/// Measure a floor plan's room, generate a round-table layout for a guest count, place
+/// custom objects (stage, bar, ...) in it, save it, and preview it in 3D. Managers only.
 class FloorStudioScreen extends ConsumerStatefulWidget {
   const FloorStudioScreen({super.key});
 
@@ -28,6 +30,8 @@ class _FloorStudioScreenState extends ConsumerState<FloorStudioScreen> {
   int _selectedOption = 0;
   String? _error;
   var _loadedFor = '';
+  var _objects = <StudioObject>[];
+  String? _selectedObjectId;
 
   @override
   void dispose() {
@@ -43,6 +47,8 @@ class _FloorStudioScreenState extends ConsumerState<FloorStudioScreen> {
     _options = const [];
     _error = null;
     _show3D = false;
+    _objects = [...?saved?.objects];
+    _selectedObjectId = null;
     if (saved == null) {
       _width.clear();
       _depth.clear();
@@ -92,11 +98,19 @@ class _FloorStudioScreenState extends ConsumerState<FloorStudioScreen> {
       setState(() => _error = 'Enter room width and depth.');
       return;
     }
-    if (_options.isEmpty) {
+    // Tables come from the generated option, or else the saved layout, so objects can be
+    // saved on their own.
+    final tables = _options.isNotEmpty
+        ? _options[_selectedOption].tables
+        : saved?.tables ?? const <StudioTable>[];
+    if (tables.isEmpty && _objects.isEmpty && saved == null) {
       setState(() => _error = 'Generate a layout before saving.');
       return;
     }
-    final tables = _options[_selectedOption].tables;
+    final objects = [
+      for (final object in _objects)
+        clampStudioObject(object, widthFeet: width, depthFeet: depth),
+    ];
     final issues = validateStudioLayout(
       widthFeet: width,
       depthFeet: depth,
@@ -125,6 +139,7 @@ class _FloorStudioScreenState extends ConsumerState<FloorStudioScreen> {
                   saved?.tableDiameterFeet ?? defaultTableDiameterFeet,
               seatsPerTable: saved?.seatsPerTable ?? defaultSeatsPerTable,
               tables: tables,
+              objects: objects,
             ),
           );
       ref.invalidate(floorStudioLayoutsProvider(venueId));
@@ -140,6 +155,75 @@ class _FloorStudioScreenState extends ConsumerState<FloorStudioScreen> {
       if (mounted) setState(() => _saving = false);
     }
   }
+
+  Future<void> _addObject(double width, double depth) async {
+    final object = await showDialog<StudioObject>(
+      context: context,
+      builder: (_) => AddStudioObjectDialog(widthFeet: width, depthFeet: depth),
+    );
+    if (object == null || !mounted) return;
+    final placed =
+        clampStudioObject(object, widthFeet: width, depthFeet: depth);
+    setState(() {
+      _objects = [..._objects, placed];
+      _selectedObjectId = placed.id;
+    });
+  }
+
+  void _moveObject(StudioObject moved) => setState(() {
+        _objects = [
+          for (final object in _objects) object.id == moved.id ? moved : object,
+        ];
+      });
+
+  void _rotateSelected(double width, double depth) {
+    final selected = _selectedObject;
+    if (selected == null) return;
+    _moveObject(
+      clampStudioObject(
+        selected.copyWith(
+          rotationDegrees: (selected.rotationDegrees + 90) % 360,
+        ),
+        widthFeet: width,
+        depthFeet: depth,
+      ),
+    );
+  }
+
+  Future<void> _removeSelected() async {
+    final selected = _selectedObject;
+    if (selected == null) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Remove ${selected.description}?'),
+        content: const Text(
+          'The object leaves the plan when you save the floor plan layout.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() {
+      _objects = [
+        for (final object in _objects)
+          if (object.id != selected.id) object,
+      ];
+      _selectedObjectId = null;
+    });
+  }
+
+  StudioObject? get _selectedObject =>
+      _objects.where((o) => o.id == _selectedObjectId).firstOrNull;
 
   @override
   Widget build(BuildContext context) {
@@ -214,6 +298,8 @@ class _FloorStudioScreenState extends ConsumerState<FloorStudioScreen> {
                         const TextInputType.numberWithOptions(decimal: true),
                     decoration:
                         const InputDecoration(labelText: 'Width (feet)'),
+                    // The room plan redraws from these fields as they change.
+                    onChanged: (_) => setState(() {}),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -224,6 +310,7 @@ class _FloorStudioScreenState extends ConsumerState<FloorStudioScreen> {
                         const TextInputType.numberWithOptions(decimal: true),
                     decoration:
                         const InputDecoration(labelText: 'Depth (feet)'),
+                    onChanged: (_) => setState(() {}),
                   ),
                 ),
               ],
@@ -278,29 +365,103 @@ class _FloorStudioScreenState extends ConsumerState<FloorStudioScreen> {
                 ],
               ),
             ],
-            if (previewTables.isNotEmpty) ...[
+            if (width > 0 && depth > 0) ...[
               const SizedBox(height: 16),
-              Builder(
-                builder: (context) {
-                  final issues = validateStudioLayout(
-                    widthFeet: width,
-                    depthFeet: depth,
-                    tableDiameterFeet:
-                        saved?.tableDiameterFeet ?? defaultTableDiameterFeet,
-                    tables: previewTables,
-                  );
-                  return Text(
-                    issues.isEmpty
-                        ? 'No table boundary or clearance conflicts detected.'
-                        : issues.join('\n'),
-                    style: TextStyle(
-                      color: issues.isEmpty
-                          ? Colors.green.shade800
-                          : Theme.of(context).colorScheme.error,
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Room plan',
+                      style: Theme.of(context).textTheme.titleSmall,
                     ),
-                  );
-                },
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () => _addObject(width, depth),
+                    icon: const Icon(Icons.add),
+                    label: const Text('Add object'),
+                  ),
+                ],
               ),
+              const SizedBox(height: 8),
+              StudioObjectPlan(
+                widthFeet: width,
+                depthFeet: depth,
+                tables: previewTables,
+                tableDiameterFeet:
+                    saved?.tableDiameterFeet ?? defaultTableDiameterFeet,
+                objects: _objects,
+                selectedId: _selectedObjectId,
+                onSelect: (id) => setState(() => _selectedObjectId = id),
+                onMove: _moveObject,
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'Drag an object to move it. Tap one to select it.',
+                style: TextStyle(fontSize: 12),
+              ),
+              for (final object in _objects)
+                ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  selected: object.id == _selectedObjectId,
+                  title: Text(object.description),
+                  subtitle: Text(
+                    '${object.kind.label} · '
+                    '${object.widthFeet.toStringAsFixed(0)} × '
+                    '${object.depthFeet.toStringAsFixed(0)} ft',
+                  ),
+                  onTap: () => setState(() => _selectedObjectId = object.id),
+                ),
+              if (_selectedObject != null)
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Selected: ${_selectedObject!.description}',
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    TextButton.icon(
+                      onPressed: () => _rotateSelected(width, depth),
+                      icon: const Icon(Icons.rotate_90_degrees_ccw_outlined),
+                      label: const Text('Rotate'),
+                    ),
+                    TextButton.icon(
+                      onPressed: _removeSelected,
+                      icon: const Icon(Icons.delete_outline),
+                      label: const Text('Remove'),
+                    ),
+                  ],
+                ),
+            ],
+            // A saved layout can always be saved again, so removing its last object sticks.
+            if (previewTables.isNotEmpty ||
+                _objects.isNotEmpty ||
+                saved != null) ...[
+              if (previewTables.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                Builder(
+                  builder: (context) {
+                    final issues = validateStudioLayout(
+                      widthFeet: width,
+                      depthFeet: depth,
+                      tableDiameterFeet:
+                          saved?.tableDiameterFeet ?? defaultTableDiameterFeet,
+                      tables: previewTables,
+                    );
+                    return Text(
+                      issues.isEmpty
+                          ? 'No table boundary or clearance conflicts detected.'
+                          : issues.join('\n'),
+                      style: TextStyle(
+                        color: issues.isEmpty
+                            ? Colors.green.shade800
+                            : Theme.of(context).colorScheme.error,
+                      ),
+                    );
+                  },
+                ),
+              ],
               const SizedBox(height: 10),
               FilledButton.icon(
                 onPressed: _saving ? null : () => _save(venueId, saved),
@@ -324,6 +485,7 @@ class _FloorStudioScreenState extends ConsumerState<FloorStudioScreen> {
                       depthFeet: depth,
                       verified: _verified,
                       tables: previewTables,
+                      objects: _objects,
                     ),
                     guestCount: previewTables.length *
                         (saved?.seatsPerTable ?? defaultSeatsPerTable),
