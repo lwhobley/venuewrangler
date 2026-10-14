@@ -2,6 +2,15 @@
 
 All ten audit findings are implemented and verified locally. Release rollout is authorized; hosted deployment results are recorded separately.
 
+## Release rollout
+
+- Implementation commit `635a88c` pushed to `main`.
+- Production project `puttwjwmwrzmhpsjykuj`: all six pending review/audit migrations applied successfully. Verified RPC permissions, POS trigger, studio constraints, zero malformed studio rows, and no enabled legacy push registrations.
+- Deployed `stripe-create-checkout` v34, `notifications-send` v37, and `notifications-dispatch` v16, preserving their authentication settings. Live unauthenticated calls return 401.
+- GitHub Actions passed: 720 database assertions across 45 files, 321 Flutter tests, backend checks, and CodeQL.
+- Initial Cloudflare deployment succeeded, but live verification exposed Pages redirecting `scene.html` to `scene`. The follow-up fixes the narrow framing exception on both URLs and adds a redirect regression test; 16 JavaScript tests and TypeScript checking pass.
+- Pushed `ios-v1.12.0-7` at `635a88c`; Codemagic acknowledged the tag push with HTTP 202. Build completion and TestFlight upload are not verified here. The follow-up affects only web hosting headers, not the native app.
+
 | Finding | Implementation |
 |---|---|
 | AUD-01 | Expired Checkout replacement compares the exact observed attempt key under the existing lock. Concurrent stale callers reuse the replacement. The later ten-second mitigation was discovered during implementation and the audit's original reproduction claim was corrected. |

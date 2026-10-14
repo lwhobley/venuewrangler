@@ -16,7 +16,7 @@ export default {
       // Flutter reuses engine and bootstrap file names across releases. Keep
       // one release's shell from loading another release's cached assets.
       response.headers.set('Cache-Control', 'no-store');
-      if (url.pathname === '/app/assets/assets/three/scene.html') {
+      if (url.pathname === '/app/assets/assets/three/scene.html' || url.pathname === '/app/assets/assets/three/scene') {
         // This one asset is deliberately embedded by the operator app. Override
         // the static catch-all anti-framing headers only for its same-origin host.
         response.headers.set('X-Frame-Options', 'SAMEORIGIN');
