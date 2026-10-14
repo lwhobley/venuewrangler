@@ -85,7 +85,7 @@ const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.maxPolarAngle = Math.PI * 0.49;
 controls.minDistance = 2;
-controls.maxDistance = 60;
+controls.maxDistance = 150;
 
 scene.add(new THREE.HemisphereLight(0xf5f7f5, 0x4b4536, 0.65));
 const sun = new THREE.DirectionalLight(0xfff4e0, 1.4);
@@ -616,22 +616,6 @@ function renderObjects(objects) {
   }
 }
 
-// Frames the room from the same viewing angle as before. It only pulls back when the floor
-// would not fit the viewport's width (narrow phone previews), so far corners and objects stay
-// on screen. Rooms that already fit keep the original framing.
-function frameRoom(width, depth) {
-  const target = new THREE.Vector3(width / 2, 0.9, depth / 2);
-  const offset = new THREE.Vector3(width * 0.5, Math.max(6, width * 0.4) - 0.9, depth * 0.6);
-  const halfDiagonal = Math.hypot(width, depth) / 2 + 0.5;
-  const halfVerticalFov = THREE.MathUtils.degToRad(camera.fov / 2);
-  const halfHorizontalFov = Math.atan(Math.tan(halfVerticalFov) * camera.aspect);
-  const neededDistance = halfDiagonal / Math.tan(halfHorizontalFov);
-  const scale = Math.max(1, neededDistance / offset.length());
-  controls.target.copy(target);
-  camera.position.copy(target).add(offset.multiplyScalar(scale));
-  controls.update();
-}
-
 let renderToken = 0;
 
 async function render(data) {
@@ -648,7 +632,8 @@ async function render(data) {
       index,
     );
   });
-  frameRoom(data.widthMeters, data.heightMeters);
+  lastRoom = data;
+  fitCamera(data);
 
   await modelsReady;
   if (token !== renderToken) return; // A newer render replaced this one while models loaded.
@@ -657,12 +642,34 @@ async function render(data) {
   report('rendered');
 }
 
+// Keeps the whole room in view. Phones are much narrower than they are tall, so the horizontal
+// field of view is usually the limit; the camera backs off until a sphere around the room fits
+// inside whichever field of view is narrower.
+let lastRoom = null;
+function fitCamera(data) {
+  const center = new THREE.Vector3(data.widthMeters / 2, WALL_HEIGHT / 2, data.heightMeters / 2);
+  const direction = new THREE.Vector3(
+    data.widthMeters * 0.5,
+    Math.max(6, data.widthMeters * 0.4),
+    data.heightMeters * 0.6,
+  ).normalize();
+  const radius = Math.hypot(data.widthMeters, WALL_HEIGHT, data.heightMeters) / 2 + 1;
+  const halfVertical = THREE.MathUtils.degToRad(camera.fov) / 2;
+  const halfHorizontal = Math.atan(Math.tan(halfVertical) * camera.aspect);
+  const distance = radius / Math.sin(Math.min(halfVertical, halfHorizontal));
+  controls.target.copy(center);
+  camera.position.copy(center).addScaledVector(direction, distance);
+  camera.lookAt(center);
+  controls.update();
+}
+
 function resize() {
   const w = container.clientWidth || 1;
   const h = container.clientHeight || 1;
   renderer.setSize(w, h, false);
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
+  if (lastRoom) fitCamera(lastRoom);
 }
 window.addEventListener('resize', resize);
 resize();
