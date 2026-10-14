@@ -78,7 +78,8 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xdfe6e3);
 scene.fog = new THREE.Fog(0xdfe6e3, 20, 60);
 
-const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 200);
+// The far plane must reach the far side of the largest room the camera backs off to.
+const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 2000);
 camera.position.set(8, 9, 12);
 
 const controls = new OrbitControls(camera, renderer.domElement);
@@ -663,6 +664,8 @@ async function render(data) {
 // field of view is usually the limit; the camera backs off until a sphere around the room fits
 // inside whichever field of view is narrower.
 let lastRoom = null;
+// Half the room's diagonal (plus a margin), set by fitCamera. The fog starts past it.
+let roomRadius = 0;
 function fitCamera(data) {
   const center = new THREE.Vector3(data.widthMeters / 2, WALL_HEIGHT / 2, data.heightMeters / 2);
   const direction = new THREE.Vector3(
@@ -674,6 +677,9 @@ function fitCamera(data) {
   const halfVertical = THREE.MathUtils.degToRad(camera.fov) / 2;
   const halfHorizontal = Math.atan(Math.tan(halfVertical) * camera.aspect);
   const distance = radius / Math.sin(Math.min(halfVertical, halfHorizontal));
+  roomRadius = radius;
+  // Leave room to zoom out from the fitted view, however large the room is.
+  controls.maxDistance = Math.max(150, distance * 2);
   controls.target.copy(center);
   camera.position.copy(center).addScaledVector(direction, distance);
   camera.lookAt(center);
@@ -698,9 +704,19 @@ window.addEventListener('message', (event) => {
   }
 });
 
+// The fog matches the background, so it must start beyond the far side of the room at the
+// camera's current distance. A fixed range hid large rooms completely once the camera
+// backed off far enough to fit them on a phone.
+function updateFog() {
+  const near = camera.position.distanceTo(controls.target) + roomRadius;
+  scene.fog.near = near;
+  scene.fog.far = near + 40;
+}
+
 function animate() {
   requestAnimationFrame(animate);
   controls.update();
+  updateFog();
   renderer.render(scene, camera);
 }
 animate();
