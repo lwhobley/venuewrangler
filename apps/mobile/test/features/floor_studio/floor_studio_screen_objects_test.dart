@@ -76,8 +76,20 @@ Future<_FakeFloorStudioRepository> _pumpScreen(WidgetTester tester) async {
     find.widgetWithText(TextField, 'Depth (feet)'),
     '40',
   );
-  await tester.pump();
+  // The plan adopts typed dimensions after a short pause.
+  await tester.pump(const Duration(seconds: 1));
   return repo;
+}
+
+Future<void> _addPodium(WidgetTester tester) async {
+  await tester.tap(find.text('Add object'));
+  await tester.pumpAndSettle();
+  await tester.enterText(
+    find.widgetWithText(TextField, 'Description'),
+    'Podium',
+  );
+  await tester.tap(find.widgetWithText(FilledButton, 'Add'));
+  await tester.pumpAndSettle();
 }
 
 Future<void> _saveLayout(WidgetTester tester) async {
@@ -160,5 +172,48 @@ void main() {
     await tester.pumpAndSettle();
     await _saveLayout(tester);
     expect(repo.saved.single.objects.single.x, closeTo(59, 1e-9));
+  });
+
+  testWidgets(
+      'shrinking the room moves objects inside the new walls, ignoring '
+      'half-typed values', (tester) async {
+    final repo = await _pumpScreen(tester);
+    await _addPodium(tester);
+    await tester.drag(
+      find.byKey(const ValueKey('studio-object-plan-canvas')),
+      const Offset(900, 0),
+    );
+    await tester.pumpAndSettle();
+
+    // "6" on the way to "40" must not shrink the room: that would clamp the podium to 5 ft.
+    final width = find.widgetWithText(TextField, 'Width (feet)');
+    await tester.enterText(width, '6');
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.enterText(width, '40');
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(find.textContaining('Podium'), findsWidgets);
+    await _saveLayout(tester);
+    expect(repo.saved.single.widthFeet, 40);
+    expect(repo.saved.single.objects.single.x, closeTo(39, 1e-9));
+  });
+
+  testWidgets('a non-finite width is rejected, not drawn', (tester) async {
+    final repo = await _pumpScreen(tester);
+    await _addPodium(tester);
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Width (feet)'),
+      'Infinity',
+    );
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(tester.takeException(), isNull);
+    expect(
+      find.byKey(const ValueKey('studio-object-plan-canvas')),
+      findsOneWidget,
+    );
+    await _saveLayout(tester);
+    expect(find.text('Enter room width and depth.'), findsOneWidget);
+    expect(repo.saved, isEmpty);
   });
 }

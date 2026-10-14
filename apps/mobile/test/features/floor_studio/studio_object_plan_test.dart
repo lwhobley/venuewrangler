@@ -69,4 +69,34 @@ void main() {
     expect(log.moves.last.x, closeTo(36, 1e-9));
     expect(log.moves.last.y, closeTo(20, 1e-9));
   });
+
+  testWidgets('a long, thin room keeps a usable plan size and scrolls',
+      (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 360,
+            child: StudioObjectPlan(
+              widthFeet: 200,
+              depthFeet: 2,
+              tables: const [],
+              tableDiameterFeet: 6,
+              objects: const [],
+              selectedId: null,
+              onSelect: (_) {},
+              onMove: (_) {},
+            ),
+          ),
+        ),
+      ),
+    );
+    final size = tester.getSize(
+      find.byKey(const ValueKey('studio-object-plan-canvas')),
+    );
+    expect(size.height, StudioObjectPlan.minSide);
+    expect(size.width, closeTo(StudioObjectPlan.minSide * 100, 1e-6));
+    expect(find.byType(SingleChildScrollView), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }

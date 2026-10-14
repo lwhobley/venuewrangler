@@ -20,6 +20,7 @@ class StudioObjectPlan extends StatefulWidget {
     required this.selectedId,
     required this.onSelect,
     required this.onMove,
+    this.onMoveEnd,
   });
 
   final double widthFeet;
@@ -31,7 +32,14 @@ class StudioObjectPlan extends StatefulWidget {
   final ValueChanged<String?> onSelect;
   final ValueChanged<StudioObject> onMove;
 
+  /// Called once when a drag that moved an object ends.
+  final VoidCallback? onMoveEnd;
+
   static const maxHeight = 360.0;
+
+  /// Neither side of the plan is drawn smaller than this, so a long, thin room stays
+  /// tappable. The plan then scrolls instead of shrinking.
+  static const minSide = 48.0;
 
   @override
   State<StudioObjectPlan> createState() => _StudioObjectPlanState();
@@ -88,75 +96,94 @@ class _StudioObjectPlanState extends State<StudioObjectPlan> {
     );
   }
 
-  void _endDrag() => _dragging = null;
+  void _endDrag() {
+    if (_dragging == null) return;
+    _dragging = null;
+    widget.onMoveEnd?.call();
+  }
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
+        // One scale for both axes. Fit the width, cap the height, then grow back to the
+        // minimum side; a very long room ends up wider or taller than the space and scrolls.
+        final aspect = widget.depthFeet / widget.widthFeet;
         var width = constraints.maxWidth;
-        var height = width * widget.depthFeet / widget.widthFeet;
+        var height = width * aspect;
         if (height > StudioObjectPlan.maxHeight) {
           height = StudioObjectPlan.maxHeight;
-          width = height * widget.widthFeet / widget.depthFeet;
+          width = height / aspect;
         }
-        return Center(
-          child: SizedBox(
-            key: const ValueKey('studio-object-plan-canvas'),
-            width: width,
-            height: height,
-            child: RawGestureDetector(
-              gestures: <Type, GestureRecognizerFactory>{
-                _ObjectPanRecognizer:
-                    GestureRecognizerFactoryWithHandlers<_ObjectPanRecognizer>(
-                  () => _ObjectPanRecognizer(
-                    canStart: (position) => _objectAt(position) != null,
-                  ),
-                  (recognizer) {
-                    recognizer.onDown = (details) {
-                      _startDrag(details.globalPosition);
-                    };
-                    recognizer.onUpdate = (details) {
-                      _updateDrag(details.globalPosition);
-                    };
-                    recognizer.onEnd = (_) => _endDrag();
-                    recognizer.onCancel = _endDrag;
-                  },
+        if (height < StudioObjectPlan.minSide) {
+          height = StudioObjectPlan.minSide;
+          width = height / aspect;
+        }
+        if (width < StudioObjectPlan.minSide) {
+          width = StudioObjectPlan.minSide;
+          height = width * aspect;
+        }
+        final canvas = SizedBox(
+          key: const ValueKey('studio-object-plan-canvas'),
+          width: width,
+          height: height,
+          child: RawGestureDetector(
+            gestures: <Type, GestureRecognizerFactory>{
+              _ObjectPanRecognizer:
+                  GestureRecognizerFactoryWithHandlers<_ObjectPanRecognizer>(
+                () => _ObjectPanRecognizer(
+                  canStart: (position) => _objectAt(position) != null,
                 ),
-                TapGestureRecognizer:
-                    GestureRecognizerFactoryWithHandlers<TapGestureRecognizer>(
-                  TapGestureRecognizer.new,
-                  (recognizer) {
-                    // Tapping an object already selects it on pointer down, so a tap only
-                    // needs to clear the selection when it lands on empty floor.
-                    recognizer.onTapUp = (details) {
-                      if (_objectAt(details.globalPosition) == null) {
-                        widget.onSelect(null);
-                      }
-                    };
-                  },
-                ),
-              },
-              child: CustomPaint(
-                key: _canvasKey,
-                size: Size(width, height),
-                painter: _StudioPlanPainter(
-                  widthFeet: widget.widthFeet,
-                  depthFeet: widget.depthFeet,
-                  tables: widget.tables,
-                  tableDiameterFeet: widget.tableDiameterFeet,
-                  objects: widget.objects,
-                  selectedId: widget.selectedId,
-                  wallColor: Theme.of(context).colorScheme.outline,
-                  floorColor:
-                      Theme.of(context).colorScheme.surfaceContainerHighest,
-                  tableColor: Theme.of(context).colorScheme.surface,
-                  selectionColor: Theme.of(context).colorScheme.primary,
-                ),
+                (recognizer) {
+                  recognizer.onDown = (details) {
+                    _startDrag(details.globalPosition);
+                  };
+                  recognizer.onUpdate = (details) {
+                    _updateDrag(details.globalPosition);
+                  };
+                  recognizer.onEnd = (_) => _endDrag();
+                  recognizer.onCancel = _endDrag;
+                },
+              ),
+              TapGestureRecognizer:
+                  GestureRecognizerFactoryWithHandlers<TapGestureRecognizer>(
+                TapGestureRecognizer.new,
+                (recognizer) {
+                  // Tapping an object already selects it on pointer down, so a tap only
+                  // needs to clear the selection when it lands on empty floor.
+                  recognizer.onTapUp = (details) {
+                    if (_objectAt(details.globalPosition) == null) {
+                      widget.onSelect(null);
+                    }
+                  };
+                },
+              ),
+            },
+            child: CustomPaint(
+              key: _canvasKey,
+              size: Size(width, height),
+              painter: _StudioPlanPainter(
+                widthFeet: widget.widthFeet,
+                depthFeet: widget.depthFeet,
+                tables: widget.tables,
+                tableDiameterFeet: widget.tableDiameterFeet,
+                objects: widget.objects,
+                selectedId: widget.selectedId,
+                wallColor: Theme.of(context).colorScheme.outline,
+                floorColor:
+                    Theme.of(context).colorScheme.surfaceContainerHighest,
+                tableColor: Theme.of(context).colorScheme.surface,
+                selectionColor: Theme.of(context).colorScheme.primary,
               ),
             ),
           ),
         );
+        return width > constraints.maxWidth
+            ? SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: canvas,
+              )
+            : Center(child: canvas);
       },
     );
   }

@@ -335,4 +335,84 @@ void main() {
       expect(data['objects'], isEmpty);
     });
   });
+
+  group('review fixes', () {
+    test('a malformed object is skipped and the rest of the layout loads', () {
+      final layout = FloorStudioLayout.fromJson({
+        'id': 'layout-1',
+        'venue_id': 'venue-1',
+        'floor_plan_id': 'plan-1',
+        'width_feet': 60,
+        'depth_feet': 40,
+        'verified': true,
+        'table_diameter_feet': 6,
+        'seats_per_table': 10,
+        'layout': [
+          {'x': 10, 'y': 10},
+        ],
+        'objects': [
+          {'kind': 'stage', 'x': '10'},
+          'not an object',
+          {
+            'id': 'nan',
+            'x': double.nan,
+            'y': 1,
+            'widthFeet': 2,
+            'depthFeet': 2,
+          },
+          {'id': 'zero', 'x': 1, 'y': 1, 'widthFeet': 0, 'depthFeet': 2},
+          {
+            'id': 'ok',
+            'kind': 'bar',
+            'description': 'Bar',
+            'x': 5,
+            'y': 6,
+            'widthFeet': 12,
+            'depthFeet': 3,
+          },
+        ],
+      });
+      expect(layout.tables, hasLength(1));
+      expect(layout.objects.map((o) => o.id), ['ok']);
+      expect(layout.objects.single.kind, StudioObjectKind.bar);
+      expect(layout.objects.single.rotationDegrees, 0);
+    });
+
+    test('a non-list objects value loads as no objects', () {
+      final layout = FloorStudioLayout.fromJson({
+        'id': 'layout-1',
+        'venue_id': 'venue-1',
+        'floor_plan_id': 'plan-1',
+        'width_feet': 60,
+        'depth_feet': 40,
+        'verified': false,
+        'table_diameter_feet': 6,
+        'seats_per_table': 10,
+        'objects': {'id': 'x'},
+      });
+      expect(layout.objects, isEmpty);
+    });
+
+    test('parseStudioFeet accepts only finite numbers above zero', () {
+      expect(parseStudioFeet('60'), 60);
+      expect(parseStudioFeet(' 12.5 '), 12.5);
+      for (final text in [
+        'Infinity',
+        '-Infinity',
+        'NaN',
+        '1e999',
+        '0',
+        '-3',
+        '',
+      ]) {
+        expect(parseStudioFeet(text), isNull, reason: text);
+      }
+    });
+
+    test('formatStudioFeet keeps fractional feet', () {
+      expect(formatStudioFeet(3), '3');
+      expect(formatStudioFeet(2.5), '2.5');
+      expect(formatStudioFeet(0.5), '0.5');
+    });
+  });
 }
