@@ -2,9 +2,12 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
 <style>
   html, body { margin: 0; height: 100%; overflow: hidden; background: #dfe6e3; }
   #app { width: 100%; height: 100%; display: block; }
+  /* Keep CSS dimensions independent of the high-density drawing buffer. */
+  #app canvas { display: block; width: 100%; height: 100%; touch-action: none; }
   #scene-error { display: none; position: absolute; left: 8px; right: 8px; bottom: 8px; padding: 8px 10px;
     border-radius: 6px; background: rgba(120, 20, 20, 0.88); color: #fff; font: 12px/1.4 -apple-system, sans-serif; }
 </style>

@@ -359,6 +359,8 @@ class _FloorStudioScreenState extends ConsumerState<FloorStudioScreen> {
                 Expanded(
                   child: TextField(
                     controller: _width,
+                    onTapOutside: (_) =>
+                        FocusManager.instance.primaryFocus?.unfocus(),
                     keyboardType:
                         const TextInputType.numberWithOptions(decimal: true),
                     decoration:
@@ -372,6 +374,8 @@ class _FloorStudioScreenState extends ConsumerState<FloorStudioScreen> {
                 Expanded(
                   child: TextField(
                     controller: _depth,
+                    onTapOutside: (_) =>
+                        FocusManager.instance.primaryFocus?.unfocus(),
                     keyboardType:
                         const TextInputType.numberWithOptions(decimal: true),
                     decoration:
@@ -394,6 +398,8 @@ class _FloorStudioScreenState extends ConsumerState<FloorStudioScreen> {
                 Expanded(
                   child: TextField(
                     controller: _guests,
+                    onTapOutside: (_) =>
+                        FocusManager.instance.primaryFocus?.unfocus(),
                     keyboardType: TextInputType.number,
                     decoration: const InputDecoration(
                       labelText: 'Guest count for layout',

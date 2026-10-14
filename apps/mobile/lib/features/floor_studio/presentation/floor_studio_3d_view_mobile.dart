@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
@@ -126,7 +128,16 @@ class _FloorStudio3DViewState extends State<FloorStudio3DView> {
           height: 360,
           child: ClipRRect(
             borderRadius: BorderRadius.circular(8),
-            child: WebViewWidget(controller: _controller),
+            child: WebViewWidget(
+              controller: _controller,
+              // OrbitControls needs the entire drag/pinch sequence. Otherwise
+              // the surrounding ListView can win the vertical drag gesture.
+              gestureRecognizers: {
+                Factory<OneSequenceGestureRecognizer>(
+                  EagerGestureRecognizer.new,
+                ),
+              },
+            ),
           ),
         ),
         if (status != null)
