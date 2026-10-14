@@ -35,8 +35,8 @@ class _AddStudioObjectDialogState extends State<AddStudioObjectDialog> {
   void initState() {
     super.initState();
     _applyKindDefaults();
-    _x.text = _format(widget.widthFeet / 2);
-    _y.text = _format(widget.depthFeet / 2);
+    _x.text = formatStudioFeet(widget.widthFeet / 2);
+    _y.text = formatStudioFeet(widget.depthFeet / 2);
   }
 
   @override
@@ -50,13 +50,9 @@ class _AddStudioObjectDialogState extends State<AddStudioObjectDialog> {
   }
 
   void _applyKindDefaults() {
-    _width.text = _format(_kind.defaultWidthFeet);
-    _depth.text = _format(_kind.defaultDepthFeet);
+    _width.text = formatStudioFeet(_kind.defaultWidthFeet);
+    _depth.text = formatStudioFeet(_kind.defaultDepthFeet);
   }
-
-  static String _format(double feet) => feet == feet.roundToDouble()
-      ? feet.toStringAsFixed(0)
-      : feet.toStringAsFixed(1);
 
   void _add() {
     final description = _description.text.trim();
