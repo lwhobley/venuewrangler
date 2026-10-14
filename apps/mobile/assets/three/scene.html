@@ -602,15 +602,19 @@ const objectBuilders = {
   },
 };
 
+const objectBuilderByKind = new Map(Object.entries(objectBuilders));
+
 function renderObjects(objects) {
   for (const object of objects) {
     const values = [object.x, object.y, object.widthMeters, object.depthMeters];
     if (!values.every(Number.isFinite)) continue;
-    const kind = objectBuilders[object.kind] ? object.kind : 'placeholder';
+    // Only the known kinds are in the map, so an unknown or inherited name (e.g. "toString")
+    // falls back to the placeholder instead of being called as a builder.
+    const kind = objectBuilderByKind.has(object.kind) ? object.kind : 'placeholder';
     const group = new THREE.Group();
     group.position.set(object.x, 0, object.y);
     group.rotation.y = ((Number(object.rotationDegrees) || 0) * Math.PI) / 180;
-    objectBuilders[kind](group, object.widthMeters, object.depthMeters);
+    objectBuilderByKind.get(kind)(group, object.widthMeters, object.depthMeters);
     group.add(labelSprite(object.description, OBJECT_LABEL_HEIGHT[kind]));
     roomGroup.add(group);
   }
