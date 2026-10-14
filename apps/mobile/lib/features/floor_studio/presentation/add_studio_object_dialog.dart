@@ -77,6 +77,13 @@ class _AddStudioObjectDialogState extends State<AddStudioObjectDialog> {
       setState(() => _error = 'Enter the position in feet.');
       return;
     }
+    if (width > widget.widthFeet || depth > widget.depthFeet) {
+      setState(
+        () => _error =
+            'This object is larger than the room. Reduce its width or depth.',
+      );
+      return;
+    }
     Navigator.of(context).pop(
       StudioObject(
         id: const Uuid().v4(),

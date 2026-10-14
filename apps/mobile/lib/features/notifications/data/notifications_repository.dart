@@ -8,8 +8,9 @@ abstract interface class NotificationsRepository {
     required String venueId,
     required String token,
     required String platform,
+    String? revocationSecret,
   });
-  Future<void> unregisterPushToken(String token);
+  Future<void> unregisterPushToken(String token, {String? revocationSecret});
 
   Future<List<NotificationEvent>> getNotifications({
     required String venueId,
@@ -27,8 +28,26 @@ class SupabaseNotificationsRepository implements NotificationsRepository {
   final SupabaseClient _client;
 
   @override
-  Future<void> unregisterPushToken(String token) async {
-    await _client.rpc('unregister_push_token', params: {'p_token': token});
+  Future<void> unregisterPushToken(
+    String token, {
+    String? revocationSecret,
+  }) async {
+    if (revocationSecret == null) {
+      await _client.rpc('unregister_push_token', params: {'p_token': token});
+      return;
+    }
+    final revoked = await _client.rpc(
+      'revoke_device_push_token',
+      params: {
+        'p_token': token,
+        'p_revocation_secret': revocationSecret,
+      },
+    );
+    if (revoked != true) {
+      throw const PermissionDeniedError(
+        'Device token revocation was not verified.',
+      );
+    }
   }
 
   @override
@@ -36,14 +55,18 @@ class SupabaseNotificationsRepository implements NotificationsRepository {
     required String venueId,
     required String token,
     required String platform,
+    String? revocationSecret,
   }) async {
     try {
       final res = await _client.rpc(
-        'register_push_token',
+        revocationSecret == null
+            ? 'register_push_token'
+            : 'register_push_token_for_device',
         params: {
           'p_venue_id': venueId,
           'p_token': token,
           'p_platform': platform,
+          if (revocationSecret != null) 'p_revocation_secret': revocationSecret,
         },
       );
       return res as String;

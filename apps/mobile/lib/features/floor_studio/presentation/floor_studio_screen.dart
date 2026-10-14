@@ -14,7 +14,10 @@ import 'studio_object_plan.dart';
 /// Measure a floor plan's room, generate a round-table layout for a guest count, place
 /// custom objects (stage, bar, ...) in it, save it, and preview it in 3D. Managers only.
 class FloorStudioScreen extends ConsumerStatefulWidget {
-  const FloorStudioScreen({super.key});
+  const FloorStudioScreen({super.key, this.venueId, this.floorPlanId});
+
+  final String? venueId;
+  final String? floorPlanId;
 
   @override
   ConsumerState<FloorStudioScreen> createState() => _FloorStudioScreenState();
@@ -47,6 +50,12 @@ class _FloorStudioScreenState extends ConsumerState<FloorStudioScreen> {
   Timer? _dimensionDebounce;
 
   static const _dimensionDebounceDuration = Duration(milliseconds: 600);
+
+  @override
+  void initState() {
+    super.initState();
+    _floorPlanId = widget.floorPlanId;
+  }
 
   @override
   void dispose() {
@@ -137,6 +146,7 @@ class _FloorStudioScreenState extends ConsumerState<FloorStudioScreen> {
         guestCount: guests,
         tableDiameterFeet: saved?.tableDiameterFeet ?? defaultTableDiameterFeet,
         seatsPerTable: saved?.seatsPerTable ?? defaultSeatsPerTable,
+        objects: _objects,
       );
       setState(() {
         _options = options;
@@ -177,10 +187,10 @@ class _FloorStudioScreenState extends ConsumerState<FloorStudioScreen> {
       depthFeet: depth,
       tableDiameterFeet: saved?.tableDiameterFeet ?? defaultTableDiameterFeet,
       tables: tables,
+      objects: objects,
     );
     if (issues.isNotEmpty) {
-      const message = 'Measurements changed since generating. Generate again.';
-      setState(() => _error = message);
+      setState(() => _error = issues.join('\n'));
       return;
     }
     setState(() {
@@ -293,6 +303,14 @@ class _FloorStudioScreenState extends ConsumerState<FloorStudioScreen> {
   @override
   Widget build(BuildContext context) {
     final venue = ref.watch(activeVenueProvider);
+    if (widget.venueId != null && widget.venueId != venue?.id) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Floor plan studio')),
+        body: const Center(
+          child: Text('Switch to the order’s venue before editing this room.'),
+        ),
+      );
+    }
     final canManage =
         ref.watch(canManageActiveVenueProvider).valueOrNull ?? false;
     return Scaffold(
@@ -311,6 +329,24 @@ class _FloorStudioScreenState extends ConsumerState<FloorStudioScreen> {
   Widget _body(String venueId) {
     final plans = ref.watch(floorPlansProvider);
     final layouts = ref.watch(floorStudioLayoutsProvider(venueId));
+    if (layouts.hasError) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Could not load saved layouts. Retry before editing.'),
+            TextButton(
+              onPressed: () =>
+                  ref.invalidate(floorStudioLayoutsProvider(venueId)),
+              child: const Text('Retry'),
+            ),
+          ],
+        ),
+      );
+    }
+    if (layouts.isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
     return plans.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (error, _) => Center(child: Text('$error')),
@@ -318,6 +354,14 @@ class _FloorStudioScreenState extends ConsumerState<FloorStudioScreen> {
         if (items.isEmpty) {
           return const Center(
             child: Text('Create a floor plan first, then measure it here.'),
+          );
+        }
+        if (widget.floorPlanId != null &&
+            !items.any((p) => p.id == widget.floorPlanId)) {
+          return const Center(
+            child: Text(
+              'This room is no longer available. Return to the order and choose another room.',
+            ),
           );
         }
         final selected = items.any((p) => p.id == _floorPlanId)
@@ -329,7 +373,28 @@ class _FloorStudioScreenState extends ConsumerState<FloorStudioScreen> {
             .firstOrNull;
         // Wait for the saved layouts: latching on a still-loading (null) result would
         // skip populating the fields once the real layout arrives.
-        if (layouts.hasValue || layouts.hasError) {
+        if (saved?.loadError != null) {
+          return ListView(
+            padding: const EdgeInsets.all(20),
+            children: [
+              Text(saved!.loadError!),
+              TextButton(
+                onPressed: () =>
+                    ref.invalidate(floorStudioLayoutsProvider(venueId)),
+                child: const Text('Retry'),
+              ),
+              for (final plan in items.where((p) => p.id != selected))
+                TextButton(
+                  onPressed: () => setState(() {
+                    _floorPlanId = plan.id;
+                    _loadedFor = '';
+                  }),
+                  child: Text('Open ${plan.name}'),
+                ),
+            ],
+          );
+        }
+        if (layouts.hasValue) {
           _loadFromSaved(saved, selected);
         }
         final previewTables = _options.isNotEmpty
@@ -522,6 +587,7 @@ class _FloorStudioScreenState extends ConsumerState<FloorStudioScreen> {
                       tableDiameterFeet:
                           saved?.tableDiameterFeet ?? defaultTableDiameterFeet,
                       tables: previewTables,
+                      objects: _objects,
                     );
                     return Text(
                       issues.isEmpty

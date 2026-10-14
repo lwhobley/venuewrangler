@@ -63,6 +63,13 @@ class _BeoRoomPreviewCardState extends ConsumerState<BeoRoomPreviewCard> {
             : layouts.firstOrNull?.floorPlanId;
     final layout =
         layouts.where((l) => l.floorPlanId == selectedId).firstOrNull;
+    final studioLocation = Uri(
+      path: '/floor/studio',
+      queryParameters: {
+        'venue': beo.venueId,
+        if (selectedId != null) 'plan': selectedId,
+      },
+    ).toString();
 
     return Card(
       child: Padding(
@@ -78,7 +85,7 @@ class _BeoRoomPreviewCardState extends ConsumerState<BeoRoomPreviewCard> {
                 ),
                 if (canManage && layouts.isNotEmpty)
                   TextButton.icon(
-                    onPressed: () => context.push('/floor/studio'),
+                    onPressed: () => context.push(studioLocation),
                     icon: const Icon(Icons.edit_outlined, size: 18),
                     label: const Text('Edit in studio'),
                   ),
@@ -133,7 +140,7 @@ class _BeoRoomPreviewCardState extends ConsumerState<BeoRoomPreviewCard> {
                     ),
                   ),
                   TextButton(
-                    onPressed: () => context.push('/floor/studio'),
+                    onPressed: () => context.push(studioLocation),
                     child: const Text('Open studio'),
                   ),
                 ],
@@ -159,7 +166,15 @@ class _BeoRoomPreviewCardState extends ConsumerState<BeoRoomPreviewCard> {
                 onChanged: (value) =>
                     setState(() => _selectedFloorPlanId = value),
               ),
-              if (layout != null && guests != null && layout.capacity < guests)
+              if (layout?.loadError != null)
+                Text(
+                  layout!.loadError!,
+                  style: TextStyle(color: theme.colorScheme.error),
+                ),
+              if (layout != null &&
+                  layout.loadError == null &&
+                  guests != null &&
+                  layout.capacity < guests)
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
                   child: Text(
@@ -172,13 +187,16 @@ class _BeoRoomPreviewCardState extends ConsumerState<BeoRoomPreviewCard> {
                 ),
               const SizedBox(height: 12),
               OutlinedButton.icon(
-                onPressed: layout == null
+                onPressed: layout == null || layout.loadError != null
                     ? null
                     : () => setState(() => _show3D = !_show3D),
                 icon: const Icon(Icons.view_in_ar_outlined),
                 label: Text(_show3D ? 'Hide 3D preview' : 'Show 3D preview'),
               ),
-              if (_show3D && layout != null && guests != null) ...[
+              if (_show3D &&
+                  layout != null &&
+                  layout.loadError == null &&
+                  guests != null) ...[
                 const SizedBox(height: 10),
                 FloorStudio3DView(
                   sceneData:

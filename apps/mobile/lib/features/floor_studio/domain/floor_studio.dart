@@ -265,6 +265,7 @@ class FloorStudioLayout {
     this.seatsPerTable = defaultSeatsPerTable,
     this.tables = const [],
     this.objects = const [],
+    this.loadError,
   });
 
   final String? id;
@@ -279,6 +280,7 @@ class FloorStudioLayout {
 
   /// Custom objects (stage, bar, ...). Stored beside [tables], never inside them.
   final List<StudioObject> objects;
+  final String? loadError;
 
   /// The most guests this layout can seat.
   int get capacity => tables.length * seatsPerTable;
@@ -288,15 +290,12 @@ class FloorStudioLayout {
         id: json['id'] as String,
         venueId: json['venue_id'] as String,
         floorPlanId: json['floor_plan_id'] as String,
-        widthFeet: (json['width_feet'] as num).toDouble(),
-        depthFeet: (json['depth_feet'] as num).toDouble(),
+        widthFeet: _studioDimension(json['width_feet']),
+        depthFeet: _studioDimension(json['depth_feet']),
         verified: json['verified'] as bool,
-        tableDiameterFeet: (json['table_diameter_feet'] as num).toDouble(),
+        tableDiameterFeet: _studioDimension(json['table_diameter_feet']),
         seatsPerTable: (json['seats_per_table'] as num).toInt(),
-        tables: [
-          for (final e in (json['layout'] as List? ?? const []))
-            StudioTable.fromJson(e as Map<String, dynamic>),
-        ],
+        tables: _readStudioTables(json['layout'] ?? const []),
         objects: [
           for (final e
               in (json['objects'] is List ? json['objects'] as List : const []))
@@ -318,6 +317,34 @@ class FloorStudioLayout {
       };
 }
 
+List<StudioTable> _readStudioTables(Object? value) {
+  if (value is! List) {
+    throw const FormatException('Table layout must be an array.');
+  }
+  final tables = <StudioTable>[];
+  for (final element in value) {
+    if (element is! Map || element['x'] is! num || element['y'] is! num) {
+      throw const FormatException('A saved table has invalid coordinates.');
+    }
+    final x = (element['x'] as num).toDouble();
+    final y = (element['y'] as num).toDouble();
+    if (!x.isFinite || !y.isFinite || x < 0 || y < 0) {
+      throw const FormatException('A saved table has invalid coordinates.');
+    }
+    tables.add(StudioTable(x, y));
+  }
+  return tables;
+}
+
+double _studioDimension(Object? value) {
+  if (value is! num || !value.isFinite || value <= 0) {
+    throw const FormatException(
+      'Saved room dimensions must be finite and positive.',
+    );
+  }
+  return value.toDouble();
+}
+
 /// One candidate arrangement from [generateStudioLayouts].
 class StudioLayoutOption {
   const StudioLayoutOption({required this.name, required this.tables});
@@ -332,6 +359,7 @@ List<String> validateStudioLayout({
   required double depthFeet,
   required double tableDiameterFeet,
   required List<StudioTable> tables,
+  List<StudioObject> objects = const [],
 }) {
   if (!widthFeet.isFinite ||
       !depthFeet.isFinite ||
@@ -366,7 +394,75 @@ List<String> validateStudioLayout({
       }
     }
   }
+  for (var i = 0; i < objects.length; i++) {
+    final object = objects[i];
+    if (![
+          object.x,
+          object.y,
+          object.widthFeet,
+          object.depthFeet,
+          object.rotationDegrees,
+        ].every((v) => v.isFinite) ||
+        object.widthFeet <= 0 ||
+        object.depthFeet <= 0) {
+      issues
+          .add('${object.description} has invalid dimensions or coordinates.');
+      continue;
+    }
+    final extents = studioObjectHalfExtents(object);
+    if (object.x - extents.x < -1e-8 ||
+        object.y - extents.y < -1e-8 ||
+        object.x + extents.x > widthFeet + 1e-8 ||
+        object.y + extents.y > depthFeet + 1e-8) {
+      issues.add('${object.description} extends outside the room.');
+    }
+    final radians = object.rotationDegrees * math.pi / 180;
+    for (final table in tables) {
+      final dx = table.x - object.x;
+      final dy = table.y - object.y;
+      final x = dx * math.cos(radians) - dy * math.sin(radians);
+      final y = dx * math.sin(radians) + dy * math.cos(radians);
+      final nearestX = x.clamp(-object.widthFeet / 2, object.widthFeet / 2);
+      final nearestY = y.clamp(-object.depthFeet / 2, object.depthFeet / 2);
+      if (math.pow(x - nearestX, 2) + math.pow(y - nearestY, 2) <
+          radius * radius - 1e-8) {
+        issues.add('${object.description} overlaps a table or its clearance.');
+        break;
+      }
+    }
+    for (var j = 0; j < i; j++) {
+      if (_studioObjectsOverlap(object, objects[j])) {
+        issues.add('${object.description} overlaps ${objects[j].description}.');
+      }
+    }
+  }
   return issues;
+}
+
+// Separating-axis test for two rotated rectangles. Touching edges are allowed.
+bool _studioObjectsOverlap(StudioObject a, StudioObject b) {
+  final ar = a.rotationDegrees * math.pi / 180;
+  final br = b.rotationDegrees * math.pi / 180;
+  final axes = [
+    (math.cos(ar), -math.sin(ar)),
+    (math.sin(ar), math.cos(ar)),
+    (math.cos(br), -math.sin(br)),
+    (math.sin(br), math.cos(br)),
+  ];
+  double extent(StudioObject o, double angle, (double, double) axis) =>
+      (axis.$1 * math.cos(angle) - axis.$2 * math.sin(angle)).abs() *
+          o.widthFeet /
+          2 +
+      (axis.$1 * math.sin(angle) + axis.$2 * math.cos(angle)).abs() *
+          o.depthFeet /
+          2;
+  for (final axis in axes) {
+    final distance = ((b.x - a.x) * axis.$1 + (b.y - a.y) * axis.$2).abs();
+    if (distance >= extent(a, ar, axis) + extent(b, br, axis) - 1e-8) {
+      return false;
+    }
+  }
+  return true;
 }
 
 /// Generates up to three distinct, feasible round-table arrangements. Throws
@@ -377,6 +473,7 @@ List<StudioLayoutOption> generateStudioLayouts({
   required int guestCount,
   double tableDiameterFeet = defaultTableDiameterFeet,
   int seatsPerTable = defaultSeatsPerTable,
+  List<StudioObject> objects = const [],
 }) {
   if (!widthFeet.isFinite ||
       !depthFeet.isFinite ||
@@ -446,6 +543,7 @@ List<StudioLayoutOption> generateStudioLayouts({
         depthFeet: depthFeet,
         tableDiameterFeet: tableDiameterFeet,
         tables: tables,
+        objects: objects,
       ).isNotEmpty) {
         continue;
       }

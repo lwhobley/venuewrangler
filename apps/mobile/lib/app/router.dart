@@ -303,7 +303,10 @@ StatefulShellRoute _fullShell(GlobalKey<NavigatorState> rootKey) {
               GoRoute(
                 path: 'studio',
                 parentNavigatorKey: rootKey,
-                builder: (context, state) => const FloorStudioScreen(),
+                builder: (context, state) => FloorStudioScreen(
+                  venueId: state.uri.queryParameters['venue'],
+                  floorPlanId: state.uri.queryParameters['plan'],
+                ),
               ),
             ],
           ),

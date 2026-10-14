@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/supabase_providers.dart';
+import '../../../core/auth/auth_providers.dart';
 import '../../venues/application/venues_providers.dart';
 import '../../venues/domain/venue.dart';
 import '../data/notifications_repository.dart';
@@ -17,6 +18,7 @@ final notificationsRepositoryProvider =
 
 final pushRegistrationServiceProvider =
     Provider<PushRegistrationService>((ref) {
+  ref.watch(currentUserIdProvider);
   final service = PushRegistrationService(
     repository: ref.watch(notificationsRepositoryProvider),
   );

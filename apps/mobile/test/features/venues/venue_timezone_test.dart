@@ -2,6 +2,15 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:venuewrangler_mobile/features/venues/domain/venue_timezone.dart';
 
 void main() {
+  test('reservation and event wall-clock entry displays the time that is saved',
+      () {
+    final wall = DateTime.utc(2026, 10, 14, 15);
+    expect(VenueTimezone.formatWallTime(wall), '3:00 PM');
+    expect(VenueTimezone.formatWallDate(wall), 'Oct 14, 2026');
+    final stored = VenueTimezone.toUtc(wall, 'America/Chicago');
+    expect(stored, DateTime.utc(2026, 10, 14, 20));
+    expect(VenueTimezone.formatTime(stored, 'America/Chicago'), '3:00 PM');
+  });
   group('VenueTimezone', () {
     test('standard offset and daylight saving for America/New_York', () {
       // July is Daylight Saving Time (EDT = UTC-4)

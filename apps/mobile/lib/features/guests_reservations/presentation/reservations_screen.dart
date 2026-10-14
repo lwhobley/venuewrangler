@@ -404,10 +404,10 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
                 ListTile(
                   title: const Text('Date and time'),
                   subtitle: Text(
-                    VenueTimezone.formatShortDate(reservationTime, timezone),
+                    VenueTimezone.formatWallDate(reservationTime),
                   ),
                   trailing: Text(
-                    VenueTimezone.formatTime(reservationTime, timezone),
+                    VenueTimezone.formatWallTime(reservationTime),
                   ),
                   onTap: saving
                       ? null
@@ -415,10 +415,10 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
                           final date = await showDatePicker(
                             context: dialogCtx,
                             initialDate: reservationTime,
-                            firstDate: DateTime.now()
+                            firstDate: VenueTimezone.venueNow(timezone)
                                 .subtract(const Duration(days: 1)),
-                            lastDate:
-                                DateTime.now().add(const Duration(days: 365)),
+                            lastDate: VenueTimezone.venueNow(timezone)
+                                .add(const Duration(days: 365)),
                           );
                           if (date == null || !dialogCtx.mounted) return;
                           final time = await showTimePicker(

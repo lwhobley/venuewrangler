@@ -2,6 +2,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 const registeredPushTokenStorageKey = 'registered_push_token';
 const pendingPushTokenRevocationStorageKey = 'pending_push_token_revocation';
+const pushInstallationSecretStorageKey = 'push_installation_secret';
 
 /// Encrypted offline mutation queue. It holds several users' unsynced writes on a shared device,
 /// so sign-out clears only the signed-out user's entries and this blob is kept across
@@ -33,6 +34,7 @@ class SecureSessionStorage {
       'app_attest.device_id',
       'app_attest.key_id',
       pendingPushTokenRevocationStorageKey,
+      pushInstallationSecretStorageKey,
       offlineMutationQueueStorageKey,
     ];
     final retained = <String, String>{};

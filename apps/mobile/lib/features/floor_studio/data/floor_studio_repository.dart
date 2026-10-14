@@ -21,11 +21,31 @@ class SupabaseFloorStudioRepository implements FloorStudioRepository {
         .from('floor_plan_studio_layouts')
         .select()
         .eq('venue_id', venueId);
-    return rows
-        .cast<Map<String, dynamic>>()
-        .map(FloorStudioLayout.fromJson)
-        .toList();
+    return rows.map((row) {
+      try {
+        return FloorStudioLayout.fromJson(row);
+      } on FormatException catch (error) {
+        return _unreadableLayout(row, error.message);
+      } on TypeError {
+        return _unreadableLayout(row, 'Saved layout data is invalid.');
+      }
+    }).toList();
   }
+
+  FloorStudioLayout _unreadableLayout(
+    Map<String, dynamic> row,
+    String message,
+  ) =>
+      FloorStudioLayout(
+        id: row['id'] as String,
+        venueId: row['venue_id'] as String,
+        floorPlanId: row['floor_plan_id'] as String,
+        widthFeet: 0,
+        depthFeet: 0,
+        verified: false,
+        loadError:
+            '$message Ask a manager to repair the saved data before editing.',
+      );
 
   @override
   Future<void> saveLayout(FloorStudioLayout layout) async {

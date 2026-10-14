@@ -16,6 +16,12 @@ export default {
       // Flutter reuses engine and bootstrap file names across releases. Keep
       // one release's shell from loading another release's cached assets.
       response.headers.set('Cache-Control', 'no-store');
+      if (url.pathname === '/app/assets/assets/three/scene.html') {
+        // This one asset is deliberately embedded by the operator app. Override
+        // the static catch-all anti-framing headers only for its same-origin host.
+        response.headers.set('X-Frame-Options', 'SAMEORIGIN');
+        response.headers.set('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self'; form-action 'none'");
+      }
       return response;
     }
 

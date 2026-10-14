@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../venues/domain/venue_timezone.dart';
 
 import '../../venues/application/venues_providers.dart';
 import '../application/events_providers.dart';
@@ -65,7 +66,8 @@ class EventListScreen extends ConsumerWidget {
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showAddEventDialog(context, ref, venue.id),
+        onPressed: () =>
+            _showAddEventDialog(context, ref, venue.id, venue.timezone),
         icon: const Icon(Icons.event_outlined),
         label: const Text('Add event'),
       ),
@@ -76,10 +78,11 @@ class EventListScreen extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref,
     String venueId,
+    String timezone,
   ) async {
     final nameController = TextEditingController();
     final notesController = TextEditingController();
-    var start = DateTime.now();
+    var start = VenueTimezone.venueNow(timezone);
     var end = start.add(const Duration(hours: 3));
 
     final confirmed = await showDialog<bool>(
@@ -106,20 +109,24 @@ class EventListScreen extends ConsumerWidget {
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('Start'),
-                subtitle: Text(start.toString()),
+                subtitle: Text(
+                  '${VenueTimezone.formatWallDate(start)} ${VenueTimezone.formatWallTime(start)}',
+                ),
                 trailing: const Icon(Icons.edit_calendar_outlined),
                 onTap: () async {
-                  final picked = await _pickDateTime(context, start);
+                  final picked = await _pickDateTime(context, start, timezone);
                   if (picked != null) setState(() => start = picked);
                 },
               ),
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('End'),
-                subtitle: Text(end.toString()),
+                subtitle: Text(
+                  '${VenueTimezone.formatWallDate(end)} ${VenueTimezone.formatWallTime(end)}',
+                ),
                 trailing: const Icon(Icons.edit_calendar_outlined),
                 onTap: () async {
-                  final picked = await _pickDateTime(context, end);
+                  final picked = await _pickDateTime(context, end, timezone);
                   if (picked != null) setState(() => end = picked);
                 },
               ),
@@ -149,8 +156,8 @@ class EventListScreen extends ConsumerWidget {
       await ref.read(eventsRepositoryProvider).createEvent(
             venueId: venueId,
             name: nameController.text.trim(),
-            startTime: start,
-            endTime: end,
+            startTime: VenueTimezone.toUtc(start, timezone),
+            endTime: VenueTimezone.toUtc(end, timezone),
             notes: notesController.text.trim().isEmpty
                 ? null
                 : notesController.text.trim(),
@@ -172,12 +179,14 @@ class EventListScreen extends ConsumerWidget {
   Future<DateTime?> _pickDateTime(
     BuildContext context,
     DateTime initial,
+    String timezone,
   ) async {
     final date = await showDatePicker(
       context: context,
       initialDate: initial,
-      firstDate: DateTime.now().subtract(const Duration(days: 1)),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
+      firstDate:
+          VenueTimezone.venueNow(timezone).subtract(const Duration(days: 1)),
+      lastDate: VenueTimezone.venueNow(timezone).add(const Duration(days: 365)),
     );
     if (date == null || !context.mounted) return null;
 
@@ -187,7 +196,13 @@ class EventListScreen extends ConsumerWidget {
     );
     if (time == null) return null;
 
-    return DateTime(date.year, date.month, date.day, time.hour, time.minute);
+    return DateTime.utc(
+      date.year,
+      date.month,
+      date.day,
+      time.hour,
+      time.minute,
+    );
   }
 }
 
@@ -198,11 +213,10 @@ class _EventTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final localizations = MaterialLocalizations.of(context);
+    final timezone = ref.watch(activeVenueProvider)?.timezone ?? 'UTC';
     String formatTime(DateTime value) {
-      final local = value.toLocal();
-      return '${localizations.formatMediumDate(local)} '
-          '${localizations.formatTimeOfDay(TimeOfDay.fromDateTime(local))}';
+      return '${VenueTimezone.formatShortDate(value, timezone)} '
+          '${VenueTimezone.formatTime(value, timezone)}';
     }
 
     return ListTile(

@@ -175,7 +175,7 @@ select throws_ok(
 );
 
 -- ---------------------------------------------------------------------------
--- 13. Checkout single-flight: a forced claim within 10 seconds of a recorded session keeps it.
+-- 13. Checkout single-flight: replacement requires the exact expired key.
 -- ---------------------------------------------------------------------------
 select lives_ok(
   $$ select * from public.claim_subscription_checkout_attempt('10000000-0000-0000-0000-0000000000a1', false) $$,
@@ -195,7 +195,7 @@ select is(
   (select c.stripe_session_id from public.claim_subscription_checkout_attempt(
      '10000000-0000-0000-0000-0000000000a1', true) c),
   'cs_p1_recorded',
-  'F13: a forced claim within 10 seconds returns the existing session instead of rotating'
+  'F13: a forced claim without the expired key cannot rotate a session'
 );
 
 update public.subscription_checkout_attempts
@@ -204,9 +204,11 @@ update public.subscription_checkout_attempts
 
 select is(
   (select c.stripe_session_id from public.claim_subscription_checkout_attempt(
-     '10000000-0000-0000-0000-0000000000a1', true) c),
+     '10000000-0000-0000-0000-0000000000a1', true,
+     (select idempotency_key from public.subscription_checkout_attempts
+       where organization_id = '10000000-0000-0000-0000-0000000000a1')) c),
   null::text,
-  'F13: a forced claim after the 10 second window rotates the attempt'
+  'F13: a claim with the exact expired key rotates the attempt'
 );
 
 select * from finish();

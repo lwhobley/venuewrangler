@@ -117,7 +117,11 @@ class VenueTimezone {
 
   /// Formats the time portion (e.g., "7:00 PM" or "11:30 AM").
   static String formatTime(DateTime instant, String timezoneId) {
-    final vt = toVenueTime(instant, timezoneId);
+    return formatWallTime(toVenueTime(instant, timezoneId));
+  }
+
+  /// Format already-converted venue wall-clock fields without shifting again.
+  static String formatWallTime(DateTime vt) {
     final h24 = vt.hour;
     final h12 = h24 == 0 ? 12 : (h24 > 12 ? h24 - 12 : h24);
     final ampm = h24 >= 12 ? 'PM' : 'AM';
@@ -127,7 +131,10 @@ class VenueTimezone {
 
   /// Formats the short date (e.g., "Oct 10, 2026").
   static String formatShortDate(DateTime instant, String timezoneId) {
-    final vt = toVenueTime(instant, timezoneId);
+    return formatWallDate(toVenueTime(instant, timezoneId));
+  }
+
+  static String formatWallDate(DateTime vt) {
     const months = [
       'Jan',
       'Feb',

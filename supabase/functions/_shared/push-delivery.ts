@@ -5,6 +5,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getGoogleAccessToken } from "./google-auth.ts";
 import { loadApnsConfigFromEnv, sendApnsPush } from "./apns.ts";
+import { privatePushAlert } from "./private-push.ts";
 
 const FCM_SCOPE = "https://www.googleapis.com/auth/firebase.messaging";
 
@@ -29,7 +30,7 @@ export interface PushResult {
 }
 
 export async function deliverPush(adminClient: SupabaseClient, req: PushRequest): Promise<PushResult> {
-  const { venueId, organizationId, audience, targetUserIds, kind, title, body, data = {} } = req;
+  const { venueId, organizationId, audience, targetUserIds } = req;
 
   let tokensQuery = adminClient
     .from("push_tokens")
@@ -102,8 +103,7 @@ export async function deliverPush(adminClient: SupabaseClient, req: PushRequest)
   for (const { token, platform } of tokens as { token: string; platform: string }[]) {
     if (platform === "ios" && apnsConfig) {
       try {
-        const payload = { ...data, kind, venue_id: venueId, organization_id: organizationId };
-        const message = { deviceToken: token, title, body, data: payload };
+        const message = { deviceToken: token, ...privatePushAlert };
         let result = await sendApnsPush(apnsConfig, message);
         // Xcode debug builds register sandbox tokens; TestFlight/App Store builds register
         // production ones, and each gateway rejects the other's as BadDeviceToken — try the
@@ -135,11 +135,8 @@ export async function deliverPush(adminClient: SupabaseClient, req: PushRequest)
           body: JSON.stringify({
             message: {
               token,
-              notification: { title, body },
-              data: Object.fromEntries(
-                Object.entries({ ...data, kind, venue_id: venueId, organization_id: organizationId })
-                  .map(([k, v]) => [k, String(v)]),
-              ),
+              notification: { title: privatePushAlert.title, body: privatePushAlert.body },
+              data: privatePushAlert.data,
             },
           }),
           signal: AbortSignal.timeout(5000),

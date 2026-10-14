@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
@@ -47,12 +48,28 @@ class PushRegistrationService {
   /// against it. Null until the first successful Android registration.
   String? _androidVenueId;
   StreamSubscription<String>? _tokenRefreshSubscription;
+  Future<String>? _installationSecret;
+  bool _disposed = false;
+
+  Future<String> _getInstallationSecret() => _installationSecret ??= () async {
+        final existing =
+            await _sessionStorage.read(pushInstallationSecretStorageKey);
+        if (existing != null) return existing;
+        final random = Random.secure();
+        final secret = List.generate(
+          32,
+          (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0'),
+        ).join();
+        await _sessionStorage.write(pushInstallationSecretStorageKey, secret);
+        return secret;
+      }();
 
   FirebaseMessaging get _firebaseMessaging =>
       _firebaseMessagingOverride ?? FirebaseMessaging.instance;
 
   /// Cancels the FCM token-refresh listener. Called when the provider is disposed.
   Future<void> dispose() async {
+    _disposed = true;
     await _tokenRefreshSubscription?.cancel();
     _tokenRefreshSubscription = null;
   }
@@ -81,6 +98,8 @@ class PushRegistrationService {
     String token,
     String platform,
   ) async {
+    final secret = await _getInstallationSecret();
+    if (_disposed) return;
     // Revoking a previous account's token is best effort. If it fails (offline, or secure storage
     // unavailable) the pending marker stays and is retried on a later registration, but it must
     // not stop this device from registering for the current venue.
@@ -88,7 +107,10 @@ class PushRegistrationService {
       final pendingRevocation =
           await _sessionStorage.read(pendingPushTokenRevocationStorageKey);
       if (pendingRevocation != null) {
-        await _repository.unregisterPushToken(pendingRevocation);
+        await _repository.unregisterPushToken(
+          pendingRevocation,
+          revocationSecret: secret,
+        );
         await _sessionStorage.delete(pendingPushTokenRevocationStorageKey);
       }
     } catch (error) {
@@ -98,11 +120,16 @@ class PushRegistrationService {
       venueId: venueId,
       token: token,
       platform: platform,
+      revocationSecret: secret,
     );
+    if (_disposed) {
+      await _repository.unregisterPushToken(token, revocationSecret: secret);
+      return;
+    }
     try {
       await _sessionStorage.write(registeredPushTokenStorageKey, token);
     } catch (_) {
-      await _repository.unregisterPushToken(token);
+      await _repository.unregisterPushToken(token, revocationSecret: secret);
       rethrow;
     }
   }
@@ -110,6 +137,7 @@ class PushRegistrationService {
   /// Requests permission, obtains a token, and registers it for [venueId]. Returns `true` only
   /// if a token was actually sent to the server.
   Future<bool> registerForVenue(String venueId) async {
+    if (_disposed) return false;
     try {
       if (_isIOS()) {
         return await _registerIOS(venueId);
@@ -130,7 +158,7 @@ class PushRegistrationService {
           .invokeMethod<String>('requestPermissionAndRegister');
       if (token == null || token.isEmpty) return false;
       await _registerAndRemember(venueId, token, 'ios');
-      return true;
+      return !_disposed;
     } on PlatformException {
       return false;
     } on MissingPluginException {
@@ -149,6 +177,7 @@ class PushRegistrationService {
     if (token == null || token.isEmpty) return false;
 
     await _registerAndRemember(venueId, token, 'android');
+    if (_disposed) return false;
     _androidVenueId = venueId;
     _listenForTokenRefresh();
     return true;

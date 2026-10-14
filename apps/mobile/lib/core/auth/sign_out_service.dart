@@ -16,13 +16,18 @@ import 'auth_providers.dart';
 /// `signOut()` always runs.
 Future<void> signOutAndClearScopedData(ProviderContainer container) async {
   try {
+    await container.read(pushRegistrationServiceProvider).dispose();
     final token =
         await const SecureSessionStorage().read(registeredPushTokenStorageKey);
     if (token != null) {
       try {
         await container
             .read(notificationsRepositoryProvider)
-            .unregisterPushToken(token);
+            .unregisterPushToken(
+              token,
+              revocationSecret: await const SecureSessionStorage()
+                  .read(pushInstallationSecretStorageKey),
+            );
         await const SecureSessionStorage()
             .delete(pendingPushTokenRevocationStorageKey);
       } catch (_) {

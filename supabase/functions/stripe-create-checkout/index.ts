@@ -134,10 +134,11 @@ async function handleRequest(req: Request): Promise<Response> {
     }
   }
 
-  const claimAttempt = async (forceNew = false) => {
+  const claimAttempt = async (expiredKey: string | null = null) => {
     const { data, error } = await serviceClient.rpc("claim_subscription_checkout_attempt", {
       p_organization_id: organizationId,
-      p_force_new: forceNew,
+      p_force_new: expiredKey !== null,
+      p_expected_key: expiredKey,
     });
     if (error) throw error;
     const attempt = Array.isArray(data) ? data[0] : null;
@@ -157,7 +158,7 @@ async function handleRequest(req: Request): Promise<Response> {
     if (previous.status === "complete") {
       return jsonResponse({ error: "checkout_completed_processing" }, 409);
     }
-    attempt = await claimAttempt(true);
+    attempt = await claimAttempt(attempt.idempotency_key);
   }
 
   const session = await stripe.checkout.sessions.create({
