@@ -187,6 +187,8 @@ function decorInstance(key) {
 }
 
 let roomGroup = null;
+// Textures and materials made for the current room's objects, freed with the room.
+let roomResources = [];
 
 function clearRoom() {
   if (roomGroup) {
@@ -195,6 +197,8 @@ function clearRoom() {
       if (obj.geometry) obj.geometry.dispose();
     });
   }
+  roomResources.forEach((resource) => resource.dispose());
+  roomResources = [];
   roomGroup = new THREE.Group();
   scene.add(roomGroup);
 }
@@ -416,6 +420,202 @@ function addRoomDecor(width, depth) {
   }
 }
 
+// Custom room objects, drawn from primitives. Units are meters; `x`/`y` is the centre on the
+// floor (y maps to the scene's z axis, as for tables), and rotationDegrees turns the object
+// about the vertical axis. Each kind has a fixed look and a height for its label.
+const OBJECT_LABEL_HEIGHT = {
+  stage: 0.85,
+  bar: 1.9,
+  dance_floor: 0.5,
+  dj_booth: 1.5,
+  podium: 1.5,
+  buffet: 1.1,
+  backdrop: 2.8,
+  planter: 1.2,
+  placeholder: 1.1,
+};
+
+function trackedMaterial(params) {
+  const material = new THREE.MeshStandardMaterial(params);
+  roomResources.push(material);
+  return material;
+}
+
+function addPart(group, geometry, color, x, y, z, options = {}) {
+  const mesh = new THREE.Mesh(
+    geometry,
+    trackedMaterial({ color, roughness: options.roughness ?? 0.6, metalness: 0 }),
+  );
+  mesh.position.set(x, y, z);
+  if (options.rotationX) mesh.rotation.x = options.rotationX;
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  group.add(mesh);
+  return mesh;
+}
+
+function addBox(group, w, h, d, x, y, z, color, options) {
+  return addPart(group, new THREE.BoxGeometry(w, h, d), color, x, y, z, options);
+}
+
+function addCylinder(group, radius, height, x, y, z, color, options) {
+  return addPart(
+    group,
+    new THREE.CylinderGeometry(radius, radius, height, 32),
+    color,
+    x,
+    y,
+    z,
+    options,
+  );
+}
+
+function roundedCanvasPath(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+// A flat label that always faces the camera, showing the object's description.
+function labelSprite(text, height) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 128;
+  const ctx = canvas.getContext('2d');
+  roundedCanvasPath(ctx, 4, 24, 504, 80, 18);
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+  ctx.fill();
+  ctx.font = '600 46px -apple-system, "Segoe UI", Roboto, sans-serif';
+  ctx.fillStyle = '#263238';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  let label = String(text || '').trim() || 'Object';
+  while (label.length > 1 && ctx.measureText(label).width > 480) {
+    label = label.slice(0, -2) + '…';
+  }
+  ctx.fillText(label, 256, 66);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  const material = new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false });
+  roomResources.push(texture, material);
+  const sprite = new THREE.Sprite(material);
+  sprite.scale.set(2.6, 0.65, 1);
+  sprite.position.y = height;
+  sprite.renderOrder = 10;
+  return sprite;
+}
+
+// Two-by-two checker tile, repeated over a dance floor so each square is about half a metre.
+function danceFloorTexture(width, depth) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 128;
+  canvas.height = 128;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#2a2638';
+  ctx.fillRect(0, 0, 128, 128);
+  ctx.fillStyle = '#c2578f';
+  ctx.fillRect(0, 0, 64, 64);
+  ctx.fillRect(64, 64, 64, 64);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(width, depth);
+  roomResources.push(texture);
+  return texture;
+}
+
+const objectBuilders = {
+  stage(group, w, d) {
+    addBox(group, w, 0.5, d, 0, 0.25, 0, 0x2b2f38);
+    addBox(group, w, 0.05, d, 0, 0.525, 0, 0xe8e4d8, { roughness: 0.4 });
+  },
+  bar(group, w, d) {
+    addBox(group, w, 1.05, d, 0, 0.525, 0, 0x6b4a2f, { roughness: 0.7 });
+    addBox(group, w + 0.06, 0.05, d + 0.06, 0, 1.075, 0, 0x2a2220, { roughness: 0.3 });
+    // Back shelving: two uprights and two shelf tiers, behind the counter.
+    const shelfZ = -d / 2 + 0.15;
+    for (const sx of [-w / 2 + 0.05, w / 2 - 0.05]) {
+      addBox(group, 0.05, 1.6, 0.05, sx, 0.8, shelfZ, 0x4a3323);
+    }
+    addBox(group, w, 0.04, 0.3, 0, 1.2, shelfZ, 0x6b4a2f);
+    addBox(group, w, 0.04, 0.3, 0, 1.55, shelfZ, 0x6b4a2f);
+  },
+  dance_floor(group, w, d) {
+    const texture = danceFloorTexture(w, d);
+    const floor = new THREE.Mesh(
+      new THREE.PlaneGeometry(w, d),
+      trackedMaterial({ map: texture, roughness: 0.35, metalness: 0 }),
+    );
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.y = 0.03;
+    floor.receiveShadow = true;
+    group.add(floor);
+  },
+  dj_booth(group, w, d) {
+    addBox(group, w, 1.0, d, 0, 0.5, 0, 0x1d1f26);
+    // Angled equipment panel on the front edge.
+    addBox(group, w * 0.9, 0.45, 0.05, 0, 1.12, d / 2 - 0.12, 0x5c6bc0, {
+      rotationX: -0.5,
+      roughness: 0.4,
+    });
+  },
+  podium(group, w, d) {
+    const radius = Math.min(w, d) / 2;
+    addCylinder(group, radius, 1.1, 0, 0.55, 0, 0x4a3b2c);
+    addCylinder(group, radius * 1.06, 0.06, 0, 1.13, 0, 0xd7c7a5, { roughness: 0.4 });
+  },
+  buffet(group, w, d) {
+    // Cloth-draped body with a white top.
+    addBox(group, w, 0.72, d, 0, 0.36, 0, 0xf4f1e8, { roughness: 0.9 });
+    addBox(group, w + 0.03, 0.04, d + 0.03, 0, 0.74, 0, 0xffffff, { roughness: 0.8 });
+  },
+  backdrop(group, w) {
+    const panel = new THREE.Mesh(
+      new THREE.PlaneGeometry(w, 2.4),
+      trackedMaterial({ color: 0x3d4450, roughness: 0.8, metalness: 0, side: THREE.DoubleSide }),
+    );
+    panel.position.y = 1.2;
+    panel.castShadow = true;
+    group.add(panel);
+    addBox(group, w, 0.05, 0.3, 0, 0.025, 0, 0x2b2f38);
+  },
+  planter(group, w, d) {
+    const radius = Math.min(w, d) / 2;
+    addCylinder(group, radius * 0.9, 0.6, 0, 0.3, 0, 0x8a5a3c);
+    addPart(
+      group,
+      new THREE.SphereGeometry(radius * 0.95, 24, 16),
+      0x3f8f4a,
+      0,
+      0.6 + radius * 0.6,
+      0,
+    );
+  },
+  placeholder(group, w, d) {
+    addBox(group, w, 0.9, d, 0, 0.45, 0, 0x9aa0a6);
+  },
+};
+
+function renderObjects(objects) {
+  for (const object of objects) {
+    const values = [object.x, object.y, object.widthMeters, object.depthMeters];
+    if (!values.every(Number.isFinite)) continue;
+    const kind = objectBuilders[object.kind] ? object.kind : 'placeholder';
+    const group = new THREE.Group();
+    group.position.set(object.x, 0, object.y);
+    group.rotation.y = ((Number(object.rotationDegrees) || 0) * Math.PI) / 180;
+    objectBuilders[kind](group, object.widthMeters, object.depthMeters);
+    group.add(labelSprite(object.description, OBJECT_LABEL_HEIGHT[kind]));
+    roomGroup.add(group);
+  }
+}
+
 let renderToken = 0;
 
 async function render(data) {
@@ -438,6 +638,7 @@ async function render(data) {
   await modelsReady;
   if (token !== renderToken) return; // A newer render replaced this one while models loaded.
   addRoomDecor(data.widthMeters, data.heightMeters);
+  renderObjects(data.objects || []);
   report('rendered');
 }
 
