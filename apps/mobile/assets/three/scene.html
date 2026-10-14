@@ -194,7 +194,10 @@ function clearRoom() {
   if (roomGroup) {
     scene.remove(roomGroup);
     roomGroup.traverse((obj) => {
-      if (obj.geometry) obj.geometry.dispose();
+      // Every three.js Sprite shares one module-level geometry; disposing it here would
+      // force a re-upload on every render. Label textures and materials are freed through
+      // roomResources.
+      if (obj.geometry && !obj.isSprite) obj.geometry.dispose();
     });
   }
   roomResources.forEach((resource) => resource.dispose());
@@ -493,9 +496,13 @@ function labelSprite(text, height) {
   ctx.fillStyle = '#263238';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  let label = String(text || '').trim() || 'Object';
-  while (label.length > 1 && ctx.measureText(label).width > 480) {
-    label = label.slice(0, -2) + '…';
+  // Shorten by code points, not UTF-16 units, so an emoji is never cut in half.
+  const chars = Array.from(String(text || '').trim() || 'Object');
+  let label = chars.join('');
+  let count = chars.length;
+  while (count > 1 && ctx.measureText(label).width > 480) {
+    count -= 1;
+    label = chars.slice(0, count).join('') + '…';
   }
   ctx.fillText(label, 256, 66);
 
@@ -636,8 +643,14 @@ async function render(data) {
       index,
     );
   });
+  // Refit only when the room itself changes, so moving an object keeps the angle the
+  // user orbited to.
+  const roomChanged =
+    !lastRoom ||
+    lastRoom.widthMeters !== data.widthMeters ||
+    lastRoom.heightMeters !== data.heightMeters;
   lastRoom = data;
-  fitCamera(data);
+  if (roomChanged) fitCamera(data);
 
   await modelsReady;
   if (token !== renderToken) return; // A newer render replaced this one while models loaded.

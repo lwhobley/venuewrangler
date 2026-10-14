@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -31,10 +33,24 @@ class _FloorStudioScreenState extends ConsumerState<FloorStudioScreen> {
   String? _error;
   var _loadedFor = '';
   var _objects = <StudioObject>[];
+
+  /// What the 3D preview shows. Same as [_objects], except that it is held still while an
+  /// object is being dragged, so the preview re-renders once per drag, not once per step.
+  var _sceneObjects = <StudioObject>[];
   String? _selectedObjectId;
+
+  /// The room size the plan, the preview, and object clamping use. Typing in the width and
+  /// depth fields updates it after a short pause (or on submit/save), so a half-typed value
+  /// such as "6" on the way to "60" never shrinks the room or moves objects.
+  double? _roomWidth;
+  double? _roomDepth;
+  Timer? _dimensionDebounce;
+
+  static const _dimensionDebounceDuration = Duration(milliseconds: 600);
 
   @override
   void dispose() {
+    _dimensionDebounce?.cancel();
     _width.dispose();
     _depth.dispose();
     _guests.dispose();
@@ -47,23 +63,68 @@ class _FloorStudioScreenState extends ConsumerState<FloorStudioScreen> {
     _options = const [];
     _error = null;
     _show3D = false;
-    _objects = [...?saved?.objects];
     _selectedObjectId = null;
+    _dimensionDebounce?.cancel();
     if (saved == null) {
       _width.clear();
       _depth.clear();
       _guests.clear();
       _verified = false;
+      _roomWidth = null;
+      _roomDepth = null;
+      _setObjects(const []);
       return;
     }
     _width.text = saved.widthFeet.toStringAsFixed(1);
     _depth.text = saved.depthFeet.toStringAsFixed(1);
     _verified = saved.verified;
+    _roomWidth = saved.widthFeet;
+    _roomDepth = saved.depthFeet;
+    _setObjects(_clampedToRoom(saved.objects));
+  }
+
+  /// Sets the objects for both the plan and the 3D preview. Callers wrap it in setState.
+  void _setObjects(List<StudioObject> objects) {
+    _objects = objects;
+    _sceneObjects = objects;
+  }
+
+  List<StudioObject> _clampedToRoom(List<StudioObject> objects) {
+    final width = _roomWidth;
+    final depth = _roomDepth;
+    if (width == null || depth == null) return objects;
+    return [
+      for (final object in objects)
+        clampStudioObject(object, widthFeet: width, depthFeet: depth),
+    ];
+  }
+
+  void _onDimensionChanged(String _) {
+    _dimensionDebounce?.cancel();
+    _dimensionDebounce = Timer(_dimensionDebounceDuration, () {
+      if (mounted) _applyDimensions();
+    });
+  }
+
+  /// Adopts the typed width and depth as the room size when both are valid, and keeps every
+  /// object inside the new walls. Invalid or empty fields leave the last valid size.
+  void _applyDimensions() {
+    _dimensionDebounce?.cancel();
+    final width = parseStudioFeet(_width.text);
+    final depth = parseStudioFeet(_depth.text);
+    if (width == null || depth == null) return;
+    if (width == _roomWidth && depth == _roomDepth) return;
+    setState(() {
+      _roomWidth = width;
+      _roomDepth = depth;
+      _setObjects(_clampedToRoom(_objects));
+    });
   }
 
   void _generate(FloorStudioLayout? saved) {
-    final width = double.tryParse(_width.text);
-    final depth = double.tryParse(_depth.text);
+    _applyDimensions();
+    final width = parseStudioFeet(_width.text);
+    final depth = parseStudioFeet(_depth.text);
     final guests = int.tryParse(_guests.text);
     if (width == null || depth == null || guests == null) {
       setState(() => _error = 'Enter room width, depth, and a guest count.');
@@ -91,8 +152,9 @@ class _FloorStudioScreenState extends ConsumerState<FloorStudioScreen> {
   }
 
   Future<void> _save(String venueId, FloorStudioLayout? saved) async {
-    final width = double.tryParse(_width.text);
-    final depth = double.tryParse(_depth.text);
+    _applyDimensions();
+    final width = parseStudioFeet(_width.text);
+    final depth = parseStudioFeet(_depth.text);
     final floorPlanId = _floorPlanId;
     if (width == null || depth == null || floorPlanId == null) {
       setState(() => _error = 'Enter room width and depth.');
@@ -107,10 +169,9 @@ class _FloorStudioScreenState extends ConsumerState<FloorStudioScreen> {
       setState(() => _error = 'Generate a layout before saving.');
       return;
     }
-    final objects = [
-      for (final object in _objects)
-        clampStudioObject(object, widthFeet: width, depthFeet: depth),
-    ];
+    // _applyDimensions above already kept the on-screen objects inside these walls, so
+    // what is saved is what the plan shows.
+    final objects = _objects;
     final issues = validateStudioLayout(
       widthFeet: width,
       depthFeet: depth,
@@ -165,29 +226,33 @@ class _FloorStudioScreenState extends ConsumerState<FloorStudioScreen> {
     final placed =
         clampStudioObject(object, widthFeet: width, depthFeet: depth);
     setState(() {
-      _objects = [..._objects, placed];
+      _setObjects([..._objects, placed]);
       _selectedObjectId = placed.id;
     });
   }
 
-  void _moveObject(StudioObject moved) => setState(() {
-        _objects = [
-          for (final object in _objects) object.id == moved.id ? moved : object,
-        ];
-      });
+  List<StudioObject> _replaced(StudioObject changed) => [
+        for (final object in _objects)
+          object.id == changed.id ? changed : object,
+      ];
+
+  /// A drag step. Only the plan follows it; the preview catches up in [_endMove].
+  void _moveObject(StudioObject moved) =>
+      setState(() => _objects = _replaced(moved));
+
+  void _endMove() => setState(() => _sceneObjects = _objects);
 
   void _rotateSelected(double width, double depth) {
     final selected = _selectedObject;
     if (selected == null) return;
-    _moveObject(
-      clampStudioObject(
-        selected.copyWith(
-          rotationDegrees: (selected.rotationDegrees + 90) % 360,
-        ),
-        widthFeet: width,
-        depthFeet: depth,
+    final rotated = clampStudioObject(
+      selected.copyWith(
+        rotationDegrees: (selected.rotationDegrees + 90) % 360,
       ),
+      widthFeet: width,
+      depthFeet: depth,
     );
+    setState(() => _setObjects(_replaced(rotated)));
   }
 
   Future<void> _removeSelected() async {
@@ -214,10 +279,10 @@ class _FloorStudioScreenState extends ConsumerState<FloorStudioScreen> {
     );
     if (confirmed != true || !mounted) return;
     setState(() {
-      _objects = [
+      _setObjects([
         for (final object in _objects)
           if (object.id != selected.id) object,
-      ];
+      ]);
       _selectedObjectId = null;
     });
   }
@@ -270,8 +335,8 @@ class _FloorStudioScreenState extends ConsumerState<FloorStudioScreen> {
         final previewTables = _options.isNotEmpty
             ? _options[_selectedOption].tables
             : saved?.tables ?? const <StudioTable>[];
-        final width = double.tryParse(_width.text) ?? saved?.widthFeet ?? 0;
-        final depth = double.tryParse(_depth.text) ?? saved?.depthFeet ?? 0;
+        final width = _roomWidth ?? 0;
+        final depth = _roomDepth ?? 0;
 
         return ListView(
           padding: const EdgeInsets.all(20),
@@ -298,8 +363,9 @@ class _FloorStudioScreenState extends ConsumerState<FloorStudioScreen> {
                         const TextInputType.numberWithOptions(decimal: true),
                     decoration:
                         const InputDecoration(labelText: 'Width (feet)'),
-                    // The room plan redraws from these fields as they change.
-                    onChanged: (_) => setState(() {}),
+                    // The room plan follows these fields after a short pause.
+                    onChanged: _onDimensionChanged,
+                    onSubmitted: (_) => _applyDimensions(),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -310,7 +376,8 @@ class _FloorStudioScreenState extends ConsumerState<FloorStudioScreen> {
                         const TextInputType.numberWithOptions(decimal: true),
                     decoration:
                         const InputDecoration(labelText: 'Depth (feet)'),
-                    onChanged: (_) => setState(() {}),
+                    onChanged: _onDimensionChanged,
+                    onSubmitted: (_) => _applyDimensions(),
                   ),
                 ),
               ],
@@ -393,6 +460,7 @@ class _FloorStudioScreenState extends ConsumerState<FloorStudioScreen> {
                 selectedId: _selectedObjectId,
                 onSelect: (id) => setState(() => _selectedObjectId = id),
                 onMove: _moveObject,
+                onMoveEnd: _endMove,
               ),
               const SizedBox(height: 6),
               const Text(
@@ -407,8 +475,8 @@ class _FloorStudioScreenState extends ConsumerState<FloorStudioScreen> {
                   title: Text(object.description),
                   subtitle: Text(
                     '${object.kind.label} · '
-                    '${object.widthFeet.toStringAsFixed(0)} × '
-                    '${object.depthFeet.toStringAsFixed(0)} ft',
+                    '${formatStudioFeet(object.widthFeet)} × '
+                    '${formatStudioFeet(object.depthFeet)} ft',
                   ),
                   onTap: () => setState(() => _selectedObjectId = object.id),
                 ),
@@ -485,7 +553,7 @@ class _FloorStudioScreenState extends ConsumerState<FloorStudioScreen> {
                       depthFeet: depth,
                       verified: _verified,
                       tables: previewTables,
-                      objects: _objects,
+                      objects: _sceneObjects,
                     ),
                     guestCount: previewTables.length *
                         (saved?.seatsPerTable ?? defaultSeatsPerTable),

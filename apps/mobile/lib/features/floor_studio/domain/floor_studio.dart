@@ -119,6 +119,43 @@ class StudioObject {
         rotationDegrees: (json['rotationDegrees'] as num?)?.toDouble() ?? 0,
       );
 
+  /// Like [StudioObject.fromJson], but returns null instead of throwing when an element is
+  /// malformed (missing id, non-numeric or non-finite position, non-positive size). The
+  /// database only checks that `objects` is an array, so one bad element must not stop the
+  /// rest of the layout from loading.
+  static StudioObject? tryFromJson(Object? json) {
+    if (json is! Map) return null;
+    double? number(Object? value) =>
+        value is num && value.isFinite ? value.toDouble() : null;
+    final id = json['id'];
+    final x = number(json['x']);
+    final y = number(json['y']);
+    final width = number(json['widthFeet']);
+    final depth = number(json['depthFeet']);
+    if (id is! String ||
+        id.isEmpty ||
+        x == null ||
+        y == null ||
+        width == null ||
+        width <= 0 ||
+        depth == null ||
+        depth <= 0) {
+      return null;
+    }
+    final kind = json['kind'];
+    final description = json['description'];
+    return StudioObject(
+      id: id,
+      kind: StudioObjectKind.fromValue(kind is String ? kind : null),
+      description: description is String ? description : '',
+      x: x,
+      y: y,
+      widthFeet: width,
+      depthFeet: depth,
+      rotationDegrees: number(json['rotationDegrees']) ?? 0,
+    );
+  }
+
   Map<String, dynamic> toJson() => {
         'id': id,
         'kind': kind.value,
@@ -182,6 +219,18 @@ StudioObject clampStudioObject(
     y: clampAxis(object.y, extents.y, depthFeet),
   );
 }
+
+/// A room or object dimension typed by the user, in feet: a finite number above zero, or
+/// null. `double.tryParse` alone accepts "Infinity" and "NaN".
+double? parseStudioFeet(String text) {
+  final value = double.tryParse(text.trim());
+  return value != null && value.isFinite && value > 0 ? value : null;
+}
+
+/// Feet for display: whole numbers without a decimal, anything else to one decimal.
+String formatStudioFeet(double feet) => feet == feet.roundToDouble()
+    ? feet.toStringAsFixed(0)
+    : feet.toStringAsFixed(1);
 
 /// Snaps a plan coordinate to the nearest half foot, which keeps dragged objects tidy.
 double snapStudioFeet(double feet) => (feet * 2).roundToDouble() / 2;
@@ -249,9 +298,10 @@ class FloorStudioLayout {
             StudioTable.fromJson(e as Map<String, dynamic>),
         ],
         objects: [
-          for (final e in (json['objects'] as List? ?? const []))
-            StudioObject.fromJson(e as Map<String, dynamic>),
-        ],
+          for (final e
+              in (json['objects'] is List ? json['objects'] as List : const []))
+            StudioObject.tryFromJson(e),
+        ].whereType<StudioObject>().toList(),
       );
 
   /// Upsert payload. `id`, `organization_id`, `created_at` are set by the database.
