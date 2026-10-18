@@ -1,88 +1,136 @@
 # Venue Wrangler SOC 2 Controls Matrix
 
-This document maps AICPA Trust Services Criteria to specific technical and organizational controls implemented across the Venue Wrangler platform.
+Last reviewed: 2026-10-17. **This is an honest self-assessment, not an attestation.** Venue Wrangler is operated by a very small team and has **not** undergone a SOC 2 Type I or Type II examination. The matrix maps AICPA Trust Services Criteria to what exists in the repository today. Earlier versions of this file described controls (mandatory pull-request reviews, branch protection, AWS S3 backups with automated restore verification, semi-annual DR drills, quarterly executive reviews) that were not operated; those claims have been removed.
+
+## Status legend
+
+| Status | Meaning |
+|---|---|
+| **Implemented** | The control exists and operates today; the evidence pointer shows where to verify it. |
+| **Partial** | Part of the control exists; the gap is stated. |
+| **Planned** | Designed or scheduled but not yet operating. Do not describe it as in place. |
+| **Not operated** | A control a SOC 2 auditor would expect, which is not performed today. |
+
+Where a control depends on a GitHub, Supabase or Cloudflare dashboard setting that cannot be seen in the repository, it is marked **[verify in dashboard]**. Record evidence in `docs/security/hosted-auth-settings.md` and `docs/security/secrets-handling.md` as settings are applied.
 
 ---
 
 ## 1. Common Criteria (Security)
 
 ### CC1: Control Environment
-| Criterion | Control Activity | Implementation / Evidence |
-|-----------|------------------|---------------------------|
-| **CC1.1** | Commitment to integrity and ethical values | Code of Conduct and Information Security Policy acknowledged by all personnel annually. |
-| **CC1.2** | Oversight responsibilities of leadership | Security officer assigned; quarterly executive reviews of risk registers and security KPIs. |
-| **CC1.3** | Organizational structure and assignment of authority | Role-based permissions in GitHub, GCP IAM, Supabase, and Stripe; least privilege strictly enforced. |
-| **CC1.4** | Human resources practices | Background checks conducted for all new hires; offboarding checklist revokes all system access within 24 hours. |
+
+| Criterion | Control | Status | Evidence / gap |
+|---|---|---|---|
+| CC1.1 | Commitment to integrity and ethics | **Partial** | Policies exist in `docs/soc2/`. There is one principal; no code-of-conduct acknowledgements, annual or otherwise, are collected. |
+| CC1.2 | Oversight by leadership | **Not operated** | One-person company; no independent oversight body and no quarterly risk-register or KPI review is performed. Roadmap: calendar a quarterly self-review and record minutes. |
+| CC1.3 | Structure and assignment of authority | **Partial** | Role-based access exists in the product (`memberships`, RLS). Vendor-console access is held by the owner alone; there is no separation of duties. `.github/CODEOWNERS` records ownership. |
+| CC1.4 | HR practices (screening, offboarding) | **Not operated** | No employees besides the owner; no background-check or offboarding procedure has been exercised. Roadmap: written onboarding/offboarding checklist before the first hire or contractor. |
 
 ### CC2: Communication and Information
-| Criterion | Control Activity | Implementation / Evidence |
-|-----------|------------------|---------------------------|
-| **CC2.1** | Internal and external security communications | Security responsibilities communicated via onboarding training and security alerts channel. |
-| **CC2.2** | Incident reporting procedures | Defined Incident Response Plan (`docs/soc2/incident-response-plan.md`) with public security contact (`support@venuewrangler.com`). |
+
+| Criterion | Control | Status | Evidence / gap |
+|---|---|---|---|
+| CC2.1 | Internal security communication | **Partial** | Policies are in this folder; there is no training programme or alerting channel. |
+| CC2.2 | Incident reporting channel | **Partial** | `docs/soc2/incident-response-plan.md` defines the process and a contact address; it has not been exercised in a drill. |
+| CC2.3 | External communication | **Partial** | Privacy policy (`docs/privacy-policy.md`, `site/privacy/index.html`) and terms are published; the privacy policy is a draft awaiting counsel review. |
 
 ### CC3: Risk Assessment
-| Criterion | Control Activity | Implementation / Evidence |
-|-----------|------------------|---------------------------|
-| **CC3.1** | Risk assessment process | Annual organizational risk assessments and threat modeling for new architectural changes. |
-| **CC3.2** | Identification of potential fraud risks | Anti-fraud rate limiting on auth routes; POS secret rotation with cryptographic one-way hashing. |
+
+| Criterion | Control | Status | Evidence / gap |
+|---|---|---|---|
+| CC3.1 | Risk assessment process | **Partial** | An internal security audit was performed on 2026-10-17 and its remediation is tracked; there is no recurring, documented annual risk assessment or risk register. |
+| CC3.2 | Fraud risk | **Partial** | Server-side rate limiting exists in Edge Functions (`supabase/functions/_shared/rate-limit.ts`). Time-clock location is client-reported and can be spoofed; geofencing is not fraud-proof (audit F-01). |
 
 ### CC4: Monitoring Activities
-| Criterion | Control Activity | Implementation / Evidence |
-|-----------|------------------|---------------------------|
-| **CC4.1** | Ongoing evaluations of internal controls | Automated CI/CD security scanning, dependency vulnerability gates (`.github/workflows/dependency-audit.yml`), and CodeQL analysis (`.github/workflows/codeql.yml`). |
-| **CC4.2** | Communication of deficiencies | GCP Cloud Monitoring alert policies (`projects/venuewrangler/alertPolicies/7994759751285739344`) and Sentry error tracking. |
+
+| Criterion | Control | Status | Evidence / gap |
+|---|---|---|---|
+| CC4.1 | Evaluation of controls | **Partial** | CI runs tests, CodeQL for JavaScript/TypeScript (`.github/workflows/codeql.yml`), pgTAP RLS tests (`supabase-ci.yml`), `npm audit` for production dependencies (`site-ci.yml`, deploy workflow) and a frozen Deno lockfile. CodeQL does not cover Dart or SQL. There is no vulnerability scanning of the Flutter (pub) dependencies beyond Dependabot. |
+| CC4.2 | Communication of deficiencies | **Partial** | Sentry captures client and Edge Function errors; `public.ops_health_report()` surfaces silent failures where the migration is applied. No paging or on-call rota. |
 
 ### CC5: Control Activities
-| Criterion | Control Activity | Implementation / Evidence |
-|-----------|------------------|---------------------------|
-| **CC5.1** | Selection and development of control activities | Defense-in-depth architecture: NestJS validation pipes, helmet HTTP headers, strict CORS, and database RLS. |
-| **CC5.2** | Controls over technology infrastructure | Cloud Run containerized revisions; automated TLS 1.3 / HSTS termination. |
 
-### CC6: Logical and Physical Access Controls
-| Criterion | Control Activity | Implementation / Evidence |
-|-----------|------------------|---------------------------|
-| **CC6.1** | Logical access security | JWT session-based authentication, PBKDF2 password hashing (600,000 iterations), brute-force throttling (`assertWithinSharedRateLimit`). |
-| **CC6.2** | User registration and credential management | Single-use email verification tokens, secure password reset one-time codes, session revocation on password change. |
-| **CC6.3** | Role-Based Access Control (RBAC) | Explicit role hierarchy (`admin`, `owner`, `manager`, `server`, `staff`) enforced by `RolesGuard` and `VenueScopeInterceptor`. |
-| **CC6.4** | Physical access restrictions | Physical hosting delegated to Google Cloud Platform and Supabase (AWS us-east-1) SOC 2 Type II certified data centers. |
-| **CC6.5** | Data transmission and endpoint protection | TLS 1.3 in transit with HSTS; secret redaction filter (`sanitizeAuditMetadata`) preventing secret leakage in audit logs. Note this redacts secret-bearing keys (password/token/secret/authorization/PAN/CVV/SSN), not PII — actor and target names are deliberately retained for the audit trail. |
-| **CC6.6** | Multi-tenant isolation | Tenant isolation Prisma extension (`packages/api/src/prisma/tenant-scope.ts`) enforcing `where: { venueId }` on all tenant queries with Postgres RLS fail-closed backstop. |
-| **CC6.7** | Threat detection and prevention | Rate limiting per IP and venue; automatic account lockout after 8 consecutive failed sign-in attempts. |
+| Criterion | Control | Status | Evidence / gap |
+|---|---|---|---|
+| CC5.1 | Control activities that mitigate risk | **Implemented** | Authorization is enforced in Postgres: row-level security on tenant tables, helper functions in the unexposed `app_hidden` schema, `to authenticated` policies, trigger-derived ownership columns (`supabase/migrations`, tests in `supabase/tests/database`). |
+| CC5.2 | Technology general controls | **Partial** | Hosting by Supabase and Cloudflare (managed). Strict CSP and security headers on the web app (`site/_worker.js`) and marketing site (`site/_headers`, inline scripts allowed by hash only). |
+| CC5.3 | Policies and procedures | **Partial** | This policy set; several documents describe aspirations alongside current state, which each document now separates. |
+
+### CC6: Logical and Physical Access
+
+| Criterion | Control | Status | Evidence / gap |
+|---|---|---|---|
+| CC6.1 | Logical access security | **Partial** | Supabase Auth (hashed passwords, JWT sessions, refresh-token rotation). Local config now requires 12-character passwords with mixed case and digits; **the hosted project must be updated by hand** (`docs/security/hosted-auth-settings.md`) **[verify in dashboard]**. Leaked-password protection and CAPTCHA are not enabled until applied. |
+| CC6.2 | Registration and credential management | **Partial** | Email confirmation is required in config; invitation redemption requires a verified email. Offboarding of members (deprovisioning, role change, ownership transfer) has known gaps tracked from the audit. |
+| CC6.3 | Role-based access | **Implemented** | Roles via `memberships` and RLS; membership resolved live, not from stale JWT claims. Known segregation-of-duties gaps (managers approving their own requests, admins editing their own pay) are tracked. |
+| CC6.4 | Physical access | **Implemented (inherited)** | Delegated to Supabase and Cloudflare data centres. Obtain their current SOC 2 reports; none are on file yet (see vendor policy). |
+| CC6.5 | Disposal of data and media | **Partial** | In-app account deletion and scheduled retention cleanup exist (`app_hidden.run_retention_cleanup()`); guest erasure and some purges are in recently added migrations. No documented device-sanitization procedure. |
+| CC6.6 | Boundary protection | **Partial** | All access is via Supabase APIs over TLS; Postgres direct access network restrictions not confirmed **[verify in dashboard]**. |
+| CC6.7 | Data transmission protection | **Implemented** | TLS everywhere; HSTS on the site (`site/_headers`, `site/_worker.js`). Database backups are encrypted client-side with `age` before upload (`supabase-database-backup.yml`) once `BACKUP_AGE_RECIPIENT` is configured; the first encrypted run is not yet recorded. |
+| CC6.8 | Malicious software prevention | **Implemented** | Uploaded documents are scanned (ClamAV / Cloudmersive) and rejected if unscanned (`supabase/functions/documents-upload`). |
 
 ### CC7: System Operations
-| Criterion | Control Activity | Implementation / Evidence |
-|-----------|------------------|---------------------------|
-| **CC7.1** | Vulnerability management | Weekly automated dependency scans; high/critical vulnerability gate blocking PR merges. |
-| **CC7.2** | Infrastructure and security monitoring | Cloud Run log-based metrics, centralized `AuditLog` table capturing auth and administrative events. |
-| **CC7.3** | Incident response management | Formal Incident Response Plan (`docs/soc2/incident-response-plan.md`) with defined severity matrix and customer notification SLAs (<72h). |
+
+| Criterion | Control | Status | Evidence / gap |
+|---|---|---|---|
+| CC7.1 | Vulnerability detection | **Partial** | Dependabot (npm, pub, GitHub Actions), `npm audit` gate, CodeQL (JS/TS), GitHub secret scanning and push protection **[verify in dashboard]**. No SBOM, no Dart/SQL static analysis in CI beyond `dart analyze`. |
+| CC7.2 | Monitoring for anomalies | **Partial** | Sentry; audit log (`public.audit_log`) retained 365 days. No alerting rules or log review procedure. |
+| CC7.3 | Security event evaluation | **Partial** | Incident Response Plan exists; never exercised. |
+| CC7.4 | Incident response | **Planned** | Plan to be exercised with a tabletop exercise (roadmap in `incident-response-plan.md`). |
+| CC7.5 | Recovery from incidents | **Partial** | See A1.2/A1.3: backups exist, restore proven only after the first successful drill run. |
 
 ### CC8: Change Management
-| Criterion | Control Activity | Implementation / Evidence |
-|-----------|------------------|---------------------------|
-| **CC8.1** | Authorized system changes | Mandatory pull request reviews, branch protection on `main`, automated CI testing (API unit & integration tests, mobile CI) before deployment. |
-| **CC8.2** | Deployment and rollback procedures | Google Cloud Run immutable revision deployments with zero-downtime rollback runbook (`docs/production-operations.md`). |
+
+| Criterion | Control | Status | Evidence / gap |
+|---|---|---|---|
+| CC8.1 | Authorized, tested changes | **Partial** | **Branch protection and mandatory pull-request review are NOT enabled on `main`** (the repository API reports no protection); changes can be pushed directly. What does exist: CI test jobs, SHA-pinned Actions, least-privilege workflow permissions, `.github/CODEOWNERS` and a PR checklist (`.github/pull_request_template.md`), and the production deploy job is bound to a GitHub `production` environment (reviewers must be configured **[verify in dashboard]**). Database migrations and Edge Functions are applied by hand from the operator's machine; there is **no staging environment**. |
+| CC8.2 | Deployment and rollback | **Partial** | Web deploys via `deploy-cloudflare-pages.yml`; rollback is redeploying a previous commit/Pages deployment (`docs/production-operations.md`). Database changes are forward-only; no rehearsed rollback. |
 
 ### CC9: Risk Mitigation
-| Criterion | Control Activity | Implementation / Evidence |
-|-----------|------------------|---------------------------|
-| **CC9.1** | Business risk mitigation | Business Continuity and Disaster Recovery Plan (`docs/soc2/business-continuity-disaster-recovery.md`). |
-| **CC9.2** | Vendor and third-party risk management | Formal vendor review policy (`docs/soc2/vendor-management-policy.md`) covering all subprocessors. |
+
+| Criterion | Control | Status | Evidence / gap |
+|---|---|---|---|
+| CC9.1 | Business disruption risk | **Partial** | `docs/soc2/business-continuity-disaster-recovery.md` states current recovery capability honestly (RPO up to 24 hours, RTO untested). |
+| CC9.2 | Vendor risk management | **Partial** | Subprocessor list maintained (`docs/soc2/vendor-management-policy.md`); no vendor SOC 2 reports or DPAs are filed yet; no annual review has been performed. |
 
 ---
 
-## 2. Availability Criteria
+## 2. Availability
 
-| Criterion | Control Activity | Implementation / Evidence |
-|-----------|------------------|---------------------------|
-| **A1.1** | Capacity management | Cloud Run auto-scaling (up to 8 instances), managed PostgreSQL connection pooling budget (5 connections per container, 40 total, 20 reserved for admin). |
-| **A1.2** | Data backup and restoration | Nightly encrypted logical backups to AWS S3 (`.github/workflows/database-backup.yml`) with automated restore verification and 30-day lifecycle retention. Supabase PITR is not a current control and must be enabled before claiming a sub-hour RPO. |
-| **A1.3** | Disaster recovery testing | Semi-annual restore drills from backup artifacts to isolated staging environment. |
+| Criterion | Control | Status | Evidence / gap |
+|---|---|---|---|
+| A1.1 | Capacity and availability management | **Partial** | Capacity is managed by Supabase and Cloudflare. No load testing and no documented capacity thresholds. |
+| A1.2 | Backup, recovery infrastructure | **Partial** | Nightly logical `pg_dump` (public, app_hidden, auth, storage schemas) uploaded to **Cloudflare R2** (not AWS S3), encrypted client-side with `age` (`.github/workflows/supabase-database-backup.yml`); daily Storage mirror (`supabase-storage-backup.yml`). **A restore has not yet been verified.** The restore drill (`supabase-restore-drill.yml`) exists but has not yet run; until it passes, treat backups as unproven. RPO is up to 24 hours; Supabase PITR is not enabled. No object lock or versioning is evidenced on the R2 bucket **[verify in dashboard]**. |
+| A1.3 | Recovery testing | **Not operated** | Semi-annual DR drills have **not** been performed. The monthly automated restore drill is the planned control; its first successful run is the first piece of evidence. There is no staging environment. |
 
 ---
 
-## 3. Confidentiality Criteria
+## 3. Confidentiality
 
-| Criterion | Control Activity | Implementation / Evidence |
-|-----------|------------------|---------------------------|
-| **C1.1** | Data classification and identification | Formal data classification (Public, Internal, Confidential, Restricted) defined in `docs/soc2/data-retention-disposal-policy.md`. |
-| **C1.2** | Secure disposal of confidential information | Tenant data deletion workflows, POS secret cryptographic hashing (SHA-256 digests stored, plaintext never persisted), and S3 SSE-S3 encrypted storage. |
+| Criterion | Control | Status | Evidence / gap |
+|---|---|---|---|
+| C1.1 | Identification and protection of confidential information | **Partial** | Data classification is defined in `docs/soc2/data-retention-disposal-policy.md`. Tenant isolation by RLS; line staff can currently read some guest and incident data they may not need (tracked). |
+| C1.2 | Disposal of confidential information | **Partial** | Retention cleanup runs in-database (pg_cron) for the audit log, wage-record store and other short-lived data; backups expire after 30 days if the R2 lifecycle rule is configured **[verify in dashboard]**. No documented evidence of deletion requests being completed within SLA. |
+
+---
+
+## 4. Privacy (not in the committed scope, tracked for honesty)
+
+| Criterion | Control | Status | Evidence / gap |
+|---|---|---|---|
+| P1 | Privacy notice | **Partial** | One privacy notice (`docs/privacy-policy.md` mirrored in `site/privacy/index.html`) describing controller/processor roles and the real subprocessors; draft pending counsel review. The sign-up flow link/acceptance is being added in the app. |
+| P3-P4 | Collection, use and retention | **Partial** | Retention schedule in the policy matches `supabase/migrations`. |
+| P5 | Access and correction, deletion | **Partial** | In-app self-deletion; guest erasure function in a recent migration; email requests answered within 30 days by process only. |
+| P6 | Disclosure to third parties | **Partial** | Subprocessors listed; DPAs and international-transfer mechanism not yet on file **[counsel to confirm]**. |
+
+---
+
+## 5. Evidence log
+
+| Evidence | Where |
+|---|---|
+| Restore drill result | GitHub Actions run summary of `Supabase Restore Drill` (none yet) |
+| Encrypted backup run | GitHub Actions run of `Supabase Database Backup` with `.dump.gz.age` object |
+| Hosted auth settings applied | `docs/security/hosted-auth-settings.md` applied-settings log |
+| Secret rotations | `docs/security/secrets-handling.md` rotation log |
+| Branch protection / environments | GitHub screenshots, once configured |

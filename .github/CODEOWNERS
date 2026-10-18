@@ -1,0 +1,29 @@
+# Code owners. With branch protection's "Require review from Code Owners" enabled on main
+# (docs/security/secrets-handling.md), changes to these paths need the owner's review.
+# Note: a sole owner cannot approve their own PR; see the branch-protection notes for the
+# bypass / second-reviewer options appropriate to a one-person company.
+
+# Default owner for everything.
+*                               @lwhobley
+
+# Security-critical paths, listed explicitly so they stay owned if the default changes.
+/.github/                       @lwhobley
+/supabase/migrations/           @lwhobley
+/supabase/functions/            @lwhobley
+/supabase/config.toml           @lwhobley
+/supabase/tests/                @lwhobley
+/site/_worker.js                @lwhobley
+/site/_headers                  @lwhobley
+/scripts/                       @lwhobley
+/tests/                         @lwhobley
+/codemagic.yaml                 @lwhobley
+/apps/mobile/android/           @lwhobley
+/apps/mobile/ios/               @lwhobley
+/apps/mobile/lib/core/auth/     @lwhobley
+/docs/soc2/                     @lwhobley
+/docs/security/                 @lwhobley
+/docs/privacy-policy.md         @lwhobley
+/site/privacy/                  @lwhobley
+/.gitignore                     @lwhobley
+/package.json                   @lwhobley
+/package-lock.json              @lwhobley

@@ -27,7 +27,7 @@ This policy applies to:
 
 ## 3. Workstation & Device Security
 
-* **Full-Disk Encryption**: All employee and contractor laptops must have full-disk encryption enabled (FileVault on macOS, BitLocker on Windows, LUKS on Linux).
+* **Full-Disk Encryption** (policy; the operator must confirm for each device): laptops must have full-disk encryption enabled (FileVault on macOS, BitLocker on Windows, LUKS on Linux).
 * **Password Managers**: Use of an approved password manager (e.g., 1Password, Bitwarden) is mandatory for generating and storing strong, unique credentials.
 * **Screen Lock**: Workstations must be configured to automatically lock after 5 minutes of inactivity.
 * **Anti-Malware & OS Updates**: Operating systems and software must have automatic security updates enabled.
@@ -36,23 +36,18 @@ This policy applies to:
 
 ## 4. Software Development Lifecycle (SDLC) Security
 
-* **Version Control & Branch Protection**: All source code is hosted on GitHub. Direct pushes to `main` are prohibited. Branch protection rules require:
-  * At least one approving pull request review from an authorized engineer.
-  * Successful completion of automated CI checks (linter, unit tests, integration tests, dependency security audits, and CodeQL analysis).
-* **Vulnerability Management**: 
-  * Automated dependency scanning runs on every PR and weekly via scheduled GitHub Actions.
-  * Critical and High vulnerabilities must be triaged and patched within 14 days of disclosure.
-* **Separation of Environments**: Production and Development/Testing environments are completely isolated. Production database credentials are never accessible from local developer machines without encrypted, logged ephemeral bastion access.
+Current state, with gaps stated plainly (see [soc2-controls-matrix.md](./soc2-controls-matrix.md)):
 
----
+* **Version control**: source is on GitHub. **Branch protection and mandatory pull-request review are not enabled on `main`** and direct pushes are possible; enabling them is a manual GitHub setting (`docs/security/secrets-handling.md`, section 6). `.github/CODEOWNERS` and a pull-request security checklist exist.
+* **CI checks**: Vitest security and site tests, pgTAP RLS tests, Deno check/lint/test with a frozen lockfile, Flutter analysis and tests, CodeQL for JavaScript/TypeScript, and `npm audit --omit=dev --audit-level=high` for production npm dependencies. GitHub Actions are pinned to commit SHAs and run with least-privilege permissions.
+* **Vulnerability management**: Dependabot (npm, pub, GitHub Actions) and GitHub secret scanning with push protection **[verify in dashboard]**. A 14-day patch target for high/critical findings is an objective; it is not tracked or measured.
+* **Environments**: there is a single production Supabase project and **no staging environment**. Database migrations and Edge Function deployments are applied by hand from the operator's machine. Local development uses the Supabase CLI stack and test data.
 
 ## 5. Network & Cryptographic Safeguards
 
-* **Encryption in Transit**: All public API traffic and web communications require TLS 1.3 with strong cipher suites and HTTP Strict Transport Security (HSTS) preloading.
-* **Encryption at Rest**: All databases, storage volumes, and backups utilize AES-256 encryption.
-* **Secrets Management**: Plaintext credentials, private keys, and API tokens must never be committed to source code repositories. Environment configurations in production utilize GCP Secret Manager or encrypted environment variables.
-
----
+* **Encryption in transit**: all traffic to Supabase and the Cloudflare-hosted site uses TLS; HSTS is set on the site (without preload).
+* **Encryption at rest**: provided by Supabase and Cloudflare. Database backups are additionally encrypted client-side with `age` before upload.
+* **Secrets management**: plaintext credentials, private keys and API tokens must never be committed. Production secrets live in Supabase secrets, GitHub Environments and Codemagic; see `docs/security/secrets-handling.md`. The repository must not live in a cloud-synced folder.
 
 ## 6. Policy Review & Enforcement
 

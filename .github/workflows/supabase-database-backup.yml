@@ -1,5 +1,18 @@
 name: Supabase Database Backup
 
+# Nightly logical pg_dump of the production database, encrypted client-side with `age`
+# BEFORE it leaves the runner, then uploaded to Cloudflare R2 as
+# database-backups/supabase-<ref>-<UTC timestamp>.dump.gz.age.
+#
+# The dump includes the `auth` schema (password hashes, refresh tokens, MFA secrets), so an
+# unencrypted copy must never reach the bucket. Only the PUBLIC age recipient is configured
+# here (BACKUP_AGE_RECIPIENT); the matching private identity is held offline and, for the
+# restore drill only, as the BACKUP_AGE_IDENTITY secret of the `backup-restore-drill`
+# environment. See docs/production-operations.md.
+#
+# Runs in the `production-backups` GitHub environment so the database URL and R2 token can be
+# scoped to it (and, if desired, protected by deployment branch rules).
+
 on:
   workflow_dispatch:
   schedule:
@@ -8,10 +21,15 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: supabase-database-backup
+  cancel-in-progress: false
+
 jobs:
   backup:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    environment: production-backups
     env:
       SUPABASE_DB_URL: ${{ secrets.SUPABASE_PRODUCTION_DB_URL }}
       SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PRODUCTION_PROJECT_REF }}
@@ -26,6 +44,8 @@ jobs:
       # Set when the bucket was created in a jurisdiction (e.g. "us", "eu"); such buckets are
       # only reachable through <account>.<jurisdiction>.r2.cloudflarestorage.com.
       R2_JURISDICTION: ${{ vars.R2_JURISDICTION }}
+      # PUBLIC age recipient (age1...). Required: the job fails rather than upload plaintext.
+      BACKUP_AGE_RECIPIENT: ${{ secrets.BACKUP_AGE_RECIPIENT || vars.BACKUP_AGE_RECIPIENT }}
       PGSSLMODE: require
     steps:
       - name: Verify production connection and backup destination
@@ -43,6 +63,14 @@ jobs:
           : "${AWS_SECRET_ACCESS_KEY:?R2_BACKUP_SECRET_ACCESS_KEY is not configured}"
           : "${R2_ACCOUNT_ID:?R2_ACCOUNT_ID is not configured}"
           : "${BACKUP_BUCKET:?R2_BACKUP_BUCKET is not configured}"
+          : "${BACKUP_AGE_RECIPIENT:?BACKUP_AGE_RECIPIENT is not configured; refusing to create an unencrypted backup}"
+          BACKUP_AGE_RECIPIENT="$(printf '%s' "$BACKUP_AGE_RECIPIENT" | tr -d '[:space:]')"
+          case "$BACKUP_AGE_RECIPIENT" in
+            AGE-SECRET-KEY-*) echo "::error::BACKUP_AGE_RECIPIENT holds a PRIVATE age identity. Configure the public recipient (age1...) only and rotate this key pair."; exit 1 ;;
+            age1*) ;;
+            *) echo "::error::BACKUP_AGE_RECIPIENT must be an age public key starting with age1"; exit 1 ;;
+          esac
+          echo "BACKUP_AGE_RECIPIENT=${BACKUP_AGE_RECIPIENT}" >> "$GITHUB_ENV"
           python3 - <<'PY'
           import os
           from urllib.parse import urlparse
@@ -76,7 +104,23 @@ jobs:
           unzip -q /tmp/awscliv2.zip -d /tmp
           sudo /tmp/aws/install --update
 
-      - name: Dump, verify, and upload Supabase database to R2
+      # age comes from the Ubuntu archive (apt verifies the repository signature chain), not an
+      # unpinned download. The version is asserted so a runner-image change cannot silently
+      # swap in something unexpected.
+      - name: Install age (client-side encryption)
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends age
+          version="$(age --version)"
+          echo "age ${version}"
+          case "$version" in
+            1.1.*|1.2.*|1.3.*) ;;
+            *) echo "::error::Unexpected age version ${version}"; exit 1 ;;
+          esac
+
+      - name: Dump, verify, encrypt, and upload Supabase database to R2
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -86,6 +130,7 @@ jobs:
           timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
           dump="/tmp/supabase-${SUPABASE_PROJECT_REF}-${timestamp}.dump"
           archive="${dump}.gz"
+          encrypted="${archive}.age"
           docker run --rm --network host --user "$(id -u):$(id -g)" \
             --env SUPABASE_DB_URL --env PGSSLMODE \
             --volume /tmp:/backup \
@@ -98,15 +143,28 @@ jobs:
             pg_restore --list "/backup/$(basename "$dump")" >/dev/null
           gzip --best "$dump"
           gzip --test "$archive"
-          key="database-backups/$(basename "$archive")"
-          # R2 encrypts every object at rest; it does not accept S3's --sse header.
-          aws s3 cp "$archive" "s3://${BACKUP_BUCKET}/${key}" \
-            --endpoint-url "$R2_ENDPOINT" --only-show-errors
-          size="$(aws s3api head-object --bucket "$BACKUP_BUCKET" --key "$key" \
-            --endpoint-url "$R2_ENDPOINT" --query ContentLength --output text)"
-          if [ "$size" != "$(stat -c %s "$archive")" ]; then
-            echo "::error::Uploaded backup size ($size) does not match the local archive"
+          # Encrypt to the public recipient; the private identity never exists on this runner.
+          # The plaintext archive is deleted immediately and is never uploaded.
+          age --recipient "$BACKUP_AGE_RECIPIENT" --output "$encrypted" "$archive"
+          rm -f "$archive"
+          # Sanity-check the age container header and that the ciphertext is not empty.
+          if [ "$(head -c 21 "$encrypted")" != "age-encryption.org/v1" ]; then
+            echo "::error::Encrypted backup does not have an age header; refusing to upload"
             exit 1
           fi
-          echo "Uploaded ${key} (${size} bytes) to R2 bucket ${BACKUP_BUCKET}"
-          rm -f "$archive"
+          local_size="$(stat -c %s "$encrypted")"
+          if [ "$local_size" -lt 1024 ]; then
+            echo "::error::Encrypted backup is implausibly small (${local_size} bytes)"
+            exit 1
+          fi
+          key="database-backups/$(basename "$encrypted")"
+          # R2 encrypts every object at rest; it does not accept S3's --sse header. The age
+          # layer above is what protects the backup from anyone holding bucket access.
+          aws s3 cp "$encrypted" "s3://${BACKUP_BUCKET}/${key}"             --endpoint-url "$R2_ENDPOINT" --only-show-errors
+          size="$(aws s3api head-object --bucket "$BACKUP_BUCKET" --key "$key"             --endpoint-url "$R2_ENDPOINT" --query ContentLength --output text)"
+          if [ "$size" != "$local_size" ]; then
+            echo "::error::Uploaded backup size ($size) does not match the local encrypted archive ($local_size)"
+            exit 1
+          fi
+          echo "Uploaded ${key} (${size} bytes, age-encrypted) to R2 bucket ${BACKUP_BUCKET}"
+          rm -f "$encrypted"

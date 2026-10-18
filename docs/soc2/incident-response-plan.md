@@ -1,63 +1,57 @@
 # Security Incident Response Plan (IRP)
 
-**Document Owner**: Security Lead & On-Call Engineering  
-**Effective Date**: August 2026  
-**Review Cycle**: Semi-Annual  
+**Document Owner**: Principal (Loungeability LLC)
+**Last reviewed**: 2026-10-17
+**Review Cycle**: Annual
+
+Venue Wrangler is run by one person. There is no on-call rota and no dedicated security team, and this plan has **never been exercised**. The service levels below are targets for a one-person operation, not guarantees. Earlier versions referenced a Cloud Run API, NestJS, a `Session` table and a 24/7 on-call engineer; those do not exist.
 
 ---
 
-## 1. Objective & Scope
+## 1. Objective & scope
 
-The purpose of this plan is to establish a clear, structured procedure for detecting, triaging, containing, mitigating, and documenting security incidents that affect Venue Wrangler's customer data, cloud infrastructure, or mobile applications.
-
----
-
-## 2. Incident Classification & Severity Matrix
-
-| Severity | Definition | Examples | SLA to Initial Response | Target Resolution |
-|----------|------------|----------|-------------------------|-------------------|
-| **SEV-1 (Critical)** | Active data breach, unauthorized access to customer databases, complete service outage, or compromised cloud root credentials. | SQL injection exploit, exposed production DB, active ransomware, API unauthenticated data exposure. | **< 15 minutes** | **< 4 hours** |
-| **SEV-2 (High)** | Severe vulnerability actively exploitable, partial service outage, POS secret compromise, or elevated role privilege bypass. | Tenant isolation bypass flaw discovered, POS key leak, auth bypass on non-admin routes. | **< 30 minutes** | **< 12 hours** |
-| **SEV-3 (Medium)** | Moderate security issue with compensating controls, localized denial of service, rate limit bypass. | Brute force bypass on non-critical endpoint, dependency with published high CVE but no active exploit. | **< 2 hours** | **< 48 hours** |
-| **SEV-4 (Low)** | Informational or low-risk vulnerability, minor security enhancement, failed automated scan anomaly. | Low-severity package advisory, minor security header misconfiguration. | **< 24 hours** | **Next Sprint** |
+Detect, triage, contain, remediate and document incidents affecting customer data, the Supabase project, Edge Functions, the Cloudflare site, the mobile apps, or the credentials that control them.
 
 ---
 
-## 3. Incident Response Workflow
+## 2. Severity
 
-```mermaid
-flowchart TD
-    A[1. Detection & Alerting] --> B[2. Triage & Classification]
-    B --> C[3. Containment & Isolation]
-    C --> D[4. Eradication & Remediation]
-    D --> E[5. Recovery & Verification]
-    E --> F[6. Post-Mortem & Notification]
-```
+| Severity | Definition | Examples | Target first response | Target containment |
+|---|---|---|---|---|
+| **SEV-1** | Confirmed or likely unauthorized access to customer data, leaked production credentials, or total outage | Leaked service-role key, RLS bypass actively exploited, backup bucket exposed | Same day, as soon as noticed (best effort outside business hours) | 24 hours |
+| **SEV-2** | Exploitable vulnerability without evidence of exploitation, partial outage, third-party provider incident affecting us | Cross-tenant read bug reported, Stripe key exposed in a log | 1 business day | 3 days |
+| **SEV-3** | Moderate issue with compensating controls | Dependency with a high CVE, rate-limit bypass | 3 business days | 2 weeks |
+| **SEV-4** | Low or informational | Header misconfiguration, scanner noise | Next planning cycle | Next release |
 
-### Phase 1: Detection & Alerting
-* Automated GCP Cloud Run 5xx alerts, Sentry exception triggers, or reports to `security@venuewrangler.com` / `support@venuewrangler.com`.
-* On-call engineer acknowledges alert and opens a dedicated Incident Channel (`#incident-YYYYMMDD-[topic]`).
+---
 
-### Phase 2: Triage & Classification
-* Incident Commander assesses scope, affected tenants, and sets severity level (SEV-1 to SEV-4).
-* Technical leads are assembled.
+## 3. Workflow
 
-### Phase 3: Containment & Isolation
-* For compromised credentials: Revoke API keys, rotate POS webhook secrets, terminate active user sessions via `DELETE FROM "Session"`.
-* For container/code vulnerabilities: Route Cloud Run traffic back to last known-good revision immediately:
-  ```bash
-  gcloud run services update-traffic venue-wrangler-api --to-revisions=LAST_KNOWN_GOOD_REV=100 --region=us-east1 --project=venuewrangler
-  ```
-* For database attacks: Restrict Supabase database connections to authorized backend CIDRs.
+1. **Detect.** Sources today: Sentry error alerts, GitHub secret-scanning/Dependabot/CodeQL alerts, Supabase and Cloudflare notifications, reports to `admin@venuewrangler.com`, and customer reports. A dedicated `security@` address and a published security contact page/`security.txt` are not yet in place (roadmap). There is no automated alerting on audit-log anomalies.
+2. **Triage.** Record the time, what was observed, which tenants may be affected, and set a severity. Keep a timeline in a private document.
+3. **Contain.**
+   - Leaked credential: rotate it using `docs/security/secrets-handling.md` (Stripe, Supabase service-role/JWT secret, database password, Cloudflare, signing keys), then revoke the old value.
+   - Vulnerable web build: roll back the Cloudflare Pages deployment to the last good one.
+   - Vulnerable Edge Function or policy: ship a fix migration/function, or disable the function in the Supabase dashboard.
+   - Compromised user: remove the membership and revoke the session in the Supabase dashboard.
+   - Compromised GitHub access: revoke tokens and sessions, review recent commits, workflow runs and secrets, disable Actions if needed.
+4. **Eradicate and recover.** Fix the root cause with a reviewed change and add a regression test (RLS pgTAP test or Vitest spec). Verify sign-in, core flows and the backup/restore workflows. If data was lost or corrupted, follow `business-continuity-disaster-recovery.md` (RPO up to 24 hours; restore not yet proven).
+5. **Notify.** If personal data was or may have been accessed without authorization:
+   - Venues are controllers of staff and guest data, so tell affected venues without undue delay, with what happened, what data, what we did and what they should do.
+   - Regulators and individuals: notification duties depend on jurisdiction (for example GDPR 72 hours to the regulator, US state laws, POPIA). **[counsel to confirm timelines and who notifies.]** The 72-hour figure is a working assumption for the controller's duty, not a legal conclusion.
+6. **Learn.** Write a short post-incident review within a week: timeline, root cause, impact, and action items with owners and dates; update this plan.
 
-### Phase 4: Eradication & Remediation
-* Root cause analysis (RCA) performed.
-* Patch developed, reviewed by at least one engineer, validated via CI test suites, and deployed to production.
+---
 
-### Phase 5: Recovery & Verification
-* Verify `/api/health`, authenticated routes, and database integrity.
-* Monitor traffic metrics for anomalous behavior.
+## 4. Evidence to preserve
 
-### Phase 6: Post-Mortem & Customer Notification
-* **Blameless Post-Mortem**: Document timeline, root cause, impact, and action items within 48 hours.
-* **Customer Breach Notification**: In the event of confirmed unauthorized access to customer Personal Identifiable Information (PII) or confidential business records, affected customers and regulatory bodies will be notified in writing within **72 hours** of breach confirmation, in accordance with applicable laws (GDPR, state privacy regulations).
+Supabase auth and API logs (note the retention window of the plan), `public.audit_log`, Cloudflare logs, GitHub audit log and Actions history, Sentry events. Export before the retention windows elapse.
+
+---
+
+## 5. Roadmap
+
+- Run a tabletop exercise (leaked key scenario) and record the result.
+- Publish a security contact (`security@venuewrangler.com`, `/.well-known/security.txt`).
+- Alerting on `ops_health_report()` findings, failed backups and failed restore drills (GitHub Actions failure notifications are the minimum).
+- Add a second trusted contact for account recovery and incident help.

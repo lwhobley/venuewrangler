@@ -31,6 +31,10 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
 
+      # Fails on high/critical advisories in production dependencies (audit O-05).
+      - name: Audit production npm dependencies
+        run: npm audit --omit=dev --audit-level=high
+
       - name: Test
         run: npm test
 

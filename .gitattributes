@@ -1,0 +1,2 @@
+site/**/*.html text eol=lf
+site/_headers text eol=lf

@@ -104,3 +104,24 @@ screenshots/
 # EAS credential downloads (certificate + password) — never commit
 credentials.json
 credentials/
+
+# Local audit/review artifacts and agent scratch output (never publish; this repo is public).
+/output/
+/ads/
+/.playwright-cli/
+/.freebuff/
+/code_review_bundle.txt
+/AUDIT_FINDINGS.md
+/SECURITY_AUDIT_*.md
+
+# Signing material and credential folders (secrets-handling.md). Signing identities live only
+# in Codemagic / Play App Signing.
+*.keystore
+key.properties
+**/android/key.properties
+**/upload-keystore*
+*.pfx
+*.cer
+credentials/
+.env.*
+!.env.example

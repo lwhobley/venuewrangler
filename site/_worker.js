@@ -35,6 +35,9 @@ export default {
     response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
     response.headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
     response.headers.set('Permissions-Policy', 'camera=(self), microphone=(), geolocation=(self)');
+    // Popups stay allowed so provider/checkout tabs can open; the opener link is isolated.
+    response.headers.set('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
+    response.headers.set('Cross-Origin-Resource-Policy', 'same-site');
     // /app/ is the Flutter web build (scripts/build-site.mjs). script-src still
     // has no 'unsafe-inline': web/index.html only loads flutter_bootstrap.js via
     // src, and the build uses --no-web-resources-cdn so CanvasKit/skwasm come
@@ -44,8 +47,12 @@ export default {
     // style-src keeps 'unsafe-inline' -- the Flutter engine injects <style>
     // elements at runtime. fonts.gstatic.com is the engine's fallback-font
     // source (fetched, so it is in connect-src too). Supabase covers REST/Auth/
-    // Storage (https) and Realtime (wss); sentry.io is crash reporting.
-    response.headers.set('Content-Security-Policy', "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://browser.sentry-cdn.com; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https://*.supabase.co; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.sentry.io https://fonts.gstatic.com; media-src 'self' blob: https://*.supabase.co; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'");
+    // Storage/Edge Functions (https) and Realtime (wss), pinned to the one production
+    // project host (the SUPABASE_URL in codemagic.yaml / FLUTTER_PRODUCTION_ENV_JSON) rather
+    // than *.supabase.co, so a script-injection bug cannot exfiltrate to an attacker's own
+    // Supabase project (audit F-06). If the project is ever migrated, update the host in this
+    // CSP and in tests/studio-headers.spec.ts together. sentry.io is crash reporting.
+    response.headers.set('Content-Security-Policy', "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://browser.sentry-cdn.com; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https://puttwjwmwrzmhpsjykuj.supabase.co; connect-src 'self' https://puttwjwmwrzmhpsjykuj.supabase.co wss://puttwjwmwrzmhpsjykuj.supabase.co https://*.sentry.io https://fonts.gstatic.com; media-src 'self' blob: https://puttwjwmwrzmhpsjykuj.supabase.co; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'");
     return response;
   },
 };

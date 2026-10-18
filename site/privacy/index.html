@@ -18,33 +18,95 @@
 <body>
 <div class="wrap">
   <h1>Privacy Policy</h1>
-  <p class="muted">Last updated: June 10, 2026</p>
+  <p class="muted">Last updated: October 17, 2026</p>
 
-  <p>Venue Wrangler ("the app") is operated by Loungeability LLC. This policy describes what we collect, why, and your choices.</p>
-
-  <h2>What we collect</h2>
+  <h2>1. Who we are</h2>
+  <p>Venue Wrangler (the "service": a mobile and web app for running restaurants, bars and venues) is operated by <strong>Loungeability LLC</strong> ("we", "us").</p>
+  <p><strong>Our role depends on whose data it is.</strong></p>
   <ul>
-    <li><strong>Account information</strong> — your email address and name, used for sign-in and so your team can recognize you.</li>
-    <li><strong>Location (while using the app)</strong> — your precise location is checked only at the moment you clock in or out, to verify you are physically at your venue. We store the clock-punch coordinates with the time entry. We do not track your location in the background.</li>
-    <li><strong>Work data</strong> — schedules, time entries, chat messages, reservations, and other operational records you and your venue create in the app.</li>
-    <li><strong>User content</strong> — photos or files you choose to upload (for example bar inventory count sheets).</li>
-    <li><strong>Identifiers</strong> — app and account identifiers used for authentication, subscription management, and push notification delivery.</li>
+    <li><strong>Venues are the controllers of staff and guest data.</strong> A venue (the "customer") decides what staff, guest, reservation, schedule, time-clock, chat, inventory and other operational data it puts into Venue Wrangler, and why. For that data, <strong>Loungeability LLC acts as a processor (service provider)</strong>: we handle it only on the venue's instructions and to provide the service. If you are a staff member or a guest of a venue and want to know how the venue uses your data, or to exercise your rights over it, contact the venue first. We will help the venue respond.</li>
+    <li><strong>Loungeability LLC is the controller</strong> of the data we need to run our own business: account and sign-in data for people who use the app, billing and subscription records, security and audit logs, support correspondence, and website visitor data.</li>
   </ul>
 
-  <h2>How we use it</h2>
-  <p>Solely to provide the service: operating your venue's scheduling, time clock, reservations, chat, and reporting. We do not sell your personal information, and we do not use your data for third-party advertising.</p>
+  <h2>2. What we collect</h2>
+  <ul>
+    <li><strong>Account data</strong> — name, email address, role, venue membership, optional profile photo, and sign-in credentials (passwords are stored only as salted hashes by our authentication provider).</li>
+    <li><strong>Work data</strong> — schedules, shift swaps and requests, tasks, chat messages and attachments, announcements, incident reports and evidence photos, inventory counts, floor plans, and documents you upload.</li>
+    <li><strong>Time-clock data</strong> — clock-in and clock-out times, and <strong>GPS coordinates and accuracy at the moment of each punch</strong>, used to check you are at the venue. We do not track your location in the background.</li>
+    <li><strong>Photos and files</strong> — profile photos, incident evidence, documents, count sheets and chat attachments. Photos can contain location metadata (EXIF) if your device adds it.</li>
+    <li><strong>Guest data</strong> — guest names, phone numbers, email addresses, reservation details, visit history, dietary and allergy notes, CRM leads and contract details that a venue enters. Allergy and dietary notes may be health-related; venues should enter only what they need.</li>
+    <li><strong>HR and pay data</strong> — employee number, hourly rate, PTO balances and employment details that a venue enters.</li>
+    <li><strong>Point-of-sale data</strong> — check and order data received from a POS the venue connects, which can include a guest name.</li>
+    <li><strong>Billing data</strong> — organization and subscription status and a Stripe customer ID. Card numbers go directly to Stripe and never reach our servers.</li>
+    <li><strong>Device and diagnostic data</strong> — push notification tokens, device and platform type, app version, device integrity results, and crash and error reports.</li>
+    <li><strong>Audit and security logs</strong> — who did what and when (sign-ins, role changes, time corrections, deletions).</li>
+    <li><strong>Website data</strong> — standard server logs when you visit venuewrangler.com.</li>
+  </ul>
+  <p>We do not sell personal data, we do not share it for third-party advertising, and the apps contain no advertising SDKs.</p>
 
-  <h2>Sharing</h2>
-  <p>Your work data is visible to your venue's team according to role (for example, managers can see the venue schedule and time entries). We use service providers to run the service, and share data with them only as needed for that purpose: Google Cloud and Supabase (hosting and database), Apple In-App Purchase and Stripe (payments), Amazon Web Services (photo and document storage), Resend (transactional email), Sentry (error diagnostics), Google Gemini (roster import processing, which may include names, email addresses, phone numbers and job titles), and Groq (AI assistant prompts submitted by users). We do not sell personal data or share it for advertising.</p>
+  <h2>3. How we use it</h2>
+  <p>To provide and secure the service (scheduling, time clock, reservations, chat, inventory, reporting, billing, notifications); to authenticate users and prevent abuse; to keep records we are legally required to keep; to communicate with you about the service and answer support requests; and to diagnose and fix errors. Data we process for a venue is used only for that venue's purposes.</p>
+  <p>Where laws such as the GDPR apply, our legal bases are: performance of a contract (providing the service), legitimate interests (security, fraud prevention and diagnostics), legal obligation (record keeping), and consent where we ask for it (for example, optional AI features). For staff and guest data, the venue determines the legal basis. [counsel to confirm]</p>
 
-  <h2>Retention &amp; deletion</h2>
-  <p>You can delete your account at any time in the app (Profile &rarr; Account &rarr; Delete account). Your account, profile and sign-in credentials are permanently removed. Photos, documents and other files you uploaded into a venue remain with that venue as its operational records, and are permanently deleted when the venue itself is deleted. If you are the final owner of a venue, the confirmation also deletes that venue, its operational data and its stored media. Wage and timeclock records that must legally be retained are kept in de-identified form for the statutory period, separately from the venue. You may also email us to request deletion.</p>
+  <h2>4. AI assistant</h2>
+  <p>Venue Wrangler includes optional AI features (an assistant and roster import). They are available only when your organization has enabled them, and the app asks for your consent before first use. When used, the text you submit (which may include names, emails, phone numbers and job titles pasted into a roster import) and relevant context are sent to <strong>Groq</strong> to generate a response. Please do not submit personal data you do not need to. Organizations that do not enable AI do not send data to Groq.</p>
 
-  <h2>Security</h2>
-  <p>Data is encrypted in transit. Passwords are stored as salted, iterated hashes — never in plain text.</p>
+  <h2>5. Who we share data with (subprocessors)</h2>
+  <p>We use these service providers to run Venue Wrangler. They process personal data only for us (and, for venue data, on the venue's behalf) and only as needed to provide their service.</p>
+  <ul>
+    <li><strong>Supabase</strong> — database, authentication, file storage and server-side functions (all application data).</li>
+    <li><strong>Cloudflare</strong> — website and web-app hosting and delivery (Cloudflare Pages) and encrypted backup storage (Cloudflare R2).</li>
+    <li><strong>Stripe</strong> — subscription billing and payments.</li>
+    <li><strong>Resend</strong> — transactional email such as invitations, notices, and verification and recovery emails.</li>
+    <li><strong>Sentry</strong> — crash and error diagnostics.</li>
+    <li><strong>Groq</strong> — AI assistant, only when your organization enables AI.</li>
+    <li><strong>Google Firebase Cloud Messaging</strong> and <strong>Apple Push Notification service</strong> — delivering push notifications.</li>
+    <li><strong>Google Play Integrity</strong> and <strong>Apple App Attest</strong> — device and app integrity checks.</li>
+    <li><strong>Cloudmersive</strong> and <strong>ClamAV</strong> — malware scanning of uploaded documents.</li>
+    <li><strong>Optional integrations a venue connects</strong> — <strong>Square</strong> and <strong>Toast</strong> (point of sale), <strong>QuickBooks (Intuit)</strong> and <strong>Gusto</strong> (accounting and payroll). These exchange only what the venue authorizes and operate under the venue's own agreement with them.</li>
+  </ul>
+  <p>We will update this list before adding a provider. We may also disclose information if the law requires it, to protect rights and safety, or in a business transfer, subject to this policy.</p>
 
-  <h2>Contact</h2>
-  <p>Questions or requests: <a href="mailto:admin@venuewrangler.com">admin@venuewrangler.com</a></p>
+  <h2>6. Who can see your data inside a venue</h2>
+  <p>Venue data is visible to members of that venue according to role. For example, managers can see schedules, time entries and the GPS recorded at punches, and staff can see their own records and shared schedules. Different venues cannot see each other's data.</p>
+
+  <h2>7. Retention</h2>
+  <ul>
+    <li><strong>Account and operational data</strong> — while the venue's subscription and your account are active; removed when the venue or account is deleted, except as stated below.</li>
+    <li><strong>Audit log</strong> — 365 days; time-entry correction and void records, 3 years.</li>
+    <li><strong>Raw GPS coordinates on finished time punches</strong> — 365 days by default; punch times and the on-site verdict stay with the time record.</li>
+    <li><strong>Wage and time records the law requires venues to keep</strong> — 3 years, in a restricted store separate from the venue and the account.</li>
+    <li><strong>Raw point-of-sale payloads</strong> — 90 days; the parsed check data remains.</li>
+    <li><strong>Guest personal details on past reservations</strong> — anonymized after 24 months.</li>
+    <li><strong>Invitations</strong> — resolved invitations 90 days after resolution; unaccepted ones 30 days after they expire.</li>
+    <li><strong>Notification events</strong> — 180 days.</li>
+    <li><strong>Database backups</strong> — 30 days, stored encrypted.</li>
+  </ul>
+  <p>Copies of deleted data in backups age out within the backup period.</p>
+
+  <h2>8. Your rights and how to use them</h2>
+  <p>Depending on where you live (for example the EU or UK under the GDPR, California under the CCPA/CPRA, or South Africa under POPIA), you may have the right to <strong>access</strong> your personal data, <strong>correct</strong> it, <strong>delete</strong> it, <strong>object</strong> to or <strong>restrict</strong> certain processing, receive a <strong>portable copy</strong>, and <strong>withdraw consent</strong>. We do not make decisions about you based solely on automated processing, and we do not sell or share personal information for advertising. [counsel to confirm which regimes apply]</p>
+  <ul>
+    <li><strong>Delete your account:</strong> in the app, go to Settings, then Delete account. Your sign-in and profile are removed. Wage records that a venue must legally keep are retained as described above.</li>
+    <li><strong>Anything else:</strong> email <a href="mailto:admin@venuewrangler.com">admin@venuewrangler.com</a> from the address on your account. We may ask you to verify your identity.</li>
+    <li><strong>Data a venue entered about you</strong> (for example a staff or guest record): tell us which venue. We will pass the request to the venue as controller and assist it, and we will respond to you about our own data.</li>
+  </ul>
+  <p>We aim to respond within 30 days. You may also complain to your local data-protection authority.</p>
+
+  <h2>9. International transfers</h2>
+  <p>We and our service providers may process data in the United States and other countries. Where personal data is transferred from the EU, UK or Switzerland, we rely on an adequacy decision or on Standard Contractual Clauses and the UK addendum. [counsel to confirm the transfer mechanism, and state the hosting regions.]</p>
+
+  <h2>10. Security</h2>
+  <p>Our measures include encryption in transit and at rest, tenant isolation enforced in the database, role-based access control, a security audit log, malware scanning of uploaded documents, secrets kept out of source code, client-side encryption of database backups, and automated testing and dependency checks. Multi-factor authentication is available but is not yet required for every account. No system is perfectly secure. If a breach affects your personal data, we will notify affected customers and, where required, regulators without undue delay. [counsel to confirm]</p>
+
+  <h2>11. Children</h2>
+  <p>The service is for venue staff and operators and is not directed at children under 16.</p>
+
+  <h2>12. Changes</h2>
+  <p>We will post updates here and change the date above. For material changes we will notify account holders in the app or by email.</p>
+
+  <h2>13. Contact</h2>
+  <p>Loungeability LLC. Questions or requests: <a href="mailto:admin@venuewrangler.com">admin@venuewrangler.com</a></p>
 
   <p><a href="/">&larr; Back to venuewrangler home</a></p>
 </div>

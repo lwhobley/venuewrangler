@@ -105,7 +105,13 @@ jobs:
         run: psql -v ON_ERROR_STOP=1 -f supabase/tests/ci_grants_stub.sql
 
       - name: Install pgTAP extension
-        run: psql -v ON_ERROR_STOP=1 -c "CREATE EXTENSION IF NOT EXISTS pgtap;"
+        # The migrations set global default privileges (no PUBLIC execute on new functions), so pgTAP
+        # lives in its own schema that is opened up explicitly; this also keeps `public` free of
+        # test objects for supabase/tests/database/security_invariants.test.sql.
+        run: |
+          psql -v ON_ERROR_STOP=1 -c "CREATE SCHEMA IF NOT EXISTS tap; CREATE EXTENSION IF NOT EXISTS pgtap SCHEMA tap;"
+          psql -v ON_ERROR_STOP=1 -c "GRANT USAGE ON SCHEMA tap TO PUBLIC; GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA tap TO PUBLIC;"
+          psql -v ON_ERROR_STOP=1 -c "ALTER DATABASE $PGDATABASE SET search_path = public, tap;"
 
       - name: Run RLS authorization tests
         run: pg_prove --dbname "$PGDATABASE" supabase/tests/database/*.test.sql
@@ -124,9 +130,13 @@ jobs:
       # (e.g. "@supabase/supabase-js") resolve through node_modules - deno check doesn't
       # install them on its own, so without this, every such import fails with "not a
       # dependency" on a fresh checkout.
-      - name: Install npm dependencies for Edge Functions
+      #
+      # --frozen makes the install fail if deno.lock does not exactly cover the imports in
+      # deno.json (audit O-05), so a dependency can only change through a reviewed lockfile
+      # diff. Regenerate with `deno install` in supabase/functions and commit deno.lock.
+      - name: Install npm dependencies for Edge Functions (frozen lockfile)
         working-directory: supabase/functions
-        run: deno install
+        run: deno install --frozen
 
       - name: Deno check all functions
         run: |

@@ -55,6 +55,7 @@ it('overlapping expired checkout retries share the replacement session', async (
     require(name: string) {
       if (name.includes('supabase-clients')) return { createServiceClient: () => client, createUserClient: () => client };
       if (name.includes('/stripe')) return { createStripeClient: () => stripe };
+      if (name.includes('rate-limit')) return { async enforceRateLimit() { return null; } };
       if (name.includes('cors')) return { corsHeaders: {}, handleCorsPreflight: () => null };
       return { initObservability() {}, captureException() {}, async flushObservability() {} };
     },

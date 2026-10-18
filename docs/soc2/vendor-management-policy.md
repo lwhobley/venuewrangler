@@ -1,45 +1,59 @@
 # Vendor Management & Subprocessor Policy
 
-**Document Owner**: Security & Legal  
-**Effective Date**: August 2026  
-**Review Cycle**: Annual  
+**Document Owner**: Principal (Loungeability LLC)
+**Last reviewed**: 2026-10-17
+**Review Cycle**: Annual
 
 ---
 
 ## 1. Purpose & Scope
 
-This policy governs the selection, risk evaluation, ongoing monitoring, and annual security assessment of all third-party vendors and cloud subprocessors that store, process, or transmit customer data or support Venue Wrangler's production infrastructure.
+Selection, risk evaluation and monitoring of third parties that store, process or transmit customer data or support production. This list must match the privacy policy (`docs/privacy-policy.md`, `site/privacy/index.html`) and the notes in `docs/production-operations.md`. Update all three together.
+
+Google Cloud Platform, Amazon Web Services (S3), Apple In-App Purchase and Google Gemini appeared in earlier versions of this document. The current code does not use them and they have been removed. If a legacy GCP or AWS account still exists, decommission it and revoke its credentials (see the manual-only Prowler workflow).
 
 ---
 
-## 2. Approved Production Subprocessors
+## 2. Subprocessors (verified against the code)
 
-| Subprocessor | Purpose / Service | Data Processed | Compliance Certifications |
-|--------------|-------------------|----------------|---------------------------|
-| **Google Cloud Platform (GCP)** | Cloud Run container hosting, load balancing, logging, and secret management. | Application compute, encrypted environment variables, request logs. | SOC 1/2/3, ISO 27001, FedRAMP, HIPAA |
-| **Supabase (PostgreSQL)** | Managed PostgreSQL database hosting, connection pooling, and storage. | Customer tenant data, user profiles, shift schedules, reservations. | SOC 2 Type II, HIPAA, ISO 27001 |
-| **Amazon Web Services (AWS)** | S3 object storage for chat media attachments and nightly database backups. | User-uploaded images, encrypted logical database backup dumps. | SOC 1/2/3, ISO 27001, FedRAMP |
-| **Stripe** | Subscription billing, invoicing, credit card processing. | Customer billing details, subscription status, tokenized payment IDs (zero raw PAN on Venue Wrangler servers). | PCI-DSS Level 1, SOC 1/2 |
-| **Sentry** | Error logging and application performance monitoring. | Application stack traces, redacted error metadata (PII scrubbing active). | SOC 2 Type II, ISO 27001, HIPAA |
-| **Resend / SendGrid** | Transactional emails (verification codes, password resets, onboarding). | User email addresses, staff names, invitation codes. | SOC 2 Type II, ISO 27001 |
-| **Apple / Google (Expo)** | Push notifications and mobile app distribution. | Device push notification tokens. | SOC 2 / ISO 27001 |
+Columns "DPA on file", "SOC 2 / ISO report on file" and "Last review" record evidence. **None has been collected yet**, so each reads "No" until the operator files it. Certifications are what the vendors publicly claim; verify before relying on them.
+
+| Subprocessor | Service | Data | Evidence in repo | DPA on file | Report on file | Last review |
+|---|---|---|---|---|---|---|
+| **Supabase** | Postgres, Auth, Storage, Edge Functions | All application data | `supabase/` | No | No | Never |
+| **Cloudflare** | Pages hosting, CDN, R2 backups | Web traffic metadata; encrypted backups and file mirrors | `site/`, backup workflows | No | No | Never |
+| **Stripe** | Subscription billing | Billing contact, subscription IDs; card data goes to Stripe directly | `supabase/functions/stripe-*` | No | No | Never |
+| **Resend** | Transactional email | Recipient email, name, message content | `supabase/functions/crm-send-email` | No | No | Never |
+| **Sentry** | Error diagnostics | Technical error data | `_shared/observability.ts`, `error_reporter.dart` | No | No | Never |
+| **Groq** | AI assistant, only when an organization enables AI | Text and context submitted to the assistant | `_shared/groq.ts` | No | No | Never (confirm zero-retention setting) |
+| **Google (Firebase Cloud Messaging)** | Android push | Push token, notification content | `_shared/push-delivery.ts` | No | No | Never |
+| **Apple (APNs)** | iOS push | Push token, notification content | `_shared/apns.ts` | No | No | Never |
+| **Google Play Integrity / Apple App Attest** | Device integrity | Attestation tokens | `device-attestation` function | No | No | Never |
+| **Cloudmersive** / **ClamAV** (self-hosted) | Malware scanning of uploads | The uploaded file | `_shared/malware-scan.ts` | No | No | Never |
+| **Square, Toast, QuickBooks (Intuit), Gusto** | Optional customer-connected POS / payroll / accounting | Whatever the venue authorizes | `supabase/functions/*-oauth`, `toast-pos` | No (venue's own agreements; verify OAuth app terms) | No | Never |
+| **Codemagic** | iOS build and signing | Source, signing identities, build secrets | `codemagic.yaml` | No | No | Never |
+| **GitHub** | Source, CI | Source code, CI secrets | `.github/` | No | No | Never |
+
+Codemagic and GitHub process no customer data but hold signing and deployment credentials, so they are included for access-risk purposes.
 
 ---
 
-## 3. Vendor Assessment & Onboarding Criteria
+## 3. Onboarding criteria (applies to any new vendor)
 
-Prior to onboarding any new vendor handling sensitive customer data or infrastructure:
-1. **Security Review**: Vendor must provide a valid **SOC 2 Type II Report** or **ISO 27001 Certificate** issued within the last 12 months.
-2. **Data Protection Agreement (DPA)**: Standard contractual clauses and confidentiality terms must be executed.
-3. **Encryption & Redaction**: Vendor must support encryption in transit (TLS 1.2+) and at rest (AES-256).
-4. **Least Privilege Integration**: API integrations must use narrowly scoped API keys or service accounts.
+1. Identify the data it will touch and update the privacy policy and this list **before** go-live.
+2. Obtain a current SOC 2 Type II report or ISO 27001 certificate where the vendor has one, and a signed DPA with Standard Contractual Clauses where personal data is transferred outside the EU/UK **[counsel to confirm]**.
+3. Require TLS in transit and encryption at rest.
+4. Use the narrowest API key or OAuth scope available; store it as a Supabase secret.
+5. For AI providers: confirm training and retention settings and keep the feature opt-in per organization.
 
 ---
 
-## 4. Annual Vendor Review Process
+## 4. Annual review (roadmap; not yet performed)
 
-* **Schedule**: All vendors in Section 2 undergo an annual security review.
-* **Requirements**:
-  * Request and review updated SOC 2 Type II reports / bridge letters.
-  * Audit integration scopes and rotate API credentials/webhook secrets.
-  * Review any vendor security incidents or data breaches disclosed during the prior 12 months.
+Once a year: collect updated reports, confirm DPAs, review scopes and rotate keys (`docs/security/secrets-handling.md`), and check each vendor's incident disclosures. **No annual review has been performed to date.** First review target: record the date in the table above.
+
+---
+
+## 5. Subprocessor changes
+
+Customers should be told before a subprocessor is added. Mechanism (notice period, objection right) is **[counsel/operator to confirm]** and is not yet automated.

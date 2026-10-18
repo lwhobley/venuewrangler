@@ -40,4 +40,16 @@ describe('3D scene embedding policy', () => {
     expect(response.headers.get('X-Frame-Options')).toBe('SAMEORIGIN');
     expect(response.headers.get('Content-Security-Policy')).toContain("frame-ancestors 'self'");
   });
+  it('pins the app CSP to the production Supabase project host instead of every *.supabase.co', async () => {
+    const response = await worker.fetch(new Request('https://example.test/app/'), env);
+    const csp = response.headers.get('Content-Security-Policy')!;
+    const host = 'puttwjwmwrzmhpsjykuj.supabase.co';
+    expect(csp).not.toContain('*.supabase.co');
+    expect(csp).toContain(`connect-src 'self' https://${host} wss://${host}`);
+    expect(csp).toContain(`img-src 'self' data: blob: https://${host}`);
+    expect(csp).toContain(`media-src 'self' blob: https://${host}`);
+    expect(csp).not.toMatch(/script-src[^;]*'unsafe-inline'/);
+    expect(response.headers.get('Cross-Origin-Opener-Policy')).toBe('same-origin-allow-popups');
+    expect(response.headers.get('Cross-Origin-Resource-Policy')).toBe('same-site');
+  });
 });

@@ -1,4 +1,6 @@
-# Prowler Continuous Compliance & Security Scanning Guide
+# Prowler Compliance & Security Scanning Guide
+
+> **Status (2026-10-17): manual-only, and out of date for the current stack.** The current product runs on Supabase and Cloudflare, not Google Cloud or AWS, so this scan covers infrastructure the product no longer depends on. The weekly schedule was removed and the fallback to the backup job's AWS keys was deleted. Run the workflow by hand only if a GCP/AWS account is back in scope. Cloud-security evidence for the current stack is collected from the Supabase and Cloudflare dashboards and the evidence log in `soc2-controls-matrix.md`. The text below is retained for reference.
 
 ## Overview
 
@@ -10,8 +12,8 @@ Venue Wrangler uses Prowler as a **zero-cost alternative** to continuous complia
 
 ## 1. Automated GitHub Actions Scanning
 
-The repository includes a scheduled workflow [`.github/workflows/prowler-compliance.yml`](../../.github/workflows/prowler-compliance.yml) that:
-- Runs automatically **every Monday at 06:00 UTC** and on-demand via `workflow_dispatch`.
+The repository includes a manually triggered workflow [`.github/workflows/prowler-compliance.yml`](../../.github/workflows/prowler-compliance.yml) that:
+- Runs **on demand only** via `workflow_dispatch` (the former Monday 06:00 UTC schedule was removed).
 - Performs read-only scans across GCP (Cloud Run, IAM, KMS, GCS, Cloud Logging) and AWS (S3, IAM).
 - Generates interactive **HTML dashboards**, **CSV matrices**, and **JSON-OCSF data**.
 - Stores the reports as downloadable GitHub artifacts retained for 90 days.

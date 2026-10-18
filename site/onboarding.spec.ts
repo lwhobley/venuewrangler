@@ -21,7 +21,9 @@ describe('website onboarding routes', () => {
   it('lets the Flutter web app reach Supabase without loosening script-src', () => {
     const worker = readSite('_worker.js');
     expect(worker).toContain("script-src 'self' 'wasm-unsafe-eval' https://browser.sentry-cdn.com;");
-    expect(worker).toContain('connect-src \'self\' https://*.supabase.co wss://*.supabase.co');
+    // Pinned to the production project host, not every *.supabase.co project (audit F-06).
+    expect(worker).toContain("connect-src 'self' https://puttwjwmwrzmhpsjykuj.supabase.co wss://puttwjwmwrzmhpsjykuj.supabase.co");
+    expect(worker).not.toContain('https://*.supabase.co');
     // Flutter's index.html relies on <base href="/app/">.
     expect(worker).toContain("base-uri 'self'");
     expect(worker).not.toContain("'unsafe-eval'");
