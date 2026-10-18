@@ -2,7 +2,7 @@
 -- Fixture: org A (owner ...002), venue A1 (manager ...004, staff 1 ...005, staff 2 ...008), org B (owner ...006).
 
 begin;
-select plan(27);
+select plan(28);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-000000000002', 'org-a-owner@example.com'),
@@ -341,7 +341,12 @@ select throws_ok(
 -- ---------------------------------------------------------------------------
 -- 15. delete: staff member cannot delete time entries
 -- ---------------------------------------------------------------------------
-delete from public.time_entries where id = '80000000-0000-0000-0000-000000000001';
+select throws_ok(
+  $$ delete from public.time_entries where id = '80000000-0000-0000-0000-000000000001' $$,
+  '42501',
+  null,
+  'staff cannot delete time entries (no policy, no DELETE grant)'
+);
 
 select is(
   (select count(*)::integer from public.time_entries where id = '80000000-0000-0000-0000-000000000001'),

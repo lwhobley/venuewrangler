@@ -3,7 +3,7 @@
 -- for the full cast if these ids look unfamiliar.
 
 begin;
-select plan(20);
+select plan(21);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-000000000002', 'org-a-owner@example.com'),
@@ -85,7 +85,7 @@ set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-000000000005';
 select is(
   (select count(*)::int from public.incidents),
   1,
-  'a venue member can see the incident'
+  'the reporter can see their own incident'
 );
 
 select throws_ok(
@@ -118,10 +118,18 @@ select lives_ok(
 );
 
 select is(
+  (select count(*)::int from public.incidents),
+  0,
+  'an unrelated staff member cannot even see another person''s incident report'
+);
+
+reset role;
+select is(
   (select title from public.incidents where id = '50000000-0000-0000-0000-000000000001'),
   'Spilled fryer oil near entrance',
   'the title is unchanged by the unrelated staff member''s no-op update'
 );
+
 
 -- ---------------------------------------------------------------------------
 -- manager resolution + audit trail

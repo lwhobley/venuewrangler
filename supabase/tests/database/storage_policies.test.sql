@@ -5,7 +5,7 @@
 -- files.
 
 begin;
-select plan(12);
+select plan(14);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-000000000004', 'venue-a1-manager@example.com'),
@@ -25,11 +25,14 @@ insert into public.memberships (user_id, organization_id, venue_id, role) values
 
 -- Seed one object per bucket as the table owner (bypasses RLS), matching how an Edge
 -- Function / the Storage API itself would actually write these rows.
-insert into storage.objects (bucket_id, name) values
-  ('incident-evidence', '10000000-0000-0000-0000-00000000000a/20000000-0000-0000-0000-0000000000a1/photo1.jpg'),
-  ('incident-evidence', '10000000-0000-0000-0000-00000000000b/20000000-0000-0000-0000-0000000000b1/photo2.jpg'),
-  ('incident-evidence', 'not-a-valid-path.jpg'),
-  ('exports', '10000000-0000-0000-0000-00000000000a/20000000-0000-0000-0000-0000000000a1/report.csv');
+-- owner is the uploader (Storage sets it from the JWT); incident evidence is readable by its
+-- uploader and by supervisors and above, not by every venue member.
+insert into storage.objects (bucket_id, name, owner) values
+  ('incident-evidence', '10000000-0000-0000-0000-00000000000a/20000000-0000-0000-0000-0000000000a1/photo1.jpg', '00000000-0000-0000-0000-000000000005'),
+  ('incident-evidence', '10000000-0000-0000-0000-00000000000b/20000000-0000-0000-0000-0000000000b1/photo2.jpg', null),
+  ('incident-evidence', '10000000-0000-0000-0000-00000000000a/20000000-0000-0000-0000-0000000000a1/photo4.jpg', '00000000-0000-0000-0000-000000000004'),
+  ('incident-evidence', 'not-a-valid-path.jpg', null),
+  ('exports', '10000000-0000-0000-0000-00000000000a/20000000-0000-0000-0000-0000000000a1/report.csv', null);
 
 -- ---------------------------------------------------------------------------
 -- incident-evidence: venue-scoped select/insert, manager-only delete
@@ -46,7 +49,17 @@ select is(
       and name = '10000000-0000-0000-0000-00000000000a/20000000-0000-0000-0000-0000000000a1/photo1.jpg'
   ),
   1,
-  'a venue member can see evidence uploaded under their own venue''s path'
+  'an uploader can see the evidence they uploaded under their venue''s path'
+);
+
+select is(
+  (
+    select count(*)::int from storage.objects
+    where bucket_id = 'incident-evidence'
+      and name = '10000000-0000-0000-0000-00000000000a/20000000-0000-0000-0000-0000000000a1/photo4.jpg'
+  ),
+  0,
+  'a staff member cannot see evidence another colleague uploaded in the same venue'
 );
 
 select is(
@@ -153,6 +166,18 @@ select throws_ok(
   '42501',
   null,
   'a client can never write directly into exports (Edge-Function/service-role only)'
+);
+
+-- supervisors and above can read evidence uploaded by anyone in the venue
+reset role;
+set local role authenticated;
+set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-000000000004';
+select is(
+  (select count(*)::int from storage.objects
+    where bucket_id = 'incident-evidence'
+      and name = '10000000-0000-0000-0000-00000000000a/20000000-0000-0000-0000-0000000000a1/photo4.jpg'),
+  1,
+  'a venue manager can read evidence uploaded by staff and by others'
 );
 
 select * from finish();

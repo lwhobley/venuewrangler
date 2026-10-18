@@ -38,3 +38,9 @@ $$;
 grant usage on schema public to anon, authenticated, service_role;
 grant usage on schema auth to anon, authenticated, service_role;
 grant select on auth.users to anon, authenticated, service_role;
+
+-- Real Supabase provides auth.jwt(); the audit-remediation migrations call it (aal claim).
+create or replace function auth.jwt() returns jsonb
+language sql stable
+as $$ select coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb $$;
+grant execute on function auth.jwt() to anon, authenticated, service_role;

@@ -353,10 +353,13 @@ select is(
 -- F12. Fully signed contracts freeze the remaining terms
 -- ---------------------------------------------------------------------------
 reset role;
+-- Seed a signed contract the way record_contract_signature would (the guard refuses direct writes).
+do $$ begin perform set_config('app.contract_signing', 'on', true); end $$;
 insert into public.crm_contracts (id, organization_id, venue_id, contract_number, client_signature_name)
   values ('d1000000-0000-0000-0000-0000000000c1', '10000000-0000-0000-0000-00000000000a',
           '20000000-0000-0000-0000-0000000000a1', 'CT-REVIEW-1', 'Pat Client');
 update public.crm_contracts set status = 'fully_signed' where id = 'd1000000-0000-0000-0000-0000000000c1';
+do $$ begin perform set_config('app.contract_signing', 'off', true); end $$;
 
 select throws_ok(
   $$ update public.crm_contracts set payment_schedule = '[{"amount":1}]'::jsonb

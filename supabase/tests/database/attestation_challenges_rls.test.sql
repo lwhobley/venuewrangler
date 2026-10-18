@@ -19,10 +19,11 @@ reset role;
 set local role authenticated;
 set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-000000000007';
 
-select is(
-  (select count(*)::int from public.attestation_challenges),
-  0,
-  'a client can never read attestation challenges, even their own (no select policy by design)'
+select throws_ok(
+  $$ select count(*) from public.attestation_challenges $$,
+  '42501',
+  null,
+  'a client can never read attestation challenges, even their own (no select policy and no SELECT grant)'
 );
 
 select throws_ok(
@@ -32,9 +33,11 @@ select throws_ok(
   'a client can never forge its own attestation challenge row'
 );
 
-select lives_ok(
+select throws_ok(
   $$ update public.attestation_challenges set consumed_at = now() where nonce_hash = 'deadbeef' $$,
-  'a client''s update attempt executes without error but matches no rows (no update policy exists, so a client cannot self-consume or un-consume a challenge)'
+  '42501',
+  null,
+  'a client cannot self-consume or un-consume a challenge (no update policy and no UPDATE grant)'
 );
 
 reset role;
@@ -42,7 +45,7 @@ reset role;
 select is(
   (select consumed_at from public.attestation_challenges where nonce_hash = 'deadbeef'),
   null,
-  'the no-op client update above did not actually mark the challenge consumed'
+  'the denied client update above did not actually mark the challenge consumed'
 );
 
 select * from finish();
