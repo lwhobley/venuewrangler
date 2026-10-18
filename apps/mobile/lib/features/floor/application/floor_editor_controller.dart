@@ -5,6 +5,8 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import '../../../core/auth/auth_providers.dart';
+import '../../../core/storage/app_secure_storage.dart';
 import '../data/floor_repository.dart';
 import '../domain/editor_table.dart';
 import '../domain/floor_table.dart';
@@ -91,11 +93,17 @@ class FloorEditorState {
 }
 
 class FloorEditorController extends StateNotifier<FloorEditorState> {
-  FloorEditorController({FlutterSecureStorage? storage})
-      : _storage = storage ?? const FlutterSecureStorage(),
+  FloorEditorController({FlutterSecureStorage? storage, String? userId})
+      : _storage = storage ?? const AppSecureStorage(),
+        _userId = userId,
         super(const FloorEditorState());
 
   final FlutterSecureStorage _storage;
+
+  /// Owner of any local draft. Drafts are keyed by user as well as plan so one account's
+  /// unpublished layout is never restored for the next account on a shared device; with no
+  /// signed-in user there is nowhere safe to keep one.
+  final String? _userId;
   int _newCounter = 0;
 
   static const _maxHistory = 50;
@@ -297,11 +305,14 @@ class FloorEditorController extends StateNotifier<FloorEditorState> {
 
   // ---- drafts (local, per floor plan) -------------------------------------
 
-  String _draftKey(String planId) => 'floor_draft_$planId';
+  String? _draftKey(String planId) =>
+      _userId == null ? null : 'floor_draft_${_userId}_$planId';
 
   Future<void> saveDraft(String planId) async {
+    final key = _draftKey(planId);
+    if (key == null) return;
     await _storage.write(
-      key: _draftKey(planId),
+      key: key,
       value: jsonEncode({
         'tables': [for (final t in state.tables) t.toJson()],
         'base_ids': state.published.keys.toList(growable: false),
@@ -310,8 +321,10 @@ class FloorEditorController extends StateNotifier<FloorEditorState> {
   }
 
   Future<bool> hasDraft(String planId) async {
+    final key = _draftKey(planId);
+    if (key == null) return false;
     try {
-      return (await _storage.read(key: _draftKey(planId))) != null;
+      return (await _storage.read(key: key)) != null;
     } catch (_) {
       return false;
     }
@@ -321,9 +334,11 @@ class FloorEditorController extends StateNotifier<FloorEditorState> {
   /// draft or it could not be read (corrupt, or written by an older schema): the unusable draft
   /// is then deleted and the editor keeps the live layout, so it still opens normally.
   Future<bool> restoreDraft(String planId) async {
+    final key = _draftKey(planId);
+    if (key == null) return false;
     final String? raw;
     try {
-      raw = await _storage.read(key: _draftKey(planId));
+      raw = await _storage.read(key: key);
     } catch (error) {
       debugPrint('Floor draft could not be read: $error');
       return false;
@@ -376,7 +391,9 @@ class FloorEditorController extends StateNotifier<FloorEditorState> {
   }
 
   Future<void> discardDraft(String planId) async {
-    await _storage.delete(key: _draftKey(planId));
+    final key = _draftKey(planId);
+    if (key == null) return;
+    await _storage.delete(key: key);
   }
 
   // ---- publish -------------------------------------------------------------
@@ -423,5 +440,5 @@ class FloorEditorController extends StateNotifier<FloorEditorState> {
 
 final floorEditorProvider =
     StateNotifierProvider.autoDispose<FloorEditorController, FloorEditorState>(
-  (ref) => FloorEditorController(),
+  (ref) => FloorEditorController(userId: ref.watch(currentUserIdProvider)),
 );

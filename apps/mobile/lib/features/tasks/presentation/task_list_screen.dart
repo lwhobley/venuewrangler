@@ -34,7 +34,8 @@ class TaskListScreen extends ConsumerWidget {
     }
 
     final tasksAsync = ref.watch(tasksForVenueProvider(venue.id));
-    final queueState = ref.watch(offlineQueueControllerProvider);
+    // Only this user's queued work: the queue is shared across accounts on a device.
+    final queueState = ref.watch(userOfflineQueueProvider);
     final pendingStatusByTaskId = _pendingStatusByTaskId(queueState.pending);
     final taskConflicts = queueState.conflicts
         .where((mutation) => mutation.kind == kTaskStatusUpdateMutationKind)

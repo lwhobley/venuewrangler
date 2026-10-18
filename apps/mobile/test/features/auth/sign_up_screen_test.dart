@@ -60,6 +60,7 @@ Future<void> _fillAndSubmit(
   WidgetTester tester, {
   required String venueName,
   required String timezoneLabel,
+  bool acceptTerms = true,
 }) async {
   await tester.enterText(
     find.widgetWithText(TextFormField, 'Venue name'),
@@ -74,6 +75,12 @@ Future<void> _fillAndSubmit(
     'Correct-Horse-1',
   );
   await _selectTimezone(tester, timezoneLabel);
+  if (acceptTerms) {
+    final checkbox = find.byType(Checkbox);
+    await tester.ensureVisible(checkbox);
+    await tester.tap(checkbox);
+    await tester.pumpAndSettle();
+  }
   final submitButton =
       find.widgetWithText(FilledButton, "Let's get you in command");
   await tester.ensureVisible(submitButton);
@@ -191,5 +198,42 @@ void main() {
 
     expect(fakeAuth.signUpCalled, isTrue);
     expect(fakeAuth.capturedWorkspaceName, hasLength(120));
+  });
+
+  testWidgets('cannot sign up without accepting the terms and privacy policy',
+      (tester) async {
+    final fakeAuth = await pumpSignUp(tester);
+
+    await _fillAndSubmit(
+      tester,
+      venueName: 'The Riverside Taphouse',
+      timezoneLabel: 'Central (Chicago)',
+      acceptTerms: false,
+    );
+
+    expect(
+      find.text('Accept the terms and privacy policy'),
+      findsOneWidget,
+    );
+    expect(fakeAuth.signUpCalled, isFalse);
+  });
+
+  testWidgets(
+      'links the terms and privacy policy and discloses location punches',
+      (tester) async {
+    await pumpSignUp(tester);
+
+    final checkbox = find.byType(Checkbox);
+    await tester.ensureVisible(checkbox);
+
+    expect(
+      find.textContaining('Terms of Service', findRichText: true),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining('Privacy Policy', findRichText: true),
+      findsOneWidget,
+    );
+    expect(find.textContaining('store the device location'), findsOneWidget);
   });
 }

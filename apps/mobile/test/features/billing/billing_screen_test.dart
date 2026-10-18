@@ -17,14 +17,6 @@ class _FakeBillingRepository implements BillingRepository {
         status: 'past_due',
         cancelAtPeriodEnd: false,
       );
-
-  @override
-  Future<String> createCheckoutUrl(String organizationId) =>
-      throw UnimplementedError();
-
-  @override
-  Future<String> createPortalUrl(String organizationId) =>
-      throw UnimplementedError();
 }
 
 void main() {

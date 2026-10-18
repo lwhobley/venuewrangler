@@ -109,12 +109,16 @@ class _FakeCrmRepository implements CrmRepository {
   }) =>
       throw UnimplementedError();
 
+  List<CrmContract> contracts = [];
+  final signatures =
+      <({String contractId, String name, bool fully, String? note})>[];
+
   @override
   Future<List<CrmContract>> getContracts({
     required String venueId,
     int limit = 100,
   }) async =>
-      [];
+      contracts;
 
   @override
   Future<void> updateContractStatus({
@@ -122,6 +126,23 @@ class _FakeCrmRepository implements CrmRepository {
     required String status,
   }) =>
       throw UnimplementedError();
+
+  @override
+  Future<void> recordContractSignature({
+    required String contractId,
+    required String signerName,
+    bool fullySigned = true,
+    String? note,
+  }) async {
+    signatures.add(
+      (
+        contractId: contractId,
+        name: signerName,
+        fully: fullySigned,
+        note: note
+      ),
+    );
+  }
 
   @override
   Future<List<CrmForecastRow>> getForecast({required String venueId}) async =>
@@ -245,6 +266,107 @@ void main() {
     expect(
       find.text('The minimum is a commitment, not an additional charge.'),
       findsOneWidget,
+    );
+  });
+
+  testWidgets('signed states are only offered through the signature action',
+      (tester) async {
+    final now = DateTime.utc(2026, 10, 7);
+    final fakeRepo = _FakeCrmRepository(beos: [])
+      ..contracts = [
+        CrmContract(
+          id: 'contract-1',
+          venueId: testVenue.id,
+          contractNumber: 'CT-1',
+          eventName: 'Gala',
+          status: 'sent',
+          createdAt: now,
+          updatedAt: now,
+        ),
+      ];
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          activeVenueProvider.overrideWith((ref) => testVenue),
+          crmRepositoryProvider.overrideWithValue(fakeRepo),
+        ],
+        child: const MaterialApp(home: CrmScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Contracts'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(PopupMenuButton<String>));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Record client signature…'), findsOneWidget);
+    expect(find.text('fully_signed'), findsNothing);
+    expect(find.text('partially_signed'), findsNothing);
+    expect(find.text('cancelled'), findsOneWidget);
+  });
+
+  testWidgets('recording a signature sends the signer and the evidence note',
+      (tester) async {
+    final now = DateTime.utc(2026, 10, 7);
+    final fakeRepo = _FakeCrmRepository(beos: [])
+      ..contracts = [
+        CrmContract(
+          id: 'contract-1',
+          venueId: testVenue.id,
+          contractNumber: 'CT-1',
+          status: 'sent',
+          createdAt: now,
+          updatedAt: now,
+        ),
+      ];
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          activeVenueProvider.overrideWith((ref) => testVenue),
+          crmRepositoryProvider.overrideWithValue(fakeRepo),
+        ],
+        child: const MaterialApp(home: CrmScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Contracts'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(PopupMenuButton<String>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Record client signature…'));
+    await tester.pumpAndSettle();
+
+    // A too-short name is rejected before anything is sent.
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Signer full name'),
+      'x',
+    );
+    await tester.tap(find.text('Record signature'));
+    await tester.pumpAndSettle();
+    expect(fakeRepo.signatures, isEmpty);
+    expect(find.text("Enter the signer's full name."), findsOneWidget);
+
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Signer full name'),
+      'Pat Client',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Note (optional, e.g. signed in person)'),
+      'signed in person',
+    );
+    await tester.tap(find.text('Record signature'));
+    await tester.pumpAndSettle();
+
+    expect(
+      fakeRepo.signatures.single,
+      (
+        contractId: 'contract-1',
+        name: 'Pat Client',
+        fully: true,
+        note: 'signed in person',
+      ),
     );
   });
 }

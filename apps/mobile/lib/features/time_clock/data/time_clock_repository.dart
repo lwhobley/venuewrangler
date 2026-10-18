@@ -2,6 +2,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/errors/app_error.dart';
 import '../domain/time_entry.dart';
+import 'attested_punch_client.dart';
 
 abstract interface class TimeClockRepository {
   /// Returns the user's open entry *at [venueId]*, or null. The database allows only one open
@@ -53,9 +54,16 @@ abstract interface class TimeClockRepository {
 }
 
 class SupabaseTimeClockRepository implements TimeClockRepository {
-  const SupabaseTimeClockRepository(this._client);
+  /// With an [attestedPunches] client, punches go through the verified path first and fall back
+  /// to the direct database insert only when the server function is unavailable (an older
+  /// backend, or it is down). A policy refusal from the server is never retried directly.
+  const SupabaseTimeClockRepository(
+    this._client, {
+    AttestedPunchClient? attestedPunches,
+  }) : _attested = attestedPunches;
 
   final SupabaseClient _client;
+  final AttestedPunchClient? _attested;
 
   @override
   Future<TimeEntry?> getActiveEntry({required String venueId}) async {
@@ -150,6 +158,21 @@ class SupabaseTimeClockRepository implements TimeClockRepository {
     required double accuracyM,
     bool mocked = false,
   }) async {
+    final attested = _attested;
+    if (attested != null && shiftId == null) {
+      try {
+        return await attested.punch(
+          kind: 'in',
+          venueId: venueId,
+          lat: lat,
+          lng: lng,
+          accuracyM: accuracyM,
+          mocked: mocked,
+        );
+      } on AttestedPunchUnavailable {
+        // fall through to the direct path
+      }
+    }
     try {
       final row = await _client
           .from('time_entries')
@@ -181,6 +204,24 @@ class SupabaseTimeClockRepository implements TimeClockRepository {
     required double accuracyM,
     bool mocked = false,
   }) async {
+    final attested = _attested;
+    if (attested != null) {
+      try {
+        final venueId = await _venueOfEntry(entryId);
+        if (venueId != null) {
+          return await attested.punch(
+            kind: 'out',
+            venueId: venueId,
+            lat: lat,
+            lng: lng,
+            accuracyM: accuracyM,
+            mocked: mocked,
+          );
+        }
+      } on AttestedPunchUnavailable {
+        // fall through to the direct path
+      }
+    }
     try {
       final now = DateTime.now().toUtc().toIso8601String();
       final row = await _client
@@ -264,6 +305,19 @@ class SupabaseTimeClockRepository implements TimeClockRepository {
       throw _mapPostgrestException(e);
     } catch (_) {
       throw const NetworkError();
+    }
+  }
+
+  Future<String?> _venueOfEntry(String entryId) async {
+    try {
+      final row = await _client
+          .from('time_entries')
+          .select('venue_id')
+          .eq('id', entryId)
+          .maybeSingle();
+      return row?['venue_id'] as String?;
+    } catch (_) {
+      return null;
     }
   }
 

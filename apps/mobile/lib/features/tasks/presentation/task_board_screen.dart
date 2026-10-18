@@ -4,12 +4,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../core/auth/auth_providers.dart';
 import '../../../core/offline/offline_queue_providers.dart';
 import '../../../core/theme/ops_colors.dart';
 import '../../../core/widgets/state_views.dart';
 import '../../../core/widgets/status_chip.dart';
 import '../../venues/application/venues_providers.dart';
 import '../../workforce/application/workforce_providers.dart';
+import '../../workforce/domain/workforce_models.dart';
 import '../application/task_status_change.dart';
 import '../application/tasks_providers.dart';
 import '../domain/operational_task.dart';
@@ -138,11 +140,14 @@ class _TaskBoardScreenState extends ConsumerState<TaskBoardScreen> {
     }
     final tasksAsync = ref.watch(tasksForVenueProvider(venue.id));
     final queue = ref.watch(offlineQueueControllerProvider);
-    final pending = pendingTaskStatuses(queue.pending);
+    final pending = pendingTaskStatuses(
+      queue.pending,
+      userId: ref.watch(currentUserIdProvider),
+    );
     _pending = pending;
     final roster = ref.watch(rosterForVenueProvider(venue.id)).valueOrNull;
-    final names = {
-      for (final m in roster ?? const [])
+    final names = <String, String>{
+      for (final m in roster ?? const <RosterMember>[])
         m.userId: m.displayName ?? 'Team member',
     };
 

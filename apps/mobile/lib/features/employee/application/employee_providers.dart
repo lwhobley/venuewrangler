@@ -5,6 +5,7 @@ import '../../guests_reservations/application/guests_reservations_providers.dart
 import '../../guests_reservations/domain/reservation.dart';
 import '../../schedules/application/schedules_providers.dart';
 import '../../shift_mode/domain/shift_mode.dart';
+import '../../venues/application/venue_clock.dart';
 import '../../venues/application/venues_providers.dart';
 import '../domain/employee_day.dart';
 
@@ -13,7 +14,7 @@ final todaysReservationsProvider =
     FutureProvider.autoDispose<List<Reservation>>((ref) async {
   final venue = ref.watch(activeVenueProvider);
   if (venue == null) return const [];
-  final w = businessDayWindow(DateTime.now());
+  final w = businessDayWindow(ref.watch(venueClockProvider), DateTime.now());
   return ref.watch(guestsReservationsRepositoryProvider).getReservations(
         venueId: venue.id,
         from: w.start,

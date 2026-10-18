@@ -6,7 +6,9 @@ import 'package:venuewrangler_mobile/features/guests_reservations/data/guests_re
 import 'package:venuewrangler_mobile/features/guests_reservations/domain/guest.dart';
 import 'package:venuewrangler_mobile/features/guests_reservations/domain/reservation.dart';
 import 'package:venuewrangler_mobile/features/guests_reservations/presentation/reservations_screen.dart';
+import 'package:venuewrangler_mobile/features/venues/application/venue_clock.dart';
 import 'package:venuewrangler_mobile/features/venues/application/venues_providers.dart';
+import 'package:venuewrangler_mobile/features/venues/domain/venue_timezone.dart';
 import 'package:venuewrangler_mobile/features/venues/domain/venue.dart';
 
 class _FakeGuestsReservationsRepository
@@ -195,5 +197,77 @@ void main() {
 
     expect(find.text('John Doe'), findsNothing);
     expect(find.text('Jane Smith'), findsOneWidget);
+  });
+
+  group('new reservation form uses the venue clock', () {
+    Future<_FakeGuestsReservationsRepository> openForm(
+      WidgetTester tester,
+      String timezone,
+    ) async {
+      final repo = _FakeGuestsReservationsRepository();
+      final venue = Venue(
+        id: 'venue-1',
+        organizationId: 'org-1',
+        name: 'Venue 1',
+        timezone: timezone,
+        createdAt: DateTime.now(),
+      );
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            activeVenueProvider.overrideWith((ref) => venue),
+            guestsReservationsRepositoryProvider.overrideWithValue(repo),
+          ],
+          child: const MaterialApp(home: ReservationsScreen()),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('New Reservation'));
+      await tester.pumpAndSettle();
+      return repo;
+    }
+
+    testWidgets('shows the venue wall time once, and saves its instant',
+        (tester) async {
+      const tz = 'Africa/Johannesburg'; // UTC+2: a double offset would show +4
+      const clock = VenueClock(tz);
+      final before = clock.now.add(const Duration(hours: 1));
+      final repo = await openForm(tester, tz);
+
+      // The form shows now+1h on the venue clock (not shifted a second time).
+      final after = clock.now.add(const Duration(hours: 1));
+      final shown = {
+        VenueTimezone.formatWallTime(before),
+        VenueTimezone.formatWallTime(after),
+      };
+      expect(
+        shown.any((t) => find.text(t).evaluate().isNotEmpty),
+        isTrue,
+        reason: 'expected one of $shown on screen',
+      );
+
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Guest Name *'),
+        'Ada',
+      );
+      await tester.tap(find.widgetWithText(ElevatedButton, 'Create'));
+      await tester.pumpAndSettle();
+
+      expect(repo.createReservationCalled, isTrue);
+      final saved = repo.reservations.single.reservationTime;
+      expect(saved.isUtc, isTrue);
+      // The instant, read back on the venue clock, is the time that was displayed.
+      expect(
+        clock.wall(saved).difference(before).inMinutes.abs(),
+        lessThanOrEqualTo(2),
+      );
+    });
+
+    testWidgets('an unsupported zone refuses to open the form', (tester) async {
+      await openForm(tester, 'Mars/Olympus_Mons');
+
+      expect(find.text('Guest Name *'), findsNothing);
+      expect(find.textContaining("isn't supported"), findsWidgets);
+    });
   });
 }

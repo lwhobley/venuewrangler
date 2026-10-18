@@ -62,6 +62,30 @@ class AppAttestService {
     }
   }
 
+  /// Per-request proof for a time punch (see supabase/functions/time-clock-punch): an App
+  /// Attest assertion whose clientDataHash is SHA-256([payloadBytes]), produced with this
+  /// install's attested key. Returns the key id and assertion, or null when the device does not
+  /// support App Attest, no key has been attested yet, or the OS refuses. Never throws.
+  Future<({String keyId, Uint8List assertion})?> generateAssertion(
+    Uint8List payloadBytes,
+  ) async {
+    if (!await isSupported()) return null;
+    final keyId = await _storage.read(_keyIdStorageKey);
+    if (keyId == null || keyId.isEmpty) return null;
+    try {
+      final assertion = await _channel.invokeMethod<Uint8List>(
+        'generateAssertion',
+        {'keyId': keyId, 'clientDataBytes': payloadBytes},
+      );
+      if (assertion == null) return null;
+      return (keyId: keyId, assertion: assertion);
+    } on PlatformException {
+      return null;
+    } on MissingPluginException {
+      return null;
+    }
+  }
+
   /// Runs the full attest-and-verify round trip. Returns `true` only if the server recorded a
   /// `valid` verdict for this attestation; `false` for every other outcome (unsupported
   /// device, network failure, expired/reused challenge, server rejection) — see class doc for

@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../storage/app_secure_storage.dart';
 import '../storage/secure_session_storage.dart';
 import 'pending_mutation.dart';
 
@@ -83,7 +84,7 @@ class FileOfflineQueueStore implements OfflineQueueStore {
 /// copies. Values are cleared with the rest of secure session storage on sign-out.
 class SecureStorageOfflineQueueStore implements OfflineQueueStore {
   const SecureStorageOfflineQueueStore({
-    FlutterSecureStorage storage = const FlutterSecureStorage(),
+    FlutterSecureStorage storage = const AppSecureStorage(),
     this.key = offlineMutationQueueStorageKey,
     this.migrateLegacyFile = false,
   }) : _storage = storage;

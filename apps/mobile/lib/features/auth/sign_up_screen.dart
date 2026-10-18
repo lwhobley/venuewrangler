@@ -11,6 +11,7 @@ import '../../core/errors/app_error.dart';
 import '../../core/theme/app_colors.dart';
 import '../organizations/domain/workspace_name.dart';
 import '../organizations/domain/workspace_timezones.dart';
+import 'legal_acceptance_field.dart';
 
 /// "Launch Workspace" — the marketing site's entry point for a brand-new customer starting
 /// their own organization from scratch (as opposed to SignInScreen, for someone already
@@ -207,6 +208,10 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
                                       validator: (value) =>
                                           passwordPolicyProblem(value ?? ''),
                                     ),
+                                    const SizedBox(height: 12),
+                                    const LegalAcceptanceField(),
+                                    const SizedBox(height: 4),
+                                    const LocationPunchNotice(),
                                     if (_error != null) ...[
                                       const SizedBox(height: 12),
                                       Text(

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../core/auth/reauth_dialog.dart';
 import '../../../core/auth/sign_out_service.dart';
 import '../application/settings_providers.dart';
 
@@ -58,6 +59,15 @@ class DeleteAccountButton extends ConsumerWidget {
     );
 
     if (confirmed != true || !context.mounted) return;
+
+    // Step-up: deleting the account is irreversible, so a borrowed unlocked phone is not enough.
+    final reauthenticated = await confirmPasswordReauth(
+      context,
+      ref,
+      title: 'Confirm to delete your account',
+      reason: 'Enter your current password to permanently delete your account.',
+    );
+    if (!reauthenticated || !context.mounted) return;
 
     // Capture everything needed after the await up front: the widget (and its WidgetRef) may
     // be disposed while the request is in flight, but sign-out must still run.

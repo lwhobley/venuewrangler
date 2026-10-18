@@ -21,7 +21,15 @@ abstract interface class IncidentsRepository {
   });
 
   Future<void> updateStatus(String incidentId, IncidentStatus status);
+
+  /// Short-lived signed URLs for the photos attached to [incidentId], signed in one batch.
+  /// Throws when the attachments cannot be listed or none of them can be signed, so the screen
+  /// can say so instead of showing "no evidence"; a path that is individually missing is skipped.
+  Future<List<String>> fetchEvidenceUrls(String incidentId);
 }
+
+/// How long an evidence URL stays valid after it is signed.
+const int kEvidenceUrlTtlSeconds = 600;
 
 class SupabaseIncidentsRepository implements IncidentsRepository {
   const SupabaseIncidentsRepository(this._client);
@@ -77,5 +85,31 @@ class SupabaseIncidentsRepository implements IncidentsRepository {
         code: '42501',
       );
     }
+  }
+
+  @override
+  Future<List<String>> fetchEvidenceUrls(String incidentId) async {
+    final rows = await _client
+        .from('incident_attachments')
+        .select('storage_path')
+        .eq('incident_id', incidentId);
+    final paths = [
+      for (final row in rows)
+        if ((row['storage_path'] as String?)?.isNotEmpty ?? false)
+          row['storage_path'] as String,
+    ];
+    if (paths.isEmpty) return const [];
+
+    final results = await _client.storage
+        .from('incident-evidence')
+        .createSignedUrlsResult(paths, kEvidenceUrlTtlSeconds);
+    final urls = [
+      for (final result in results)
+        if (result is SignedUrlSuccess) result.signedUrl,
+    ];
+    if (urls.isEmpty) {
+      throw StateError('None of the incident evidence could be signed.');
+    }
+    return urls;
   }
 }

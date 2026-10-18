@@ -61,7 +61,7 @@ void main() {
     expect(request.url.path, '/rest/v1/rpc/inventory_save_count');
     final body = jsonDecode(request.body) as Map;
     expect(body['p_complete'], true);
-    expect((body['p_values'] as List)[1]['quantity'], isNull);
+    expect(((body['p_values'] as List)[1] as Map)['quantity'], isNull);
   });
   test(
       'item update is explicitly constrained to its venue and soft deletion preserves history',

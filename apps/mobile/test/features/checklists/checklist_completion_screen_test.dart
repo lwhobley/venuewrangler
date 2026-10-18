@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -110,7 +111,7 @@ void main() {
     await tester.pumpAndSettle();
     // Navigate to the detail route the same way the list screen does.
     final router = GoRouter.of(tester.element(find.byType(Scaffold)));
-    router.push('/detail');
+    unawaited(router.push<void>('/detail'));
     await tester.pumpAndSettle();
 
     expect(find.text('Unlock door'), findsOneWidget);
@@ -144,7 +145,7 @@ void main() {
     await tester.pumpWidget(buildHarness(fakeRepo));
     await tester.pumpAndSettle();
     final router = GoRouter.of(tester.element(find.byType(Scaffold)));
-    router.push('/detail');
+    unawaited(router.push<void>('/detail'));
     await tester.pumpAndSettle();
 
     await tester.tap(find.widgetWithText(FilledButton, 'Submit'));

@@ -25,8 +25,13 @@ import '../features/floor/presentation/floor_plan_screen.dart';
 import '../features/guests_reservations/presentation/reservations_screen.dart';
 import '../features/incidents/presentation/incident_list_screen.dart';
 import '../features/insights/presentation/shift_insights_screen.dart';
+import '../features/integrations/presentation/integration_complete_screen.dart';
 import '../features/integrations/presentation/integrations_screen.dart';
+import '../features/invites/application/invites_providers.dart';
+import '../features/invites/presentation/pending_invites_screen.dart';
 import '../features/inventory/presentation/inventory_list_screen.dart';
+import '../features/mfa/presentation/mfa_challenge_screen.dart';
+import '../features/mfa/presentation/mfa_settings_screen.dart';
 import '../features/notifications/application/notification_routing.dart';
 import '../features/notifications/application/notifications_providers.dart';
 import '../features/notifications/presentation/notifications_screen.dart';
@@ -39,6 +44,8 @@ import '../features/shift_mode/presentation/shift_mode_screen.dart';
 import '../features/staff_requests/presentation/staff_requests_screen.dart';
 import '../features/tasks/presentation/task_board_screen.dart';
 import '../features/tasks/presentation/task_list_screen.dart';
+import '../features/team/domain/team_member.dart';
+import '../features/team/presentation/team_screen.dart';
 import '../features/time_clock/presentation/time_clock_screen.dart';
 import '../features/venues/application/venues_providers.dart';
 import '../features/venues/domain/venue.dart';
@@ -61,16 +68,35 @@ final routerRefreshNotifierProvider = Provider<RouterRefreshNotifier>((ref) {
   ref.listen(activeVenueProvider, (_, __) => notifier.notify());
   ref.listen(passwordRecoveryPendingProvider, (_, __) => notifier.notify());
   ref.listen(myVenueRoleProvider, (_, __) => notifier.notify());
+  ref.listen(mfaChallengeRequiredProvider, (_, __) => notifier.notify());
+  ref.listen(invitesPromptDueProvider, (_, __) => notifier.notify());
   ref.onDispose(notifier.dispose);
   return notifier;
 });
+
+/// Roles that get the full manager shell. Anything else (staff, no membership on the active
+/// venue, or a role this app does not know such as `platform_admin`) gets the employee shell,
+/// so an unexpected role never lands on manager screens. The database still enforces access.
+const managerShellRoles = {
+  'supervisor',
+  'venue_manager',
+  'organization_admin',
+  'organization_owner',
+};
+
+/// True when [role] (already resolved) belongs in the employee shell.
+bool usesEmployeeShell(String? role) => !managerShellRoles.contains(role);
 
 final isEmployeeRoleProvider = Provider<bool>((ref) {
   final isSignedIn = ref.watch(isSignedInProvider);
   final hasActiveVenue = ref.watch(activeVenueProvider) != null;
   if (!isSignedIn || !hasActiveVenue) return false;
   final roleAsync = ref.watch(myVenueRoleProvider);
-  return roleAsync.hasError || isEmployeeRole(roleAsync.valueOrNull);
+  if (roleAsync.hasError) return true;
+  // Role not resolved yet: keep the structure the router already has (the redirect holds the
+  // user on /loading) instead of building one shell now and swapping it a moment later.
+  if (roleAsync.isLoading && !roleAsync.hasValue) return false;
+  return usesEmployeeShell(roleAsync.valueOrNull);
 });
 
 final routerProvider = Provider<GoRouter>((ref) {
@@ -95,12 +121,21 @@ final routerProvider = Provider<GoRouter>((ref) {
           : const AsyncValue<String?>.data(null);
       final roleLoading = roleAsync.isLoading && !roleAsync.hasValue;
       final isEmployee =
-          roleAsync.hasError || isEmployeeRole(roleAsync.valueOrNull);
+          roleAsync.hasError || usesEmployeeShell(roleAsync.valueOrNull);
 
       final goingToSignIn = state.matchedLocation == '/sign-in';
       final goingToSignUp = state.matchedLocation == '/sign-up';
       final goingToSelectVenue = state.matchedLocation == '/select-venue';
       final goingToReset = state.matchedLocation == '/reset-password';
+      final goingToMfaChallenge = state.matchedLocation == '/mfa-challenge';
+      final goingToInvites = state.matchedLocation == '/invites';
+
+      // A verified authenticator exists but this session only passed the password: nothing
+      // else (not even a password-reset) until the code is entered.
+      if (isSignedIn && ref.read(mfaChallengeRequiredProvider)) {
+        return goingToMfaChallenge ? null : '/mfa-challenge';
+      }
+      if (goingToMfaChallenge) return '/';
 
       // Opened a reset link: nothing else until a new password is set.
       if (isSignedIn && recoveringPassword) {
@@ -112,8 +147,13 @@ final routerProvider = Provider<GoRouter>((ref) {
         return (goingToSignIn || goingToSignUp) ? null : '/sign-in';
       }
       if (isSignedIn && (goingToSignIn || goingToSignUp)) return '/';
-      if (!hasActiveVenue && !goingToSelectVenue) return '/select-venue';
-      if (!hasActiveVenue) return null;
+      if (!hasActiveVenue) {
+        if (goingToInvites) return null;
+        if (!goingToSelectVenue) return '/select-venue';
+        // Invites no longer auto-join at sign-up: someone invited who has no workspace yet is
+        // shown them here once (until they decide later or accept).
+        return ref.read(invitesPromptDueProvider) ? '/invites' : null;
+      }
 
       // Choosing a venue (or creating a workspace) only sets the active venue; this router is
       // not rebuilt for it, so leave the switcher here. Stay only while a tapped notification
@@ -132,6 +172,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       if (path == '/billing' &&
           roleAsync.valueOrNull != 'organization_owner' &&
           roleAsync.valueOrNull != 'organization_admin') {
+        return '/';
+      }
+      if (path == '/team' &&
+          !teamManagerRoles.contains(roleAsync.valueOrNull)) {
         return '/';
       }
       if (isEmployee && !employeeCanOpen(path)) return '/';
@@ -159,6 +203,18 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/loading',
         builder: (context, state) => const _LoadingScreen(),
       ),
+      GoRoute(
+        path: '/invites',
+        builder: (context, state) => const PendingInvitesScreen(),
+      ),
+      GoRoute(
+        path: '/mfa',
+        builder: (context, state) => const MfaSettingsScreen(),
+      ),
+      GoRoute(
+        path: '/mfa-challenge',
+        builder: (context, state) => const MfaChallengeScreen(),
+      ),
       if (employee) _employeeShell() else _fullShell(rootKey),
     ],
   );
@@ -183,6 +239,9 @@ bool employeeCanOpen(String path) => const {
       '/select-venue',
       '/reset-password',
       '/loading',
+      '/invites',
+      '/mfa',
+      '/mfa-challenge',
     }.contains(path);
 
 class _LoadingScreen extends StatelessWidget {
@@ -423,9 +482,27 @@ StatefulShellRoute _fullShell(GlobalKey<NavigatorState> rootKey) {
             path: '/integrations',
             builder: (context, state) => const IntegrationsScreen(),
           ),
+          // Return links from the {provider}-oauth callbacks (venuewrangler://integrations/...).
+          GoRoute(
+            path: '/integrations/connected',
+            builder: (context, state) => IntegrationCompleteScreen(
+              provider: state.uri.queryParameters['provider'],
+              nonce: state.uri.queryParameters['nonce'],
+            ),
+          ),
+          GoRoute(
+            path: '/integrations/error',
+            builder: (context, state) => IntegrationErrorScreen(
+              reason: state.uri.queryParameters['reason'],
+            ),
+          ),
           GoRoute(
             path: '/settings',
             builder: (context, state) => const SettingsScreen(),
+          ),
+          GoRoute(
+            path: '/team',
+            builder: (context, state) => const TeamScreen(),
           ),
         ],
       ),

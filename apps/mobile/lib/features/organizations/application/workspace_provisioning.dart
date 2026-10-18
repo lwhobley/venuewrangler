@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -132,7 +133,7 @@ class WorkspaceProvisioningController
       if (mounted) {
         state = WorkspaceProvisioningState(
           status: WorkspaceProvisioningStatus.failed,
-          message: e.message.isEmpty ? _genericFailure : e.message,
+          message: friendlyWorkspaceError(e.message),
         );
       }
       return false;
@@ -145,6 +146,21 @@ class WorkspaceProvisioningController
       }
       return false;
     }
+  }
+
+  /// `create_workspace` raises `workspace_rate_limited` / `workspace_limit_reached`; anything
+  /// else keeps the server's own message.
+  @visibleForTesting
+  static String friendlyWorkspaceError(String message) {
+    if (message.contains('workspace_rate_limited')) {
+      return 'You have created several workspaces in a short time. Please wait '
+          'a while and try again.';
+    }
+    if (message.contains('workspace_limit_reached')) {
+      return 'You have reached the maximum number of workspaces for one '
+          'account. Contact support if you need more.';
+    }
+    return message.isEmpty ? _genericFailure : message;
   }
 
   static const _genericFailure =

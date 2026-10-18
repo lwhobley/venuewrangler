@@ -7,6 +7,7 @@ import '../../venues/application/venues_providers.dart';
 import '../application/document_picker_service.dart';
 import '../application/documents_providers.dart';
 import '../domain/venue_document.dart';
+import '../../../core/privacy/screen_security.dart';
 
 const _categoryLabels = {
   'sop': 'SOP',
@@ -34,52 +35,55 @@ class DocumentsScreen extends ConsumerWidget {
 
     final documentsAsync = ref.watch(documentsProvider(venue.id));
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Documents'),
-      ),
-      body: RefreshIndicator(
-        onRefresh: () async => ref.invalidate(documentsProvider(venue.id)),
-        child: documentsAsync.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (error, _) => Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text('Could not load documents.'),
-                const SizedBox(height: 12),
-                OutlinedButton(
-                  onPressed: () => ref.invalidate(documentsProvider(venue.id)),
-                  child: const Text('Retry'),
-                ),
-              ],
-            ),
-          ),
-          data: (documents) {
-            if (documents.isEmpty) {
-              return LayoutBuilder(
-                builder: (context, constraints) => SingleChildScrollView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  child: SizedBox(
-                    height: constraints.maxHeight,
-                    child: const Center(child: Text('No documents yet.')),
-                  ),
-                ),
-              );
-            }
-            return ListView(
-              children: [
-                for (final document in documents)
-                  _DocumentTile(document: document, venueId: venue.id),
-              ],
-            );
-          },
+    return SecureScreen(
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Documents'),
         ),
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _upload(context, ref, venueId: venue.id),
-        icon: const Icon(Icons.upload_file_outlined),
-        label: const Text('Upload'),
+        body: RefreshIndicator(
+          onRefresh: () async => ref.invalidate(documentsProvider(venue.id)),
+          child: documentsAsync.when(
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (error, _) => Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('Could not load documents.'),
+                  const SizedBox(height: 12),
+                  OutlinedButton(
+                    onPressed: () =>
+                        ref.invalidate(documentsProvider(venue.id)),
+                    child: const Text('Retry'),
+                  ),
+                ],
+              ),
+            ),
+            data: (documents) {
+              if (documents.isEmpty) {
+                return LayoutBuilder(
+                  builder: (context, constraints) => SingleChildScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    child: SizedBox(
+                      height: constraints.maxHeight,
+                      child: const Center(child: Text('No documents yet.')),
+                    ),
+                  ),
+                );
+              }
+              return ListView(
+                children: [
+                  for (final document in documents)
+                    _DocumentTile(document: document, venueId: venue.id),
+                ],
+              );
+            },
+          ),
+        ),
+        floatingActionButton: FloatingActionButton.extended(
+          onPressed: () => _upload(context, ref, venueId: venue.id),
+          icon: const Icon(Icons.upload_file_outlined),
+          label: const Text('Upload'),
+        ),
       ),
     );
   }

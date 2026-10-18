@@ -12,6 +12,7 @@ import '../application/workforce_providers.dart';
 import '../domain/workforce_models.dart';
 import '../domain/employee_hr_profile.dart';
 import 'employee_profile_widgets.dart';
+import '../../../core/privacy/screen_security.dart';
 
 /// Team identity, HR profiles, and invitations for the active venue.
 class WorkforceRosterScreen extends ConsumerWidget {
@@ -36,192 +37,199 @@ class WorkforceRosterScreen extends ConsumerWidget {
     final actorRole = ref.watch(myVenueRoleProvider).valueOrNull;
     final actorId = ref.watch(currentUserIdProvider);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Team Management'),
-        actions: [
-          if (canManage)
-            IconButton(
-              tooltip: 'Import staff',
-              icon: const Icon(Icons.upload_file_outlined),
-              onPressed: () => _showImportDialog(context, ref, venue.id),
-            ),
-        ],
-      ),
-      body: RefreshIndicator(
-        onRefresh: () async {
-          ref.invalidate(
-            canManage
-                ? rosterForVenueProvider(venue.id)
-                : scheduleRosterForVenueProvider(venue.id),
-          );
-          if (canManage) {
-            ref.invalidate(invitesForVenueProvider(venue.id));
-          }
-        },
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-          physics: const AlwaysScrollableScrollPhysics(),
-          children: [
-            const _SectionHeader('Roster'),
-            rosterAsync.when(
-              loading: () => const Padding(
-                padding: EdgeInsets.all(16),
-                child: Center(child: CircularProgressIndicator()),
+    return SecureScreen(
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Team Management'),
+          actions: [
+            if (canManage)
+              IconButton(
+                tooltip: 'Import staff',
+                icon: const Icon(Icons.upload_file_outlined),
+                onPressed: () => _showImportDialog(context, ref, venue.id),
               ),
-              error: (_, __) =>
-                  const ListTile(title: Text('Could not load roster.')),
-              data: (roster) => roster.isEmpty
-                  ? const ListTile(title: Text('No roster members yet.'))
-                  : Column(
-                      children: [
-                        for (final member in roster)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 6),
-                            child: Card(
-                              child: ListTile(
-                                leading: StaffAvatar(
-                                  profileKey: (
-                                    venueId: venue.id,
-                                    userId: member.userId
+          ],
+        ),
+        body: RefreshIndicator(
+          onRefresh: () async {
+            ref.invalidate(
+              canManage
+                  ? rosterForVenueProvider(venue.id)
+                  : scheduleRosterForVenueProvider(venue.id),
+            );
+            if (canManage) {
+              ref.invalidate(invitesForVenueProvider(venue.id));
+            }
+          },
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+            physics: const AlwaysScrollableScrollPhysics(),
+            children: [
+              const _SectionHeader('Roster'),
+              rosterAsync.when(
+                loading: () => const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Center(child: CircularProgressIndicator()),
+                ),
+                error: (_, __) =>
+                    const ListTile(title: Text('Could not load roster.')),
+                data: (roster) => roster.isEmpty
+                    ? const ListTile(title: Text('No roster members yet.'))
+                    : Column(
+                        children: [
+                          for (final member in roster)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 6),
+                              child: Card(
+                                child: ListTile(
+                                  leading: StaffAvatar(
+                                    profileKey: (
+                                      venueId: venue.id,
+                                      userId: member.userId
+                                    ),
+                                    name: member.displayName ?? 'Team member',
                                   ),
-                                  name: member.displayName ?? 'Team member',
-                                ),
-                                title:
-                                    Text(member.displayName ?? '(no name set)'),
-                                subtitle:
-                                    Text(member.role.replaceAll('_', ' ')),
-                                trailing: canManageEmployeeDetails(
-                                          actorRole,
-                                          member.role,
-                                        ) ||
-                                        actorId == member.userId
-                                    ? const Icon(Icons.chevron_right)
-                                    : null,
-                                onTap: canManageEmployeeDetails(
-                                          actorRole,
-                                          member.role,
-                                        ) ||
-                                        actorId == member.userId
-                                    ? () => showModalBottomSheet<void>(
-                                          context: context,
-                                          isScrollControlled: true,
-                                          useSafeArea: true,
-                                          builder: (context) => SizedBox(
-                                            height: MediaQuery.sizeOf(context)
-                                                    .height *
-                                                .85,
-                                            child: ListView(
-                                              padding: const EdgeInsets.all(16),
-                                              children: [
-                                                Text(
-                                                  member.displayName ??
-                                                      'Team member',
-                                                  style: Theme.of(context)
-                                                      .textTheme
-                                                      .titleLarge,
-                                                ),
-                                                const SizedBox(height: 16),
-                                                Center(
-                                                  child: StaffAvatar(
+                                  title: Text(
+                                    member.displayName ?? '(no name set)',
+                                  ),
+                                  subtitle:
+                                      Text(member.role.replaceAll('_', ' ')),
+                                  trailing: canManageEmployeeDetails(
+                                            actorRole,
+                                            member.role,
+                                          ) ||
+                                          actorId == member.userId
+                                      ? const Icon(Icons.chevron_right)
+                                      : null,
+                                  onTap: canManageEmployeeDetails(
+                                            actorRole,
+                                            member.role,
+                                          ) ||
+                                          actorId == member.userId
+                                      ? () => showModalBottomSheet<void>(
+                                            context: context,
+                                            isScrollControlled: true,
+                                            useSafeArea: true,
+                                            builder: (context) => SizedBox(
+                                              height: MediaQuery.sizeOf(context)
+                                                      .height *
+                                                  .85,
+                                              child: ListView(
+                                                padding:
+                                                    const EdgeInsets.all(16),
+                                                children: [
+                                                  Text(
+                                                    member.displayName ??
+                                                        'Team member',
+                                                    style: Theme.of(context)
+                                                        .textTheme
+                                                        .titleLarge,
+                                                  ),
+                                                  const SizedBox(height: 16),
+                                                  Center(
+                                                    child: StaffAvatar(
+                                                      profileKey: (
+                                                        venueId: venue.id,
+                                                        userId: member.userId
+                                                      ),
+                                                      name:
+                                                          member.displayName ??
+                                                              'Team member',
+                                                      radius: 40,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(height: 12),
+                                                  ProfilePhotoButton(
+                                                    profileKey: (
+                                                      venueId: venue.id,
+                                                      userId: member.userId
+                                                    ),
+                                                    organizationId:
+                                                        venue.organizationId,
+                                                  ),
+                                                  const SizedBox(height: 16),
+                                                  EmployeeHrCard(
                                                     profileKey: (
                                                       venueId: venue.id,
                                                       userId: member.userId
                                                     ),
                                                     name: member.displayName ??
                                                         'Team member',
-                                                    radius: 40,
+                                                    manageEmployment:
+                                                        canManageEmployeeDetails(
+                                                      actorRole,
+                                                      member.role,
+                                                    ),
                                                   ),
-                                                ),
-                                                const SizedBox(height: 12),
-                                                ProfilePhotoButton(
-                                                  profileKey: (
-                                                    venueId: venue.id,
-                                                    userId: member.userId
-                                                  ),
-                                                  organizationId:
-                                                      venue.organizationId,
-                                                ),
-                                                const SizedBox(height: 16),
-                                                EmployeeHrCard(
-                                                  profileKey: (
-                                                    venueId: venue.id,
-                                                    userId: member.userId
-                                                  ),
-                                                  name: member.displayName ??
-                                                      'Team member',
-                                                  manageEmployment:
-                                                      canManageEmployeeDetails(
-                                                    actorRole,
-                                                    member.role,
-                                                  ),
-                                                ),
-                                              ],
+                                                ],
+                                              ),
                                             ),
-                                          ),
-                                        )
-                                    : null,
+                                          )
+                                      : null,
+                                ),
                               ),
+                            ),
+                        ],
+                      ),
+              ),
+              if (canManage) ...[
+                const Divider(),
+                const _SectionHeader('Pending invites'),
+                invitesAsync!.when(
+                  loading: () => const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Center(child: CircularProgressIndicator()),
+                  ),
+                  error: (_, __) =>
+                      const ListTile(title: Text('Could not load invites.')),
+                  data: (invites) {
+                    final pending = invites
+                        .where(
+                          (invite) => invite.status == InviteStatus.pending,
+                        )
+                        .toList();
+                    if (pending.isEmpty) {
+                      return const ListTile(title: Text('No pending invites.'));
+                    }
+                    return Column(
+                      children: [
+                        for (final invite in pending)
+                          ListTile(
+                            leading: const Icon(Icons.mail_outline),
+                            title: Text(invite.email),
+                            subtitle: Text(invite.role.label),
+                            trailing: TextButton(
+                              onPressed: () => _revokeInvite(
+                                context,
+                                ref,
+                                invite.id,
+                                venue.id,
+                              ),
+                              child: const Text('Revoke'),
                             ),
                           ),
                       ],
-                    ),
-            ),
-            if (canManage) ...[
-              const Divider(),
-              const _SectionHeader('Pending invites'),
-              invitesAsync!.when(
-                loading: () => const Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Center(child: CircularProgressIndicator()),
+                    );
+                  },
                 ),
-                error: (_, __) =>
-                    const ListTile(title: Text('Could not load invites.')),
-                data: (invites) {
-                  final pending = invites
-                      .where((invite) => invite.status == InviteStatus.pending)
-                      .toList();
-                  if (pending.isEmpty) {
-                    return const ListTile(title: Text('No pending invites.'));
-                  }
-                  return Column(
-                    children: [
-                      for (final invite in pending)
-                        ListTile(
-                          leading: const Icon(Icons.mail_outline),
-                          title: Text(invite.email),
-                          subtitle: Text(invite.role.label),
-                          trailing: TextButton(
-                            onPressed: () => _revokeInvite(
-                              context,
-                              ref,
-                              invite.id,
-                              venue.id,
-                            ),
-                            child: const Text('Revoke'),
-                          ),
-                        ),
-                    ],
-                  );
-                },
-              ),
+              ],
             ],
-          ],
+          ),
         ),
-      ),
-      bottomNavigationBar: canManage
-          ? SafeArea(
-              top: false,
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: FilledButton.icon(
-                  onPressed: () => _showInviteDialog(context, ref, venue.id),
-                  icon: const Icon(Icons.person_add_alt_outlined),
-                  label: const Text('Add New Staff'),
+        bottomNavigationBar: canManage
+            ? SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: FilledButton.icon(
+                    onPressed: () => _showInviteDialog(context, ref, venue.id),
+                    icon: const Icon(Icons.person_add_alt_outlined),
+                    label: const Text('Add New Staff'),
+                  ),
                 ),
-              ),
-            )
-          : null,
+              )
+            : null,
+      ),
     );
   }
 

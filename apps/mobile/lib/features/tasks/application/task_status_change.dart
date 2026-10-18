@@ -9,10 +9,16 @@ import '../domain/operational_task.dart';
 import 'tasks_providers.dart';
 
 /// Status changes still queued for sync, by task id (latest wins). Conflicts are excluded: they
-/// are no longer retried and are shown to the person separately.
-Map<String, TaskStatus> pendingTaskStatuses(List<PendingMutation> pending) {
+/// are no longer retried and are shown to the person separately. The offline queue is shared by
+/// every account that signs in on a device, so only entries owned by [userId] count: another
+/// user's unsynced change must not show up as this user's pending status.
+Map<String, TaskStatus> pendingTaskStatuses(
+  List<PendingMutation> pending, {
+  required String? userId,
+}) {
   final result = <String, TaskStatus>{};
   for (final m in pending) {
+    if (m.userId != userId) continue;
     if (m.isConflict) continue;
     if (m.kind != kTaskStatusUpdateMutationKind) continue;
     result[m.payload['taskId'] as String] =

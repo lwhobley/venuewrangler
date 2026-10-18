@@ -1,15 +1,16 @@
 import '../../floor/domain/floor_table.dart';
 import '../../guests_reservations/domain/reservation.dart';
-import '../../schedules/domain/schedule_timeline.dart';
+import '../../venues/domain/venue_clock.dart';
 import '../../tasks/domain/operational_task.dart';
 
-/// The business day (6am–6am) containing [now], as a half-open [start, end) window.
-({DateTime start, DateTime end}) businessDayWindow(DateTime now) {
-  final start = businessDayStart(businessDateFor(now));
-  return (
-    start: start,
-    end: DateTime(start.year, start.month, start.day + 1, start.hour)
-  );
+/// The venue's business day (6am–6am on its own clock) containing the instant [now], as a
+/// half-open [start, end) window of instants.
+({DateTime start, DateTime end}) businessDayWindow(
+  VenueClock clock,
+  DateTime now,
+) {
+  final range = clock.businessDayRange(clock.businessDate(now));
+  return (start: range.startUtc, end: range.endUtc);
 }
 
 bool _inWindow(DateTime t, ({DateTime start, DateTime end}) w) =>
@@ -20,9 +21,10 @@ List<Reservation> myReservationsToday(
   Iterable<Reservation> reservations,
   String? userId,
   DateTime now,
+  VenueClock clock,
 ) {
   if (userId == null) return const [];
-  final w = businessDayWindow(now);
+  final w = businessDayWindow(clock, now);
   final list = [
     for (final r in reservations)
       if (r.assignedTo == userId &&
@@ -71,16 +73,17 @@ int tasksDoneToday(
   String? userId,
   Map<String, TaskStatus> pending,
   DateTime now,
+  VenueClock clock,
 ) {
   if (userId == null) return 0;
-  final w = businessDayWindow(now);
+  final w = businessDayWindow(clock, now);
   var n = 0;
   for (final t in tasks) {
     if (t.assignedTo != userId) continue;
     final queuedDone = pending[t.id] == TaskStatus.completed;
     final doneToday = t.status == TaskStatus.completed &&
         t.completedAt != null &&
-        _inWindow(t.completedAt!.toLocal(), w);
+        _inWindow(t.completedAt!, w);
     if (queuedDone || doneToday) n++;
   }
   return n;

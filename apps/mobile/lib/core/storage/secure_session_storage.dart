@@ -1,5 +1,7 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import 'app_secure_storage.dart';
+
 const registeredPushTokenStorageKey = 'registered_push_token';
 const pendingPushTokenRevocationStorageKey = 'pending_push_token_revocation';
 const pushInstallationSecretStorageKey = 'push_installation_secret';
@@ -15,7 +17,7 @@ const offlineMutationQueueStorageKey = 'offline_mutation_queue';
 /// token). Use this for things like a cached device-attestation key id (Phase 3) or a
 /// correlation id tied to an in-flight privileged request.
 class SecureSessionStorage {
-  const SecureSessionStorage([this._storage = const FlutterSecureStorage()]);
+  const SecureSessionStorage([this._storage = const AppSecureStorage()]);
 
   final FlutterSecureStorage _storage;
 

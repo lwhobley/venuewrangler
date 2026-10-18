@@ -43,6 +43,10 @@ const _linked = [
   '/sign-in',
   '/select-venue',
   '/reset-password',
+  '/team',
+  '/invites',
+  '/mfa',
+  '/mfa-challenge',
 ];
 
 void main() {
@@ -50,6 +54,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         isSignedInProvider.overrideWithValue(true),
+        mfaChallengeRequiredProvider.overrideWithValue(false),
         myVenueRoleProvider.overrideWith((ref) async => 'venue_manager'),
         activeVenueProvider.overrideWith(
           (ref) => Venue(
@@ -164,6 +169,7 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           isSignedInProvider.overrideWithValue(true),
+          mfaChallengeRequiredProvider.overrideWithValue(false),
           myVenueRoleProvider.overrideWith((ref) async => 'staff'),
           activeVenueProvider.overrideWith(
             (ref) => Venue(
@@ -222,6 +228,9 @@ void main() {
       expect(employeeCanOpen('/floor/edit'), isFalse);
       expect(employeeCanOpen('/staff-requests'), isTrue);
       expect(employeeCanOpen('/more'), isFalse);
+      expect(employeeCanOpen('/team'), isFalse);
+      expect(employeeCanOpen('/invites'), isTrue);
+      expect(employeeCanOpen('/mfa'), isTrue);
     });
 
     test('staff get the employee app; supervisors and up do not', () {

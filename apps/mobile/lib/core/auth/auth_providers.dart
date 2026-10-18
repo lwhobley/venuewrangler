@@ -68,3 +68,15 @@ final passwordRecoveryTriggerProvider = Provider<void>((ref) {
     fireImmediately: true,
   );
 });
+
+final mfaRepositoryProvider = Provider<MfaRepository>((ref) {
+  return SupabaseMfaRepository(ref.watch(supabaseClientProvider));
+});
+
+/// True while the session is AAL1 but the account has a verified authenticator, so the router
+/// holds the user on /mfa-challenge. Re-evaluated on every auth event (sign-in, token refresh,
+/// `mfaChallengeVerified`, sign-out) because the answer lives in the session's JWT.
+final mfaChallengeRequiredProvider = Provider<bool>((ref) {
+  ref.watch(authStateChangesProvider);
+  return ref.watch(mfaRepositoryProvider).challengeRequired;
+});

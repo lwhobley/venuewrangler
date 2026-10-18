@@ -40,6 +40,20 @@ final offlineQueueControllerProvider =
   );
 });
 
+/// The queue as the signed-in user may see it: their own pending writes and conflicts only. The
+/// underlying queue also holds other accounts' unsynced work on a shared device.
+final userOfflineQueueProvider = Provider<OfflineQueueState>((ref) {
+  final queue = ref.watch(offlineQueueControllerProvider);
+  String? userId;
+  try {
+    userId = ref.watch(currentUserIdProvider);
+  } catch (_) {
+    // Tests often override the controller without a Supabase client; entries are then
+    // unowned (null) and match a null user, same as the controller's own stamping.
+  }
+  return queue.forUser(userId);
+});
+
 final secureSessionStorageProvider = Provider<SecureSessionStorage>((ref) {
   return const SecureSessionStorage();
 });

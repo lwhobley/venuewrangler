@@ -8,6 +8,9 @@
 // Dart side: lib/core/security/app_attest_service.dart. Method contract:
 //   - "isSupported" -> bool
 //   - "generateKey" -> String (the key identifier, base64 SHA-256 of the public key)
+//   - "generateAssertion" (args: {"keyId": String, "clientDataBytes": FlutterStandardTypedData}) ->
+//     the raw assertion object bytes. clientDataBytes is the exact punch payload the server will
+//     hash; SHA-256 is computed here, same as for attestKey.
 //   - "attestKey" (args: {"keyId": String, "nonceBytes": FlutterStandardTypedData}) -> the raw
 //     attestation object bytes. clientDataHash (SHA256 of nonceBytes) is computed here, not in
 //     Dart, so Dart never needs its own SHA-256 implementation just for this one call.
@@ -25,7 +28,16 @@ public class AppAttestPlugin: NSObject, FlutterPlugin {
     registrar.addMethodCallDelegate(instance, channel: channel)
   }
 
-  public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+  public func handle(_ call: FlutterMethodCall, result rawResult: @escaping FlutterResult) {
+    // DCAppAttestService completion handlers run on a background queue, and FlutterResult must
+    // only be invoked on the main thread. Every reply below goes through this wrapper.
+    let result: FlutterResult = { value in
+      if Thread.isMainThread {
+        rawResult(value)
+      } else {
+        DispatchQueue.main.async { rawResult(value) }
+      }
+    }
     switch call.method {
     case "isSupported":
       if #available(iOS 14.0, *) {
@@ -77,6 +89,36 @@ public class AppAttestPlugin: NSObject, FlutterPlugin {
           return
         }
         result(FlutterStandardTypedData(bytes: attestationObject))
+      }
+
+    case "generateAssertion":
+      guard #available(iOS 14.0, *) else {
+        result(FlutterError(code: "unsupported", message: "App Attest requires iOS 14+", details: nil))
+        return
+      }
+      guard
+        let args = call.arguments as? [String: Any],
+        let keyId = args["keyId"] as? String,
+        let clientData = args["clientDataBytes"] as? FlutterStandardTypedData
+      else {
+        result(FlutterError(code: "invalid_arguments", message: "keyId and clientDataBytes are required", details: nil))
+        return
+      }
+
+      // Like attestKey, generateAssertion expects a pre-hashed clientDataHash. The server computes
+      // SHA256(payload_json) and verifies the assertion against exactly that value.
+      let assertionClientDataHash = Data(SHA256.hash(data: clientData.data))
+
+      DCAppAttestService.shared.generateAssertion(keyId, clientDataHash: assertionClientDataHash) { assertion, error in
+        if let error = error {
+          result(FlutterError(code: "generate_assertion_failed", message: error.localizedDescription, details: nil))
+          return
+        }
+        guard let assertion = assertion else {
+          result(FlutterError(code: "generate_assertion_failed", message: "No assertion returned", details: nil))
+          return
+        }
+        result(FlutterStandardTypedData(bytes: assertion))
       }
 
     default:

@@ -34,6 +34,10 @@ class Shift {
 
   /// Floor section worked on this shift (matches FloorTable.section), set by managers.
   final String? section;
+
+  /// Instants (UTC) exactly as stored in the database. They are not in any timezone until a
+  /// `VenueClock` turns them into the venue's wall time for display or editing; never format
+  /// them with the device's local time.
   final DateTime startTime;
   final DateTime endTime;
   final ShiftStatus status;
@@ -64,8 +68,8 @@ class Shift {
         staffId: json['staff_id'] as String?,
         roleLabel: json['role_label'] as String?,
         section: json['section'] as String?,
-        startTime: DateTime.parse(json['start_time'] as String).toLocal(),
-        endTime: DateTime.parse(json['end_time'] as String).toLocal(),
+        startTime: DateTime.parse(json['start_time'] as String).toUtc(),
+        endTime: DateTime.parse(json['end_time'] as String).toUtc(),
         status: ShiftStatus.fromDb(json['status'] as String),
       );
 

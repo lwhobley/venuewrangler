@@ -4,31 +4,35 @@ import 'shift.dart';
 const int kSnapMinutes = 15;
 const Duration kMinShift = Duration(minutes: 30);
 
+/// Every `DateTime` in this file is a venue *wall time* (see `VenueClock`): a UTC-flagged value
+/// whose fields are the venue's clock reading, so snapping and day arithmetic never meet a
+/// device daylight-saving jump. Results keep the flag of the value they were derived from, which
+/// lets plain local `DateTime`s be used the same way in tests.
+DateTime _like(DateTime like, int y, int m, int d, [int h = 0, int min = 0]) =>
+    like.isUtc ? DateTime.utc(y, m, d, h, min) : DateTime(y, m, d, h, min);
+
 /// The business day a timeline column covers: [startHour] on [date] for 24 hours, so an
 /// evening shift that runs past midnight stays on one row.
 DateTime businessDayStart(DateTime date, {int startHour = 6}) =>
-    DateTime(date.year, date.month, date.day, startHour);
+    _like(date, date.year, date.month, date.day, startHour);
 
-/// Which business day "now" falls in (before [startHour] still belongs to yesterday).
+/// Which business day the wall time [now] falls in (before [startHour] still belongs to
+/// yesterday).
 DateTime businessDateFor(DateTime now, {int startHour = 6}) {
-  final d = DateTime(now.year, now.month, now.day);
-  return now.hour < startHour ? DateTime(d.year, d.month, d.day - 1) : d;
+  final d = _like(now, now.year, now.month, now.day);
+  return now.hour < startHour ? _like(now, d.year, d.month, d.day - 1) : d;
 }
 
 DateTime weekStart(DateTime date) {
-  final d = DateTime(date.year, date.month, date.day);
-  return DateTime(d.year, d.month, d.day - (d.weekday - DateTime.monday));
+  final d = _like(date, date.year, date.month, date.day);
+  return _like(d, d.year, d.month, d.day - (d.weekday - DateTime.monday));
 }
 
 DateTime snapTime(DateTime t, {int minutes = kSnapMinutes}) {
-  // Work in local wall-clock time: rebuilding a UTC instant from its fields as a local
-  // DateTime would shift it by the UTC offset.
-  final local = t.toLocal();
-  final total = local.hour * 60 + local.minute;
+  final total = t.hour * 60 + t.minute;
   final snapped = (total / minutes).round() * minutes;
-  // The (year, month, day, 0, minutes) constructor normalises overflow in local time, so a
-  // DST change that day doesn't add or drop an hour.
-  return DateTime(local.year, local.month, local.day, 0, snapped);
+  // The (year, month, day, 0, minutes) constructor normalises overflow into the next day.
+  return _like(t, t.year, t.month, t.day, 0, snapped);
 }
 
 Duration _deltaFor(double dx, double hourWidth) =>
@@ -148,11 +152,12 @@ String hourLabel(int hour24) {
   return '$h12$suffix';
 }
 
-String clockLabel(DateTime time) {
-  final t = time.toLocal();
-  final h = t.hour % 12 == 0 ? 12 : t.hour % 12;
-  final m = t.minute.toString().padLeft(2, '0');
-  return t.minute == 0
-      ? '$h${t.hour < 12 ? 'a' : 'p'}'
-      : '$h:$m${t.hour < 12 ? 'a' : 'p'}';
+/// Compact label for a venue wall time: "6a", "7:30p". Convert an instant with
+/// `VenueClock.clockLabel` instead of passing it here.
+String clockLabel(DateTime wall) {
+  final h = wall.hour % 12 == 0 ? 12 : wall.hour % 12;
+  final m = wall.minute.toString().padLeft(2, '0');
+  return wall.minute == 0
+      ? '$h${wall.hour < 12 ? 'a' : 'p'}'
+      : '$h:$m${wall.hour < 12 ? 'a' : 'p'}';
 }

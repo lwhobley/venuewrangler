@@ -20,6 +20,16 @@ class OfflineQueueState {
   /// per the migration plan's "never silently overwrite a manager's changes" requirement.
   final List<PendingMutation> conflicts;
 
+  /// The slice of the queue owned by [userId]. The queue is shared by everyone who signs in
+  /// on a device, so any screen that shows or acts on queued work must view it through this
+  /// (or [userOfflineQueueProvider]) rather than reading `pending`/`conflicts` directly.
+  OfflineQueueState forUser(String? userId) => OfflineQueueState(
+        pending:
+            pending.where((m) => m.userId == userId).toList(growable: false),
+        conflicts:
+            conflicts.where((m) => m.userId == userId).toList(growable: false),
+      );
+
   OfflineQueueState copyWith({
     List<PendingMutation>? pending,
     List<PendingMutation>? conflicts,
@@ -129,10 +139,13 @@ class OfflineQueueController extends StateNotifier<OfflineQueueState> {
   /// Sign-out: removes only the signed-out user's pending writes and conflicts. Entries owned
   /// by anyone else (or legacy entries without an owner) stay queued, so a shared device never
   /// discards another person's unsynced work or unresolved conflicts.
-  Future<void> clearAll() async {
+  ///
+  /// [forUserId] names the user being signed out when the session is already gone (a
+  /// server-initiated sign-out), where the current-user callback would report null.
+  Future<void> clearAll({String? forUserId}) async {
     await _loaded;
     _queueGeneration++;
-    final signedOut = _currentUserId?.call();
+    final signedOut = forUserId ?? _currentUserId?.call();
     bool isSignedOut(PendingMutation m) => m.userId == signedOut;
     state = OfflineQueueState(
       pending:
@@ -143,7 +156,16 @@ class OfflineQueueController extends StateNotifier<OfflineQueueState> {
     await _persist();
   }
 
+  /// Discards one entry. Only the user who owns it may do so: another person on the same device
+  /// must not be able to dismiss someone else's unsynced change.
   Future<void> dismissConflict(String mutationId) async {
+    final currentUserId = _currentUserId;
+    if (currentUserId != null) {
+      final owner = currentUserId();
+      final owned = [...state.pending, ...state.conflicts]
+          .any((m) => m.id == mutationId && m.userId == owner);
+      if (!owned) return;
+    }
     state = state.copyWith(
       pending: state.pending
           .where((m) => m.id != mutationId)

@@ -121,4 +121,57 @@ void main() {
       expect(minutes, 0);
     });
   });
+
+  group('purged GPS (closed entries older than a year)', () {
+    final json = <String, dynamic>{
+      'id': 'e-old',
+      'organization_id': 'o',
+      'venue_id': 'v',
+      'user_id': 'u',
+      'clock_in_at': '2025-01-06T09:00:00Z',
+      'clock_in_lat': null,
+      'clock_in_lng': null,
+      'clock_in_accuracy_m': null,
+      'clock_in_mocked': false,
+      'clock_out_at': '2025-01-06T17:00:00Z',
+      'clock_out_lat': null,
+      'clock_out_lng': null,
+      'clock_out_accuracy_m': null,
+      'is_open': false,
+      'breaks': const [],
+      'created_at': '2025-01-06T09:00:00Z',
+      'updated_at': '2025-01-06T17:00:00Z',
+    };
+
+    test('a closed entry with null coordinates parses', () {
+      final entry = TimeEntry.fromJson(json);
+
+      expect(entry.clockInLat, isNull);
+      expect(entry.clockInLng, isNull);
+      expect(entry.clockInAccuracyM, isNull);
+      expect(entry.hasClockInFix, isFalse);
+      expect(entry.workedDuration, const Duration(hours: 8));
+    });
+
+    test('it round-trips without writing the purged fields back', () {
+      final out = TimeEntry.fromJson(json).toJson();
+
+      expect(out.containsKey('clock_in_lat'), isFalse);
+      expect(out.containsKey('clock_in_accuracy_m'), isFalse);
+    });
+
+    test('an entry that still has its fix keeps it', () {
+      final entry = TimeEntry.fromJson({
+        ...json,
+        'clock_in_lat': 40.5,
+        'clock_in_lng': -74,
+        'clock_in_accuracy_m': 8,
+      });
+
+      expect(entry.clockInLat, 40.5);
+      expect(entry.clockInLng, -74.0);
+      expect(entry.clockInAccuracyM, 8.0);
+      expect(entry.hasClockInFix, isTrue);
+    });
+  });
 }

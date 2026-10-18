@@ -45,7 +45,7 @@ class _RecordingRepo implements FloorRepository {
 
 FloorEditorController _controller() {
   FlutterSecureStorage.setMockInitialValues({});
-  final c = FloorEditorController();
+  final c = FloorEditorController(userId: 'user-a');
   c.load(
     live: [_live('a', 'T1'), _live('b', 'T2', x: 200)],
     planWidth: 1000,
@@ -181,7 +181,7 @@ void main() {
     await c.saveDraft('plan');
     expect(await c.hasDraft('plan'), isTrue);
 
-    final fresh = FloorEditorController()
+    final fresh = FloorEditorController(userId: 'user-a')
       ..load(live: [_live('a', 'T1')], planWidth: 1000, planHeight: 800);
     await fresh.restoreDraft('plan');
     expect(fresh.state.tables.map((t) => t.label), ['T1', 'T3']);
@@ -191,11 +191,40 @@ void main() {
     expect(await fresh.hasDraft('plan'), isFalse);
   });
 
+  test('drafts are keyed by user so another account never restores them',
+      () async {
+    final c = _controller();
+    c.moveTo('a', 300, 300);
+    await c.saveDraft('plan');
+
+    final other = FloorEditorController(userId: 'user-b')
+      ..load(live: [_live('a', 'T1')], planWidth: 1000, planHeight: 800);
+
+    expect(await other.hasDraft('plan'), isFalse);
+    expect(await other.restoreDraft('plan'), isFalse);
+    expect(other.state.tables.single.x, 0);
+    expect(
+      await const FlutterSecureStorage().read(key: 'floor_draft_user-a_plan'),
+      isNotNull,
+    );
+  });
+
+  test('without a signed-in user no draft is written or read', () async {
+    FlutterSecureStorage.setMockInitialValues({});
+    final c = FloorEditorController()
+      ..load(live: [_live('a', 'T1')], planWidth: 1000, planHeight: 800);
+
+    await c.saveDraft('plan');
+
+    expect(await c.hasDraft('plan'), isFalse);
+    expect(await const FlutterSecureStorage().readAll(), isEmpty);
+  });
+
   test('a corrupt draft is discarded and the live layout is kept', () async {
     FlutterSecureStorage.setMockInitialValues(
-      {'floor_draft_plan': '{"tables": [{"id": '},
+      {'floor_draft_user-a_plan': '{"tables": [{"id": '},
     );
-    final fresh = FloorEditorController()
+    final fresh = FloorEditorController(userId: 'user-a')
       ..load(live: [_live('a', 'T1')], planWidth: 1000, planHeight: 800);
 
     final restored = await fresh.restoreDraft('plan');
@@ -208,9 +237,9 @@ void main() {
   test('a draft in an old schema is discarded instead of breaking the editor',
       () async {
     FlutterSecureStorage.setMockInitialValues(
-      {'floor_draft_plan': '{"tables": [{"legacy_field": true}]}'},
+      {'floor_draft_user-a_plan': '{"tables": [{"legacy_field": true}]}'},
     );
-    final fresh = FloorEditorController()
+    final fresh = FloorEditorController(userId: 'user-a')
       ..load(live: [_live('a', 'T1')], planWidth: 1000, planHeight: 800);
 
     expect(await fresh.restoreDraft('plan'), isFalse);

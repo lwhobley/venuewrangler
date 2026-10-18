@@ -8,6 +8,7 @@ import 'package:venuewrangler_mobile/features/schedules/data/schedules_repositor
 import 'package:venuewrangler_mobile/features/schedules/domain/schedule_timeline.dart';
 import 'package:venuewrangler_mobile/features/schedules/domain/shift.dart';
 import 'package:venuewrangler_mobile/features/schedules/presentation/schedule_timeline_screen.dart';
+import 'package:venuewrangler_mobile/features/venues/application/venue_clock.dart';
 import 'package:venuewrangler_mobile/features/venues/application/venues_providers.dart';
 import 'package:venuewrangler_mobile/features/venues/domain/venue.dart';
 import 'package:venuewrangler_mobile/features/workforce/domain/workforce_models.dart';
@@ -126,17 +127,17 @@ void main() {
       expect(lanes['a']!.lanes, 2);
     });
 
-    test('UTC times from the database are not shifted by snapping', () {
-      // Regression: snapping rebuilt a UTC instant's fields as local time, so in any non-UTC
-      // timezone picking a shift up and dropping it in place moved it by the UTC offset.
-      final utc = DateTime.parse('2026-10-05T23:00:00+00:00');
-      final r = movedBy(utc, utc.add(const Duration(hours: 4)), 0, 56);
-      expect(r.start.isAtSameMomentAs(utc), isTrue);
-      expect(r.end.isAtSameMomentAs(utc.add(const Duration(hours: 4))), isTrue);
-      expect(clockLabel(utc), clockLabel(utc.toLocal()));
+    test('snapping a venue wall time keeps its fields and its UTC flag', () {
+      // Wall times are UTC-flagged with the venue's clock in their fields; snapping must not
+      // reinterpret them in the device timezone.
+      final wall = DateTime.utc(2026, 10, 5, 23, 7);
+      final r = movedBy(wall, wall.add(const Duration(hours: 4)), 0, 56);
+      expect(r.start, DateTime.utc(2026, 10, 5, 23));
+      expect(r.start.isUtc, isTrue);
+      expect(clockLabel(wall), '11:07p');
     });
 
-    test('shifts parsed from the database are in local time', () {
+    test('shifts parsed from the database are UTC instants', () {
       final s = Shift.fromJson({
         'id': 'a',
         'venue_id': 'v',
@@ -144,11 +145,8 @@ void main() {
         'end_time': '2026-10-06T03:00:00+00:00',
         'status': 'scheduled',
       });
-      expect(s.startTime.isUtc, isFalse);
-      expect(
-        s.startTime.isAtSameMomentAs(DateTime.utc(2026, 10, 5, 23)),
-        isTrue,
-      );
+      expect(s.startTime.isUtc, isTrue);
+      expect(s.startTime, DateTime.utc(2026, 10, 5, 23));
     });
 
     test('before 6am still belongs to the previous business day', () {
@@ -166,7 +164,8 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
 
-    final dayStart = businessDayStart(businessDateFor(DateTime.now()));
+    const clock = VenueClock('UTC');
+    final dayStart = businessDayStart(businessDateFor(clock.now));
     final start = dayStart.add(const Duration(hours: 12));
     final repo = _FakeRepo([
       _shift('s1', 'alice', start, start.add(const Duration(hours: 4))),
@@ -230,5 +229,110 @@ void main() {
       (call['end']! as DateTime).difference(call['start']! as DateTime),
       const Duration(hours: 4),
     );
+  });
+
+  group('venue time zone', () {
+    Future<_FakeRepo> pumpBoard(
+      WidgetTester tester,
+      String timezone,
+      List<Shift> shifts,
+    ) async {
+      tester.view.physicalSize = const Size(900, 1400);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final repo = _FakeRepo(shifts);
+      final venue = Venue(
+        id: 'venue-1',
+        organizationId: 'org',
+        name: 'Venue',
+        timezone: timezone,
+        createdAt: DateTime(2026),
+      );
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            activeVenueProvider.overrideWith((ref) => venue),
+            currentUserIdProvider.overrideWithValue('boss'),
+            schedulesRepositoryProvider.overrideWithValue(repo),
+            canManageActiveVenueProvider.overrideWith((ref) async => true),
+            scheduleRosterForVenueProvider.overrideWith(
+              (ref, venueId) async => const [
+                RosterMember(
+                  userId: 'alice',
+                  role: 'staff',
+                  displayName: 'Alice',
+                ),
+                RosterMember(userId: 'bob', role: 'staff', displayName: 'Bob'),
+              ],
+            ),
+          ],
+          child: MaterialApp(
+            theme: AppTheme.dark(),
+            home: const ScheduleTimelineScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      return repo;
+    }
+
+    Future<void> dragShift(WidgetTester tester) async {
+      final block = find.textContaining('Server');
+      final gesture = await tester.startGesture(tester.getCenter(block));
+      await tester.pump(const Duration(milliseconds: 700));
+      await gesture.moveBy(const Offset(120, 0));
+      await tester.pump();
+      await gesture.up();
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets(
+        'shows shifts on the venue clock and saves moves as real instants',
+        (tester) async {
+      const clock =
+          VenueClock('Africa/Johannesburg'); // UTC+2, never the device zone
+      final wallStart = businessDayStart(businessDateFor(clock.now))
+          .add(const Duration(hours: 12));
+      final start = clock.instant(wallStart); // 16:00Z
+      final repo = await pumpBoard(tester, 'Africa/Johannesburg', [
+        _shift('s1', 'alice', start, start.add(const Duration(hours: 4))),
+      ]);
+
+      // The business day starts at 6am, so +12h is 18:00-22:00 *venue* time, whatever the
+      // device timezone is.
+      expect(find.textContaining('6p–10p'), findsWidgets);
+
+      await dragShift(tester);
+
+      final saved = repo.calls.single['start']! as DateTime;
+      expect(saved.isUtc, isTrue);
+      expect(saved.isAfter(start), isTrue);
+      // Still a whole venue-clock quarter hour: the move was made in venue time.
+      expect(clock.wall(saved).minute % 15, 0);
+      expect(
+        (repo.calls.single['end']! as DateTime).difference(saved),
+        const Duration(hours: 4),
+      );
+    });
+
+    testWidgets('an unsupported zone warns and refuses to save',
+        (tester) async {
+      const clock = VenueClock('UTC');
+      final start = businessDayStart(businessDateFor(clock.now))
+          .add(const Duration(hours: 12));
+      final repo = await pumpBoard(tester, 'Mars/Olympus_Mons', [
+        _shift('s1', 'alice', start, start.add(const Duration(hours: 4))),
+      ]);
+
+      expect(
+        find.byKey(const ValueKey('unsupported-timezone-banner')),
+        findsOneWidget,
+      );
+
+      await dragShift(tester);
+
+      expect(repo.calls, isEmpty);
+      expect(find.textContaining("isn't supported"), findsWidgets);
+    });
   });
 }

@@ -31,6 +31,7 @@ void main() {
       ProviderContainer(
         overrides: [
           isSignedInProvider.overrideWithValue(true),
+          mfaChallengeRequiredProvider.overrideWithValue(false),
           currentUserIdProvider.overrideWithValue('user-1'),
           myOrganizationsProvider.overrideWith((ref) async => [org]),
           venuesForOrganizationProvider

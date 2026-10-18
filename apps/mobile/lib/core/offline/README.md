@@ -18,13 +18,20 @@ Implemented: a feature-agnostic offline mutation queue.
   empty and is overridden in `app/bootstrap.dart` with the merged handler map from every
   feature that queues mutations, so this folder never imports a feature package directly.
 
-First (and so far only) consumer: `features/tasks` (see its README) — its status-toggle path
-tries an immediate online update first and falls back to the queue on failure, using the
-task's `updated_at` as an optimistic-concurrency token to detect a conflicting change made in
-the meantime.
+Ownership: the queue is shared by everyone who signs in on a device, so every entry is stamped
+with its owner (`PendingMutation.userId`). `flush` only runs the current user's entries;
+`OfflineQueueState.forUser` / `userOfflineQueueProvider` are the only way a screen should read
+the queue; `dismissConflict` ignores entries owned by someone else; and sign-out
+(`core/auth/sign_out_service.dart`, run for UI and server-initiated sign-outs alike) prunes only
+the signed-out user's entries via `clearAll(forUserId:)`. Legacy entries with no owner are kept
+but never shown or replayed.
 
-Still to wire up, per the migration plan's offline-writable scope: checklist responses,
-incident drafts, and media-upload retry metadata. Each should register its own
-`MutationHandler`(s) the same way `features/tasks/application/tasks_providers.dart`'s
-`taskMutationHandlersProvider` does, rather than this folder growing feature-specific
-branches.
+Consumers, each registering its own `MutationHandler`(s) into `offlineQueueHandlersProvider`
+(merged in `app/bootstrap.dart`) rather than this folder growing feature-specific branches:
+
+- `features/tasks` — status toggles (immediate online try, queue on a transport failure, the
+  task's `updated_at` as the optimistic-concurrency token).
+- `features/checklists` — checklist completions.
+- `features/incidents` — incident reports (client-generated id, so retries are idempotent).
+- `features/media` — incident-evidence photo uploads (metadata is stripped before upload and
+  the cached local copy is deleted once stored).

@@ -9,6 +9,7 @@ import '../../notifications/application/notifications_providers.dart';
 import '../../schedules/application/schedules_providers.dart';
 import '../../tasks/application/tasks_providers.dart';
 import '../../tasks/domain/operational_task.dart';
+import '../../venues/application/venue_clock.dart';
 import '../../venues/application/venues_providers.dart';
 
 const _weekdays = [
@@ -67,15 +68,17 @@ class DashboardScreen extends ConsumerWidget {
       orElse: () => null,
     );
     final now = DateTime.now();
+    final clock = ref.watch(venueClockProvider);
+    final venueToday = clock.now;
     final todayShiftCount = shiftsAsync.maybeWhen(
-      data: (shifts) => shifts
-          .where(
-            (s) =>
-                s.startTime.year == now.year &&
-                s.startTime.month == now.month &&
-                s.startTime.day == now.day,
-          )
-          .length,
+      data: (shifts) => shifts.where(
+        (s) {
+          final start = clock.wall(s.startTime);
+          return start.year == venueToday.year &&
+              start.month == venueToday.month &&
+              start.day == venueToday.day;
+        },
+      ).length,
       orElse: () => null,
     );
     final upcomingEventCount = eventsAsync.maybeWhen(
@@ -87,9 +90,9 @@ class DashboardScreen extends ConsumerWidget {
       orElse: () => null,
     );
 
-    final greeting = now.hour < 12
+    final greeting = venueToday.hour < 12
         ? 'Good morning'
-        : now.hour < 17
+        : venueToday.hour < 17
             ? 'Good afternoon'
             : 'Good evening';
 
@@ -126,7 +129,7 @@ class DashboardScreen extends ConsumerWidget {
           children: [
             Text(greeting, style: theme.textTheme.headlineSmall),
             Text(
-              '${_weekdays[now.weekday - 1]}, ${_months[now.month - 1]} ${now.day}',
+              '${_weekdays[venueToday.weekday - 1]}, ${_months[venueToday.month - 1]} ${venueToday.day}',
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),

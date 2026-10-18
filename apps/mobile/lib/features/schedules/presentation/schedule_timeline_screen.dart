@@ -9,7 +9,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/auth/auth_providers.dart';
 import '../../../core/theme/ops_colors.dart';
 import '../../../core/widgets/state_views.dart';
+import '../../venues/application/venue_clock.dart';
 import '../../venues/application/venues_providers.dart';
+import '../../venues/presentation/venue_time_widgets.dart';
 import '../../workforce/domain/workforce_models.dart';
 import '../application/schedules_providers.dart';
 import '../domain/schedule_timeline.dart';
@@ -69,7 +71,10 @@ class _ScheduleTimelineScreenState
   static const double _headerHeight = 30;
   static const int _startHour = 6;
 
-  late DateTime _date = businessDateFor(DateTime.now());
+  // All times on this board are venue wall times (see VenueClock): shifts are converted from
+  // their stored instants on the way in and back with `_clock.instant` on the way out.
+  VenueClock get _clock => ref.read(venueClockProvider);
+  late DateTime _date = businessDateFor(_clock.now);
   double _hourWidth = 56;
   _Drag? _drag;
   final Map<String, Shift> _pending = {};
@@ -96,11 +101,11 @@ class _ScheduleTimelineScreenState
   }
 
   DateTime get _windowStart => businessDayStart(_date, startHour: _startHour);
-  DateTime get _windowEnd => DateTime(
-        _windowStart.year,
-        _windowStart.month,
-        _windowStart.day + 1,
-        _windowStart.hour,
+  DateTime get _windowEnd => _windowStart.add(const Duration(hours: 24));
+
+  Shift _toWall(Shift s) => s.copyWith(
+        startTime: _clock.wall(s.startTime),
+        endTime: _clock.wall(s.endTime),
       );
 
   void _toast(String message, {bool error = false}) {
@@ -210,6 +215,7 @@ class _ScheduleTimelineScreenState
     setState(() => _drag = null);
     if (unchanged) return;
 
+    if (!ensureSupported(context, _clock)) return;
     final venueId = orig.venueId;
     setState(() => _pending[orig.id] = updated);
     try {
@@ -217,8 +223,8 @@ class _ScheduleTimelineScreenState
             shiftId: orig.id,
             staffId: updated.staffId,
             clearStaff: updated.staffId == null && orig.staffId != null,
-            startTime: updated.startTime,
-            endTime: updated.endTime,
+            startTime: _clock.instant(updated.startTime),
+            endTime: _clock.instant(updated.endTime),
           );
       ref.invalidate(shiftsForVenueProvider(venueId));
       await ref.read(shiftsForVenueProvider(venueId).future);
@@ -243,6 +249,7 @@ class _ScheduleTimelineScreenState
     required String? staffId,
     required DateTime start,
   }) async {
+    if (!ensureSupported(context, _clock)) return;
     final result = await _showShiftForm(
       title: 'Add shift',
       confirmLabel: 'Add',
@@ -262,8 +269,8 @@ class _ScheduleTimelineScreenState
             staffId: result.staffId,
             roleLabel: result.role.isEmpty ? null : result.role,
             section: result.section.isEmpty ? null : result.section,
-            startTime: result.start,
-            endTime: result.end,
+            startTime: _clock.instant(result.start),
+            endTime: _clock.instant(result.end),
           );
       ref.invalidate(shiftsForVenueProvider(venueId));
     } catch (e) {
@@ -272,6 +279,7 @@ class _ScheduleTimelineScreenState
   }
 
   Future<void> _edit(Shift shift, List<_Row> rows) async {
+    if (!ensureSupported(context, _clock)) return;
     final result = await _showShiftForm(
       title: 'Edit shift',
       confirmLabel: 'Save',
@@ -300,8 +308,8 @@ class _ScheduleTimelineScreenState
           clearStaff: result.staffId == null,
           roleLabel: result.role,
           section: result.section,
-          startTime: result.start,
-          endTime: result.end,
+          startTime: _clock.instant(result.start),
+          endTime: _clock.instant(result.end),
         );
       }
       ref.invalidate(shiftsForVenueProvider(shift.venueId));
@@ -337,19 +345,25 @@ class _ScheduleTimelineScreenState
           rows: rows,
           initial: initial,
           allowDelete: allowDelete,
+          nowWall: _clock.now,
         ),
       ),
     );
   }
 
   Future<void> _pickDate() async {
+    final today = _clock.now;
     final picked = await showDatePicker(
       context: context,
-      initialDate: _date,
-      firstDate: DateTime.now().subtract(const Duration(days: 365)),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
+      initialDate: DateTime(_date.year, _date.month, _date.day),
+      firstDate: DateTime(today.year, today.month, today.day - 365),
+      lastDate: DateTime(today.year, today.month, today.day + 365),
     );
-    if (picked != null) setState(() => _date = picked);
+    if (picked != null) {
+      setState(
+        () => _date = DateTime.utc(picked.year, picked.month, picked.day),
+      );
+    }
   }
 
   // ---- build ---------------------------------------------------------------
@@ -395,7 +409,11 @@ class _ScheduleTimelineScreenState
           final canEdit =
               ref.watch(canManageActiveVenueProvider).valueOrNull ?? false;
           _rows = _buildRows(roster, shifts);
-          return _buildBoard(venue.id, shifts, canEdit);
+          return _buildBoard(
+            venue.id,
+            [for (final s in shifts) _toWall(s)],
+            canEdit,
+          );
         },
       ),
     );
@@ -408,7 +426,7 @@ class _ScheduleTimelineScreenState
     final windowStart = _windowStart;
     final windowEnd = _windowEnd;
     final weekFrom = weekStart(_date);
-    final weekTo = DateTime(weekFrom.year, weekFrom.month, weekFrom.day + 7);
+    final weekTo = weekFrom.add(const Duration(days: 7));
     final totalWidth = 24 * _hourWidth;
     final theme = Theme.of(context);
 
@@ -422,16 +440,16 @@ class _ScheduleTimelineScreenState
 
     return Column(
       children: [
+        const UnsupportedTimezoneBanner(),
         _DayBar(
           date: _date,
           onPrev: () => setState(() {
-            _date = DateTime(_date.year, _date.month, _date.day - 1);
+            _date = _date.subtract(const Duration(days: 1));
           }),
           onNext: () => setState(() {
-            _date = DateTime(_date.year, _date.month, _date.day + 1);
+            _date = _date.add(const Duration(days: 1));
           }),
-          onToday: () =>
-              setState(() => _date = businessDateFor(DateTime.now())),
+          onToday: () => setState(() => _date = businessDateFor(_clock.now)),
           onPick: _pickDate,
           shiftCount: visible.length,
           conflictCount: visible.where((s) => conflicts.contains(s.id)).length,
@@ -538,7 +556,7 @@ class _ScheduleTimelineScreenState
     String venueId,
     ThemeData theme,
   ) {
-    final now = DateTime.now();
+    final now = _clock.now;
     final nowX = now.isAfter(_windowStart) && now.isBefore(_windowEnd)
         ? now.difference(_windowStart).inMinutes / 60 * _hourWidth
         : null;
@@ -1040,8 +1058,11 @@ class _ShiftForm extends StatefulWidget {
     required this.rows,
     required this.initial,
     required this.allowDelete,
+    required this.nowWall,
   });
 
+  /// The venue's wall time now, for bounding the pickers.
+  final DateTime nowWall;
   final String title;
   final String confirmLabel;
   final List<_Row> rows;
@@ -1073,21 +1094,12 @@ class _ShiftFormState extends State<_ShiftForm> {
     super.dispose();
   }
 
-  Future<DateTime?> _pick(DateTime initial) async {
-    final date = await showDatePicker(
-      context: context,
-      initialDate: initial,
-      firstDate: DateTime.now().subtract(const Duration(days: 365)),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
-    );
-    if (date == null || !mounted) return null;
-    final time = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay.fromDateTime(initial),
-    );
-    if (time == null) return null;
-    return DateTime(date.year, date.month, date.day, time.hour, time.minute);
-  }
+  Future<DateTime?> _pick(DateTime initial) => pickVenueDateTime(
+        context,
+        initial: initial,
+        nowWall: widget.nowWall,
+        daysBack: 365,
+      );
 
   String _fmt(DateTime t) =>
       '${_weekdays[t.weekday - 1]} ${_months[t.month - 1]} ${t.day}, ${clockLabel(t)}';

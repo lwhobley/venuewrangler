@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../media/application/image_sanitizer.dart';
 import '../domain/employee_hr_profile.dart';
 
 abstract interface class EmployeeProfilesRepository {
@@ -94,7 +95,8 @@ class SupabaseEmployeeProfilesRepository implements EmployeeProfilesRepository {
     String organizationId,
     String filePath,
   ) async {
-    final bytes = await XFile(filePath).readAsBytes();
+    // Re-sanitized here (the picker already did) so a file from any source is clean at upload.
+    final bytes = sanitizeImageBytes(await XFile(filePath).readAsBytes());
     final mime = profileImageMime(bytes);
     final path = '$organizationId/${key.venueId}/${key.userId}.photo';
     await client.storage.from('profile-photos').uploadBinary(
@@ -107,5 +109,6 @@ class SupabaseEmployeeProfilesRepository implements EmployeeProfilesRepository {
       {'venue_id': key.venueId, 'user_id': key.userId, 'storage_path': path},
       onConflict: 'venue_id,user_id',
     );
+    await deleteTempImage(filePath);
   }
 }

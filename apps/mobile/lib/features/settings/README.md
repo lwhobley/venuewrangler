@@ -19,6 +19,13 @@ row).
   standalone widget rather than inline in `SettingsScreen` specifically so it's testable
   without needing to fake `supabaseClientProvider`.
 
+Settings is also the entry point for: Team (`features/team`, managers and up), pending
+invitations (`features/invites`, only when some exist), two-factor authentication
+(`features/mfa`) with an enrollment banner for owners/admins, the organization AI switch
+(`features/ai`, owners/admins), and the privacy policy and terms links
+(`domain/legal_links.dart`). `delete_account_button.dart` re-asks for the password
+(`core/auth/reauth_dialog.dart`) before deleting.
+
 **Not implemented yet:** organization/venue-level settings (there isn't much to configure
 there yet beyond what `features/organizations` and `features/workforce` already cover), any
 notion of app-wide preferences beyond theme, and tenant/organization offboarding (full

@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+enum _DstRule { none, us, eu, au, nz }
+
 /// Utilities for translating UTC instants into venue wall-clock time and business days.
 /// Handles standard Daylight Saving Time (DST) rules for supported IANA timezones.
 class VenueTimezone {
@@ -8,33 +10,90 @@ class VenueTimezone {
   /// Unknown ids already reported, so each one is logged once rather than on every format.
   static final Set<String> _unknownZonesLogged = <String>{};
 
-  /// Standard offsets from UTC (in hours) without daylight saving.
-  static const Map<String, int> _standardOffsetsHours = {
-    'UTC': 0,
-    'America/New_York': -5,
-    'America/Chicago': -6,
-    'America/Denver': -7,
-    'America/Phoenix': -7, // No DST
-    'America/Los_Angeles': -8,
-    'America/Anchorage': -9,
-    'Pacific/Honolulu': -10, // No DST
-    'Europe/London': 0,
-    'Europe/Paris': 1,
-    'Australia/Sydney': 10,
+  /// Zones the app can convert, with their standard (non-daylight) UTC offset in minutes and the
+  /// daylight-saving rule they follow. Hand-maintained because the `timezone` package is not a
+  /// dependency; a venue whose zone is not here is reported through [isSupported] (the schedule,
+  /// event and reservation screens show a warning and refuse to save times) instead of being
+  /// silently treated as UTC.
+  static const Map<String, ({int stdMinutes, _DstRule rule})> _zones = {
+    'UTC': (stdMinutes: 0, rule: _DstRule.none),
+    // United States and Canada (same rules since 2007).
+    'America/New_York': (stdMinutes: -300, rule: _DstRule.us),
+    'America/Chicago': (stdMinutes: -360, rule: _DstRule.us),
+    'America/Denver': (stdMinutes: -420, rule: _DstRule.us),
+    'America/Los_Angeles': (stdMinutes: -480, rule: _DstRule.us),
+    'America/Anchorage': (stdMinutes: -540, rule: _DstRule.us),
+    'America/Toronto': (stdMinutes: -300, rule: _DstRule.us),
+    'America/Detroit': (stdMinutes: -300, rule: _DstRule.us),
+    'America/Halifax': (stdMinutes: -240, rule: _DstRule.us),
+    'America/Winnipeg': (stdMinutes: -360, rule: _DstRule.us),
+    'America/Edmonton': (stdMinutes: -420, rule: _DstRule.us),
+    'America/Vancouver': (stdMinutes: -480, rule: _DstRule.us),
+    // No daylight saving.
+    'America/Phoenix': (stdMinutes: -420, rule: _DstRule.none),
+    'Pacific/Honolulu': (stdMinutes: -600, rule: _DstRule.none),
+    'America/Mexico_City': (stdMinutes: -360, rule: _DstRule.none),
+    'America/Bogota': (stdMinutes: -300, rule: _DstRule.none),
+    'America/Lima': (stdMinutes: -300, rule: _DstRule.none),
+    'America/Sao_Paulo': (stdMinutes: -180, rule: _DstRule.none),
+    'America/Argentina/Buenos_Aires': (stdMinutes: -180, rule: _DstRule.none),
+    'Africa/Johannesburg': (stdMinutes: 120, rule: _DstRule.none),
+    'Africa/Lagos': (stdMinutes: 60, rule: _DstRule.none),
+    'Africa/Nairobi': (stdMinutes: 180, rule: _DstRule.none),
+    'Europe/Moscow': (stdMinutes: 180, rule: _DstRule.none),
+    'Europe/Istanbul': (stdMinutes: 180, rule: _DstRule.none),
+    'Asia/Dubai': (stdMinutes: 240, rule: _DstRule.none),
+    'Asia/Kolkata': (stdMinutes: 330, rule: _DstRule.none),
+    'Asia/Jakarta': (stdMinutes: 420, rule: _DstRule.none),
+    'Asia/Singapore': (stdMinutes: 480, rule: _DstRule.none),
+    'Asia/Hong_Kong': (stdMinutes: 480, rule: _DstRule.none),
+    'Asia/Shanghai': (stdMinutes: 480, rule: _DstRule.none),
+    'Asia/Manila': (stdMinutes: 480, rule: _DstRule.none),
+    'Asia/Tokyo': (stdMinutes: 540, rule: _DstRule.none),
+    'Asia/Seoul': (stdMinutes: 540, rule: _DstRule.none),
+    'Australia/Brisbane': (stdMinutes: 600, rule: _DstRule.none),
+    'Australia/Perth': (stdMinutes: 480, rule: _DstRule.none),
+    // European Union summer time (all switch at 01:00 UTC).
+    'Europe/London': (stdMinutes: 0, rule: _DstRule.eu),
+    'Europe/Dublin': (stdMinutes: 0, rule: _DstRule.eu),
+    'Europe/Lisbon': (stdMinutes: 0, rule: _DstRule.eu),
+    'Europe/Paris': (stdMinutes: 60, rule: _DstRule.eu),
+    'Europe/Berlin': (stdMinutes: 60, rule: _DstRule.eu),
+    'Europe/Madrid': (stdMinutes: 60, rule: _DstRule.eu),
+    'Europe/Rome': (stdMinutes: 60, rule: _DstRule.eu),
+    'Europe/Amsterdam': (stdMinutes: 60, rule: _DstRule.eu),
+    'Europe/Brussels': (stdMinutes: 60, rule: _DstRule.eu),
+    'Europe/Vienna': (stdMinutes: 60, rule: _DstRule.eu),
+    'Europe/Zurich': (stdMinutes: 60, rule: _DstRule.eu),
+    'Europe/Stockholm': (stdMinutes: 60, rule: _DstRule.eu),
+    'Europe/Copenhagen': (stdMinutes: 60, rule: _DstRule.eu),
+    'Europe/Oslo': (stdMinutes: 60, rule: _DstRule.eu),
+    'Europe/Prague': (stdMinutes: 60, rule: _DstRule.eu),
+    'Europe/Warsaw': (stdMinutes: 60, rule: _DstRule.eu),
+    'Europe/Budapest': (stdMinutes: 60, rule: _DstRule.eu),
+    'Europe/Athens': (stdMinutes: 120, rule: _DstRule.eu),
+    'Europe/Helsinki': (stdMinutes: 120, rule: _DstRule.eu),
+    // Southern hemisphere.
+    'Australia/Sydney': (stdMinutes: 600, rule: _DstRule.au),
+    'Australia/Melbourne': (stdMinutes: 600, rule: _DstRule.au),
+    'Pacific/Auckland': (stdMinutes: 720, rule: _DstRule.nz),
   };
+
+  /// Whether [timezoneId] is one the app can convert correctly.
+  static bool isSupported(String timezoneId) => _zones.containsKey(timezoneId);
 
   /// Returns the offset for [timezoneId] at the given UTC [instant] (defaults to now).
   static Duration offsetFor(String timezoneId, [DateTime? instant]) {
     final utc = instant?.toUtc() ?? DateTime.now().toUtc();
-    final stdOffset = _standardOffsetFor(timezoneId);
-    if (stdOffset == null) {
-      // Fallback: if unrecognized timezone, default to UTC
+    final zone = _zoneFor(timezoneId);
+    if (zone == null) {
+      // Unrecognized zone: UTC, never silently. [_zoneFor] logged it once, and callers are
+      // expected to check [isSupported] and warn instead of saving times in this fallback.
       return Duration.zero;
     }
 
-    final isDst = _isDaylightSaving(timezoneId, utc);
-    final hours = stdOffset + (isDst ? 1 : 0);
-    return Duration(hours: hours);
+    final isDst = _isDaylightSaving(zone, utc);
+    return Duration(minutes: zone.stdMinutes + (isDst ? 60 : 0));
   }
 
   /// Converts a UTC instant to a venue wall-clock [DateTime].
@@ -73,11 +132,14 @@ class VenueTimezone {
       venueTime.second,
       venueTime.millisecond,
     );
-    final stdHours = _standardOffsetFor(timezoneId);
-    if (stdHours == null) return wall; // Unknown zone: UTC fallback.
+    final zone = _zoneFor(timezoneId);
+    if (zone == null) {
+      // Unknown zone: UTC fallback (see [isSupported]).
+      return wall;
+    }
 
-    final standard = Duration(hours: stdHours);
-    final daylight = Duration(hours: stdHours + 1);
+    final standard = Duration(minutes: zone.stdMinutes);
+    final daylight = Duration(minutes: zone.stdMinutes + 60);
     final daylightCandidate = wall.subtract(daylight);
     if (offsetFor(timezoneId, daylightCandidate) == daylight) {
       return daylightCandidate;
@@ -175,36 +237,32 @@ class VenueTimezone {
     return '$dayName, $monthName ${vt.day}';
   }
 
-  /// Standard offset in hours for [timezoneId], or null for an id outside the table (which is
-  /// treated as UTC). Logs each unknown id once so a misconfigured venue is visible in debug
-  /// output rather than silently shifted.
-  static int? _standardOffsetFor(String timezoneId) {
-    final hours = _standardOffsetsHours[timezoneId];
-    if (hours == null && _unknownZonesLogged.add(timezoneId)) {
+  /// The table entry for [timezoneId], or null for an id outside it (which is treated as UTC).
+  /// Logs each unknown id once so a misconfigured venue is visible in debug output.
+  static ({int stdMinutes, _DstRule rule})? _zoneFor(String timezoneId) {
+    final zone = _zones[timezoneId];
+    if (zone == null && _unknownZonesLogged.add(timezoneId)) {
       debugPrint(
-        'VenueTimezone: unknown timezone "$timezoneId", falling back to UTC.',
+        'VenueTimezone: unsupported timezone "$timezoneId", falling back to UTC.',
       );
     }
-    return hours;
+    return zone;
   }
 
-  static bool _isDaylightSaving(String timezoneId, DateTime utc) {
-    switch (timezoneId) {
-      case 'America/New_York':
-      case 'America/Chicago':
-      case 'America/Denver':
-      case 'America/Los_Angeles':
-      case 'America/Anchorage':
-        return _isUsDst(timezoneId, utc);
-      case 'Europe/London':
-      case 'Europe/Paris':
+  static bool _isDaylightSaving(
+    ({int stdMinutes, _DstRule rule}) zone,
+    DateTime utc,
+  ) {
+    switch (zone.rule) {
+      case _DstRule.us:
+        return _isUsDst(zone.stdMinutes, utc);
+      case _DstRule.eu:
         return _isEuDst(utc);
-      case 'Australia/Sydney':
+      case _DstRule.au:
         return _isAustraliaDst(utc);
-      case 'America/Phoenix':
-      case 'Pacific/Honolulu':
-      case 'UTC':
-      default:
+      case _DstRule.nz:
+        return _isNewZealandDst(utc);
+      case _DstRule.none:
         return false;
     }
   }
@@ -213,19 +271,18 @@ class VenueTimezone {
   /// Sunday of March and ends at 02:00 local daylight time on the 1st Sunday of November.
   /// The UTC instants depend on each zone's standard offset, so they are computed per zone
   /// (e.g. America/Los_Angeles changes at 10:00 UTC in March, not 07:00 UTC).
-  static bool _isUsDst(String timezoneId, DateTime utc) {
+  static bool _isUsDst(int stdMinutes, DateTime utc) {
     final year = utc.year;
-    final stdHours = _standardOffsetsHours[timezoneId] ?? 0;
+    final std = Duration(minutes: stdMinutes);
 
-    // 02:00 standard time = 02:00 - stdHours (UTC).
+    // 02:00 standard time = 02:00 - standard offset (UTC).
     final marchSecondSunday = _nthSundayOfMonth(year, 3, 2);
-    final dstStart = DateTime.utc(year, 3, marchSecondSunday, 2)
-        .subtract(Duration(hours: stdHours));
+    final dstStart = DateTime.utc(year, 3, marchSecondSunday, 2).subtract(std);
 
-    // 02:00 daylight time = 02:00 - (stdHours + 1) (UTC).
+    // 02:00 daylight time = 02:00 - (standard offset + 1h) (UTC).
     final novFirstSunday = _nthSundayOfMonth(year, 11, 1);
     final dstEnd = DateTime.utc(year, 11, novFirstSunday, 2)
-        .subtract(Duration(hours: stdHours + 1));
+        .subtract(std + const Duration(hours: 1));
 
     return !utc.isBefore(dstStart) && utc.isBefore(dstEnd);
   }
@@ -257,6 +314,17 @@ class VenueTimezone {
     } else if (utc.month <= 4) {
       return utc.isBefore(dstEnd);
     }
+    return false;
+  }
+
+  /// New Zealand: last Sunday in September (02:00 NZST = 14:00 UTC the day before) to the first
+  /// Sunday in April (03:00 NZDT = 14:00 UTC the day before).
+  static bool _isNewZealandDst(DateTime utc) {
+    final year = utc.year;
+    final dstStart = DateTime.utc(year, 9, _lastSundayOfMonth(year, 9) - 1, 14);
+    final dstEnd = DateTime.utc(year, 4, _nthSundayOfMonth(year, 4, 1) - 1, 14);
+    if (utc.month >= 9) return !utc.isBefore(dstStart);
+    if (utc.month <= 4) return utc.isBefore(dstEnd);
     return false;
   }
 

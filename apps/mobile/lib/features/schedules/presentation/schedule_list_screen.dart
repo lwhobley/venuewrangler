@@ -4,10 +4,13 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/errors/app_error.dart';
-import '../../../core/network/supabase_providers.dart';
+import '../../../core/auth/auth_providers.dart';
 import '../../ai/application/ai_providers.dart';
 import '../../ai/domain/ai_models.dart';
+import '../../venues/application/venue_clock.dart';
 import '../../venues/application/venues_providers.dart';
+import '../../venues/presentation/venue_time_widgets.dart';
+import '../../workforce/domain/workforce_models.dart';
 import '../application/schedules_providers.dart';
 import '../domain/shift.dart';
 
@@ -27,8 +30,7 @@ class ScheduleListScreen extends ConsumerWidget {
 
     final shiftsAsync = ref.watch(shiftsForVenueProvider(venue.id));
     final swapsAsync = ref.watch(shiftSwapsForVenueProvider(venue.id));
-    final currentUserId =
-        ref.watch(supabaseClientProvider).auth.currentUser?.id;
+    final currentUserId = ref.watch(currentUserIdProvider);
     final canManage =
         ref.watch(canManageActiveVenueProvider).valueOrNull ?? false;
 
@@ -43,70 +45,78 @@ class ScheduleListScreen extends ConsumerWidget {
           ),
         ],
       ),
-      body: RefreshIndicator(
-        onRefresh: () async {
-          ref.invalidate(shiftsForVenueProvider(venue.id));
-          ref.invalidate(shiftSwapsForVenueProvider(venue.id));
-        },
-        child: shiftsAsync.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (_, __) => Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text('Could not load the schedule.'),
-                const SizedBox(height: 12),
-                OutlinedButton(
-                  onPressed: () =>
-                      ref.invalidate(shiftsForVenueProvider(venue.id)),
-                  child: const Text('Retry'),
+      body: Column(
+        children: [
+          const UnsupportedTimezoneBanner(),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: () async {
+                ref.invalidate(shiftsForVenueProvider(venue.id));
+                ref.invalidate(shiftSwapsForVenueProvider(venue.id));
+              },
+              child: shiftsAsync.when(
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (_, __) => Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text('Could not load the schedule.'),
+                      const SizedBox(height: 12),
+                      OutlinedButton(
+                        onPressed: () =>
+                            ref.invalidate(shiftsForVenueProvider(venue.id)),
+                        child: const Text('Retry'),
+                      ),
+                    ],
+                  ),
                 ),
-              ],
+                data: (shifts) {
+                  final pendingSwaps = swapsAsync.maybeWhen(
+                    data: (swaps) => swaps
+                        .where((s) => s.status == ShiftSwapStatus.pending)
+                        .toList(),
+                    orElse: () => const <ShiftSwap>[],
+                  );
+                  if (shifts.isEmpty && pendingSwaps.isEmpty) {
+                    return LayoutBuilder(
+                      builder: (context, constraints) => SingleChildScrollView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        child: SizedBox(
+                          height: constraints.maxHeight,
+                          child: const Center(
+                            child: Text('No shifts scheduled yet.'),
+                          ),
+                        ),
+                      ),
+                    );
+                  }
+                  return ListView(
+                    children: [
+                      if (pendingSwaps.isNotEmpty) ...[
+                        const Padding(
+                          padding: EdgeInsets.fromLTRB(16, 16, 16, 4),
+                          child: Text(
+                            'Open swap requests',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                        for (final swap in pendingSwaps)
+                          _SwapTile(swap: swap, currentUserId: currentUserId),
+                        const Divider(),
+                      ],
+                      for (final shift in shifts)
+                        _ShiftTile(
+                          shift: shift,
+                          currentUserId: currentUserId,
+                          canManage: canManage,
+                        ),
+                    ],
+                  );
+                },
+              ),
             ),
           ),
-          data: (shifts) {
-            final pendingSwaps = swapsAsync.maybeWhen(
-              data: (swaps) => swaps
-                  .where((s) => s.status == ShiftSwapStatus.pending)
-                  .toList(),
-              orElse: () => const <ShiftSwap>[],
-            );
-            if (shifts.isEmpty && pendingSwaps.isEmpty) {
-              return LayoutBuilder(
-                builder: (context, constraints) => SingleChildScrollView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  child: SizedBox(
-                    height: constraints.maxHeight,
-                    child:
-                        const Center(child: Text('No shifts scheduled yet.')),
-                  ),
-                ),
-              );
-            }
-            return ListView(
-              children: [
-                if (pendingSwaps.isNotEmpty) ...[
-                  const Padding(
-                    padding: EdgeInsets.fromLTRB(16, 16, 16, 4),
-                    child: Text(
-                      'Open swap requests',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                  for (final swap in pendingSwaps)
-                    _SwapTile(swap: swap, currentUserId: currentUserId),
-                  const Divider(),
-                ],
-                for (final shift in shifts)
-                  _ShiftTile(
-                    shift: shift,
-                    currentUserId: currentUserId,
-                    canManage: canManage,
-                  ),
-              ],
-            );
-          },
-        ),
+        ],
       ),
       floatingActionButton: canManage
           ? Column(
@@ -140,9 +150,32 @@ class ScheduleListScreen extends ConsumerWidget {
     DateTime? prefillStart,
     DateTime? prefillEnd,
   }) async {
-    final staffIdController = TextEditingController(text: prefillStaffId);
+    final clock = ref.read(venueClockProvider);
+    if (!ensureSupported(context, clock)) return;
+
+    // Who can be assigned: the venue's roster (RPC venue_schedule_roster), not a typed user id.
+    List<RosterMember> roster;
+    try {
+      roster = await ref.read(scheduleRosterForVenueProvider(venueId).future);
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Couldn't load your team. Please retry.")),
+      );
+      return;
+    }
+    if (!context.mounted) return;
+    final people = [...roster]..sort(
+        (a, b) => (a.displayName ?? '').toLowerCase().compareTo(
+              (b.displayName ?? '').toLowerCase(),
+            ),
+      );
+
     final roleLabelController = TextEditingController(text: prefillRoleLabel);
-    var start = prefillStart ?? DateTime.now();
+    String? staffId =
+        people.any((m) => m.userId == prefillStaffId) ? prefillStaffId : null;
+    // Venue wall times (see VenueClock): what the manager reads on the venue's clock.
+    var start = prefillStart ?? clock.now;
     var end = prefillEnd ?? start.add(const Duration(hours: 4));
 
     final confirmed = await showDialog<bool>(
@@ -150,44 +183,64 @@ class ScheduleListScreen extends ConsumerWidget {
       builder: (context) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
           title: const Text('Add shift'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: staffIdController,
-                decoration: const InputDecoration(
-                  labelText:
-                      'Staff user ID (optional — leave blank for an open shift)',
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                DropdownButtonFormField<String?>(
+                  initialValue: staffId,
+                  isExpanded: true,
+                  decoration: const InputDecoration(labelText: 'Assigned to'),
+                  items: [
+                    const DropdownMenuItem<String?>(
+                      value: null,
+                      child: Text('Open shift (unassigned)'),
+                    ),
+                    for (final member in people)
+                      DropdownMenuItem<String?>(
+                        value: member.userId,
+                        child: Text(member.displayName ?? 'Team member'),
+                      ),
+                  ],
+                  onChanged: (value) => setState(() => staffId = value),
                 ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: roleLabelController,
-                decoration:
-                    const InputDecoration(labelText: 'Role (e.g. bartender)'),
-              ),
-              const SizedBox(height: 12),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Start'),
-                subtitle: Text(start.toString()),
-                trailing: const Icon(Icons.edit_calendar_outlined),
-                onTap: () async {
-                  final picked = await _pickDateTime(context, start);
-                  if (picked != null) setState(() => start = picked);
-                },
-              ),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('End'),
-                subtitle: Text(end.toString()),
-                trailing: const Icon(Icons.edit_calendar_outlined),
-                onTap: () async {
-                  final picked = await _pickDateTime(context, end);
-                  if (picked != null) setState(() => end = picked);
-                },
-              ),
-            ],
+                const SizedBox(height: 12),
+                TextField(
+                  controller: roleLabelController,
+                  decoration:
+                      const InputDecoration(labelText: 'Role (e.g. bartender)'),
+                ),
+                const SizedBox(height: 12),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Start'),
+                  subtitle: Text(VenueClock.formatWallDateTime(start)),
+                  trailing: const Icon(Icons.edit_calendar_outlined),
+                  onTap: () async {
+                    final picked = await pickVenueDateTime(
+                      context,
+                      initial: start,
+                      nowWall: clock.now,
+                    );
+                    if (picked != null) setState(() => start = picked);
+                  },
+                ),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('End'),
+                  subtitle: Text(VenueClock.formatWallDateTime(end)),
+                  trailing: const Icon(Icons.edit_calendar_outlined),
+                  onTap: () async {
+                    final picked = await pickVenueDateTime(
+                      context,
+                      initial: end,
+                      nowWall: clock.now,
+                    );
+                    if (picked != null) setState(() => end = picked);
+                  },
+                ),
+              ],
+            ),
           ),
           actions: [
             TextButton(
@@ -208,14 +261,12 @@ class ScheduleListScreen extends ConsumerWidget {
     try {
       await ref.read(schedulesRepositoryProvider).createShift(
             venueId: venueId,
-            staffId: staffIdController.text.trim().isEmpty
-                ? null
-                : staffIdController.text.trim(),
+            staffId: staffId,
             roleLabel: roleLabelController.text.trim().isEmpty
                 ? null
                 : roleLabelController.text.trim(),
-            startTime: start,
-            endTime: end,
+            startTime: clock.instant(start),
+            endTime: clock.instant(end),
           );
       ref.invalidate(shiftsForVenueProvider(venueId));
     } on PostgrestException catch (error) {
@@ -230,25 +281,19 @@ class ScheduleListScreen extends ConsumerWidget {
     }
   }
 
-  Future<DateTime?> _pickDateTime(
-    BuildContext context,
-    DateTime initial,
-  ) async {
-    final date = await showDatePicker(
-      context: context,
-      initialDate: initial,
-      firstDate: DateTime.now().subtract(const Duration(days: 1)),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
+  /// An AI-suggested time as a venue wall time: a value with an offset or `Z` is an instant and
+  /// is converted to the venue's clock; one without is taken to already be the venue's clock.
+  DateTime? _suggestedWall(WidgetRef ref, String? raw) {
+    final parsed = DateTime.tryParse(raw ?? '');
+    if (parsed == null) return null;
+    if (parsed.isUtc) return ref.read(venueClockProvider).wall(parsed);
+    return DateTime.utc(
+      parsed.year,
+      parsed.month,
+      parsed.day,
+      parsed.hour,
+      parsed.minute,
     );
-    if (date == null || !context.mounted) return null;
-
-    final time = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay.fromDateTime(initial),
-    );
-    if (time == null) return null;
-
-    return DateTime(date.year, date.month, date.day, time.hour, time.minute);
   }
 
   Future<void> _showSuggestDialog(
@@ -340,9 +385,8 @@ class ScheduleListScreen extends ConsumerWidget {
                         ref,
                         venueId,
                         prefillStaffId: suggestion.staffId,
-                        prefillStart:
-                            DateTime.tryParse(suggestion.startTime ?? ''),
-                        prefillEnd: DateTime.tryParse(suggestion.endTime ?? ''),
+                        prefillStart: _suggestedWall(ref, suggestion.startTime),
+                        prefillEnd: _suggestedWall(ref, suggestion.endTime),
                       );
                     },
                     child: const Text('Add'),
@@ -362,6 +406,15 @@ class ScheduleListScreen extends ConsumerWidget {
   }
 }
 
+/// Display names by user id for the venue's schedule roster (empty until it loads).
+Map<String, String> _rosterNames(WidgetRef ref, String venueId) {
+  final roster = ref.watch(scheduleRosterForVenueProvider(venueId)).valueOrNull;
+  return {
+    for (final m in roster ?? const <RosterMember>[])
+      m.userId: m.displayName ?? 'Team member',
+  };
+}
+
 class _ShiftTile extends ConsumerWidget {
   const _ShiftTile({
     required this.shift,
@@ -376,13 +429,15 @@ class _ShiftTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isMine = currentUserId != null && shift.staffId == currentUserId;
+    final clock = ref.watch(venueClockProvider);
+    final names = _rosterNames(ref, shift.venueId);
 
     return ListTile(
       leading: const Icon(Icons.schedule_outlined),
       title: Text(shift.roleLabel ?? 'Shift'),
       subtitle: Text(
-        '${shift.startTime} → ${shift.endTime}'
-        '${shift.staffId != null ? '\nStaff: ${shift.staffId}' : '\n(open shift)'}'
+        '${clock.formatDateTime(shift.startTime)} → ${clock.formatDateTime(shift.endTime)}'
+        '${shift.staffId != null ? '\nStaff: ${names[shift.staffId] ?? 'Team member'}' : '\n(open shift)'}'
         '${shift.status == ShiftStatus.cancelled ? '\nCancelled' : ''}',
       ),
       isThreeLine: true,
@@ -470,7 +525,9 @@ class _SwapTile extends ConsumerWidget {
       title: Text(
         swap.offeredTo != null ? 'Offered to one teammate' : 'Open to anyone',
       ),
-      subtitle: Text('Requested by ${swap.requestedBy}'),
+      subtitle: Text(
+        'Requested by ${_rosterNames(ref, swap.venueId)[swap.requestedBy] ?? 'a teammate'}',
+      ),
       trailing: isRequester
           ? TextButton(
               onPressed: () => _cancel(context, ref),

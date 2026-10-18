@@ -17,8 +17,6 @@ abstract interface class InventoryRepository {
     num? unitCostUsd,
   });
 
-  Future<void> updateQuantity(String itemId, num quantity);
-
   Future<void> deleteItem(String itemId);
 
   Future<InventorySnapshot> fetchSnapshot(
@@ -99,13 +97,6 @@ class SupabaseInventoryRepository implements InventoryRepository {
       if (unit != null) 'unit': unit,
       if (unitCostUsd != null) 'unit_cost_usd': unitCostUsd,
     });
-  }
-
-  @override
-  Future<void> updateQuantity(String itemId, num quantity) async {
-    await _client
-        .from('inventory_items')
-        .update({'quantity': quantity}).eq('id', itemId);
   }
 
   @override
