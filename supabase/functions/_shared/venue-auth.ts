@@ -9,6 +9,13 @@ export const MEMBER_ROLES = [
   "organization_admin",
 ];
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** True only for a canonical UUID string. Gate for any id interpolated into a PostgREST filter. */
+export function isUuid(value: unknown): value is string {
+  return typeof value === "string" && UUID_PATTERN.test(value);
+}
+
 // Org owners/admins hold org-level memberships (venue_id null), never venue rows — a
 // venue_id-only lookup can never find them. Resolve the venue's organization first,
 // then match either the venue row or the org row. Reads through the caller's own
@@ -18,6 +25,10 @@ export async function getCallerVenueRoles(
   userId: string,
   venueId: string,
 ): Promise<{ organizationId: string; roles: string[] } | null> {
+  // venueId is interpolated into a PostgREST .or() filter below; a non-UUID could inject
+  // extra filter clauses (audit B-09), so treat it as "no such venue" (callers answer 403/404;
+  // endpoints that want a 400 should check isUuid() themselves first).
+  if (!isUuid(venueId) || !isUuid(userId)) return null;
   const { data: venue } = await userClient
     .from("venues")
     .select("organization_id")
@@ -47,6 +58,7 @@ export async function isCurrentVenueManager(
   userId: string,
   venueId: string,
 ): Promise<boolean> {
+  if (!isUuid(venueId) || !isUuid(userId)) return false;
   const { data: venue, error: venueError } = await adminClient
     .from("venues")
     .select("organization_id")

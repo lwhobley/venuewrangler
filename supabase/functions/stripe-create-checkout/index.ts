@@ -7,6 +7,7 @@
 import { corsHeaders, handleCorsPreflight } from "../_shared/cors.ts";
 import { createServiceClient, createUserClient } from "../_shared/supabase-clients.ts";
 import { createStripeClient } from "../_shared/stripe.ts";
+import { enforceRateLimit } from "../_shared/rate-limit.ts";
 import { initObservability, captureException, flushObservability } from "../_shared/observability.ts";
 
 initObservability();
@@ -90,6 +91,15 @@ async function handleRequest(req: Request): Promise<Response> {
   }
 
   const serviceClient = createServiceClient();
+  // 10/hour/user (audit B-05); fails open so a limiter outage cannot block paying customers.
+  const limited = await enforceRateLimit(
+    serviceClient,
+    `stripe-checkout:user:${userData.user.id}`,
+    10,
+    3600,
+    { failOpen: true },
+  );
+  if (limited) return limited;
   const stripe = createStripeClient();
 
   // Reuse an existing Stripe customer for this organization if one was already created by an

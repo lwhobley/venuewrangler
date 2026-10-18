@@ -43,31 +43,67 @@ function importHmacKey(base64Key: string): Promise<CryptoKey> {
   );
 }
 
-// Output: base64(iv) + "." + base64(ciphertext). A fresh random IV every call, per AES-GCM's
-// requirement that an (key, iv) pair never repeat.
-export async function encryptToken(plaintext: string, base64Key: string): Promise<string> {
+export type OAuthProvider = "square" | "quickbooks" | "gusto";
+
+/** What a stored token is bound to. Used as AES-GCM additional authenticated data. */
+export interface TokenContext {
+  venueId: string;
+  provider: OAuthProvider;
+}
+
+const TOKEN_FORMAT_V1 = "v1";
+
+function tokenAad(context: TokenContext): Uint8Array<ArrayBuffer> {
+  return new TextEncoder().encode(`${context.venueId}:${context.provider}`);
+}
+
+// Output (current): "v1." + base64(iv) + "." + base64(ciphertext), with AES-GCM additional data
+// `${venue_id}:${provider}`. Binding the ciphertext to its venue and provider means a database
+// row copied to another venue/provider (or a token swapped between rows) fails authentication
+// instead of decrypting. A fresh random IV every call, per AES-GCM's requirement that an
+// (key, iv) pair never repeat.
+export async function encryptToken(
+  plaintext: string,
+  base64Key: string,
+  context: TokenContext,
+): Promise<string> {
   const key = await importAesKey(base64Key);
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const ciphertext = await crypto.subtle.encrypt(
-    { name: "AES-GCM", iv },
+    { name: "AES-GCM", iv, additionalData: tokenAad(context) },
     key,
     new TextEncoder().encode(plaintext),
   );
-  return `${bytesToBase64(iv)}.${bytesToBase64(new Uint8Array(ciphertext))}`;
+  return `${TOKEN_FORMAT_V1}.${bytesToBase64(iv)}.${bytesToBase64(new Uint8Array(ciphertext))}`;
 }
 
-export async function decryptToken(encoded: string, base64Key: string): Promise<string> {
-  const [ivB64, ciphertextB64] = encoded.split(".");
+// Accepts both formats so rows written before versioning keep working:
+//  - "v1.<iv>.<ct>": authenticated against `context` (required; throws without it).
+//  - "<iv>.<ct>" (legacy, no AAD): `context` is ignored.
+export async function decryptToken(
+  encoded: string,
+  base64Key: string,
+  context?: TokenContext,
+): Promise<string> {
+  const parts = encoded.split(".");
+  let ivB64: string;
+  let ciphertextB64: string;
+  let additionalData: Uint8Array<ArrayBuffer> | undefined;
+  if (parts.length === 3 && parts[0] === TOKEN_FORMAT_V1) {
+    if (!context) throw new Error("decryptToken: v1 ciphertext requires a venue/provider context");
+    [, ivB64, ciphertextB64] = parts;
+    additionalData = tokenAad(context);
+  } else if (parts.length === 2) {
+    [ivB64, ciphertextB64] = parts;
+  } else {
+    throw new Error("decryptToken: unrecognized ciphertext format");
+  }
   const key = await importAesKey(base64Key);
-  const plaintext = await crypto.subtle.decrypt(
-    { name: "AES-GCM", iv: base64ToBytes(ivB64) },
-    key,
-    base64ToBytes(ciphertextB64),
-  );
+  const params: AesGcmParams = { name: "AES-GCM", iv: base64ToBytes(ivB64) };
+  if (additionalData) params.additionalData = additionalData;
+  const plaintext = await crypto.subtle.decrypt(params, key, base64ToBytes(ciphertextB64));
   return new TextDecoder().decode(plaintext);
 }
-
-export type OAuthProvider = "square" | "quickbooks" | "gusto";
 
 // `aud` names the one provider callback a state may be redeemed at, and `purpose` names the flow,
 // so a state minted for one provider can never be replayed at another provider's callback even
@@ -80,7 +116,14 @@ export interface OAuthStatePayload {
   aud: OAuthProvider;
   purpose: typeof OAUTH_STATE_PURPOSE;
   issued_at: number;
+  /**
+   * Random per-state value (uuid). The callback records it in
+   * oauth_pending_connections.state_nonce (UNIQUE), which is what makes a state single-use.
+   */
+  nonce: string;
 }
+
+const NONCE_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const STATE_TTL_MS = 10 * 60 * 1000; // 10 minutes — long enough for a provider's consent screen.
 
@@ -97,6 +140,7 @@ export async function signOAuthState(
     ...payload,
     purpose: OAUTH_STATE_PURPOSE,
     issued_at: Date.now(),
+    nonce: crypto.randomUUID(),
   };
   const payloadB64 = btoa(JSON.stringify(fullPayload));
   const key = await importHmacKey(base64Key);
@@ -130,6 +174,7 @@ export async function verifyOAuthState(
       Date.now() - payload.issued_at > STATE_TTL_MS ||
       typeof payload.venue_id !== "string" ||
       typeof payload.user_id !== "string" ||
+      typeof payload.nonce !== "string" || !NONCE_PATTERN.test(payload.nonce) ||
       payload.aud !== expectedAud ||
       payload.purpose !== OAUTH_STATE_PURPOSE) return null;
     return payload;

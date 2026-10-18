@@ -1,5 +1,7 @@
-// Gusto OAuth2 connect/callback/disconnect for payroll push. Same shape as square-oauth and
-// quickbooks-oauth.
+// Gusto OAuth2 connect/callback/complete/disconnect for payroll push. Same two-step connect
+// flow as square-oauth (audit B-04): /callback parks the encrypted tokens in
+// oauth_pending_connections and redirects the app with a one-time nonce; POST /complete
+// (authenticated, same user) activates the connection. See _shared/oauth-connections.ts.
 //
 // NOT independently verified against a live Gusto sandbox app (none was available in this
 // environment). Endpoint shapes follow Gusto's published OAuth2 docs; confirm against
@@ -7,23 +9,25 @@
 // this in production. GUSTO_API_BASE has no default and must be set explicitly.
 import { corsHeaders, handleCorsPreflight } from "../_shared/cors.ts";
 import { createServiceClient, createUserClient } from "../_shared/supabase-clients.ts";
-import { getCallerVenueRoles, isCurrentVenueManager, isManager } from "../_shared/venue-auth.ts";
+import { getCallerVenueRoles, isCurrentVenueManager, isManager, isUuid } from "../_shared/venue-auth.ts";
+import { decryptToken, signOAuthState, verifyOAuthState } from "../_shared/crypto.ts";
 import {
-  decryptToken,
-  encryptToken,
-  signOAuthState,
-  verifyOAuthState,
-} from "../_shared/crypto.ts";
+  handleCompleteRequest,
+  OAUTH_FETCH_TIMEOUT_MS,
+  oauthJson as jsonResponse,
+  storePendingConnection,
+  withQuery,
+} from "../_shared/oauth-connections.ts";
 import { initObservability, captureException, flushObservability } from "../_shared/observability.ts";
 
 initObservability();
 
-function jsonResponse(body: Record<string, unknown>, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}
+// Read-only by default until payroll push ships. NEEDS VERIFICATION against the scopes enabled
+// on the Gusto application (names follow Gusto's granular "<resource>:read" scopes); override
+// with GUSTO_OAUTH_SCOPES (space-separated) to match what the app registration actually grants.
+// Set GUSTO_OAUTH_SCOPES to an empty string to omit the `scope` parameter entirely, which keeps
+// the previous behaviour of letting the application registration decide.
+const DEFAULT_SCOPES = "companies:read employees:read payrolls:read";
 
 function redirectResponse(url: string): Response {
   return new Response(null, { status: 302, headers: { ...corsHeaders, Location: url } });
@@ -31,6 +35,30 @@ function redirectResponse(url: string): Response {
 
 // Best-effort provider-side revoke of the stored Gusto access token. Never throws and never
 // blocks disconnect: returns false on any failure and the caller reports it as `revoked: false`.
+async function postGustoRevoke(
+  accessToken: string,
+  apiBase: string,
+  clientId: string,
+  clientSecret: string,
+): Promise<boolean> {
+  try {
+    const response = await fetch(`${apiBase}/oauth/revoke`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ client_id: clientId, client_secret: clientSecret, token: accessToken }),
+      signal: AbortSignal.timeout(OAUTH_FETCH_TIMEOUT_MS),
+    });
+    if (!response.ok) {
+      console.error("Gusto token revoke failed", response.status, await response.text());
+      return false;
+    }
+    return true;
+  } catch (error) {
+    console.error("Gusto token revoke threw", error);
+    return false;
+  }
+}
+
 async function revokeGustoAccessToken(
   serviceClient: ReturnType<typeof createServiceClient>,
   venueId: string,
@@ -48,17 +76,11 @@ async function revokeGustoAccessToken(
       .maybeSingle();
     if (error || !connection?.encrypted_access_token) return false;
 
-    const accessToken = await decryptToken(connection.encrypted_access_token, encryptionKey);
-    const response = await fetch(`${apiBase}/oauth/revoke`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ client_id: clientId, client_secret: clientSecret, token: accessToken }),
+    const accessToken = await decryptToken(connection.encrypted_access_token, encryptionKey, {
+      venueId,
+      provider: "gusto",
     });
-    if (!response.ok) {
-      console.error("Gusto token revoke failed", response.status, await response.text());
-      return false;
-    }
-    return true;
+    return await postGustoRevoke(accessToken, apiBase, clientId, clientSecret);
   } catch (error) {
     console.error("Gusto token revoke threw", error);
     return false;
@@ -118,9 +140,11 @@ async function handleRequest(req: Request): Promise<Response> {
   const clientId = Deno.env.get("GUSTO_CLIENT_ID");
   const clientSecret = Deno.env.get("GUSTO_CLIENT_SECRET");
   const redirectUri = Deno.env.get("GUSTO_REDIRECT_URI");
+  const scopes = Deno.env.get("GUSTO_OAUTH_SCOPES") ?? DEFAULT_SCOPES;
 
   if (!encryptionKey || !stateSigningKey || !apiBase || !clientId || !clientSecret || !redirectUri) {
     console.error("gusto-oauth is not fully configured");
+    // Callbacks must redirect (the browser is waiting), API calls get JSON.
     if (url.pathname.endsWith("/callback")) {
       const errorUrl = Deno.env.get("PAYROLL_OAUTH_ERROR_URL") ?? "venuewrangler://integrations/error";
       return redirectResponse(`${errorUrl}?provider=gusto&reason=not_configured`);
@@ -136,6 +160,7 @@ async function handleRequest(req: Request): Promise<Response> {
       return jsonResponse({ error: "invalid_json_body" }, 400);
     }
     if (!payload.venue_id) return jsonResponse({ error: "missing_venue_id" }, 400);
+    if (!isUuid(payload.venue_id)) return jsonResponse({ error: "invalid_venue_id" }, 400);
 
     const auth = await requireVenueManager(req.headers.get("Authorization"), payload.venue_id);
     if ("error" in auth) return auth.error;
@@ -148,6 +173,7 @@ async function handleRequest(req: Request): Promise<Response> {
     authorizeUrl.searchParams.set("client_id", clientId);
     authorizeUrl.searchParams.set("redirect_uri", redirectUri);
     authorizeUrl.searchParams.set("response_type", "code");
+    if (scopes.trim()) authorizeUrl.searchParams.set("scope", scopes.trim());
     authorizeUrl.searchParams.set("state", state);
 
     return jsonResponse({ url: authorizeUrl.toString() });
@@ -180,6 +206,7 @@ async function handleRequest(req: Request): Promise<Response> {
         redirect_uri: redirectUri,
         grant_type: "authorization_code",
       }),
+      signal: AbortSignal.timeout(OAUTH_FETCH_TIMEOUT_MS),
     });
 
     if (!tokenResponse.ok) {
@@ -195,34 +222,48 @@ async function handleRequest(req: Request): Promise<Response> {
     if (!await isCurrentVenueManager(serviceClient, statePayload.user_id, statePayload.venue_id)) {
       return redirectResponse(`${errorUrl}?provider=gusto&reason=authorization_revoked`);
     }
-    const { error } = await serviceClient.from("payroll_connections").upsert(
-      {
-        venue_id: statePayload.venue_id,
-        provider: "gusto",
-        status: "connected",
+
+    // Park the encrypted tokens; the connection is activated only by POST /complete.
+    const stored = await storePendingConnection(serviceClient, {
+      provider: "gusto",
+      state: statePayload,
+      encryptionKey,
+      revokeTokens: ({ accessToken }) => postGustoRevoke(accessToken, apiBase, clientId, clientSecret),
+      tokens: {
+        accessToken: tokenData.access_token,
+        refreshToken: tokenData.refresh_token ?? null,
+        tokenExpiresAt: tokenData.expires_in
+          ? new Date(Date.now() + tokenData.expires_in * 1000).toISOString()
+          : null,
         // Gusto doesn't return a company/account id on the OAuth callback itself (unlike
         // Square's merchant_id or QuickBooks' realmId) — a follow-up call to Gusto's own API
         // would be needed to populate this; left null until that's built.
-        external_account_id: null,
-        encrypted_access_token: await encryptToken(tokenData.access_token, encryptionKey),
-        encrypted_refresh_token: tokenData.refresh_token
-          ? await encryptToken(tokenData.refresh_token, encryptionKey)
-          : null,
-        token_expires_at: tokenData.expires_in
-          ? new Date(Date.now() + tokenData.expires_in * 1000).toISOString()
-          : null,
-        connected_by: statePayload.user_id,
-        last_error: null,
+        externalAccountId: null,
       },
-      { onConflict: "venue_id,provider" },
-    );
-
-    if (error) {
-      console.error("failed to persist Gusto connection", error);
-      return redirectResponse(`${errorUrl}?provider=gusto&reason=storage_failed`);
+    });
+    if (!stored.ok) {
+      return redirectResponse(`${errorUrl}?provider=gusto&reason=${stored.reason}`);
     }
 
-    return redirectResponse(`${successUrl}?provider=gusto`);
+    return redirectResponse(withQuery(successUrl, { provider: "gusto", nonce: stored.nonce }));
+  }
+
+  if (url.pathname.endsWith("/complete") && req.method === "POST") {
+    return await handleCompleteRequest({
+      req,
+      provider: "gusto",
+      serviceClient: createServiceClient(),
+      encryptionKey,
+      revokePrevious: (venueId) =>
+        revokeGustoAccessToken(
+          createServiceClient(),
+          venueId,
+          encryptionKey,
+          apiBase,
+          clientId,
+          clientSecret,
+        ),
+    });
   }
 
   if (url.pathname.endsWith("/disconnect") && req.method === "POST") {
@@ -233,6 +274,7 @@ async function handleRequest(req: Request): Promise<Response> {
       return jsonResponse({ error: "invalid_json_body" }, 400);
     }
     if (!payload.venue_id) return jsonResponse({ error: "missing_venue_id" }, 400);
+    if (!isUuid(payload.venue_id)) return jsonResponse({ error: "invalid_venue_id" }, 400);
 
     const auth = await requireVenueManager(req.headers.get("Authorization"), payload.venue_id);
     if ("error" in auth) return auth.error;

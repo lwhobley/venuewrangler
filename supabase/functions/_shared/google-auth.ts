@@ -75,6 +75,7 @@ export async function getGoogleAccessToken(
       grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
       assertion,
     }),
+    signal: AbortSignal.timeout(10_000),
   });
 
   if (!response.ok) {

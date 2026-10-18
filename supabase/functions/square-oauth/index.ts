@@ -1,7 +1,13 @@
-// Square OAuth2 connect/callback/disconnect for payroll push (POS/labor data), per the
+// Square OAuth2 connect/callback/complete/disconnect for payroll push (POS/labor data), per the
 // migration plan's "Square/QuickBooks/Gusto payroll push, all OAuth exchange server-side"
 // requirement — the Flutter app only ever sees a hosted `authorize_url` to open in a browser,
 // never a client secret.
+//
+// Connect flow (audit B-04): /connect mints a signed single-use state; /callback exchanges the
+// code but does NOT activate anything — it parks the encrypted tokens in
+// oauth_pending_connections and redirects the app deep link with a one-time completion nonce;
+// POST /complete (authenticated, nonce + same user) is what finally writes payroll_connections.
+// See _shared/oauth-connections.ts for why this defeats a forwarded consent link.
 //
 // NOT independently verified against a live Square sandbox: the authorize/token endpoint
 // shapes below follow Square's published OAuth2 docs, but no real SQUARE_APPLICATION_ID/
@@ -10,23 +16,22 @@
 // production, and adjust SQUARE_OAUTH_SCOPES to exactly what the payroll-push feature needs.
 import { corsHeaders, handleCorsPreflight } from "../_shared/cors.ts";
 import { createServiceClient, createUserClient } from "../_shared/supabase-clients.ts";
-import { getCallerVenueRoles, isCurrentVenueManager, isManager } from "../_shared/venue-auth.ts";
+import { getCallerVenueRoles, isCurrentVenueManager, isManager, isUuid } from "../_shared/venue-auth.ts";
+import { decryptToken, signOAuthState, verifyOAuthState } from "../_shared/crypto.ts";
 import {
-  decryptToken,
-  encryptToken,
-  signOAuthState,
-  verifyOAuthState,
-} from "../_shared/crypto.ts";
+  handleCompleteRequest,
+  OAUTH_FETCH_TIMEOUT_MS,
+  oauthJson as jsonResponse,
+  storePendingConnection,
+  withQuery,
+} from "../_shared/oauth-connections.ts";
 import { initObservability, captureException, flushObservability } from "../_shared/observability.ts";
 
 initObservability();
 
-function jsonResponse(body: Record<string, unknown>, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}
+// Read-only by default until payroll push ships. Writing labor/timecards needs
+// LABOR_WRITE/TIMECARDS_WRITE; add them via SQUARE_OAUTH_SCOPES only when push is released.
+const DEFAULT_SCOPES = "MERCHANT_PROFILE_READ LABOR_READ TIMECARDS_READ";
 
 function redirectResponse(url: string): Response {
   return new Response(null, { status: 302, headers: { ...corsHeaders, Location: url } });
@@ -34,6 +39,33 @@ function redirectResponse(url: string): Response {
 
 // Best-effort provider-side revoke of the stored Square access token. Never throws and never
 // blocks disconnect: returns false on any failure and the caller reports it as `revoked: false`.
+async function postSquareRevoke(
+  accessToken: string,
+  apiBase: string,
+  clientId: string,
+  clientSecret: string,
+): Promise<boolean> {
+  try {
+    const response = await fetch(`${apiBase}/oauth2/revoke`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Client ${clientSecret}`,
+      },
+      body: JSON.stringify({ client_id: clientId, access_token: accessToken }),
+      signal: AbortSignal.timeout(OAUTH_FETCH_TIMEOUT_MS),
+    });
+    if (!response.ok) {
+      console.error("Square token revoke failed", response.status, await response.text());
+      return false;
+    }
+    return true;
+  } catch (error) {
+    console.error("Square token revoke threw", error);
+    return false;
+  }
+}
+
 async function revokeSquareAccessToken(
   serviceClient: ReturnType<typeof createServiceClient>,
   venueId: string,
@@ -51,20 +83,11 @@ async function revokeSquareAccessToken(
       .maybeSingle();
     if (error || !connection?.encrypted_access_token) return false;
 
-    const accessToken = await decryptToken(connection.encrypted_access_token, encryptionKey);
-    const response = await fetch(`${apiBase}/oauth2/revoke`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Client ${clientSecret}`,
-      },
-      body: JSON.stringify({ client_id: clientId, access_token: accessToken }),
+    const accessToken = await decryptToken(connection.encrypted_access_token, encryptionKey, {
+      venueId,
+      provider: "square",
     });
-    if (!response.ok) {
-      console.error("Square token revoke failed", response.status, await response.text());
-      return false;
-    }
-    return true;
+    return await postSquareRevoke(accessToken, apiBase, clientId, clientSecret);
   } catch (error) {
     console.error("Square token revoke threw", error);
     return false;
@@ -124,8 +147,7 @@ async function handleRequest(req: Request): Promise<Response> {
   const clientId = Deno.env.get("SQUARE_APPLICATION_ID");
   const clientSecret = Deno.env.get("SQUARE_APPLICATION_SECRET");
   const redirectUri = Deno.env.get("SQUARE_REDIRECT_URI");
-  const scopes = Deno.env.get("SQUARE_OAUTH_SCOPES") ??
-    "MERCHANT_PROFILE_READ LABOR_READ LABOR_WRITE TIMECARDS_READ TIMECARDS_WRITE";
+  const scopes = Deno.env.get("SQUARE_OAUTH_SCOPES") ?? DEFAULT_SCOPES;
 
   if (!encryptionKey || !stateSigningKey || !apiBase || !clientId || !clientSecret || !redirectUri) {
     console.error("square-oauth is not fully configured");
@@ -145,6 +167,7 @@ async function handleRequest(req: Request): Promise<Response> {
       return jsonResponse({ error: "invalid_json_body" }, 400);
     }
     if (!payload.venue_id) return jsonResponse({ error: "missing_venue_id" }, 400);
+    if (!isUuid(payload.venue_id)) return jsonResponse({ error: "invalid_venue_id" }, 400);
 
     const auth = await requireVenueManager(req.headers.get("Authorization"), payload.venue_id);
     if ("error" in auth) return auth.error;
@@ -190,6 +213,7 @@ async function handleRequest(req: Request): Promise<Response> {
         grant_type: "authorization_code",
         redirect_uri: redirectUri,
       }),
+      signal: AbortSignal.timeout(OAUTH_FETCH_TIMEOUT_MS),
     });
 
     if (!tokenResponse.ok) {
@@ -205,29 +229,43 @@ async function handleRequest(req: Request): Promise<Response> {
     if (!await isCurrentVenueManager(serviceClient, statePayload.user_id, statePayload.venue_id)) {
       return redirectResponse(`${errorUrl}?provider=square&reason=authorization_revoked`);
     }
-    const { error } = await serviceClient.from("payroll_connections").upsert(
-      {
-        venue_id: statePayload.venue_id,
-        provider: "square",
-        status: "connected",
-        external_account_id: tokenData.merchant_id ?? null,
-        encrypted_access_token: await encryptToken(tokenData.access_token, encryptionKey),
-        encrypted_refresh_token: tokenData.refresh_token
-          ? await encryptToken(tokenData.refresh_token, encryptionKey)
-          : null,
-        token_expires_at: tokenData.expires_at ?? null,
-        connected_by: statePayload.user_id,
-        last_error: null,
-      },
-      { onConflict: "venue_id,provider" },
-    );
 
-    if (error) {
-      console.error("failed to persist Square connection", error);
-      return redirectResponse(`${errorUrl}?provider=square&reason=storage_failed`);
+    // Park the encrypted tokens; the connection is activated only by POST /complete.
+    const stored = await storePendingConnection(serviceClient, {
+      provider: "square",
+      state: statePayload,
+      encryptionKey,
+      revokeTokens: ({ accessToken }) => postSquareRevoke(accessToken, apiBase, clientId, clientSecret),
+      tokens: {
+        accessToken: tokenData.access_token,
+        refreshToken: tokenData.refresh_token ?? null,
+        tokenExpiresAt: tokenData.expires_at ?? null,
+        externalAccountId: tokenData.merchant_id ?? null,
+      },
+    });
+    if (!stored.ok) {
+      return redirectResponse(`${errorUrl}?provider=square&reason=${stored.reason}`);
     }
 
-    return redirectResponse(`${successUrl}?provider=square`);
+    return redirectResponse(withQuery(successUrl, { provider: "square", nonce: stored.nonce }));
+  }
+
+  if (url.pathname.endsWith("/complete") && req.method === "POST") {
+    return await handleCompleteRequest({
+      req,
+      provider: "square",
+      serviceClient: createServiceClient(),
+      encryptionKey,
+      revokePrevious: (venueId) =>
+        revokeSquareAccessToken(
+          createServiceClient(),
+          venueId,
+          encryptionKey,
+          apiBase,
+          clientId,
+          clientSecret,
+        ),
+    });
   }
 
   if (url.pathname.endsWith("/disconnect") && req.method === "POST") {
@@ -238,6 +276,7 @@ async function handleRequest(req: Request): Promise<Response> {
       return jsonResponse({ error: "invalid_json_body" }, 400);
     }
     if (!payload.venue_id) return jsonResponse({ error: "missing_venue_id" }, 400);
+    if (!isUuid(payload.venue_id)) return jsonResponse({ error: "invalid_venue_id" }, 400);
 
     const auth = await requireVenueManager(req.headers.get("Authorization"), payload.venue_id);
     if ("error" in auth) return auth.error;
