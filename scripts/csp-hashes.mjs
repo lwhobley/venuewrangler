@@ -46,7 +46,7 @@ export function collectInlineScripts(siteDir = join(root, 'site')) {
   const found = [];
   for (const file of listHtml(siteDir)) {
     const html = readFileSync(file, 'utf8');
-    for (const match of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi)) {
+    for (const match of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\b[^>]*>/gi)) {
       const attrs = match[1];
       if (/\bsrc\s*=/i.test(attrs)) continue;
       const type = (/\btype\s*=\s*["']?([^"'\s>]*)/i.exec(attrs)?.[1] ?? '').toLowerCase();
