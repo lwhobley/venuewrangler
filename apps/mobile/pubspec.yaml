@@ -16,7 +16,7 @@ dependencies:
   go_router: ^14.6.2
 
   # Supabase
-  supabase_flutter: ^2.8.0
+  supabase_flutter: ^2.18.3
   # Classify HTTP transport failures for offline retries on every platform.
   http: ^1.6.0
 
