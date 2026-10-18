@@ -1,6 +1,7 @@
 import { corsHeaders } from "../_shared/cors.ts";
 import { createServiceClient, createUserClient } from "../_shared/supabase-clients.ts";
 import { deliverPush } from "../_shared/push-delivery.ts";
+import { enforceRateLimit } from "../_shared/rate-limit.ts";
 import { initObservability, captureException, flushObservability } from "../_shared/observability.ts";
 
 initObservability();
@@ -94,6 +95,16 @@ Deno.serve(async (req: Request) => {
     }
 
     const adminClient = createServiceClient();
+
+    // Rate limit per user (audit B-05): venue-wide broadcasts are the expensive/abusable path
+    // (20/hour); targeted notifications get 120/hour. Fails open so a limiter outage cannot
+    // silence operational pushes.
+    const limited = audience === "user"
+      ? await enforceRateLimit(adminClient, `notify:user:${user.id}`, 120, 3600, { failOpen: true })
+      : await enforceRateLimit(adminClient, `notify:broadcast:${user.id}`, 20, 3600, {
+        failOpen: true,
+      });
+    if (limited) return limited;
 
     const { data: venue } = await adminClient
       .from("venues")

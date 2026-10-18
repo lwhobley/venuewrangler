@@ -4,6 +4,7 @@
 import { corsHeaders, handleCorsPreflight } from "../_shared/cors.ts";
 import { createServiceClient, createUserClient } from "../_shared/supabase-clients.ts";
 import { createStripeClient } from "../_shared/stripe.ts";
+import { enforceRateLimit } from "../_shared/rate-limit.ts";
 import { initObservability, captureException, flushObservability } from "../_shared/observability.ts";
 
 initObservability();
@@ -76,6 +77,17 @@ async function handleRequest(req: Request): Promise<Response> {
 
   const serviceClient = createServiceClient();
 
+  // 10/hour/user (audit B-05). Fails open: a limiter outage should not lock admins out of
+  // managing billing.
+  const limited = await enforceRateLimit(
+    serviceClient,
+    `stripe-portal:user:${userData.user.id}`,
+    10,
+    3600,
+    { failOpen: true },
+  );
+  if (limited) return limited;
+
   const { data: subscription, error: subscriptionError } = await serviceClient
     .from("subscriptions")
     .select("stripe_customer_id")
@@ -97,9 +109,14 @@ async function handleRequest(req: Request): Promise<Response> {
   }
 
   const stripe = createStripeClient();
+  // The Stripe account is shared with unrelated projects, so its DEFAULT portal configuration
+  // could expose their prices. Pin a dedicated configuration (restricted to this app's price,
+  // with cancel/payment-method only) via STRIPE_PORTAL_CONFIGURATION_ID when set (audit B-06).
+  const portalConfiguration = Deno.env.get("STRIPE_PORTAL_CONFIGURATION_ID");
   const session = await stripe.billingPortal.sessions.create({
     customer: subscription.stripe_customer_id,
     return_url: returnUrl,
+    ...(portalConfiguration ? { configuration: portalConfiguration } : {}),
   });
 
   return jsonResponse({ url: session.url });

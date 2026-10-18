@@ -94,6 +94,20 @@ Deno.serve(async (req) => {
     }
   }
 
+  // This Stripe account is shared with unrelated projects, and the billing portal could move a
+  // customer onto one of their prices. When STRIPE_ALLOWED_PRICE_IDS (comma list) is set, a
+  // subscription whose price is not in it is ignored (logged, 200) instead of granting
+  // entitlement. Unset keeps the previous behaviour (audit B-06).
+  const allowedPriceIds = (Deno.env.get("STRIPE_ALLOWED_PRICE_IDS") ?? "")
+    .split(",")
+    .map((id) => id.trim())
+    .filter((id) => id.length > 0);
+  function isAllowedPrice(subscription: Stripe.Subscription | null): boolean {
+    if (allowedPriceIds.length === 0 || !subscription) return true;
+    const priceId = subscription.items.data[0]?.price?.id;
+    return typeof priceId === "string" && allowedPriceIds.includes(priceId);
+  }
+
   try {
     switch (event.type) {
       case "checkout.session.completed": {
@@ -116,6 +130,13 @@ Deno.serve(async (req) => {
         const subscription = subscriptionId
           ? await currentSubscription(subscriptionId, null)
           : null;
+        if (!isAllowedPrice(subscription)) {
+          console.warn("ignoring checkout for a price not in STRIPE_ALLOWED_PRICE_IDS", {
+            eventId: event.id,
+            priceId: subscription?.items.data[0]?.price?.id,
+          });
+          break;
+        }
         await applyState(organizationId, customerId, subscription);
         break;
       }
@@ -130,6 +151,14 @@ Deno.serve(async (req) => {
             : eventSubscription.customer.id;
 
         const subscription = await currentSubscription(eventSubscription.id, eventSubscription);
+        if (!isAllowedPrice(subscription)) {
+          console.warn("ignoring subscription event for a price not in STRIPE_ALLOWED_PRICE_IDS", {
+            eventType: event.type,
+            eventId: event.id,
+            priceId: subscription.items.data[0]?.price?.id,
+          });
+          break;
+        }
         const applied = await applyState(
           null,
           customerId,

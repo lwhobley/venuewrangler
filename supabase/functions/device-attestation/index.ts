@@ -23,6 +23,7 @@ import {
   createUserClient,
 } from "../_shared/supabase-clients.ts";
 import { getGoogleAccessToken } from "../_shared/google-auth.ts";
+import { enforceRateLimit } from "../_shared/rate-limit.ts";
 import {
   sha256Hex,
   signAttestationChallenge,
@@ -144,6 +145,16 @@ async function handleRequest(req: Request): Promise<Response> {
     if (!challengeSigningKey) {
       return jsonResponse({ error: "app_attest_not_configured" }, 503);
     }
+    // Bound challenge issuance (each one inserts a row): 30/hour/user. Fails open — a limiter
+    // outage must never block sign-in, per this function's observe-mode posture.
+    const limited = await enforceRateLimit(
+      createServiceClient(),
+      `attest-challenge:${userData.user.id}`,
+      30,
+      3600,
+      { failOpen: true },
+    );
+    if (limited) return limited;
     const { token, nonceBytes } = await signAttestationChallenge(
       userData.user.id,
       payload.device_id,
@@ -177,6 +188,15 @@ async function handleRequest(req: Request): Promise<Response> {
   }
 
   const serviceClient = createServiceClient();
+  // Each verification records a device_attestations row, so bound that insert path too.
+  const verifyLimited = await enforceRateLimit(
+    serviceClient,
+    `attest-verify:${userData.user.id}`,
+    60,
+    3600,
+    { failOpen: true },
+  );
+  if (verifyLimited) return verifyLimited;
   let status: "observed" | "valid" | "invalid" = "observed";
   let detail: Record<string, unknown> = {};
 
@@ -225,6 +245,7 @@ async function handleRequest(req: Request): Promise<Response> {
               body: JSON.stringify({
                 integrity_token: payload.integrity_token,
               }),
+              signal: AbortSignal.timeout(10_000),
             },
           );
 
@@ -324,6 +345,15 @@ async function handleRequest(req: Request): Promise<Response> {
             });
             status = "valid";
             detail = { environment: result.environment, key_id: result.keyId };
+            // Keep the attested public key so later per-request assertions (time-clock-punch)
+            // can be verified. A registration failure must not turn a valid attestation invalid.
+            const { error: keyError } = await serviceClient.rpc("register_attestation_key", {
+              p_user_id: userData.user.id,
+              p_platform: "ios",
+              p_key_id: result.keyId,
+              p_public_key_spki: result.publicKeySpkiBase64,
+            });
+            if (keyError) console.error("register_attestation_key failed", keyError);
           } catch (err) {
             status = "invalid";
             detail = { error: err instanceof Error ? err.message : String(err) };

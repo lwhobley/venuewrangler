@@ -6,7 +6,14 @@
 // overspend, and logged to ai_usage_events for audit.
 import { corsHeaders, handleCorsPreflight } from "../_shared/cors.ts";
 import { createServiceClient, createUserClient } from "../_shared/supabase-clients.ts";
-import { callGroqJson, estimateInputTokens, pricingFor } from "../_shared/groq.ts";
+import {
+  callGroqJson,
+  DEFAULT_GROQ_TIMEOUT_MS,
+  estimateInputTokens,
+  GroqCallError,
+  pricingFor,
+} from "../_shared/groq.ts";
+import { checkEntitlement } from "../_shared/rate-limit.ts";
 import { systemPromptFor, TASK_TYPES, type TaskType } from "./prompts.ts";
 import { initObservability, captureException, flushObservability } from "../_shared/observability.ts";
 
@@ -15,6 +22,9 @@ initObservability();
 const MAX_INPUT_CHARS = 20_000;
 const RATE_LIMIT_MAX_CALLS = 20;
 const RATE_LIMIT_WINDOW_MINUTES = 10;
+// Headroom between the Groq timeout and the reservation TTL: the provider call must always
+// finish (or abort) before its budget reservation expires.
+const RESERVATION_TTL_MARGIN_MS = 10_000;
 
 Deno.serve(async (req) => {
   const preflight = handleCorsPreflight(req);
@@ -54,6 +64,11 @@ async function handleRequest(
 ): Promise<Response> {
   if (req.method !== "POST") {
     return jsonResponse({ error: "method_not_allowed" }, 405);
+  }
+
+  // Global kill switch (audit AI-01): set AI_DISABLED=true to stop all AI spend instantly.
+  if ((Deno.env.get("AI_DISABLED") ?? "").trim().toLowerCase() === "true") {
+    return jsonResponse({ error: "ai_unavailable" }, 503);
   }
 
   const authHeader = req.headers.get("Authorization");
@@ -144,6 +159,30 @@ async function handleRequest(
 
   const serviceClient = createServiceClient();
 
+  // Org-level AI opt-in (audit AI-02). Read with the service client; fails closed if the
+  // setting cannot be read.
+  const { data: orgSettings, error: orgSettingsError } = await serviceClient
+    .from("organizations")
+    .select("ai_enabled")
+    .eq("id", organizationId)
+    .maybeSingle();
+  if (orgSettingsError || !orgSettings) {
+    console.error(`[${correlationId}]`, "organization AI settings lookup failed", orgSettingsError);
+    return jsonResponse({ error: "ai_settings_unavailable" }, 503);
+  }
+  if (orgSettings.ai_enabled !== true) {
+    return jsonResponse({ error: "ai_disabled_for_org" }, 403);
+  }
+
+  // Paywall enforcement (audit B-02): unentitled organizations get no AI spend.
+  const entitlement = await checkEntitlement(serviceClient, organizationId);
+  if (entitlement === "not_entitled") {
+    return jsonResponse({ error: "subscription_required" }, 402);
+  }
+  if (entitlement === "unavailable") {
+    return jsonResponse({ error: "entitlement_check_failed" }, 503);
+  }
+
   const model = Deno.env.get("GROQ_MODEL") ?? "openai/gpt-oss-120b";
   const apiKey = Deno.env.get("GROQ_API_KEY");
   if (!apiKey) {
@@ -180,6 +219,52 @@ async function handleRequest(
     Deno.env.get("AI_BUDGET_RESERVATION_TTL_SECONDS") ?? "120",
     10,
   );
+  // Provider timeout: GROQ_TIMEOUT_MS (default 60s), always clamped below the reservation TTL.
+  const configuredTimeoutMs = parseInt(Deno.env.get("GROQ_TIMEOUT_MS") ?? "", 10);
+  const requestedTimeoutMs = Number.isFinite(configuredTimeoutMs) && configuredTimeoutMs > 0
+    ? configuredTimeoutMs
+    : DEFAULT_GROQ_TIMEOUT_MS;
+  const groqTimeoutMs = Math.max(
+    1_000,
+    Math.min(requestedTimeoutMs, reservationTtlSeconds * 1000 - RESERVATION_TTL_MARGIN_MS),
+  );
+
+  // Per-user monthly cap (audit AI-04): one staff member cannot exhaust the org's budget.
+  // Counts this user's committed spend in this org for the current UTC month
+  // (ai_usage_events.user_id exists, see 20261002171532_ai_usage.sql).
+  const monthlyUserBudget = parseFloat(Deno.env.get("AI_MONTHLY_USER_BUDGET_USD") ?? "3");
+  if (Number.isFinite(monthlyUserBudget) && monthlyUserBudget > 0) {
+    const now = new Date();
+    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
+    let userSpend = 0;
+    const pageSize = 1000;
+    for (let page = 0; page < 20; page++) {
+      const { data: rows, error: spendError } = await serviceClient
+        .from("ai_usage_events")
+        .select("cost_usd")
+        .eq("organization_id", organizationId)
+        .eq("user_id", userId)
+        .gte("created_at", monthStart)
+        .order("created_at", { ascending: true })
+        .range(page * pageSize, page * pageSize + pageSize - 1);
+      if (spendError) {
+        console.error(`[${correlationId}]`, "user spend lookup failed", spendError);
+        return jsonResponse({ error: "budget_reservation_failed" }, 500);
+      }
+      for (const row of rows ?? []) userSpend += Number(row.cost_usd) || 0;
+      if (!rows || rows.length < pageSize) break;
+    }
+    if (userSpend + estimatedCost > monthlyUserBudget) {
+      return jsonResponse(
+        {
+          error: "monthly_user_budget_exceeded",
+          monthly_user_budget_usd: monthlyUserBudget,
+          current_user_spend_usd: userSpend,
+        },
+        402,
+      );
+    }
+  }
   // Atomic check-and-reserve: one RPC holds a per-org advisory lock, verifies budget
   // + rate limit (including in-flight reservations), and inserts the reservation.
   // Never check-then-insert in two round trips — concurrent requests would overspend.
@@ -234,6 +319,29 @@ async function handleRequest(
     if (error) console.error(`[${correlationId}]`, "failed to release reservation", error);
   }
 
+  // Bills the reservation with what the provider actually consumed. Used on failure paths that
+  // still cost money (truncated or non-JSON output, provider errors carrying usage) so they are
+  // metered instead of released for free (audit B-03). Never throws.
+  async function commitUsage(promptTokens: number, completionTokens: number): Promise<boolean> {
+    const cost = promptTokens * pricing.input + completionTokens * pricing.output;
+    const { error } = await serviceClient.rpc("commit_ai_reservation", {
+      p_reservation_id: reservationId,
+      p_organization_id: organizationId,
+      p_venue_id: venue_id,
+      p_user_id: userId,
+      p_task: task,
+      p_model: model,
+      p_input_tokens: promptTokens,
+      p_output_tokens: completionTokens,
+      p_cost_usd: cost,
+    });
+    if (error) {
+      console.error(`[${correlationId}]`, "AI usage accounting failed", error);
+      return false;
+    }
+    return true;
+  }
+
   let groqResult;
   try {
     groqResult = await callGroqJson({
@@ -242,11 +350,30 @@ async function handleRequest(
       systemPrompt,
       userPrompt: input,
       maxOutputTokens,
+      timeoutMs: groqTimeoutMs,
     });
   } catch (err) {
     console.error(`[${correlationId}]`, "Groq call failed", err);
-    await releaseReservation();
+    if (err instanceof GroqCallError && err.usage) {
+      await commitUsage(err.usage.promptTokens, err.usage.completionTokens);
+    } else {
+      // No usage reported (network error, timeout, plain HTTP error): nothing known to bill.
+      await releaseReservation();
+    }
     return jsonResponse({ error: "ai_provider_call_failed" }, 502);
+  }
+
+  // A completion that produced output but cannot be used is still a billed failure. If the
+  // provider omitted usage, fall back to the pre-call estimate so it is never free.
+  const billedPrompt = groqResult.promptTokens > 0 ? groqResult.promptTokens : estimatedInputTokens;
+
+  if (groqResult.finishReason === "length") {
+    console.error(`[${correlationId}]`, "Groq response truncated at max_output_tokens");
+    await commitUsage(
+      billedPrompt,
+      groqResult.completionTokens > 0 ? groqResult.completionTokens : maxOutputTokens,
+    );
+    return jsonResponse({ error: "ai_response_truncated" }, 502);
   }
 
   let parsedResult: unknown;
@@ -254,7 +381,12 @@ async function handleRequest(
     parsedResult = JSON.parse(groqResult.content);
   } catch (err) {
     console.error(`[${correlationId}]`, "Groq response was not valid JSON", err);
-    await releaseReservation();
+    await commitUsage(
+      billedPrompt,
+      groqResult.completionTokens > 0
+        ? groqResult.completionTokens
+        : Math.min(maxOutputTokens, estimateInputTokens(groqResult.content)),
+    );
     return jsonResponse({ error: "ai_response_not_valid_json" }, 502);
   }
 
@@ -262,19 +394,7 @@ async function handleRequest(
     groqResult.promptTokens * pricing.input +
     groqResult.completionTokens * pricing.output;
 
-  const { error: accountingError } = await serviceClient.rpc("commit_ai_reservation", {
-    p_reservation_id: reservationId,
-    p_organization_id: organizationId,
-    p_venue_id: venue_id,
-    p_user_id: userId,
-    p_task: task,
-    p_model: model,
-    p_input_tokens: groqResult.promptTokens,
-    p_output_tokens: groqResult.completionTokens,
-    p_cost_usd: actualCost,
-  });
-  if (accountingError) {
-    console.error(`[${correlationId}]`, "AI usage accounting failed", accountingError);
+  if (!await commitUsage(groqResult.promptTokens, groqResult.completionTokens)) {
     return jsonResponse({ error: "ai_usage_accounting_failed", correlation_id: correlationId }, 503);
   }
 

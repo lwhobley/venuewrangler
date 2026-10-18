@@ -36,19 +36,80 @@ enabled = true
 # Replace with the real local/staging/production site URL per environment; never commit a
 # real production URL that would also double as a valid OAuth/email redirect target.
 site_url = "http://localhost:3000"
-# venuewrangler://reset-password: the app's password-reset deep link (see
-# apps/mobile/lib/core/auth/auth_repository.dart). Must also be allow-listed on the hosted
-# project under Auth -> URL Configuration -> Redirect URLs.
+# venuewrangler://reset-password: the app's CURRENT password-reset deep link (see
+# apps/mobile/lib/core/auth/auth_repository.dart). A custom URL scheme can be claimed by
+# any other Android app (audit A-05); migrate to a verified https App Link / Universal
+# Link on venuewrangler.com and remove the custom scheme from this list. The hosted
+# project's Redirect URLs must be edited by hand: docs/security/hosted-auth-settings.md.
 additional_redirect_urls = ["http://localhost:3000", "http://localhost:3000/app/", "venuewrangler://reset-password"]
+# Access-token lifetime in seconds (1 hour). Keep it short: a stolen JWT is valid until
+# it expires, and RLS here resolves membership live, not from claims.
 jwt_expiry = 3600
+# Refresh-token rotation: every refresh issues a new refresh token and invalidates the old
+# one. A reused (stolen) token is detected and the session family is revoked. The 10s reuse
+# window tolerates a client retrying a refresh after a network drop.
 enable_refresh_token_rotation = true
 refresh_token_reuse_interval = 10
 enable_signup = true
+# Password policy (audit A-04). 12+ characters with mixed case and digits. The hosted
+# project does NOT read this file; see docs/security/hosted-auth-settings.md for the
+# dashboard settings that must be applied by hand (including leaked-password protection,
+# which is a Pro-plan hosted-only feature and has no config.toml key).
+minimum_password_length = 12
+password_requirements = "lower_upper_letters_digits"
 
 [auth.email]
 enable_signup = true
 double_confirm_changes = true
 enable_confirmations = true
+# Changing the password requires a recent sign-in (reauthentication nonce), so an unlocked
+# shared manager tablet cannot be turned into account takeover with one tap (audit A-03).
+# The client must call auth.reauthenticate() for this to be usable; see the audit notes.
+secure_password_change = true
+# Email OTP / magic-link / recovery lifetime in seconds (15 minutes; Supabase default is 1h).
+otp_expiry = 900
+
+# TOTP multi-factor authentication (audit A-02). Enrolment and verification are enabled so
+# the app can offer and later enforce MFA for owners and admins. Enabling these only makes
+# the API available; enforcement (aal2 checks in RLS and in-app prompts) is separate work.
+[auth.mfa.totp]
+enroll_enabled = true
+verify_enabled = true
+
+# Rate limits (requests per hour unless noted; sign_in_sign_ups, token_verifications and
+# token_refresh are per 5 minutes per IP). Local values mirror the intended hosted values.
+[auth.rate_limit]
+# Emails sent per hour (signup confirmation, recovery, email change). Hosted projects
+# using the built-in SMTP are capped far lower; configure custom SMTP (docs/security/
+# hosted-auth-settings.md) before relying on this.
+email_sent = 4
+anonymous_users = 10
+token_refresh = 150
+sign_in_sign_ups = 30
+token_verifications = 30
+
+# Session limits (audit A-04). Commented out because `[auth.sessions]` timebox and
+# inactivity_timeout are Supabase Pro-plan features: pushing them to a free-plan project
+# with `supabase config push` is rejected. When the hosted project is on Pro, uncomment
+# these (or set Auth -> Sessions in the dashboard):
+#   timebox            = absolute maximum session lifetime regardless of activity
+#   inactivity_timeout = sign out after this long without a token refresh
+# [auth.sessions]
+# timebox = "168h"
+# inactivity_timeout = "8h"
+
+# Captcha / bot protection on sign-up, sign-in and password recovery (audit A-04).
+# Disabled locally. For hosted environments use Cloudflare Turnstile: create a Turnstile
+# widget in the Cloudflare dashboard (Managed mode, hostnames venuewrangler.com), then in
+# Supabase Dashboard -> Authentication -> Attack Protection enable captcha and paste the
+# Turnstile SECRET key there. The secret must never be written into this file; for
+# `supabase config push` reference it as an env() value:
+# [auth.captcha]
+# enabled = true
+# provider = "turnstile"
+# secret = "env(AUTH_CAPTCHA_SECRET)"
+# The Flutter client must also pass the Turnstile token as `captchaToken` on signUp,
+# signInWithPassword and resetPasswordForEmail, or those calls fail once captcha is on.
 
 # OIDC providers (Okta/Entra, etc.) are configured per-environment via the Supabase
 # dashboard/CLI secrets, not hardcoded here — see docs/security/enterprise-sso-setup.md for

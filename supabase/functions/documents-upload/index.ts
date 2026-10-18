@@ -13,6 +13,7 @@
 import { corsHeaders, handleCorsPreflight } from "../_shared/cors.ts";
 import { createServiceClient, createUserClient } from "../_shared/supabase-clients.ts";
 import { getCallerVenueRoles, isManager } from "../_shared/venue-auth.ts";
+import { enforceRateLimit, requireEntitlement } from "../_shared/rate-limit.ts";
 import {
   MAX_DOCUMENT_BYTES,
   DocumentValidationError,
@@ -41,6 +42,45 @@ function base64ToBytes(b64: string): Uint8Array {
   return Uint8Array.from(atob(cleaned), (c) => c.charCodeAt(0));
 }
 
+// Largest request body accepted: base64 inflates MAX_DOCUMENT_BYTES by 4/3, plus JSON field
+// overhead. ~15MB total. Enforced before the body is buffered (audit B-05).
+const MAX_REQUEST_BODY_BYTES = 15 * 1024 * 1024;
+
+class RequestTooLargeError extends Error {}
+
+// Parses a JSON body without ever buffering more than `maxBytes`: rejects early on a declared
+// Content-Length, and also counts streamed bytes so a missing/lying header (chunked transfer)
+// cannot bypass the cap.
+async function readBoundedJson(req: Request, maxBytes: number): Promise<unknown> {
+  const declared = req.headers.get("Content-Length");
+  if (declared !== null) {
+    const length = Number(declared);
+    if (!Number.isFinite(length) || length < 0) throw new SyntaxError("bad content-length");
+    if (length > maxBytes) throw new RequestTooLargeError();
+  }
+  if (!req.body) throw new SyntaxError("empty body");
+  const reader = req.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel().catch(() => undefined);
+      throw new RequestTooLargeError();
+    }
+    chunks.push(value);
+  }
+  const merged = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return JSON.parse(new TextDecoder().decode(merged));
+}
+
 Deno.serve(async (req) => {
   const preflight = handleCorsPreflight(req);
   if (preflight) return preflight;
@@ -64,6 +104,11 @@ async function handleRequest(req: Request): Promise<Response> {
   if (!authHeader) {
     return jsonResponse({ error: "missing_authorization_header" }, 401);
   }
+  // Cheap early rejection of oversized requests before any auth round-trip or buffering.
+  const declaredLength = Number(req.headers.get("Content-Length") ?? "0");
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_REQUEST_BODY_BYTES) {
+    return jsonResponse({ error: "payload_too_large" }, 413);
+  }
   const userClient = createUserClient(authHeader);
   const { data: userData, error: userError } = await userClient.auth.getUser();
   if (userError || !userData?.user) {
@@ -79,8 +124,14 @@ async function handleRequest(req: Request): Promise<Response> {
     data_base64?: string;
   };
   try {
-    payload = await req.json();
-  } catch {
+    payload = await readBoundedJson(req, MAX_REQUEST_BODY_BYTES) as typeof payload;
+  } catch (error) {
+    if (error instanceof RequestTooLargeError) {
+      return jsonResponse({ error: "payload_too_large" }, 413);
+    }
+    return jsonResponse({ error: "invalid_json_body" }, 400);
+  }
+  if (payload === null || typeof payload !== "object") {
     return jsonResponse({ error: "invalid_json_body" }, 400);
   }
 
@@ -105,6 +156,20 @@ async function handleRequest(req: Request): Promise<Response> {
   if (!isManager(callerRoles.roles)) {
     return jsonResponse({ error: "forbidden_manager_role_required" }, 403);
   }
+
+  // Paywall + abuse controls run before the expensive decode/malware-scan work (audit B-02,
+  // B-05). Rate limit fails open (logged) so a limiter outage does not block uploads.
+  const limiterClient = createServiceClient();
+  const entitlementBlock = await requireEntitlement(limiterClient, callerRoles.organizationId);
+  if (entitlementBlock) return entitlementBlock;
+  const rateBlock = await enforceRateLimit(
+    limiterClient,
+    `docs-upload:user:${userData.user.id}`,
+    60,
+    3600,
+    { failOpen: true },
+  );
+  if (rateBlock) return rateBlock;
 
   let safeFileName: string;
   let data: Uint8Array;

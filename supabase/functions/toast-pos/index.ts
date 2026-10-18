@@ -2,16 +2,63 @@
 // Legacy gateway check ingestion. This uses a custom gateway secret, not a
 // verified native Toast webhook signature. Outbound menu commands are disabled
 // until a provider-approved adapter and delivery worker exist.
+//
+// Authentication has two modes (audit B-07):
+//  - Signed (preferred): headers X-Signature and X-Timestamp. X-Signature is the hex
+//    HMAC-SHA256 over `${X-Timestamp}.${raw request body}`, and |now - X-Timestamp| must be
+//    <= 300 seconds (unix seconds or milliseconds), which bounds replay. The plaintext gateway
+//    secret is deliberately never stored, so the HMAC key is the lowercase hex SHA-256 of the
+//    provisioned secret, i.e. the value kept in pos_connections.webhook_secret_hash. The
+//    gateway computes it as sha256Hex(secret) and keeps it private.
+//  - Legacy: the static X-Venue-Webhook-Secret header. Still accepted unless
+//    POS_WEBHOOK_REQUIRE_SIGNATURE=true, so gateways can migrate without a flag day.
 
 import { corsHeaders, handleCorsPreflight } from "../_shared/cors.ts";
 import { createServiceClient } from "../_shared/supabase-clients.ts";
 import { initObservability, captureException, flushObservability } from "../_shared/observability.ts";
 import { sha256Hex } from "../_shared/crypto.ts";
+import { enforceRateLimit } from "../_shared/rate-limit.ts";
 
 initObservability();
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_WEBHOOK_BYTES = 256 * 1024;
+const SIGNATURE_MAX_SKEW_SECONDS = 300;
+const MAX_FREE_TEXT_CHARS = 200;
+const PER_VENUE_LIMIT_PER_MINUTE = 600;
+
+function constantTimeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let mismatch = 0;
+  for (let i = 0; i < a.length; i++) mismatch |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return mismatch === 0;
+}
+
+async function hmacSha256Hex(key: string, message: string): Promise<string> {
+  const cryptoKey = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(key),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const signature = await crypto.subtle.sign("HMAC", cryptoKey, new TextEncoder().encode(message));
+  return Array.from(new Uint8Array(signature))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+// A free-text field must be absent, null, or a string of at most MAX_FREE_TEXT_CHARS after
+// trimming. Returns undefined for "absent" (leave the stored value alone), null to clear, the
+// trimmed string, or "invalid" for anything else.
+function freeText(value: unknown): string | null | undefined | "invalid" {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  if (typeof value !== "string") return "invalid";
+  const trimmed = value.trim();
+  if (trimmed.length > MAX_FREE_TEXT_CHARS) return "invalid";
+  return trimmed.length === 0 ? null : trimmed;
+}
 
 function jsonResponse(body: Record<string, unknown>, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -43,22 +90,39 @@ async function handleRequest(req: Request): Promise<Response> {
     // The webhook endpoint has no user JWT. Require a per-venue, high-entropy secret
     // provisioned by the POS gateway and stored only as a SHA-256 hash. Fail closed
     // for venues that have not configured one.
+    const signatureHeader = req.headers.get("X-Signature");
+    const timestampHeader = req.headers.get("X-Timestamp");
+    const signedMode = signatureHeader !== null || timestampHeader !== null;
     const suppliedSecret = req.headers.get("X-Venue-Webhook-Secret");
-    if (!suppliedSecret || suppliedSecret.length < 32 || suppliedSecret.length > 512) {
-      return jsonResponse({ error: "unauthorized_webhook" }, 401);
+    if (signedMode) {
+      // Both headers or neither: a half-signed request is never downgraded to the legacy path.
+      if (!signatureHeader || !timestampHeader || !/^[0-9a-f]{64}$/i.test(signatureHeader)) {
+        return jsonResponse({ error: "unauthorized_webhook" }, 401);
+      }
+    } else {
+      if (Deno.env.get("POS_WEBHOOK_REQUIRE_SIGNATURE") === "true") {
+        return jsonResponse({ error: "signature_required" }, 401);
+      }
+      if (!suppliedSecret || suppliedSecret.length < 32 || suppliedSecret.length > 512) {
+        return jsonResponse({ error: "unauthorized_webhook" }, 401);
+      }
     }
     const contentLength = Number(req.headers.get("content-length") ?? "0");
     if (contentLength > MAX_WEBHOOK_BYTES) {
       return jsonResponse({ error: "payload_too_large" }, 413);
     }
     let payload: Record<string, unknown>;
+    let rawBody: string;
     try {
-      const text = await req.text();
-      if (text.length > MAX_WEBHOOK_BYTES) {
+      rawBody = await req.text();
+      if (rawBody.length > MAX_WEBHOOK_BYTES) {
         return jsonResponse({ error: "payload_too_large" }, 413);
       }
-      payload = JSON.parse(text);
+      payload = JSON.parse(rawBody);
     } catch {
+      return jsonResponse({ error: "invalid_json_body" }, 400);
+    }
+    if (payload === null || typeof payload !== "object" || Array.isArray(payload)) {
       return jsonResponse({ error: "invalid_json_body" }, 400);
     }
 
@@ -82,18 +146,41 @@ async function handleRequest(req: Request): Promise<Response> {
     if (connectionError || !connection?.webhook_secret_hash) {
       return jsonResponse({ error: "unauthorized_webhook" }, 401);
     }
-    const suppliedHash = await sha256Hex(new TextEncoder().encode(suppliedSecret));
     const expectedHash = connection.webhook_secret_hash.toLowerCase();
     if (!/^[0-9a-f]{64}$/.test(expectedHash)) {
       return jsonResponse({ error: "unauthorized_webhook" }, 401);
     }
-    let mismatch = 0;
-    for (let i = 0; i < 64; i++) {
-      mismatch |= suppliedHash.charCodeAt(i) ^ expectedHash.charCodeAt(i);
+    if (signedMode) {
+      // Accept unix seconds or milliseconds; the timestamp is signed exactly as sent.
+      const timestampNumber = Number(timestampHeader);
+      if (!Number.isFinite(timestampNumber) || timestampNumber <= 0) {
+        return jsonResponse({ error: "unauthorized_webhook" }, 401);
+      }
+      const timestampSeconds = timestampNumber > 1e12 ? timestampNumber / 1000 : timestampNumber;
+      if (Math.abs(Date.now() / 1000 - timestampSeconds) > SIGNATURE_MAX_SKEW_SECONDS) {
+        return jsonResponse({ error: "unauthorized_webhook" }, 401);
+      }
+      const expectedSignature = await hmacSha256Hex(expectedHash, `${timestampHeader}.${rawBody}`);
+      if (!constantTimeEqual(expectedSignature, signatureHeader!.toLowerCase())) {
+        return jsonResponse({ error: "unauthorized_webhook" }, 401);
+      }
+    } else {
+      const suppliedHash = await sha256Hex(new TextEncoder().encode(suppliedSecret!));
+      if (!constantTimeEqual(suppliedHash, expectedHash)) {
+        return jsonResponse({ error: "unauthorized_webhook" }, 401);
+      }
     }
-    if (mismatch !== 0) {
-      return jsonResponse({ error: "unauthorized_webhook" }, 401);
-    }
+
+    // Per-venue ingest ceiling, charged only after authentication so unauthenticated traffic
+    // cannot burn a venue's budget. Fails open: a limiter outage must not drop POS checks.
+    const limited = await enforceRateLimit(
+      serviceClient,
+      `toast-pos:venue:${venueId}`,
+      PER_VENUE_LIMIT_PER_MINUTE,
+      60,
+      { failOpen: true },
+    );
+    if (limited) return limited;
 
     // Amounts are whole cents; reject anything else rather than letting a malformed or
     // hostile payload write negative/fractional/absurd money into revenue reporting.
@@ -119,6 +206,12 @@ async function handleRequest(req: Request): Promise<Response> {
     const openedAt = payload.opened_at || new Date().toISOString();
     const closedAtInput = payload.closed_at ?? null;
     const menuItems = payload.menu_items ?? [];
+    const tableLabel = freeText(payload.table_label);
+    const serverName = freeText(payload.server_name);
+    const guestName = freeText(payload.guest_name);
+    if (tableLabel === "invalid" || serverName === "invalid" || guestName === "invalid") {
+      return jsonResponse({ error: "invalid_check_fields" }, 400);
+    }
     if (
       subtotal === null || tax === null || tip === null || total === null ||
       !["open", "closed", "voided"].includes(status) ||
@@ -161,9 +254,9 @@ async function handleRequest(req: Request): Promise<Response> {
         venue_id: venueId,
         provider: "toast",
         external_check_id: externalCheckId,
-        table_label: payload.table_label as string | null,
-        server_name: payload.server_name as string | null,
-        guest_name: payload.guest_name as string | null,
+        table_label: tableLabel,
+        server_name: serverName,
+        guest_name: guestName,
         guest_count: guestCount,
         opened_at: openedAt,
         closed_at: closedAt,

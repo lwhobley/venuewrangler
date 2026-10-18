@@ -1,5 +1,7 @@
-// QuickBooks Online (Intuit) OAuth2 connect/callback/disconnect for payroll push. Same
-// connect-returns-a-url / callback-redirects-to-a-deep-link shape as square-oauth.
+// QuickBooks Online (Intuit) OAuth2 connect/callback/complete/disconnect for payroll push. Same
+// two-step connect flow as square-oauth (audit B-04): /callback parks the encrypted tokens in
+// oauth_pending_connections and redirects the app with a one-time nonce; POST /complete
+// (authenticated, same user) activates the connection. See _shared/oauth-connections.ts.
 //
 // NOT independently verified against a live Intuit sandbox app (none was available in this
 // environment). The authorize/token endpoint URLs below are Intuit's long-standing, stable,
@@ -9,13 +11,15 @@
 // payroll-push vs. plain accounting access.
 import { corsHeaders, handleCorsPreflight } from "../_shared/cors.ts";
 import { createServiceClient, createUserClient } from "../_shared/supabase-clients.ts";
-import { getCallerVenueRoles, isCurrentVenueManager, isManager } from "../_shared/venue-auth.ts";
+import { getCallerVenueRoles, isCurrentVenueManager, isManager, isUuid } from "../_shared/venue-auth.ts";
+import { decryptToken, signOAuthState, verifyOAuthState } from "../_shared/crypto.ts";
 import {
-  decryptToken,
-  encryptToken,
-  signOAuthState,
-  verifyOAuthState,
-} from "../_shared/crypto.ts";
+  handleCompleteRequest,
+  OAUTH_FETCH_TIMEOUT_MS,
+  oauthJson as jsonResponse,
+  storePendingConnection,
+  withQuery,
+} from "../_shared/oauth-connections.ts";
 import { initObservability, captureException, flushObservability } from "../_shared/observability.ts";
 
 initObservability();
@@ -24,12 +28,11 @@ const AUTHORIZE_URL = "https://appcenter.intuit.com/connect/oauth2";
 const TOKEN_URL = "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer";
 const REVOKE_URL = "https://developer.api.intuit.com/v2/oauth2/tokens/revoke";
 
-function jsonResponse(body: Record<string, unknown>, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}
+// Intuit offers no read-only variant of the accounting scope (com.intuit.quickbooks.accounting
+// is read/write; the only other QuickBooks scope, com.intuit.quickbooks.payment, is for the
+// Payments API), so this is the narrowest scope that exists. Nothing in this codebase writes to
+// QuickBooks yet; override with QUICKBOOKS_OAUTH_SCOPES only if Intuit adds a narrower scope.
+const DEFAULT_SCOPES = "com.intuit.quickbooks.accounting";
 
 function redirectResponse(url: string): Response {
   return new Response(null, { status: 302, headers: { ...corsHeaders, Location: url } });
@@ -37,6 +40,33 @@ function redirectResponse(url: string): Response {
 
 // Best-effort revoke of the stored QuickBooks refresh token (Intuit revokes the access token it
 // issued along with it). Never throws and never blocks disconnect: returns false on failure.
+async function postQuickBooksRevoke(
+  refreshToken: string,
+  clientId: string,
+  clientSecret: string,
+): Promise<boolean> {
+  try {
+    const response = await fetch(REVOKE_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        Authorization: `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
+      },
+      body: JSON.stringify({ token: refreshToken }),
+      signal: AbortSignal.timeout(OAUTH_FETCH_TIMEOUT_MS),
+    });
+    if (!response.ok) {
+      console.error("QuickBooks token revoke failed", response.status, await response.text());
+      return false;
+    }
+    return true;
+  } catch (error) {
+    console.error("QuickBooks token revoke threw", error);
+    return false;
+  }
+}
+
 async function revokeQuickBooksRefreshToken(
   serviceClient: ReturnType<typeof createServiceClient>,
   venueId: string,
@@ -53,21 +83,11 @@ async function revokeQuickBooksRefreshToken(
       .maybeSingle();
     if (error || !connection?.encrypted_refresh_token) return false;
 
-    const refreshToken = await decryptToken(connection.encrypted_refresh_token, encryptionKey);
-    const response = await fetch(REVOKE_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        Authorization: `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
-      },
-      body: JSON.stringify({ token: refreshToken }),
+    const refreshToken = await decryptToken(connection.encrypted_refresh_token, encryptionKey, {
+      venueId,
+      provider: "quickbooks",
     });
-    if (!response.ok) {
-      console.error("QuickBooks token revoke failed", response.status, await response.text());
-      return false;
-    }
-    return true;
+    return await postQuickBooksRevoke(refreshToken, clientId, clientSecret);
   } catch (error) {
     console.error("QuickBooks token revoke threw", error);
     return false;
@@ -125,7 +145,7 @@ async function handleRequest(req: Request): Promise<Response> {
   const clientId = Deno.env.get("QUICKBOOKS_CLIENT_ID");
   const clientSecret = Deno.env.get("QUICKBOOKS_CLIENT_SECRET");
   const redirectUri = Deno.env.get("QUICKBOOKS_REDIRECT_URI");
-  const scopes = Deno.env.get("QUICKBOOKS_OAUTH_SCOPES") ?? "com.intuit.quickbooks.accounting";
+  const scopes = Deno.env.get("QUICKBOOKS_OAUTH_SCOPES") ?? DEFAULT_SCOPES;
 
   if (!encryptionKey || !stateSigningKey || !clientId || !clientSecret || !redirectUri) {
     console.error("quickbooks-oauth is not fully configured");
@@ -144,6 +164,7 @@ async function handleRequest(req: Request): Promise<Response> {
       return jsonResponse({ error: "invalid_json_body" }, 400);
     }
     if (!payload.venue_id) return jsonResponse({ error: "missing_venue_id" }, 400);
+    if (!isUuid(payload.venue_id)) return jsonResponse({ error: "invalid_venue_id" }, 400);
 
     const auth = await requireVenueManager(req.headers.get("Authorization"), payload.venue_id);
     if ("error" in auth) return auth.error;
@@ -195,6 +216,7 @@ async function handleRequest(req: Request): Promise<Response> {
         code,
         redirect_uri: redirectUri,
       }),
+      signal: AbortSignal.timeout(OAUTH_FETCH_TIMEOUT_MS),
     });
 
     if (!tokenResponse.ok) {
@@ -210,31 +232,45 @@ async function handleRequest(req: Request): Promise<Response> {
     if (!await isCurrentVenueManager(serviceClient, statePayload.user_id, statePayload.venue_id)) {
       return redirectResponse(`${errorUrl}?provider=quickbooks&reason=authorization_revoked`);
     }
-    const { error } = await serviceClient.from("payroll_connections").upsert(
-      {
-        venue_id: statePayload.venue_id,
-        provider: "quickbooks",
-        status: "connected",
-        external_account_id: realmId,
-        encrypted_access_token: await encryptToken(tokenData.access_token, encryptionKey),
-        encrypted_refresh_token: tokenData.refresh_token
-          ? await encryptToken(tokenData.refresh_token, encryptionKey)
-          : null,
-        token_expires_at: tokenData.expires_in
+
+    // Park the encrypted tokens; the connection is activated only by POST /complete.
+    const stored = await storePendingConnection(serviceClient, {
+      provider: "quickbooks",
+      state: statePayload,
+      encryptionKey,
+      revokeTokens: ({ accessToken, refreshToken }) =>
+        postQuickBooksRevoke(refreshToken ?? accessToken, clientId, clientSecret),
+      tokens: {
+        accessToken: tokenData.access_token,
+        refreshToken: tokenData.refresh_token ?? null,
+        tokenExpiresAt: tokenData.expires_in
           ? new Date(Date.now() + tokenData.expires_in * 1000).toISOString()
           : null,
-        connected_by: statePayload.user_id,
-        last_error: null,
+        externalAccountId: realmId,
       },
-      { onConflict: "venue_id,provider" },
-    );
-
-    if (error) {
-      console.error("failed to persist QuickBooks connection", error);
-      return redirectResponse(`${errorUrl}?provider=quickbooks&reason=storage_failed`);
+    });
+    if (!stored.ok) {
+      return redirectResponse(`${errorUrl}?provider=quickbooks&reason=${stored.reason}`);
     }
 
-    return redirectResponse(`${successUrl}?provider=quickbooks`);
+    return redirectResponse(withQuery(successUrl, { provider: "quickbooks", nonce: stored.nonce }));
+  }
+
+  if (url.pathname.endsWith("/complete") && req.method === "POST") {
+    return await handleCompleteRequest({
+      req,
+      provider: "quickbooks",
+      serviceClient: createServiceClient(),
+      encryptionKey,
+      revokePrevious: (venueId) =>
+        revokeQuickBooksRefreshToken(
+          createServiceClient(),
+          venueId,
+          encryptionKey,
+          clientId,
+          clientSecret,
+        ),
+    });
   }
 
   if (url.pathname.endsWith("/disconnect") && req.method === "POST") {
@@ -245,6 +281,7 @@ async function handleRequest(req: Request): Promise<Response> {
       return jsonResponse({ error: "invalid_json_body" }, 400);
     }
     if (!payload.venue_id) return jsonResponse({ error: "missing_venue_id" }, 400);
+    if (!isUuid(payload.venue_id)) return jsonResponse({ error: "invalid_venue_id" }, 400);
 
     const auth = await requireVenueManager(req.headers.get("Authorization"), payload.venue_id);
     if ("error" in auth) return auth.error;

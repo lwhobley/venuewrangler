@@ -60,7 +60,7 @@ function concatBytes(...parts: Uint8Array[]): Uint8Array {
   return out;
 }
 
-interface ParsedCertificate {
+export interface ParsedCertificate {
   raw: Uint8Array;
   tbsCertificateRaw: Uint8Array;
   signatureAlgorithmOid: string;
@@ -101,7 +101,8 @@ function parseAsn1Time(bytes: Uint8Array, isGeneralized: boolean): Date {
   return new Date(Date.UTC(year, Number(month) - 1, Number(day), Number(hour), Number(minute), Number(second)));
 }
 
-function parseCertificate(raw: Uint8Array): ParsedCertificate {
+/** @internal Exported for unit tests. */
+export function parseCertificate(raw: Uint8Array): ParsedCertificate {
   const certNode = parseDerNode(raw, 0);
   if (certNode.tagNumber !== 16 || !certNode.constructed) {
     throw new Error("app-attest: certificate is not a DER SEQUENCE");
@@ -195,7 +196,26 @@ function derSignatureToRaw(derSig: Uint8Array, orderBytes: number): Uint8Array {
   return out;
 }
 
-async function verifyCertificateSignature(
+// The digest used to verify a certificate signature is dictated by the certificate's own
+// signatureAlgorithm, NOT by the issuer's curve (a P-384 CA may legitimately sign with SHA-256).
+// Only ECDSA-with-SHA2 algorithms are accepted; anything else is rejected rather than guessed.
+const SIGNATURE_ALGORITHM_OID_TO_HASH: Record<string, string> = {
+  "1.2.840.10045.4.3.2": "SHA-256", // ecdsa-with-SHA256
+  "1.2.840.10045.4.3.3": "SHA-384", // ecdsa-with-SHA384
+  "1.2.840.10045.4.3.4": "SHA-512", // ecdsa-with-SHA512
+};
+
+/** @internal Exported for unit tests. */
+export function hashForSignatureAlgorithm(signatureAlgorithmOid: string): string {
+  const hash = SIGNATURE_ALGORITHM_OID_TO_HASH[signatureAlgorithmOid];
+  if (!hash) {
+    throw new Error(`app-attest: unsupported certificate signature algorithm OID ${signatureAlgorithmOid}`);
+  }
+  return hash;
+}
+
+/** @internal Exported for unit tests. */
+export async function verifyCertificateSignature(
   cert: ParsedCertificate,
   issuerPublicKeySpki: Uint8Array,
   issuerCurveOid: string,
@@ -204,6 +224,7 @@ async function verifyCertificateSignature(
   if (!curveInfo) {
     throw new Error(`app-attest: unsupported issuer curve OID ${issuerCurveOid}`);
   }
+  const signatureHash = hashForSignatureAlgorithm(cert.signatureAlgorithmOid);
 
   const publicKey = await crypto.subtle.importKey(
     "spki",
@@ -216,7 +237,7 @@ async function verifyCertificateSignature(
   const rawSignature = derSignatureToRaw(cert.signatureRaw, curveInfo.order);
 
   return crypto.subtle.verify(
-    { name: "ECDSA", hash: curveInfo.hash },
+    { name: "ECDSA", hash: signatureHash },
     publicKey,
     rawSignature as BufferSource,
     cert.tbsCertificateRaw as BufferSource,
