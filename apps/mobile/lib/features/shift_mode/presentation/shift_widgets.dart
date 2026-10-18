@@ -5,7 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/ops_colors.dart';
 import '../../../core/widgets/state_views.dart';
 import '../../../core/widgets/status_chip.dart';
-import '../../schedules/domain/schedule_timeline.dart';
+import '../../venues/domain/venue_clock.dart';
 import '../../tasks/domain/operational_task.dart';
 import '../../time_clock/domain/time_entry.dart';
 import '../domain/shift_mode.dart';
@@ -56,10 +56,18 @@ class CardShell extends StatelessWidget {
 }
 
 class ShiftCard extends StatelessWidget {
-  const ShiftCard({super.key, required this.mine, required this.now});
+  const ShiftCard({
+    super.key,
+    required this.mine,
+    required this.now,
+    required this.clock,
+  });
 
   final MyShifts mine;
   final DateTime now;
+
+  /// The venue's clock: shift times are shown on it, never on the device's.
+  final VenueClock clock;
 
   @override
   Widget build(BuildContext context) {
@@ -86,7 +94,7 @@ class ShiftCard extends StatelessWidget {
               style: theme.textTheme.headlineSmall,
             ),
             Text(
-              '${clockLabel(current.startTime)} – ${clockLabel(current.endTime)}',
+              '${clock.clockLabel(current.startTime)} – ${clock.clockLabel(current.endTime)}',
               style: theme.textTheme.titleMedium,
             ),
             if (current.section?.isNotEmpty == true) ...[
@@ -115,8 +123,10 @@ class ShiftCard extends StatelessWidget {
 
     if (next != null) {
       final until = next.startTime.difference(now);
+      final nextWall = clock.wall(next.startTime);
+      final nowWall = clock.wall(now);
       final today =
-          next.startTime.day == now.day && next.startTime.month == now.month;
+          nextWall.day == nowWall.day && nextWall.month == nowWall.month;
       return CardShell(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -132,8 +142,8 @@ class ShiftCard extends StatelessWidget {
               style: theme.textTheme.headlineSmall,
             ),
             Text(
-              '${today ? 'Today' : '${next.startTime.month}/${next.startTime.day}'}'
-              ' · ${clockLabel(next.startTime)} – ${clockLabel(next.endTime)}',
+              '${today ? 'Today' : '${nextWall.month}/${nextWall.day}'}'
+              ' · ${clock.clockLabel(next.startTime)} – ${clock.clockLabel(next.endTime)}',
               style: theme.textTheme.titleMedium,
             ),
             if (next.section?.isNotEmpty == true) ...[

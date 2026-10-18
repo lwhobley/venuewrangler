@@ -54,6 +54,14 @@ android {
     buildTypes {
         release {
             signingConfig = if (hasReleaseKey) signingConfigs.getByName("release") else null
+            // Shrink, optimize and obfuscate release builds (Dart code is obfuscated separately with
+            // --obfuscate --split-debug-info; keep the symbols to de-obfuscate crash reports).
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
         }
     }
 }
@@ -70,6 +78,12 @@ kotlin {
     compilerOptions {
         jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
     }
+}
+
+dependencies {
+    // Play Integrity standard API: per-request proof that a punch came from the genuine app on a
+    // trusted device (see PlayIntegrityBridge.kt).
+    implementation("com.google.android.play:integrity:1.4.0")
 }
 
 flutter {

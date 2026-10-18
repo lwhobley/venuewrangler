@@ -240,4 +240,89 @@ void main() {
       );
     });
   });
+
+  group('zones beyond the original table', () {
+    test('Africa/Johannesburg is UTC+2 all year', () {
+      for (final month in [1, 7]) {
+        expect(
+          VenueTimezone.offsetFor(
+            'Africa/Johannesburg',
+            DateTime.utc(2026, month, 15, 12),
+          ),
+          const Duration(hours: 2),
+        );
+      }
+    });
+
+    test('America/Toronto follows US daylight saving', () {
+      expect(
+        VenueTimezone.offsetFor('America/Toronto', DateTime.utc(2026, 7, 15)),
+        const Duration(hours: -4),
+      );
+      expect(
+        VenueTimezone.offsetFor('America/Toronto', DateTime.utc(2026, 1, 15)),
+        const Duration(hours: -5),
+      );
+    });
+
+    test('Europe/Berlin follows EU summer time', () {
+      expect(
+        VenueTimezone.offsetFor('Europe/Berlin', DateTime.utc(2026, 7, 15)),
+        const Duration(hours: 2),
+      );
+      expect(
+        VenueTimezone.offsetFor('Europe/Berlin', DateTime.utc(2026, 1, 15)),
+        const Duration(hours: 1),
+      );
+    });
+
+    test('Asia/Kolkata has a half-hour offset', () {
+      expect(
+        VenueTimezone.offsetFor('Asia/Kolkata', DateTime.utc(2026, 7, 15)),
+        const Duration(hours: 5, minutes: 30),
+      );
+      final wall = VenueTimezone.toVenueTime(
+        DateTime.utc(2026, 7, 15, 12),
+        'Asia/Kolkata',
+      );
+      expect(wall, DateTime.utc(2026, 7, 15, 17, 30));
+    });
+
+    test('Pacific/Auckland switches at the right instants', () {
+      const tz = 'Pacific/Auckland';
+      // NZDT (UTC+13) in January, NZST (UTC+12) in July.
+      expect(
+        VenueTimezone.offsetFor(tz, DateTime.utc(2026, 1, 15)),
+        const Duration(hours: 13),
+      );
+      expect(
+        VenueTimezone.offsetFor(tz, DateTime.utc(2026, 7, 15)),
+        const Duration(hours: 12),
+      );
+      // 2026: starts Sun 27 Sep 02:00 NZST (Sat 26 Sep 14:00 UTC).
+      expect(
+        VenueTimezone.offsetFor(tz, DateTime.utc(2026, 9, 26, 13, 59)),
+        const Duration(hours: 12),
+      );
+      expect(
+        VenueTimezone.offsetFor(tz, DateTime.utc(2026, 9, 26, 14)),
+        const Duration(hours: 13),
+      );
+      // Ends Sun 5 Apr 2026 03:00 NZDT (Sat 4 Apr 14:00 UTC).
+      expect(
+        VenueTimezone.offsetFor(tz, DateTime.utc(2026, 4, 4, 13, 59)),
+        const Duration(hours: 13),
+      );
+      expect(
+        VenueTimezone.offsetFor(tz, DateTime.utc(2026, 4, 4, 14)),
+        const Duration(hours: 12),
+      );
+    });
+
+    test('isSupported tells a known zone from an unknown one', () {
+      expect(VenueTimezone.isSupported('Africa/Johannesburg'), isTrue);
+      expect(VenueTimezone.isSupported('America/Havana'), isFalse);
+      expect(VenueTimezone.isSupported(''), isFalse);
+    });
+  });
 }

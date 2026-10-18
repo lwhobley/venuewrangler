@@ -42,6 +42,7 @@ class _TimeClockScreenState extends ConsumerState<TimeClockScreen> {
   }
 
   Future<void> _handleClockIn(String venueId) async {
+    if (!ref.read(timeClockPunchSupportedProvider)) return;
     setState(() => _isProcessing = true);
     try {
       final repo = ref.read(timeClockRepositoryProvider);
@@ -78,6 +79,7 @@ class _TimeClockScreenState extends ConsumerState<TimeClockScreen> {
   }
 
   Future<void> _handleClockOut(TimeEntry activeEntry, String venueId) async {
+    if (!ref.read(timeClockPunchSupportedProvider)) return;
     setState(() => _isProcessing = true);
     try {
       final repo = ref.read(timeClockRepositoryProvider);
@@ -114,6 +116,7 @@ class _TimeClockScreenState extends ConsumerState<TimeClockScreen> {
   }
 
   Future<void> _handleStartBreak(TimeEntry activeEntry, String venueId) async {
+    if (!ref.read(timeClockPunchSupportedProvider)) return;
     final type = await showDialog<String>(
       context: context,
       builder: (context) => SimpleDialog(
@@ -163,6 +166,7 @@ class _TimeClockScreenState extends ConsumerState<TimeClockScreen> {
   }
 
   Future<void> _handleEndBreak(TimeEntry activeEntry, String venueId) async {
+    if (!ref.read(timeClockPunchSupportedProvider)) return;
     setState(() => _isProcessing = true);
     try {
       final repo = ref.read(timeClockRepositoryProvider);
@@ -214,6 +218,7 @@ class _TimeClockScreenState extends ConsumerState<TimeClockScreen> {
         ref.watch(openElsewhereTimeEntryProvider(venue.id)).valueOrNull;
     final myEntriesAsync = ref.watch(myTimeEntriesProvider(venue.id));
     final boardAsync = ref.watch(venueClockBoardProvider(venue.id));
+    final punchSupported = ref.watch(timeClockPunchSupportedProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -359,7 +364,9 @@ class _TimeClockScreenState extends ConsumerState<TimeClockScreen> {
                             ],
                             const SizedBox(height: 24),
                             // Action Buttons
-                            if (!isClockedIn) ...[
+                            if (!punchSupported)
+                              _MobileOnlyNotice(isClockedIn: isClockedIn)
+                            else if (!isClockedIn) ...[
                               if (openElsewhere != null) ...[
                                 Text(
                                   'You are clocked in at another venue. '
@@ -611,5 +618,49 @@ class _TimeClockScreenState extends ConsumerState<TimeClockScreen> {
     final minute = dt.minute.toString().padLeft(2, '0');
     final second = dt.second.toString().padLeft(2, '0');
     return '$hour:$minute:$second';
+  }
+}
+
+/// Shown in place of the punch buttons on web, where a GPS fix can't be trusted.
+class _MobileOnlyNotice extends StatelessWidget {
+  const _MobileOnlyNotice({required this.isClockedIn});
+
+  final bool isClockedIn;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: context.ops.info.bg,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.smartphone, color: context.ops.info.fg),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text.rich(
+              TextSpan(
+                children: [
+                  const TextSpan(
+                    text: 'Clock in/out requires the mobile app',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  TextSpan(
+                    text: isClockedIn
+                        ? '. Use the Venue Wrangler app on your phone to take '
+                            'breaks or clock out; your punches below stay up to date.'
+                        : '. Use the Venue Wrangler app on your phone to clock in; '
+                            'your punch history is still available here.',
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

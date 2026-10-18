@@ -5,10 +5,9 @@ Phase 4: implemented (port of legacy `packages/api/src/modules/time-clock/`).
 Provides geofenced time attendance, break tracking, and anti-replay GPS fix verification for staff and managers:
 
 - `domain/time_entry.dart` — Hand-written domain models for `TimeEntry` and `TimeBreak` (paid/unpaid intervals, elapsed calculation, active break detection).
-- `domain/geofence_helper.dart` — Client-side Haversine distance calculator matching PostgreSQL `app_hidden.haversine_distance_m`.
 - `data/time_clock_repository.dart` — `TimeClockRepository` interface and `SupabaseTimeClockRepository` implementation supporting `getActiveEntry`, `getMyEntries`, `getVenueEntries` (Clock Board), `clockIn`, `clockOut`, `startBreak`, and `endBreak`.
 - `application/time_clock_providers.dart` — `timeClockRepositoryProvider`, `activeTimeEntryProvider(venueId)`, `myTimeEntriesProvider(venueId)`, and `venueClockBoardProvider(venueId)` Riverpod providers.
-- `presentation/time_clock_screen.dart` — Full time clock UI with live clock timer, punch status banner, break management (paid/unpaid), punch history, and venue-wide active Clock Board.
+- `presentation/time_clock_screen.dart` — Full time clock UI (clock in/out and breaks are mobile-only: on web the buttons are replaced by a "requires the mobile app" notice because a browser GPS fix can be spoofed; history and the Clock Board stay readable) with live clock timer, punch status banner, break management (paid/unpaid), punch history, and venue-wide active Clock Board.
 
 ### Authorization & Database Controls
 Authorization is enforced entirely at the database layer via RLS and PostgreSQL triggers in `supabase/migrations/20261002220000_time_clock_schema.sql`:

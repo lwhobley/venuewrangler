@@ -1,6 +1,9 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../application/image_sanitizer.dart';
 
 /// Thrown by [MediaRepository.uploadIncidentEvidence] when the local file referenced by a
 /// queued upload no longer exists (e.g. the OS reclaimed cache storage before the device
@@ -53,10 +56,15 @@ class SupabaseMediaRepository implements MediaRepository {
     // immutable), and an upsert needs UPDATE, so a retry would fail with 403. A duplicate on a
     // retry means an earlier attempt already stored this object, which is success here.
     try {
-      await _client.storage.from('incident-evidence').upload(
+      // Sanitized again at upload time: a photo queued by an older build may still carry GPS.
+      final bytes = sanitizeImageBytes(await file.readAsBytes());
+      await _client.storage.from('incident-evidence').uploadBinary(
             objectPath,
-            file,
-            fileOptions: const FileOptions(upsert: false),
+            bytes,
+            fileOptions: FileOptions(
+              upsert: false,
+              contentType: _contentType(bytes),
+            ),
           );
     } on StorageException catch (error) {
       if (!_isAlreadyUploaded(error)) rethrow;
@@ -69,11 +77,21 @@ class SupabaseMediaRepository implements MediaRepository {
         'storage_path': objectPath,
       });
     } on PostgrestException catch (error) {
-      if (error.code == '23505') {
-        return; // already recorded by an earlier retry; done.
-      }
-      rethrow;
+      if (error.code != '23505') rethrow;
+      // 23505: already recorded by an earlier retry; done.
     }
+    // The cached copy is no longer needed once the evidence is stored.
+    await deleteTempImage(localFilePath);
+  }
+
+  String _contentType(Uint8List bytes) {
+    if (bytes.length > 3 && bytes[0] == 0x89 && bytes[1] == 0x50) {
+      return 'image/png';
+    }
+    if (bytes.length > 12 && bytes[0] == 0x52 && bytes[1] == 0x49) {
+      return 'image/webp';
+    }
+    return 'image/jpeg';
   }
 
   /// Storage answers 409 / "Duplicate" when the object key already exists.

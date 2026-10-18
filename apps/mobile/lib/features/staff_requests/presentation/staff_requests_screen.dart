@@ -6,6 +6,7 @@ import '../../../core/auth/auth_providers.dart';
 import '../../../core/theme/ops_colors.dart';
 import '../../schedules/application/schedules_providers.dart';
 import '../../schedules/domain/shift.dart';
+import '../../venues/application/venue_clock.dart';
 import '../../venues/application/venues_providers.dart';
 import '../application/staff_requests_providers.dart';
 import '../domain/staff_request.dart';
@@ -428,7 +429,7 @@ class _CreateStaffRequestDialogState
                           DropdownMenuItem(
                             value: shift.id,
                             child: Text(
-                              '${shift.startTime.toLocal()} · ${shift.roleLabel ?? 'Shift'}',
+                              '${ref.watch(venueClockProvider).formatDateTime(shift.startTime)} · ${shift.roleLabel ?? 'Shift'}',
                             ),
                           ),
                       ],

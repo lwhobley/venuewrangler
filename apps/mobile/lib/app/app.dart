@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/auth/auth_providers.dart';
+import '../core/auth/sign_out_service.dart';
 import '../core/offline/offline_queue_connectivity.dart';
+import '../core/privacy/privacy_overlay.dart';
 import '../core/security/app_attest_providers.dart';
 import '../core/theme/app_theme.dart';
 import '../features/notifications/application/notifications_providers.dart';
@@ -54,6 +56,10 @@ class _VenueWranglerAppState extends ConsumerState<VenueWranglerApp> {
     // Side-effect only: notices a password-reset sign-in so the router can hold the user on
     // /reset-password. See core/auth/auth_providers.dart.
     ref.watch(passwordRecoveryTriggerProvider);
+    // Side-effect only: runs the sign-out cleanup (push-token revocation, queue pruning, secure
+    // storage wipe) when the server ends the session, which no sign-out button ever sees. See
+    // core/auth/sign_out_service.dart.
+    ref.watch(serverSignOutCleanupProvider);
     // Side-effect only: finishes "Launch Workspace" sign-ups once a session exists. See
     // features/organizations/application/workspace_provisioning.dart.
     ref.watch(pendingWorkspaceCreationTriggerProvider);
@@ -67,6 +73,9 @@ class _VenueWranglerAppState extends ConsumerState<VenueWranglerApp> {
       darkTheme: AppTheme.dark(),
       themeMode: ref.watch(themeModeProvider),
       routerConfig: router,
+      // Hides the app in the OS app switcher; see core/privacy/privacy_overlay.dart.
+      builder: (context, child) =>
+          PrivacyOverlay(child: child ?? const SizedBox.shrink()),
     );
   }
 }

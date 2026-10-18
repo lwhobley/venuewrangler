@@ -15,13 +15,13 @@ import '../../floor/domain/table_status_style.dart';
 import '../../guests_reservations/domain/reservation.dart';
 import '../../notifications/application/notifications_providers.dart';
 import '../../schedules/application/schedules_providers.dart';
-import '../../schedules/domain/schedule_timeline.dart';
 import '../../shift_mode/domain/shift_mode.dart';
 import '../../shift_mode/presentation/shift_widgets.dart';
 import '../../tasks/application/task_status_change.dart';
 import '../../tasks/application/tasks_providers.dart';
 import '../../tasks/domain/operational_task.dart';
 import '../../time_clock/application/time_clock_providers.dart';
+import '../../venues/application/venue_clock.dart';
 import '../../venues/application/venues_providers.dart';
 import '../application/employee_providers.dart';
 import '../domain/employee_day.dart';
@@ -71,6 +71,7 @@ class _EmployeeHomeScreenState extends ConsumerState<EmployeeHomeScreen> {
       return const Scaffold(body: Center(child: Text('No venue selected.')));
     }
     final theme = Theme.of(context);
+    final clock = ref.watch(venueClockProvider);
     final userId = ref.watch(currentUserIdProvider);
     final shiftsAsync = ref.watch(shiftsForVenueProvider(venue.id));
     final tasksAsync = ref.watch(tasksForVenueProvider(venue.id));
@@ -80,24 +81,28 @@ class _EmployeeHomeScreenState extends ConsumerState<EmployeeHomeScreen> {
     final tables = tablesAsync.valueOrNull ?? const <FloorTable>[];
     final section = ref.watch(mySectionProvider);
     final unread = ref.watch(unreadNotificationsCountProvider);
-    final pending =
-        pendingTaskStatuses(ref.watch(offlineQueueControllerProvider).pending);
+    final pending = pendingTaskStatuses(
+      ref.watch(offlineQueueControllerProvider).pending,
+      userId: userId,
+    );
 
     final myReservations = myReservationsToday(
       reservationsAsync.valueOrNull ?? const <Reservation>[],
       userId,
       _now,
+      clock,
     );
     final tasks = tasksAsync.valueOrNull ?? const <OperationalTask>[];
     final openTasks = myAssignedOpenTasks(tasks, userId, pending);
-    final doneTasks = tasksDoneToday(tasks, userId, pending, _now);
+    final doneTasks = tasksDoneToday(tasks, userId, pending, _now, clock);
     final sectionTables = tablesInSection(tables, section);
     final seated = sectionTables.where((t) => t.isSeated).length;
     final active = clockAsync.valueOrNull;
 
-    final greeting = _now.hour < 12
+    final venueHour = clock.wall(_now).hour;
+    final greeting = venueHour < 12
         ? 'Good morning'
-        : _now.hour < 17
+        : venueHour < 17
             ? 'Good afternoon'
             : 'Good evening';
 
@@ -136,8 +141,11 @@ class _EmployeeHomeScreenState extends ConsumerState<EmployeeHomeScreen> {
                 message: 'Could not load your shifts.',
                 onRetry: () => ref.invalidate(shiftsForVenueProvider(venue.id)),
               ),
-              data: (shifts) =>
-                  ShiftCard(mine: myShifts(shifts, userId, _now), now: _now),
+              data: (shifts) => ShiftCard(
+                mine: myShifts(shifts, userId, _now),
+                now: _now,
+                clock: clock,
+              ),
             ),
             const SizedBox(height: 12),
             ClockCard(entry: clockAsync, now: _now),
@@ -237,7 +245,8 @@ class _EmployeeHomeScreenState extends ConsumerState<EmployeeHomeScreen> {
                 ),
               )
             else
-              for (final r in myReservations) _ReservationRow(reservation: r),
+              for (final r in myReservations)
+                _ReservationRow(reservation: r, clock: clock),
             const SizedBox(height: 20),
             const SectionTitle('My tasks'),
             if (tasksAsync.isLoading && tasks.isEmpty)
@@ -339,9 +348,10 @@ class _TableChip extends StatelessWidget {
 }
 
 class _ReservationRow extends StatelessWidget {
-  const _ReservationRow({required this.reservation});
+  const _ReservationRow({required this.reservation, required this.clock});
 
   final Reservation reservation;
+  final VenueClock clock;
 
   @override
   Widget build(BuildContext context) {
@@ -361,7 +371,7 @@ class _ReservationRow extends StatelessWidget {
             SizedBox(
               width: 64,
               child: Text(
-                clockLabel(r.reservationTime),
+                clock.clockLabel(r.reservationTime),
                 style: theme.textTheme.titleMedium
                     ?.copyWith(fontWeight: FontWeight.w800),
               ),

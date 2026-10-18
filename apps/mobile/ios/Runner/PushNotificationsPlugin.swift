@@ -49,6 +49,14 @@ public class PushNotificationsPlugin: NSObject, FlutterPlugin, UNUserNotificatio
       // resolves replaces the pending result rather than leaving the first Dart caller hanging
       // forever (it will just never get a response, which the Dart side should treat as a
       // timeout, not block on indefinitely).
+      // The replaced caller is completed with an error rather than left hanging.
+      if let superseded = pendingTokenResult {
+        superseded(FlutterError(
+          code: "superseded",
+          message: "A newer push registration request replaced this one",
+          details: nil
+        ))
+      }
       pendingTokenResult = result
       UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { granted, error in
         guard granted, error == nil else {

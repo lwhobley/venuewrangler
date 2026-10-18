@@ -117,3 +117,134 @@ class SupabaseAuthRepository implements AuthRepository {
     await _client.auth.signOut();
   }
 }
+
+/// A TOTP authenticator the user has enrolled (or started enrolling).
+class MfaFactor {
+  const MfaFactor({
+    required this.id,
+    required this.verified,
+    this.friendlyName,
+    this.createdAt,
+  });
+
+  final String id;
+  final bool verified;
+  final String? friendlyName;
+  final DateTime? createdAt;
+}
+
+/// What the user needs to add a new authenticator. The QR code Supabase returns is an SVG and
+/// no SVG renderer is a dependency, so the app shows the otpauth [secret] (and [uri]) instead.
+class MfaEnrollment {
+  const MfaEnrollment({
+    required this.factorId,
+    required this.secret,
+    required this.uri,
+  });
+
+  final String factorId;
+  final String secret;
+  final String uri;
+}
+
+/// TOTP multi-factor authentication on top of `supabase.auth.mfa`. A separate interface from
+/// [AuthRepository] so sign-in-only fakes do not have to stub it.
+abstract interface class MfaRepository {
+  /// True when the session is at AAL1 but the account has a verified factor, so the person must
+  /// complete an authenticator challenge before using the app. Reads the session JWT: no
+  /// network call.
+  bool get challengeRequired;
+
+  /// Verified and unverified TOTP factors, refreshed from the server.
+  Future<List<MfaFactor>> listFactors();
+
+  /// Starts enrolling a TOTP factor (dropping abandoned unverified ones first). The factor only
+  /// counts once [verifyEnrollment] succeeds.
+  Future<MfaEnrollment> enrollTotp({String? issuer});
+
+  /// Confirms the first code from the authenticator, activating the factor and upgrading the
+  /// session to AAL2.
+  Future<void> verifyEnrollment({
+    required String factorId,
+    required String code,
+  });
+
+  /// Answers a sign-in challenge for [factorId], upgrading the session to AAL2.
+  Future<void> challenge({required String factorId, required String code});
+
+  /// Removes a factor. The server requires an AAL2 session for this.
+  Future<void> unenroll(String factorId);
+}
+
+class SupabaseMfaRepository implements MfaRepository {
+  const SupabaseMfaRepository(this._client);
+
+  final SupabaseClient _client;
+
+  GoTrueMFAApi get _mfa => _client.auth.mfa;
+
+  @override
+  bool get challengeRequired {
+    if (_client.auth.currentSession == null) return false;
+    final aal = _mfa.getAuthenticatorAssuranceLevel();
+    return aal.currentLevel == AuthenticatorAssuranceLevels.aal1 &&
+        aal.nextLevel == AuthenticatorAssuranceLevels.aal2;
+  }
+
+  @override
+  Future<List<MfaFactor>> listFactors() async {
+    final response = await _mfa.listFactors();
+    return [
+      for (final factor in response.all)
+        if (factor.factorType == FactorType.totp)
+          MfaFactor(
+            id: factor.id,
+            verified: factor.status == FactorStatus.verified,
+            friendlyName: factor.friendlyName,
+            createdAt: factor.createdAt,
+          ),
+    ];
+  }
+
+  @override
+  Future<MfaEnrollment> enrollTotp({String? issuer}) async {
+    // An abandoned enrollment would otherwise block a retry (and linger as an unverified row).
+    for (final factor in await listFactors()) {
+      if (!factor.verified) await _mfa.unenroll(factor.id);
+    }
+    final response = await _mfa.enroll(
+      issuer: issuer,
+      friendlyName: 'Authenticator ${DateTime.now().millisecondsSinceEpoch}',
+    );
+    final totp = response.totp;
+    if (totp == null) {
+      throw const AuthException('Authenticator setup is unavailable.');
+    }
+    return MfaEnrollment(
+      factorId: response.id,
+      secret: totp.secret,
+      uri: totp.uri,
+    );
+  }
+
+  @override
+  Future<void> verifyEnrollment({
+    required String factorId,
+    required String code,
+  }) async {
+    await _mfa.challengeAndVerify(factorId: factorId, code: code);
+  }
+
+  @override
+  Future<void> challenge({
+    required String factorId,
+    required String code,
+  }) async {
+    await _mfa.challengeAndVerify(factorId: factorId, code: code);
+  }
+
+  @override
+  Future<void> unenroll(String factorId) async {
+    await _mfa.unenroll(factorId);
+  }
+}

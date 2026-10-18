@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:venuewrangler_mobile/core/auth/auth_providers.dart';
 import 'package:venuewrangler_mobile/core/offline/offline_queue_providers.dart';
 import 'package:venuewrangler_mobile/core/offline/offline_queue_store.dart';
 import 'package:venuewrangler_mobile/core/offline/pending_mutation.dart';
@@ -179,5 +180,69 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(fakeRepo.lastCreatedTitle, 'New task title');
+  });
+
+  group('offline queue is scoped to the signed-in user', () {
+    PendingMutation queued(String id, String userId, {bool conflict = false}) {
+      final mutation = PendingMutation(
+        id: id,
+        kind: kTaskStatusUpdateMutationKind,
+        payload: {
+          'taskId': 'task-1',
+          'status': 'completed',
+          'expectedUpdatedAt': DateTime(2026).toIso8601String(),
+        },
+        createdAt: DateTime(2026),
+        userId: userId,
+      );
+      return conflict ? mutation.withConflict('changed first') : mutation;
+    }
+
+    Future<_InMemoryOfflineQueueStore> pumpAs(
+      WidgetTester tester,
+      String userId,
+    ) async {
+      final store = _InMemoryOfflineQueueStore()
+        ..saved = [
+          queued('a-conflict', 'user-a', conflict: true),
+          queued('a-pending', 'user-a'),
+        ];
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            activeVenueProvider.overrideWith((ref) => venue),
+            tasksRepositoryProvider
+                .overrideWithValue(_FakeTasksRepository([openTask])),
+            offlineQueueStoreProvider.overrideWithValue(store),
+            currentUserIdProvider.overrideWith((ref) => userId),
+          ],
+          child: const MaterialApp(home: TaskListScreen()),
+        ),
+      );
+      await tester.pumpAndSettle();
+      return store;
+    }
+
+    testWidgets("another user's conflict and pending status are hidden",
+        (tester) async {
+      await pumpAs(tester, 'user-b');
+
+      expect(find.byType(MaterialBanner), findsNothing);
+      expect(find.text('Syncing…'), findsNothing);
+    });
+
+    testWidgets('the owner sees and can dismiss their own conflict',
+        (tester) async {
+      final store = await pumpAs(tester, 'user-a');
+
+      expect(find.byType(MaterialBanner), findsOneWidget);
+      expect(find.text('Syncing…'), findsOneWidget);
+
+      await tester.tap(find.text('Dismiss'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(MaterialBanner), findsNothing);
+      expect(store.saved.map((m) => m.id), ['a-pending']);
+    });
   });
 }

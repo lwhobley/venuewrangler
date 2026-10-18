@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,7 +10,6 @@ import 'package:uuid/uuid.dart';
 import '../../../core/auth/auth_providers.dart';
 import '../../../core/errors/transport_failure.dart';
 import '../../../core/offline/offline_queue_providers.dart';
-import '../../../core/network/supabase_providers.dart';
 import '../../media/application/image_picker_service.dart';
 import '../../media/application/media_providers.dart';
 import '../../media/application/photo_annotator.dart';
@@ -16,6 +17,7 @@ import '../../venues/application/venues_providers.dart';
 import '../../venues/domain/venue.dart';
 import '../application/incidents_providers.dart';
 import '../domain/incident.dart';
+import '../../../core/privacy/screen_security.dart';
 
 const _uuid = Uuid();
 
@@ -48,57 +50,60 @@ class IncidentListScreen extends ConsumerWidget {
               mutation.payload['title'] as String,
     };
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Incidents'),
-      ),
-      body: RefreshIndicator(
-        onRefresh: () async =>
-            ref.invalidate(incidentsForVenueProvider(venue.id)),
-        child: incidentsAsync.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (error, _) => Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text('Could not load incidents.'),
-                const SizedBox(height: 12),
-                OutlinedButton(
-                  onPressed: () =>
-                      ref.invalidate(incidentsForVenueProvider(venue.id)),
-                  child: const Text('Retry'),
-                ),
-              ],
-            ),
-          ),
-          data: (incidents) {
-            final hasDrafts = draftTitlesById.isNotEmpty;
-            if (incidents.isEmpty && !hasDrafts) {
-              return LayoutBuilder(
-                builder: (context, constraints) => SingleChildScrollView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  child: SizedBox(
-                    height: constraints.maxHeight,
-                    child: const Center(child: Text('No incidents reported.')),
-                  ),
-                ),
-              );
-            }
-            return ListView(
-              children: [
-                for (final title in draftTitlesById.values)
-                  _DraftTile(title: title),
-                for (final incident in incidents)
-                  _IncidentTile(incident: incident, venueId: venue.id),
-              ],
-            );
-          },
+    return SecureScreen(
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Incidents'),
         ),
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showReportDialog(context, ref, venue),
-        icon: const Icon(Icons.report_outlined),
-        label: const Text('Report incident'),
+        body: RefreshIndicator(
+          onRefresh: () async =>
+              ref.invalidate(incidentsForVenueProvider(venue.id)),
+          child: incidentsAsync.when(
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (error, _) => Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('Could not load incidents.'),
+                  const SizedBox(height: 12),
+                  OutlinedButton(
+                    onPressed: () =>
+                        ref.invalidate(incidentsForVenueProvider(venue.id)),
+                    child: const Text('Retry'),
+                  ),
+                ],
+              ),
+            ),
+            data: (incidents) {
+              final hasDrafts = draftTitlesById.isNotEmpty;
+              if (incidents.isEmpty && !hasDrafts) {
+                return LayoutBuilder(
+                  builder: (context, constraints) => SingleChildScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    child: SizedBox(
+                      height: constraints.maxHeight,
+                      child:
+                          const Center(child: Text('No incidents reported.')),
+                    ),
+                  ),
+                );
+              }
+              return ListView(
+                children: [
+                  for (final title in draftTitlesById.values)
+                    _DraftTile(title: title),
+                  for (final incident in incidents)
+                    _IncidentTile(incident: incident, venueId: venue.id),
+                ],
+              );
+            },
+          ),
+        ),
+        floatingActionButton: FloatingActionButton.extended(
+          onPressed: () => _showReportDialog(context, ref, venue),
+          icon: const Icon(Icons.report_outlined),
+          label: const Text('Report incident'),
+        ),
       ),
     );
   }
@@ -423,7 +428,11 @@ class _IncidentTile extends ConsumerWidget {
   }
 
   Future<void> _showDetails(BuildContext context, WidgetRef ref) async {
-    final evidenceFuture = _loadEvidenceUrls(ref);
+    final evidenceFuture =
+        ref.read(incidentsRepositoryProvider).fetchEvidenceUrls(incident.id);
+    // The dialog's FutureBuilder reports a failure; this only stops a failure that lands before
+    // the dialog's first build from also surfacing as an unhandled error.
+    unawaited(evidenceFuture.then((_) {}, onError: (_) {}));
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -484,28 +493,6 @@ class _IncidentTile extends ConsumerWidget {
         ],
       ),
     );
-  }
-
-  Future<List<String>> _loadEvidenceUrls(WidgetRef ref) async {
-    try {
-      final client = ref.read(supabaseClientProvider);
-      final rows = await client
-          .from('incident_attachments')
-          .select('storage_path')
-          .eq('incident_id', incident.id);
-      final urls = <String>[];
-      for (final row in rows) {
-        final path = row['storage_path'] as String?;
-        if (path == null || path.isEmpty) continue;
-        final signed = await client.storage
-            .from('incident-evidence')
-            .createSignedUrl(path, 600);
-        urls.add(signed);
-      }
-      return urls;
-    } catch (_) {
-      return const [];
-    }
   }
 
   Future<void> _resolve(BuildContext context, WidgetRef ref) async {

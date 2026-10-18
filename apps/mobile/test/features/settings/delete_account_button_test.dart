@@ -12,17 +12,25 @@ import 'package:venuewrangler_mobile/features/settings/data/settings_repository.
 import 'package:venuewrangler_mobile/features/settings/domain/profile.dart';
 import 'package:venuewrangler_mobile/features/settings/presentation/delete_account_button.dart';
 
+import '../mfa/fake_mfa_repository.dart';
+
 class _FakeAuthRepository implements AuthRepository {
+  /// A signed-in email/password user when set; null means no password to re-enter.
+  Session? session;
   bool signOutCalled = false;
+  final signIns = <String>[];
 
   @override
-  Session? get currentSession => null;
+  Session? get currentSession => session;
 
   @override
   Future<void> signInWithPassword({
     required String email,
     required String password,
-  }) async {}
+  }) async {
+    if (password == 'wrong') throw const AuthException('Invalid credentials');
+    signIns.add(password);
+  }
 
   @override
   Future<bool> signUpWithPassword({
@@ -80,6 +88,7 @@ void main() {
         overrides: [
           settingsRepositoryProvider.overrideWithValue(settingsRepository),
           authRepositoryProvider.overrideWithValue(authRepository),
+          mfaRepositoryProvider.overrideWithValue(FakeMfaRepository()),
         ],
         child: const MaterialApp(
           home: Scaffold(body: DeleteAccountButton()),
@@ -87,6 +96,22 @@ void main() {
       ),
     );
   }
+
+  Session passwordSession() => Session(
+        accessToken: 'token',
+        tokenType: 'bearer',
+        user: User(
+          id: 'u1',
+          appMetadata: const {
+            'provider': 'email',
+            'providers': ['email'],
+          },
+          userMetadata: const {},
+          aud: 'authenticated',
+          createdAt: '2026-01-01T00:00:00Z',
+          email: 'owner@example.com',
+        ),
+      );
 
   testWidgets('cancelling the confirmation dialog does not delete anything',
       (tester) async {
@@ -211,5 +236,64 @@ void main() {
       find.textContaining('the only owner of 1 organization'),
       findsOneWidget,
     );
+  });
+
+  testWidgets('a password account must re-enter its password before deletion',
+      (tester) async {
+    final settingsRepo = _FakeSettingsRepository();
+    final authRepo = _FakeAuthRepository()..session = passwordSession();
+    await pumpButton(
+      tester,
+      settingsRepository: settingsRepo,
+      authRepository: authRepo,
+    );
+
+    await tester.tap(find.text('Delete account'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete account').last);
+    await tester.pumpAndSettle();
+
+    // The destructive confirmation is followed by the password step-up.
+    expect(find.text('Confirm to delete your account'), findsOneWidget);
+    expect(settingsRepo.deleteAccountCalled, isFalse);
+
+    // A wrong password does not delete anything.
+    await tester.enterText(find.byType(TextField), 'wrong');
+    await tester.tap(find.text('Confirm'));
+    await tester.pumpAndSettle();
+    expect(find.text("That password isn't correct."), findsOneWidget);
+    expect(settingsRepo.deleteAccountCalled, isFalse);
+
+    // Cancelling abandons the deletion.
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(settingsRepo.deleteAccountCalled, isFalse);
+    expect(authRepo.signOutCalled, isFalse);
+  });
+
+  testWidgets('the right password lets the deletion proceed', (tester) async {
+    FlutterSecureStorage.setMockInitialValues({});
+    final settingsRepo = _FakeSettingsRepository();
+    final authRepo = _FakeAuthRepository()..session = passwordSession();
+    await pumpButton(
+      tester,
+      settingsRepository: settingsRepo,
+      authRepository: authRepo,
+    );
+
+    await tester.runAsync(() async {
+      await tester.tap(find.text('Delete account'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Delete account').last);
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'Correct-Horse-1');
+      await tester.tap(find.text('Confirm'));
+      await tester.pumpAndSettle();
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    });
+
+    expect(authRepo.signIns, ['Correct-Horse-1']);
+    expect(settingsRepo.deleteAccountCalled, isTrue);
+    expect(authRepo.signOutCalled, isTrue);
   });
 }

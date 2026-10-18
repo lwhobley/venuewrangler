@@ -402,6 +402,81 @@ void main() {
       expect(store.saved.map((m) => m.id), ['a-conflict']);
     });
 
+    test('clearAll(forUserId) prunes the named user after the session is gone',
+        () async {
+      final store = _InMemoryOfflineQueueStore();
+      String? userId = 'user-a';
+      final controller = OfflineQueueController(
+        store,
+        const {},
+        currentUserId: () => userId,
+      );
+      await controller.ready;
+      await controller.enqueue(_mutation(id: 'a-pending'));
+      userId = 'user-b';
+      await controller.enqueue(_mutation(id: 'b-pending'));
+      userId = null; // server-initiated sign-out: no current user any more
+
+      await controller.clearAll(forUserId: 'user-a');
+
+      expect(controller.state.pending.map((m) => m.id), ['b-pending']);
+      expect(store.saved.map((m) => m.id), ['b-pending']);
+    });
+
+    test('forUser exposes only the named users pending writes and conflicts',
+        () async {
+      final store = _InMemoryOfflineQueueStore();
+      String? userId = 'user-a';
+      final controller = OfflineQueueController(
+        store,
+        {
+          'test_kind': (payload) async =>
+              const MutationResult(MutationOutcome.conflict),
+        },
+        currentUserId: () => userId,
+      );
+      await controller.ready;
+      await controller.enqueue(_mutation(id: 'a-conflict'));
+      await controller.flush();
+      await controller.enqueue(_mutation(id: 'a-pending'));
+      userId = 'user-b';
+      await controller.enqueue(_mutation(id: 'b-pending'));
+
+      final forB = controller.state.forUser('user-b');
+      expect(forB.pending.map((m) => m.id), ['b-pending']);
+      expect(forB.conflicts, isEmpty);
+
+      final forA = controller.state.forUser('user-a');
+      expect(forA.pending.map((m) => m.id), ['a-pending']);
+      expect(forA.conflicts.map((m) => m.id), ['a-conflict']);
+    });
+
+    test('dismissConflict ignores entries owned by another user', () async {
+      final store = _InMemoryOfflineQueueStore();
+      String? userId = 'user-a';
+      final controller = OfflineQueueController(
+        store,
+        {
+          'test_kind': (payload) async =>
+              const MutationResult(MutationOutcome.conflict),
+        },
+        currentUserId: () => userId,
+      );
+      await controller.ready;
+      await controller.enqueue(_mutation(id: 'a-conflict'));
+      await controller.flush();
+
+      userId = 'user-b';
+      await controller.dismissConflict('a-conflict');
+      expect(controller.state.conflicts.map((m) => m.id), ['a-conflict']);
+      expect(store.saved.map((m) => m.id), ['a-conflict']);
+
+      userId = 'user-a';
+      await controller.dismissConflict('a-conflict');
+      expect(controller.state.conflicts, isEmpty);
+      expect(store.saved, isEmpty);
+    });
+
     test(
         'when the user changes mid-flush, mutations already applied are removed '
         'before returning so they are not replayed', () async {

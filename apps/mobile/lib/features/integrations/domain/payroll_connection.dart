@@ -7,6 +7,14 @@ enum PayrollProvider {
 
   String toDb() => name;
 
+  /// Parses the `provider` query parameter of the OAuth return deep link; null if unknown.
+  static PayrollProvider? tryParse(String? value) {
+    for (final provider in PayrollProvider.values) {
+      if (provider.name == value) return provider;
+    }
+    return null;
+  }
+
   /// The `{provider}-oauth` Edge Function slug this provider's connect/disconnect calls go to.
   String get functionSlug => '$name-oauth';
 

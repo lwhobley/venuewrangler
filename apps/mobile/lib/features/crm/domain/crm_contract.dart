@@ -55,6 +55,9 @@ class CrmContract {
     'disputed',
   ];
 
+  /// States only reachable through the signature action (record_contract_signature).
+  static const signedStatuses = {'partially_signed', 'fully_signed'};
+
   @override
   bool operator ==(Object other) => other is CrmContract && other.id == id;
 

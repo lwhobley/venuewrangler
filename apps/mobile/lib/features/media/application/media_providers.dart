@@ -64,6 +64,12 @@ final mediaMutationHandlersProvider =
         message:
             'The photo is no longer available on this device and could not be uploaded.',
       );
+    } on FormatException {
+      // Not a JPEG/PNG/WebP we can strip metadata from (or a damaged file): retrying cannot help.
+      return const MutationResult(
+        MutationOutcome.conflict,
+        message: 'The photo could not be prepared for upload.',
+      );
     } on PostgrestException catch (error) {
       if (error.code == '42501') {
         return const MutationResult(

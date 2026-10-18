@@ -553,6 +553,10 @@ class _ContractTile extends ConsumerWidget {
               contract.status != 'cancelled'
           ? PopupMenuButton<String>(
               onSelected: (status) async {
+                if (status == _recordSignatureAction) {
+                  await _recordSignature(context, ref);
+                  return;
+                }
                 try {
                   await ref.read(crmRepositoryProvider).updateContractStatus(
                         contractId: contract.id,
@@ -570,12 +574,143 @@ class _ContractTile extends ConsumerWidget {
                 }
               },
               itemBuilder: (context) => [
+                const PopupMenuItem(
+                  value: _recordSignatureAction,
+                  child: Text('Record client signature…'),
+                ),
+                // Signed states are reachable only through the signature action above, which
+                // keeps the evidence; the database refuses them as plain status updates.
                 for (final status in CrmContract.statuses)
-                  if (status != contract.status)
+                  if (status != contract.status &&
+                      !CrmContract.signedStatuses.contains(status))
                     PopupMenuItem(value: status, child: Text(status)),
               ],
             )
           : null,
+    );
+  }
+
+  static const _recordSignatureAction = '__record_signature';
+
+  Future<void> _recordSignature(BuildContext context, WidgetRef ref) async {
+    final result = await showDialog<_SignatureInput>(
+      context: context,
+      builder: (_) => const _RecordSignatureDialog(),
+    );
+    if (result == null || !context.mounted) return;
+    try {
+      await ref.read(crmRepositoryProvider).recordContractSignature(
+            contractId: contract.id,
+            signerName: result.name,
+            fullySigned: result.fullySigned,
+            note: result.note,
+          );
+      ref.invalidate(crmContractsProvider(venueId));
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not record the signature.')),
+        );
+      }
+    }
+  }
+}
+
+class _SignatureInput {
+  const _SignatureInput({
+    required this.name,
+    required this.fullySigned,
+    this.note,
+  });
+
+  final String name;
+  final bool fullySigned;
+  final String? note;
+}
+
+/// Owns its text controllers so they are disposed only after the dialog route has finished
+/// animating away (disposing them right after pop trips "used after being disposed").
+class _RecordSignatureDialog extends StatefulWidget {
+  const _RecordSignatureDialog();
+
+  @override
+  State<_RecordSignatureDialog> createState() => _RecordSignatureDialogState();
+}
+
+class _RecordSignatureDialogState extends State<_RecordSignatureDialog> {
+  final _name = TextEditingController();
+  final _note = TextEditingController();
+  var _fullySigned = true;
+  String? _error;
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _note.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final name = _name.text.trim();
+    if (name.length < 2) {
+      setState(() => _error = "Enter the signer's full name.");
+      return;
+    }
+    final note = _note.text.trim();
+    Navigator.of(context).pop(
+      _SignatureInput(
+        name: name,
+        fullySigned: _fullySigned,
+        note: note.isEmpty ? null : note,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Record client signature'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Confirm the client has signed this contract. The terms are frozen '
+            'and your name, the time and a fingerprint of the terms are kept as evidence.',
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _name,
+            autofocus: true,
+            decoration: InputDecoration(
+              labelText: 'Signer full name',
+              errorText: _error,
+            ),
+          ),
+          TextField(
+            controller: _note,
+            decoration: const InputDecoration(
+              labelText: 'Note (optional, e.g. signed in person)',
+            ),
+          ),
+          CheckboxListTile(
+            contentPadding: EdgeInsets.zero,
+            value: _fullySigned,
+            onChanged: (value) => setState(() => _fullySigned = value ?? true),
+            title: const Text('All parties have signed'),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _submit,
+          child: const Text('Record signature'),
+        ),
+      ],
     );
   }
 }

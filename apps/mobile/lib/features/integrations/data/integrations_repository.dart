@@ -14,6 +14,12 @@ abstract interface class IntegrationsRepository {
   Future<String> createConnectUrl(PayrollProvider provider, String venueId);
 
   Future<void> disconnect(PayrollProvider provider, String venueId);
+
+  /// Finishes a connection after the provider consent screen. The OAuth callback only parks the
+  /// tokens behind a one-time [nonce] that is delivered to the browser that completed consent;
+  /// redeeming it here with the signed-in session is what binds the connection to this user, so a
+  /// consent link forwarded to someone else can never be completed by the person who minted it.
+  Future<void> completeConnection(PayrollProvider provider, String nonce);
 }
 
 class SupabaseIntegrationsRepository implements IntegrationsRepository {
@@ -65,6 +71,31 @@ class SupabaseIntegrationsRepository implements IntegrationsRepository {
         body: {'venue_id': venueId},
       );
     } on FunctionException catch (error) {
+      throw _mapFunctionException(error);
+    }
+  }
+
+  @override
+  Future<void> completeConnection(
+    PayrollProvider provider,
+    String nonce,
+  ) async {
+    try {
+      await _client.functions.invoke(
+        '${provider.functionSlug}/complete',
+        body: {'nonce': nonce},
+      );
+    } on FunctionException catch (error) {
+      if (error.status == 404) {
+        throw const NotFoundError(
+          'This connection link is not valid for your account. Start the connection again from Integrations.',
+        );
+      }
+      if (error.status == 410) {
+        throw const NotFoundError(
+          'This connection link has expired or was already used. Start the connection again.',
+        );
+      }
       throw _mapFunctionException(error);
     }
   }

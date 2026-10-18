@@ -5,6 +5,7 @@ import '../domain/crm_beo.dart';
 import '../domain/crm_beo_charge.dart';
 import '../domain/crm_contract.dart';
 import '../domain/crm_lead.dart';
+import 'crm_search_filter.dart';
 
 abstract class CrmRepository {
   Future<List<CrmLead>> getLeads({
@@ -66,6 +67,16 @@ abstract class CrmRepository {
     required String status,
   });
 
+  /// Records that the client signed (offline or in person). The database snapshots a hash of the
+  /// contract terms plus who recorded it and when, and freezes the terms. This is the only way a
+  /// contract can become partially/fully signed.
+  Future<void> recordContractSignature({
+    required String contractId,
+    required String signerName,
+    bool fullySigned = true,
+    String? note,
+  });
+
   Future<List<CrmForecastRow>> getForecast({required String venueId});
   Future<List<CrmStaleLead>> getStaleLeads({
     required String venueId,
@@ -101,10 +112,7 @@ class SupabaseCrmRepository implements CrmRepository {
         .isFilter('deleted_at', null);
 
     if (search != null && search.trim().isNotEmpty) {
-      final term = '%${search.trim()}%';
-      query = query.or(
-        'full_name.ilike.$term,company.ilike.$term,email.ilike.$term,phone.ilike.$term',
-      );
+      query = query.or(crmLeadSearchFilter(search.trim()));
     }
 
     final response =
@@ -303,6 +311,24 @@ class SupabaseCrmRepository implements CrmRepository {
     await _client
         .from('crm_contracts')
         .update({'status': status}).eq('id', contractId);
+  }
+
+  @override
+  Future<void> recordContractSignature({
+    required String contractId,
+    required String signerName,
+    bool fullySigned = true,
+    String? note,
+  }) async {
+    await _client.rpc(
+      'record_contract_signature',
+      params: {
+        'p_contract_id': contractId,
+        'p_signer_name': signerName,
+        'p_fully_signed': fullySigned,
+        'p_note': note,
+      },
+    );
   }
 
   @override

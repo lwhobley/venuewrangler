@@ -22,6 +22,11 @@ abstract class PosRepository {
   });
 }
 
+const _checkColumns =
+    'id,organization_id,venue_id,pos_connection_id,provider,external_check_id,'
+    'table_label,server_name,guest_name,guest_count,opened_at,closed_at,subtotal_cents,'
+    'tax_cents,tip_cents,total_cents,status,menu_items,created_at,updated_at';
+
 class SupabasePosRepository implements PosRepository {
   SupabasePosRepository(this._client);
 
@@ -99,7 +104,9 @@ class SupabasePosRepository implements PosRepository {
   }) async {
     final response = await _client
         .from('pos_checks')
-        .select()
+        // Explicit columns: clients have no privilege on raw_payload (it can carry customer data),
+        // so a bare select() (select *) is refused by Postgres.
+        .select(_checkColumns)
         .eq('venue_id', venueId)
         .order('opened_at', ascending: false)
         .limit(limit);

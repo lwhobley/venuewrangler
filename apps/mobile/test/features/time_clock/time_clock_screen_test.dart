@@ -214,6 +214,86 @@ void main() {
     expect(find.text('Clock Out'), findsOneWidget);
   });
 
+  testWidgets('on web the punch buttons are replaced by a mobile-app notice',
+      (tester) async {
+    final fakeRepo = _FakeTimeClockRepository(
+      entries: [
+        TimeEntry(
+          id: 'e-old',
+          organizationId: 'o1',
+          venueId: 'v1',
+          userId: 'user-12345678',
+          clockInAt: DateTime(2026, 1, 5, 9),
+          clockOutAt: DateTime(2026, 1, 5, 17),
+          clockInLat: 40.0,
+          clockInLng: -74.0,
+          clockInAccuracyM: 8,
+          isOpen: false,
+          createdAt: DateTime(2026),
+          updatedAt: DateTime(2026),
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          activeVenueProvider.overrideWith((ref) => _testVenue),
+          timeClockRepositoryProvider.overrideWithValue(fakeRepo),
+          locationServiceProvider.overrideWithValue(_FakeLocationService()),
+          timeClockPunchSupportedProvider.overrideWithValue(false),
+        ],
+        child: const MaterialApp(home: TimeClockScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.textContaining('Clock in/out requires the mobile app'),
+      findsOneWidget,
+    );
+    expect(find.text('Clock In'), findsNothing);
+    expect(find.text('Clock Out'), findsNothing);
+    // History is still readable.
+    expect(find.text('Recent Punches'), findsOneWidget);
+    expect(find.textContaining('1/5'), findsOneWidget);
+    expect(fakeRepo.clockInCalled, isFalse);
+  });
+
+  testWidgets('a closed punch whose GPS was purged still renders in history',
+      (tester) async {
+    final fakeRepo = _FakeTimeClockRepository(
+      entries: [
+        TimeEntry(
+          id: 'e-purged',
+          organizationId: 'o1',
+          venueId: 'v1',
+          userId: 'user-12345678',
+          clockInAt: DateTime(2025, 1, 6, 9),
+          clockOutAt: DateTime(2025, 1, 6, 17),
+          isOpen: false,
+          createdAt: DateTime(2025),
+          updatedAt: DateTime(2025),
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          activeVenueProvider.overrideWith((ref) => _testVenue),
+          timeClockRepositoryProvider.overrideWithValue(fakeRepo),
+          locationServiceProvider.overrideWithValue(_FakeLocationService()),
+        ],
+        child: const MaterialApp(home: TimeClockScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('1/6'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('clock in is blocked, not faked, when location is denied',
       (tester) async {
     final fakeRepo = _FakeTimeClockRepository();

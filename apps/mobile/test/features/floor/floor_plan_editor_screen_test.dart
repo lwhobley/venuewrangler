@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:venuewrangler_mobile/core/auth/auth_providers.dart';
 import 'package:venuewrangler_mobile/core/theme/app_theme.dart';
 import 'package:venuewrangler_mobile/features/floor/application/floor_editor_controller.dart';
 import 'package:venuewrangler_mobile/features/floor/application/floor_providers.dart';
@@ -87,6 +88,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         activeVenueProvider.overrideWith((ref) => venue),
+        currentUserIdProvider.overrideWith((ref) => 'user-a'),
         floorRepositoryProvider.overrideWithValue(repo),
         canManageActiveVenueProvider.overrideWith((ref) async => manager),
       ],

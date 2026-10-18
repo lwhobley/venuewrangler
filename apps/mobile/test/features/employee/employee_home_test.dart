@@ -20,6 +20,7 @@ import 'package:venuewrangler_mobile/features/tasks/application/tasks_providers.
 import 'package:venuewrangler_mobile/features/tasks/data/tasks_repository.dart';
 import 'package:venuewrangler_mobile/features/tasks/domain/operational_task.dart';
 import 'package:venuewrangler_mobile/features/time_clock/application/time_clock_providers.dart';
+import 'package:venuewrangler_mobile/features/venues/application/venue_clock.dart';
 import 'package:venuewrangler_mobile/features/venues/application/venues_providers.dart';
 import 'package:venuewrangler_mobile/features/venues/domain/venue.dart';
 
@@ -115,35 +116,73 @@ class _Tasks implements TasksRepository {
 }
 
 void main() {
-  final evening = DateTime(2026, 10, 6, 19);
+  final evening = DateTime.utc(2026, 10, 6, 19);
+  const utcClock = VenueClock('UTC');
 
   group('employee day', () {
     test('my reservations: today, assigned to me, not cancelled, by time', () {
       final list = myReservationsToday(
         [
-          _res('a', 'Late', DateTime(2026, 10, 6, 21), assignedTo: 'me'),
-          _res('b', 'Early', DateTime(2026, 10, 6, 18), assignedTo: 'me'),
-          _res('c', 'Theirs', DateTime(2026, 10, 6, 18), assignedTo: 'you'),
+          _res('a', 'Late', DateTime.utc(2026, 10, 6, 21), assignedTo: 'me'),
+          _res('b', 'Early', DateTime.utc(2026, 10, 6, 18), assignedTo: 'me'),
+          _res('c', 'Theirs', DateTime.utc(2026, 10, 6, 18), assignedTo: 'you'),
           _res(
             'd',
             'Gone',
-            DateTime(2026, 10, 6, 20),
+            DateTime.utc(2026, 10, 6, 20),
             assignedTo: 'me',
             status: 'cancelled',
           ),
-          _res('e', 'Tomorrow', DateTime(2026, 10, 7, 19), assignedTo: 'me'),
+          _res(
+            'e',
+            'Tomorrow',
+            DateTime.utc(2026, 10, 7, 19),
+            assignedTo: 'me',
+          ),
           // 1am still belongs to tonight's business day.
           _res(
             'f',
             'After midnight',
-            DateTime(2026, 10, 7, 1),
+            DateTime.utc(2026, 10, 7, 1),
             assignedTo: 'me',
           ),
         ],
         'me',
         evening,
+        utcClock,
       );
       expect(list.map((r) => r.id), ['b', 'a', 'f']);
+    });
+
+    test('the business day follows the venue clock, not the device', () {
+      const chicago = VenueClock('America/Chicago'); // CDT = UTC-5 in October
+      // 01:00Z on the 7th is 20:00 on the 6th in Chicago: still tonight.
+      final tonight = DateTime.utc(2026, 10, 7, 1);
+      final list = myReservationsToday(
+        [
+          _res('a', 'Tonight', tonight, assignedTo: 'me'),
+          // 12:00Z on the 6th is 07:00 in Chicago: after 6am, same business day.
+          _res('b', 'Morning', DateTime.utc(2026, 10, 6, 12), assignedTo: 'me'),
+          // 10:00Z on the 7th is 05:00 in Chicago: before 6am, still the 6th's day.
+          _res(
+            'c',
+            'Overnight',
+            DateTime.utc(2026, 10, 7, 10),
+            assignedTo: 'me',
+          ),
+          // 12:00Z on the 7th is 07:00 on the 7th: tomorrow's business day.
+          _res(
+            'd',
+            'Tomorrow',
+            DateTime.utc(2026, 10, 7, 12),
+            assignedTo: 'me',
+          ),
+        ],
+        'me',
+        tonight,
+        chicago,
+      );
+      expect(list.map((r) => r.id), ['b', 'a', 'c']);
     });
 
     test('covers count only seated or completed parties', () {
@@ -165,14 +204,14 @@ void main() {
           'Done today',
           assignedTo: 'me',
           status: TaskStatus.completed,
-          completedAt: DateTime(2026, 10, 6, 17),
+          completedAt: DateTime.utc(2026, 10, 6, 17),
         ),
         _task(
           '5',
           'Done yesterday',
           assignedTo: 'me',
           status: TaskStatus.completed,
-          completedAt: DateTime(2026, 10, 5, 17),
+          completedAt: DateTime.utc(2026, 10, 5, 17),
         ),
         _task('6', 'Ticked offline', assignedTo: 'me'),
       ];
@@ -181,7 +220,7 @@ void main() {
         myAssignedOpenTasks(tasks, 'me', pending).map((t) => t.id),
         ['1'],
       );
-      expect(tasksDoneToday(tasks, 'me', pending, evening), 2);
+      expect(tasksDoneToday(tasks, 'me', pending, evening, utcClock), 2);
     });
 
     test('section tables match case-insensitively', () {

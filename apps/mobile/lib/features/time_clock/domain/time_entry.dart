@@ -45,9 +45,9 @@ class TimeEntry {
     required this.userId,
     this.shiftId,
     required this.clockInAt,
-    required this.clockInLat,
-    required this.clockInLng,
-    required this.clockInAccuracyM,
+    this.clockInLat,
+    this.clockInLng,
+    this.clockInAccuracyM,
     this.clockInMocked = false,
     this.clockOutAt,
     this.clockOutLat,
@@ -57,6 +57,9 @@ class TimeEntry {
     required this.isOpen,
     this.breaks = const [],
     this.locationAnomaly,
+    this.clockInAttested = false,
+    this.clockOutAttested = false,
+    this.punchSource = 'direct',
     required this.createdAt,
     required this.updatedAt,
   });
@@ -67,9 +70,11 @@ class TimeEntry {
   final String userId;
   final String? shiftId;
   final DateTime clockInAt;
-  final double clockInLat;
-  final double clockInLng;
-  final double clockInAccuracyM;
+  // Raw punch coordinates are NULLed by the backend on finished entries after 365 days, so
+  // every GPS field is nullable; display code must cope with a purged fix.
+  final double? clockInLat;
+  final double? clockInLng;
+  final double? clockInAccuracyM;
   final bool clockInMocked;
   final DateTime? clockOutAt;
   final double? clockOutLat;
@@ -79,8 +84,23 @@ class TimeEntry {
   final bool isOpen;
   final List<TimeBreak> breaks;
   final String? locationAnomaly;
+
+  /// Whether the device proved (App Attest / Play Integrity) that this end of the punch came from
+  /// the genuine app. False for punches recorded without proof; managers review those.
+  final bool clockInAttested;
+  final bool clockOutAttested;
+
+  /// `attested` when the punch went through the verified path, `direct` otherwise.
+  final String punchSource;
   final DateTime createdAt;
   final DateTime updatedAt;
+
+  /// True when every recorded end of this punch carries device proof (an open punch only needs
+  /// its clock-in proven).
+  bool get isFullyAttested => clockInAttested && (isOpen || clockOutAttested);
+
+  /// False once the backend has purged this entry's raw GPS (closed entries older than a year).
+  bool get hasClockInFix => clockInLat != null && clockInLng != null;
 
   bool get isOnBreak => breaks.any((b) => b.isOpen);
 
@@ -141,9 +161,9 @@ class TimeEntry {
       userId: json['user_id'] as String,
       shiftId: json['shift_id'] as String?,
       clockInAt: DateTime.parse(json['clock_in_at'] as String),
-      clockInLat: (json['clock_in_lat'] as num).toDouble(),
-      clockInLng: (json['clock_in_lng'] as num).toDouble(),
-      clockInAccuracyM: (json['clock_in_accuracy_m'] as num).toDouble(),
+      clockInLat: (json['clock_in_lat'] as num?)?.toDouble(),
+      clockInLng: (json['clock_in_lng'] as num?)?.toDouble(),
+      clockInAccuracyM: (json['clock_in_accuracy_m'] as num?)?.toDouble(),
       clockInMocked: json['clock_in_mocked'] as bool? ?? false,
       clockOutAt: json['clock_out_at'] != null
           ? DateTime.parse(json['clock_out_at'] as String)
@@ -157,6 +177,9 @@ class TimeEntry {
           .map((b) => TimeBreak.fromJson(b as Map<String, dynamic>))
           .toList(growable: false),
       locationAnomaly: json['location_anomaly'] as String?,
+      clockInAttested: json['clock_in_attested'] as bool? ?? false,
+      clockOutAttested: json['clock_out_attested'] as bool? ?? false,
+      punchSource: json['punch_source'] as String? ?? 'direct',
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
     );
@@ -169,9 +192,9 @@ class TimeEntry {
         'user_id': userId,
         if (shiftId != null) 'shift_id': shiftId,
         'clock_in_at': clockInAt.toUtc().toIso8601String(),
-        'clock_in_lat': clockInLat,
-        'clock_in_lng': clockInLng,
-        'clock_in_accuracy_m': clockInAccuracyM,
+        if (clockInLat != null) 'clock_in_lat': clockInLat,
+        if (clockInLng != null) 'clock_in_lng': clockInLng,
+        if (clockInAccuracyM != null) 'clock_in_accuracy_m': clockInAccuracyM,
         'clock_in_mocked': clockInMocked,
         if (clockOutAt != null)
           'clock_out_at': clockOutAt!.toUtc().toIso8601String(),
@@ -183,6 +206,9 @@ class TimeEntry {
         'is_open': isOpen,
         'breaks': breaks.map((b) => b.toJson()).toList(),
         if (locationAnomaly != null) 'location_anomaly': locationAnomaly,
+        'clock_in_attested': clockInAttested,
+        'clock_out_attested': clockOutAttested,
+        'punch_source': punchSource,
         'created_at': createdAt.toUtc().toIso8601String(),
         'updated_at': updatedAt.toUtc().toIso8601String(),
       };

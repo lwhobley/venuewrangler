@@ -10,8 +10,8 @@ flow anywhere in this app. BEO deposits are not collected through Stripe (see
 - `domain/subscription.dart` — `Subscription`.
 - `data/billing_repository.dart` — `BillingRepository` interface + Supabase implementation:
   `fetchSubscription` reads `subscriptions` directly (RLS limits this to org owners/admins —
-  a non-admin simply sees `null`, not an error); `createCheckoutUrl`/`createPortalUrl` invoke
-  the two Edge Functions and return a hosted Stripe URL.
+  a non-admin simply sees `null`, not an error); the app has no
+  checkout or portal call (the former `createCheckoutUrl`/`createPortalUrl` were unused and removed).
 - `application/billing_providers.dart` — repository + subscription-for-org provider.
 - `presentation/billing_screen.dart` — routed at `/billing`: shows subscription status
   without a purchase link. App subscriptions are sold directly to organizations outside

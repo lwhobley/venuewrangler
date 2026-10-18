@@ -1,6 +1,9 @@
 include: package:flutter_lints/flutter.yaml
 
 analyzer:
+  language:
+    strict-casts: true
+    strict-raw-types: true
   exclude:
     - "**/*.g.dart"
     - "**/*.freezed.dart"
@@ -13,3 +16,5 @@ linter:
   rules:
     prefer_single_quotes: true
     require_trailing_commas: true
+    unawaited_futures: true
+    avoid_dynamic_calls: true

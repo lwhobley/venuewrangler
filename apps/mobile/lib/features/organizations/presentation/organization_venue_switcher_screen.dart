@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/auth/sign_out_service.dart';
+import '../../invites/presentation/pending_invites_entry.dart';
 import '../../venues/application/venues_providers.dart';
 import '../../venues/domain/venue.dart';
 import '../application/organizations_providers.dart';
@@ -50,13 +51,20 @@ class OrganizationVenueSwitcherScreen extends ConsumerWidget {
             ),
             data: (organizations) {
               if (organizations.isEmpty) {
-                return const _EmptyState();
+                return const Column(
+                  children: [
+                    PendingInvitesBanner(),
+                    Expanded(child: _EmptyState()),
+                  ],
+                );
               }
               return ListView.builder(
-                itemCount: organizations.length,
-                itemBuilder: (context, index) => _OrganizationSection(
-                  organization: organizations[index],
-                ),
+                itemCount: organizations.length + 1,
+                itemBuilder: (context, index) => index == 0
+                    ? const PendingInvitesBanner()
+                    : _OrganizationSection(
+                        organization: organizations[index - 1],
+                      ),
               );
             },
           ),

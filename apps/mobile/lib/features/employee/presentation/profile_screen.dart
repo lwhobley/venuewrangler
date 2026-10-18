@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/auth/auth_providers.dart';
+import '../../../core/auth/reauth_dialog.dart';
 import '../../../core/auth/auth_repository.dart';
 import '../../../core/auth/sign_out_service.dart';
 import '../../../core/network/supabase_providers.dart';
@@ -12,13 +14,16 @@ import '../../schedules/application/schedules_providers.dart';
 import '../../schedules/domain/schedule_timeline.dart';
 import '../../schedules/domain/shift.dart';
 import '../../settings/application/settings_providers.dart';
+import '../../settings/domain/legal_links.dart';
 import '../../settings/presentation/delete_account_button.dart';
 import '../../shift_mode/presentation/shift_widgets.dart';
 import '../../time_clock/application/time_clock_providers.dart';
 import '../../time_clock/domain/time_entry.dart';
+import '../../venues/application/venue_clock.dart';
 import '../../venues/application/venues_providers.dart';
 import '../../workforce/domain/workforce_models.dart';
 import '../../workforce/presentation/employee_profile_widgets.dart';
+import '../../../core/privacy/screen_security.dart';
 
 const _weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const _months = [
@@ -69,9 +74,12 @@ class ProfileScreen extends ConsumerWidget {
         : ref.watch(myTimeEntriesProvider(venue.id));
     final entries = entriesAsync.valueOrNull;
 
+    final clock = ref.watch(venueClockProvider);
     final now = DateTime.now();
-    final weekFrom = weekStart(now);
-    final weekTo = weekFrom.add(const Duration(days: 7));
+    // The week runs Monday to Monday on the venue's clock; the bounds are instants.
+    final weekFromWall = weekStart(clock.now);
+    final weekFrom = clock.instant(weekFromWall);
+    final weekTo = clock.instant(weekFromWall.add(const Duration(days: 7)));
     final scheduled =
         userId == null ? 0.0 : scheduledHours(shifts, userId, weekFrom, weekTo);
     var workedMinutes = 0;
@@ -89,185 +97,209 @@ class ProfileScreen extends ConsumerWidget {
     final name = profile?.displayName?.trim().isNotEmpty == true
         ? profile!.displayName!.trim()
         : (email ?? 'You');
-    return Scaffold(
-      appBar: AppBar(title: const Text('My profile')),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-        children: [
-          Row(
-            children: [
-              if (venue != null && userId != null)
-                StaffAvatar(
-                  profileKey: (venueId: venue.id, userId: userId),
-                  name: name,
-                  radius: 32,
-                ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(name, style: theme.textTheme.titleLarge),
-                    Text(
-                      [
-                        _roleLabel(role),
-                        if (venue != null) venue.name,
-                      ].join(' · '),
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                    if (email != null)
-                      Text(email, style: theme.textTheme.bodySmall),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          if (venue != null && userId != null) ...[
-            ProfilePhotoButton(
-              profileKey: (venueId: venue.id, userId: userId),
-              organizationId: venue.organizationId,
-            ),
-            const SizedBox(height: 12),
-            EmployeeHrCard(
-              profileKey: (venueId: venue.id, userId: userId),
-              name: name,
-              manageEmployment: false,
-            ),
-            const SizedBox(height: 20),
-          ],
-          const SectionTitle('This week'),
-          Row(
-            children: [
-              Expanded(
-                child: _Stat(
-                  label: 'Scheduled',
-                  value: shiftsAsync.hasError
-                      ? 'Unavailable'
-                      : formatHours(scheduled),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _Stat(
-                  label: 'Worked',
-                  value: entriesAsync.hasError
-                      ? 'Unavailable'
-                      : formatHours(workedMinutes / 60),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          const SectionTitle('Upcoming shifts'),
-          if (shiftsAsync.hasError || entriesAsync.hasError)
-            CardShell(
-              child: TextButton(
-                onPressed: () {
-                  if (venue != null) {
-                    ref.invalidate(shiftsForVenueProvider(venue.id));
-                    ref.invalidate(myTimeEntriesProvider(venue.id));
-                  }
-                },
-                child: const Text('Could not load all time records. Retry.'),
-              ),
-            )
-          else if (upcoming.isEmpty)
-            const CardShell(child: Text('No upcoming shifts scheduled.'))
-          else
-            CardShell(
-              child: Column(
-                children: [
-                  for (final s in upcoming.take(5))
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 6),
-                      child: Row(
-                        children: [
-                          SizedBox(
-                            width: 96,
-                            child: Text(
-                              '${_weekdays[s.startTime.weekday - 1]} '
-                              '${_months[s.startTime.month - 1]} ${s.startTime.day}',
-                              style: theme.textTheme.titleSmall,
-                            ),
-                          ),
-                          Expanded(
-                            child: Text(
-                              '${clockLabel(s.startTime)}–${clockLabel(s.endTime)}'
-                              '${s.roleLabel?.isNotEmpty == true ? ' · ${s.roleLabel}' : ''}'
-                              '${s.section?.isNotEmpty == true ? ' · ${s.section}' : ''}',
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          const SizedBox(height: 20),
-          const SectionTitle('Settings'),
-          CardShell(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+    return SecureScreen(
+      child: Scaffold(
+        appBar: AppBar(title: const Text('My profile')),
+        body: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+          children: [
+            Row(
               children: [
-                Text('Appearance', style: theme.textTheme.labelMedium),
-                const SizedBox(height: 8),
-                SegmentedButton<ThemeMode>(
-                  segments: const [
-                    ButtonSegment(
-                      value: ThemeMode.light,
-                      icon: Icon(Icons.light_mode_outlined),
-                      label: Text('Light'),
-                    ),
-                    ButtonSegment(
-                      value: ThemeMode.dark,
-                      icon: Icon(Icons.dark_mode_outlined),
-                      label: Text('Dark'),
-                    ),
-                    ButtonSegment(
-                      value: ThemeMode.system,
-                      icon: Icon(Icons.brightness_auto_outlined),
-                      label: Text('Auto'),
-                    ),
-                  ],
-                  selected: {ref.watch(themeModeProvider)},
-                  onSelectionChanged: (s) =>
-                      ref.read(themeModeProvider.notifier).set(s.first),
-                ),
-                const SizedBox(height: 8),
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: const Icon(Icons.badge_outlined),
-                  title: const Text('Display name'),
-                  subtitle: Text(profile?.displayName ?? 'Not set'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => _editName(context, ref, profile?.displayName),
-                ),
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: const Icon(Icons.lock_outline),
-                  title: const Text('Change password'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => _changePassword(context, ref),
-                ),
-                const DeleteAccountButton(),
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: Icon(Icons.logout, color: context.ops.danger.fg),
-                  title: Text(
-                    'Sign out',
-                    style: TextStyle(color: context.ops.danger.fg),
+                if (venue != null && userId != null)
+                  StaffAvatar(
+                    profileKey: (venueId: venue.id, userId: userId),
+                    name: name,
+                    radius: 32,
                   ),
-                  onTap: () => signOutAndClearScopedData(
-                    ProviderScope.containerOf(context, listen: false),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(name, style: theme.textTheme.titleLarge),
+                      Text(
+                        [
+                          _roleLabel(role),
+                          if (venue != null) venue.name,
+                        ].join(' · '),
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      if (email != null)
+                        Text(email, style: theme.textTheme.bodySmall),
+                    ],
                   ),
                 ),
               ],
             ),
-          ),
-        ],
+            const SizedBox(height: 20),
+            if (venue != null && userId != null) ...[
+              ProfilePhotoButton(
+                profileKey: (venueId: venue.id, userId: userId),
+                organizationId: venue.organizationId,
+              ),
+              const SizedBox(height: 12),
+              EmployeeHrCard(
+                profileKey: (venueId: venue.id, userId: userId),
+                name: name,
+                manageEmployment: false,
+              ),
+              const SizedBox(height: 20),
+            ],
+            const SectionTitle('This week'),
+            Row(
+              children: [
+                Expanded(
+                  child: _Stat(
+                    label: 'Scheduled',
+                    value: shiftsAsync.hasError
+                        ? 'Unavailable'
+                        : formatHours(scheduled),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _Stat(
+                    label: 'Worked',
+                    value: entriesAsync.hasError
+                        ? 'Unavailable'
+                        : formatHours(workedMinutes / 60),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            const SectionTitle('Upcoming shifts'),
+            if (shiftsAsync.hasError || entriesAsync.hasError)
+              CardShell(
+                child: TextButton(
+                  onPressed: () {
+                    if (venue != null) {
+                      ref.invalidate(shiftsForVenueProvider(venue.id));
+                      ref.invalidate(myTimeEntriesProvider(venue.id));
+                    }
+                  },
+                  child: const Text('Could not load all time records. Retry.'),
+                ),
+              )
+            else if (upcoming.isEmpty)
+              const CardShell(child: Text('No upcoming shifts scheduled.'))
+            else
+              CardShell(
+                child: Column(
+                  children: [
+                    for (final s in upcoming.take(5))
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 6),
+                        child: Row(
+                          children: [
+                            SizedBox(
+                              width: 96,
+                              child: Text(
+                                '${_weekdays[clock.wall(s.startTime).weekday - 1]} '
+                                '${_months[clock.wall(s.startTime).month - 1]} ${clock.wall(s.startTime).day}',
+                                style: theme.textTheme.titleSmall,
+                              ),
+                            ),
+                            Expanded(
+                              child: Text(
+                                '${clock.clockLabel(s.startTime)}–${clock.clockLabel(s.endTime)}'
+                                '${s.roleLabel?.isNotEmpty == true ? ' · ${s.roleLabel}' : ''}'
+                                '${s.section?.isNotEmpty == true ? ' · ${s.section}' : ''}',
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            const SizedBox(height: 20),
+            const SectionTitle('Settings'),
+            CardShell(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text('Appearance', style: theme.textTheme.labelMedium),
+                  const SizedBox(height: 8),
+                  SegmentedButton<ThemeMode>(
+                    segments: const [
+                      ButtonSegment(
+                        value: ThemeMode.light,
+                        icon: Icon(Icons.light_mode_outlined),
+                        label: Text('Light'),
+                      ),
+                      ButtonSegment(
+                        value: ThemeMode.dark,
+                        icon: Icon(Icons.dark_mode_outlined),
+                        label: Text('Dark'),
+                      ),
+                      ButtonSegment(
+                        value: ThemeMode.system,
+                        icon: Icon(Icons.brightness_auto_outlined),
+                        label: Text('Auto'),
+                      ),
+                    ],
+                    selected: {ref.watch(themeModeProvider)},
+                    onSelectionChanged: (s) =>
+                        ref.read(themeModeProvider.notifier).set(s.first),
+                  ),
+                  const SizedBox(height: 8),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.badge_outlined),
+                    title: const Text('Display name'),
+                    subtitle: Text(profile?.displayName ?? 'Not set'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => _editName(context, ref, profile?.displayName),
+                  ),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.lock_outline),
+                    title: const Text('Change password'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => _changePassword(context, ref),
+                  ),
+                  // Staff have no Settings screen; the security and privacy entries live here.
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.shield_outlined),
+                    title: const Text('Two-factor authentication'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => context.push('/mfa'),
+                  ),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.mail_outline),
+                    title: const Text('Invitations'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => context.push('/invites'),
+                  ),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.privacy_tip_outlined),
+                    title: const Text('Privacy policy'),
+                    trailing: const Icon(Icons.open_in_new),
+                    onTap: () => openLegalLink(context, privacyPolicyUri),
+                  ),
+                  const DeleteAccountButton(),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(Icons.logout, color: context.ops.danger.fg),
+                    title: Text(
+                      'Sign out',
+                      style: TextStyle(color: context.ops.danger.fg),
+                    ),
+                    onTap: () => signOutAndClearScopedData(
+                      ProviderScope.containerOf(context, listen: false),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -324,6 +356,15 @@ class ProfileScreen extends ConsumerWidget {
   }
 
   Future<void> _changePassword(BuildContext context, WidgetRef ref) async {
+    // Step-up: a stolen unlocked phone must not be able to set a new password without knowing
+    // the current one.
+    final confirmed = await confirmPasswordReauth(
+      context,
+      ref,
+      title: 'Confirm your password',
+      reason: 'Enter your current password before choosing a new one.',
+    );
+    if (!confirmed || !context.mounted) return;
     final changed = await showDialog<bool>(
       context: context,
       builder: (_) => const _ChangePasswordDialog(),

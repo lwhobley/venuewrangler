@@ -14,6 +14,7 @@ import '../../tasks/application/task_status_change.dart';
 import '../../tasks/application/tasks_providers.dart';
 import '../../tasks/domain/operational_task.dart';
 import '../../time_clock/application/time_clock_providers.dart';
+import '../../venues/application/venue_clock.dart';
 import '../../venues/application/venues_providers.dart';
 import '../domain/shift_mode.dart';
 import 'shift_widgets.dart';
@@ -65,7 +66,7 @@ class _ShiftModeScreenState extends ConsumerState<ShiftModeScreen> {
     final tasksAsync = ref.watch(tasksForVenueProvider(venue.id));
     final clockAsync = ref.watch(activeTimeEntryProvider(venue.id));
     final queue = ref.watch(offlineQueueControllerProvider);
-    final pending = pendingTaskStatuses(queue.pending);
+    final pending = pendingTaskStatuses(queue.pending, userId: userId);
     final unread = ref.watch(unreadNotificationsCountProvider);
 
     return Scaffold(
@@ -92,8 +93,11 @@ class _ShiftModeScreenState extends ConsumerState<ShiftModeScreen> {
                 message: 'Could not load your shifts.',
                 onRetry: () => ref.invalidate(shiftsForVenueProvider(venue.id)),
               ),
-              data: (shifts) =>
-                  ShiftCard(mine: myShifts(shifts, userId, _now), now: _now),
+              data: (shifts) => ShiftCard(
+                mine: myShifts(shifts, userId, _now),
+                now: _now,
+                clock: ref.watch(venueClockProvider),
+              ),
             ),
             const SizedBox(height: 12),
             ClockCard(entry: clockAsync, now: _now),

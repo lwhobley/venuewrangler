@@ -165,6 +165,21 @@ class SupabaseAiRepository implements AiRepository {
       'venue_not_found_or_not_a_member' => const PermissionDeniedError(
           "You don't have access to AI features for this venue.",
         ),
+      'ai_disabled_for_org' => const AiUnavailableError(
+          'AI features are turned off for this organization. An owner or admin '
+          'can turn them on in Settings.',
+        ),
+      'subscription_required' => const AiUnavailableError(
+          "This organization's subscription is not active, so AI features are "
+          'paused. An owner can renew it under Billing.',
+        ),
+      'monthly_user_budget_exceeded' => const AiUnavailableError(
+          'You have used your share of AI requests for this month. Try again '
+          'next month, or ask an admin to raise the limit.',
+        ),
+      'ai_unavailable' => const AiUnavailableError(
+          'The AI assistant is temporarily unavailable. Please try again shortly.',
+        ),
       'monthly_budget_exceeded' => const AiUnavailableError(
           "This organization's AI budget for the month has been used up. "
           'Try again next month, or ask an admin to raise the limit.',

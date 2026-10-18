@@ -8,7 +8,9 @@ import '../../../core/theme/ops_colors.dart';
 import '../../../core/widgets/state_views.dart';
 import '../../../core/widgets/status_chip.dart';
 import '../../venues/application/venues_providers.dart';
+import '../../venues/application/venue_clock.dart';
 import '../../venues/domain/venue_timezone.dart';
+import '../../venues/presentation/venue_time_widgets.dart';
 import '../../workforce/application/workforce_providers.dart';
 import '../../workforce/domain/workforce_models.dart';
 import '../application/guests_reservations_providers.dart';
@@ -137,6 +139,7 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
       ),
       body: Column(
         children: [
+          const UnsupportedTimezoneBanner(),
           Padding(
             padding: const EdgeInsets.fromLTRB(16.0, 8.0, 16.0, 4.0),
             child: SingleChildScrollView(
@@ -357,13 +360,16 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
     String venueId,
     String timezone,
   ) async {
+    final clock = VenueClock(timezone);
+    if (!ensureSupported(context, clock)) return;
     final nameCtrl = TextEditingController();
     final partyCtrl = TextEditingController(text: '2');
     final phoneCtrl = TextEditingController();
     final emailCtrl = TextEditingController();
     final requestsCtrl = TextEditingController();
-    var reservationTime =
-        VenueTimezone.venueNow(timezone).add(const Duration(hours: 1));
+    // A venue wall time (UTC-flagged, fields = the venue's clock), shown as-is and converted to
+    // an instant only when saved.
+    var reservationTime = clock.now.add(const Duration(hours: 1));
     var saving = false;
     String? validationError;
 
@@ -412,32 +418,13 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
                   onTap: saving
                       ? null
                       : () async {
-                          final date = await showDatePicker(
-                            context: dialogCtx,
-                            initialDate: reservationTime,
-                            firstDate: VenueTimezone.venueNow(timezone)
-                                .subtract(const Duration(days: 1)),
-                            lastDate: VenueTimezone.venueNow(timezone)
-                                .add(const Duration(days: 365)),
+                          final picked = await pickVenueDateTime(
+                            dialogCtx,
+                            initial: reservationTime,
+                            nowWall: clock.now,
                           );
-                          if (date == null || !dialogCtx.mounted) return;
-                          final time = await showTimePicker(
-                            context: dialogCtx,
-                            initialTime: TimeOfDay(
-                              hour: reservationTime.hour,
-                              minute: reservationTime.minute,
-                            ),
-                          );
-                          if (time == null || !dialogCtx.mounted) return;
-                          update(() {
-                            reservationTime = DateTime.utc(
-                              date.year,
-                              date.month,
-                              date.day,
-                              time.hour,
-                              time.minute,
-                            );
-                          });
+                          if (picked == null || !dialogCtx.mounted) return;
+                          update(() => reservationTime = picked);
                         },
                 ),
                 if (validationError != null)
@@ -461,8 +448,7 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
                   : () async {
                       final name = nameCtrl.text.trim();
                       final party = int.tryParse(partyCtrl.text.trim());
-                      final reservationUtc =
-                          VenueTimezone.toUtc(reservationTime, timezone);
+                      final reservationUtc = clock.instant(reservationTime);
                       if (name.isEmpty ||
                           party == null ||
                           party < 1 ||
@@ -521,11 +507,10 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
         ),
       ),
     );
-    nameCtrl.dispose();
-    partyCtrl.dispose();
-    phoneCtrl.dispose();
-    emailCtrl.dispose();
-    requestsCtrl.dispose();
+    // The controllers are deliberately not disposed here: showDialog completes when the route is
+    // popped, but the dialog keeps rebuilding through its exit animation, and a disposed
+    // controller throws if a TextField builds with it. Nothing listens to them once the dialog
+    // is gone, so they are simply collected.
   }
 }
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
+import '../storage/app_secure_storage.dart';
 
 const _key = 'theme_mode';
 
@@ -13,7 +14,7 @@ final themeModeProvider =
 class ThemeModeNotifier extends StateNotifier<ThemeMode> {
   ThemeModeNotifier() : super(ThemeMode.light);
 
-  static const _storage = FlutterSecureStorage();
+  static const _storage = AppSecureStorage();
   bool _chosen = false;
 
   Future<void> load() async {

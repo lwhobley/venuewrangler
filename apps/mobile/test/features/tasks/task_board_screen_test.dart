@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:venuewrangler_mobile/core/auth/auth_providers.dart';
 import 'package:venuewrangler_mobile/core/offline/offline_queue_providers.dart';
 import 'package:venuewrangler_mobile/core/offline/offline_queue_store.dart';
 import 'package:venuewrangler_mobile/core/offline/pending_mutation.dart';
@@ -132,6 +133,7 @@ void main() {
         ProviderScope(
           overrides: [
             activeVenueProvider.overrideWith((ref) => venue),
+            currentUserIdProvider.overrideWith((ref) => 'user-1'),
             tasksRepositoryProvider.overrideWithValue(repo),
             offlineQueueStoreProvider.overrideWithValue(_Store()),
             rosterForVenueProvider.overrideWith((ref, id) async => const []),

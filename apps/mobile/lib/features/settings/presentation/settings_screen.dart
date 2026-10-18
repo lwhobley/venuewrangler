@@ -8,9 +8,14 @@ import '../../../core/network/supabase_providers.dart';
 import '../application/settings_providers.dart';
 import '../../../core/theme/theme_mode_provider.dart';
 import '../../../core/auth/auth_providers.dart';
+import '../../ai/presentation/org_ai_toggle_tile.dart';
+import '../../invites/presentation/pending_invites_entry.dart';
+import '../../mfa/presentation/mfa_enrollment_banner.dart';
+import '../../team/domain/team_member.dart';
 import '../../venues/application/venues_providers.dart';
 import '../../workforce/presentation/employee_profile_widgets.dart';
 import '../../workforce/domain/employee_hr_profile.dart';
+import '../domain/legal_links.dart';
 import 'delete_account_button.dart';
 
 /// Profile, account, and app settings. Deliberately minimal for this first slice — just the
@@ -67,12 +72,44 @@ class SettingsScreen extends ConsumerWidget {
               Text(email),
               const SizedBox(height: 24),
             ],
+            const MfaEnrollmentBanner(),
+            const PendingInvitesSettingsTile(),
+            if (teamManagerRoles.contains(role))
+              ListTile(
+                leading: const Icon(Icons.groups_outlined),
+                title: const Text('Team'),
+                subtitle: const Text('Roles, access and ownership'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => context.push('/team'),
+              ),
             ListTile(
               leading: const Icon(Icons.extension_outlined),
               title: const Text('Integrations'),
               subtitle: const Text('POS and connected services'),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => context.push('/integrations'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.shield_outlined),
+              title: const Text('Two-factor authentication'),
+              subtitle: const Text('Require a code from an authenticator app'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => context.push('/mfa'),
+            ),
+            if (venue != null &&
+                (role == 'organization_owner' || role == 'organization_admin'))
+              OrgAiToggleTile(organizationId: venue.organizationId),
+            ListTile(
+              leading: const Icon(Icons.privacy_tip_outlined),
+              title: const Text('Privacy policy'),
+              trailing: const Icon(Icons.open_in_new),
+              onTap: () => openLegalLink(context, privacyPolicyUri),
+            ),
+            ListTile(
+              leading: const Icon(Icons.description_outlined),
+              title: const Text('Terms of service'),
+              trailing: const Icon(Icons.open_in_new),
+              onTap: () => openLegalLink(context, termsUri),
             ),
             const SizedBox(height: 16),
             Text('Appearance', style: Theme.of(context).textTheme.labelMedium),

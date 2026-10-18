@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../venues/domain/venue_timezone.dart';
-
+import '../../venues/application/venue_clock.dart';
 import '../../venues/application/venues_providers.dart';
+import '../../venues/presentation/venue_time_widgets.dart';
 import '../application/events_providers.dart';
 import '../domain/event.dart';
 
@@ -27,47 +27,56 @@ class EventListScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Events'),
       ),
-      body: RefreshIndicator(
-        onRefresh: () async => ref.invalidate(eventsForVenueProvider(venue.id)),
-        child: eventsAsync.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (_, __) => Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text('Could not load events.'),
-                const SizedBox(height: 12),
-                OutlinedButton(
-                  onPressed: () =>
-                      ref.invalidate(eventsForVenueProvider(venue.id)),
-                  child: const Text('Retry'),
-                ),
-              ],
-            ),
-          ),
-          data: (events) {
-            if (events.isEmpty) {
-              return LayoutBuilder(
-                builder: (context, constraints) => SingleChildScrollView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  child: SizedBox(
-                    height: constraints.maxHeight,
-                    child: const Center(child: Text('No events planned yet.')),
+      body: Column(
+        children: [
+          const UnsupportedTimezoneBanner(),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: () async =>
+                  ref.invalidate(eventsForVenueProvider(venue.id)),
+              child: eventsAsync.when(
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (_, __) => Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text('Could not load events.'),
+                      const SizedBox(height: 12),
+                      OutlinedButton(
+                        onPressed: () =>
+                            ref.invalidate(eventsForVenueProvider(venue.id)),
+                        child: const Text('Retry'),
+                      ),
+                    ],
                   ),
                 ),
-              );
-            }
-            return ListView(
-              children: [
-                for (final event in events) _EventTile(event: event),
-              ],
-            );
-          },
-        ),
+                data: (events) {
+                  if (events.isEmpty) {
+                    return LayoutBuilder(
+                      builder: (context, constraints) => SingleChildScrollView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        child: SizedBox(
+                          height: constraints.maxHeight,
+                          child: const Center(
+                            child: Text('No events planned yet.'),
+                          ),
+                        ),
+                      ),
+                    );
+                  }
+                  return ListView(
+                    children: [
+                      for (final event in events) _EventTile(event: event),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ),
+        ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () =>
-            _showAddEventDialog(context, ref, venue.id, venue.timezone),
+        onPressed: () => _showAddEventDialog(context, ref, venue.id),
         icon: const Icon(Icons.event_outlined),
         label: const Text('Add event'),
       ),
@@ -78,11 +87,12 @@ class EventListScreen extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref,
     String venueId,
-    String timezone,
   ) async {
+    final clock = ref.read(venueClockProvider);
+    if (!ensureSupported(context, clock)) return;
     final nameController = TextEditingController();
     final notesController = TextEditingController();
-    var start = VenueTimezone.venueNow(timezone);
+    var start = clock.now;
     var end = start.add(const Duration(hours: 3));
 
     final confirmed = await showDialog<bool>(
@@ -109,24 +119,28 @@ class EventListScreen extends ConsumerWidget {
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('Start'),
-                subtitle: Text(
-                  '${VenueTimezone.formatWallDate(start)} ${VenueTimezone.formatWallTime(start)}',
-                ),
+                subtitle: Text(VenueClock.formatWallDateTime(start)),
                 trailing: const Icon(Icons.edit_calendar_outlined),
                 onTap: () async {
-                  final picked = await _pickDateTime(context, start, timezone);
+                  final picked = await pickVenueDateTime(
+                    context,
+                    initial: start,
+                    nowWall: clock.now,
+                  );
                   if (picked != null) setState(() => start = picked);
                 },
               ),
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('End'),
-                subtitle: Text(
-                  '${VenueTimezone.formatWallDate(end)} ${VenueTimezone.formatWallTime(end)}',
-                ),
+                subtitle: Text(VenueClock.formatWallDateTime(end)),
                 trailing: const Icon(Icons.edit_calendar_outlined),
                 onTap: () async {
-                  final picked = await _pickDateTime(context, end, timezone);
+                  final picked = await pickVenueDateTime(
+                    context,
+                    initial: end,
+                    nowWall: clock.now,
+                  );
                   if (picked != null) setState(() => end = picked);
                 },
               ),
@@ -156,8 +170,8 @@ class EventListScreen extends ConsumerWidget {
       await ref.read(eventsRepositoryProvider).createEvent(
             venueId: venueId,
             name: nameController.text.trim(),
-            startTime: VenueTimezone.toUtc(start, timezone),
-            endTime: VenueTimezone.toUtc(end, timezone),
+            startTime: clock.instant(start),
+            endTime: clock.instant(end),
             notes: notesController.text.trim().isEmpty
                 ? null
                 : notesController.text.trim(),
@@ -175,35 +189,6 @@ class EventListScreen extends ConsumerWidget {
           .showSnackBar(SnackBar(content: Text(message)));
     }
   }
-
-  Future<DateTime?> _pickDateTime(
-    BuildContext context,
-    DateTime initial,
-    String timezone,
-  ) async {
-    final date = await showDatePicker(
-      context: context,
-      initialDate: initial,
-      firstDate:
-          VenueTimezone.venueNow(timezone).subtract(const Duration(days: 1)),
-      lastDate: VenueTimezone.venueNow(timezone).add(const Duration(days: 365)),
-    );
-    if (date == null || !context.mounted) return null;
-
-    final time = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay.fromDateTime(initial),
-    );
-    if (time == null) return null;
-
-    return DateTime.utc(
-      date.year,
-      date.month,
-      date.day,
-      time.hour,
-      time.minute,
-    );
-  }
 }
 
 class _EventTile extends ConsumerWidget {
@@ -213,11 +198,8 @@ class _EventTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final timezone = ref.watch(activeVenueProvider)?.timezone ?? 'UTC';
-    String formatTime(DateTime value) {
-      return '${VenueTimezone.formatShortDate(value, timezone)} '
-          '${VenueTimezone.formatTime(value, timezone)}';
-    }
+    final clock = ref.watch(venueClockProvider);
+    String formatTime(DateTime value) => clock.formatDateTime(value);
 
     return ListTile(
       leading: Icon(_iconForStatus(event.status)),

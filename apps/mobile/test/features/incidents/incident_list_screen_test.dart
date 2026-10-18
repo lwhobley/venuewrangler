@@ -38,6 +38,14 @@ class _FakeIncidentsRepository implements IncidentsRepository {
   bool simulateOffline = false;
   String? lastReportedTitle;
   String? lastResolvedId;
+  Object? evidenceError;
+  List<String> evidenceUrls = const [];
+
+  @override
+  Future<List<String>> fetchEvidenceUrls(String incidentId) async {
+    if (evidenceError != null) throw evidenceError!;
+    return evidenceUrls;
+  }
 
   @override
   Future<List<Incident>> fetchIncidentsForVenue(String venueId) async =>
@@ -243,5 +251,41 @@ void main() {
     expect(fakeIncidents.lastReportedTitle, 'Broken glass');
     expect(fakeMedia.lastIncidentId, isNotNull);
     expect(fakeMedia.lastObjectPath, contains('org-1/venue-1/'));
+  });
+
+  testWidgets('a failure loading evidence is reported, not shown as none',
+      (tester) async {
+    final fakeRepo = _FakeIncidentsRepository([openIncident])
+      ..evidenceError = StateError('signing failed');
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: baseOverrides(fakeRepo),
+        child: const MaterialApp(home: IncidentListScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Spilled drink at bar'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Evidence could not be loaded.'), findsOneWidget);
+    expect(find.text('No evidence attached.'), findsNothing);
+  });
+
+  testWidgets('an incident without photos says there is no evidence',
+      (tester) async {
+    final fakeRepo = _FakeIncidentsRepository([openIncident]);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: baseOverrides(fakeRepo),
+        child: const MaterialApp(home: IncidentListScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Spilled drink at bar'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('No evidence attached.'), findsOneWidget);
   });
 }
