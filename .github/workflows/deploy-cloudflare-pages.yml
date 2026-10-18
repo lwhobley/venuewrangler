@@ -9,18 +9,9 @@ on:
     paths:
       - 'site/**'
       - 'packages/marketing/**'
-      - 'app/**'
-      - 'components/**'
-      - 'lib/**'
-      - 'modules/**'
-      - 'assets/**'
       - 'public/**'
-      - 'app.json'
-      - 'app.config.js'
       - 'package.json'
       - 'package-lock.json'
-      - 'metro.config.js'
-      - 'babel.config.js'
       - 'scripts/build-site.mjs'
       - 'scripts/site-build-files.mjs'
       - 'apps/mobile/**'
@@ -33,6 +24,11 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # Production deploys run in the `production` GitHub environment. Configure required
+    # reviewers and a `main`-only deployment branch rule on it (docs/security/
+    # secrets-handling.md) so a push alone cannot ship to every customer. The Cloudflare and
+    # Flutter production secrets should be moved from repository to environment scope.
+    environment: production
     concurrency:
       group: cloudflare-pages-production
       cancel-in-progress: false
@@ -51,6 +47,10 @@ jobs:
 
       - name: Install locked dependencies
         run: npm ci
+
+      # High/critical advisories in production dependencies block the deploy (audit O-05).
+      - name: Audit production npm dependencies
+        run: npm audit --omit=dev --audit-level=high
 
       - name: Verify site and workflow security
         run: npm test

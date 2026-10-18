@@ -3,6 +3,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { shouldCopySiteSource } from './site-build-files.mjs';
+import { checkHeaderHashes } from './csp-hashes.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 // Runs packages/marketing's "build" script (tsc --noEmit && vite build), not vite alone.
@@ -11,6 +12,12 @@ const marketing = spawnSync('npm', ['run', 'build', '-w', '@venue-wrangler/marke
 });
 if (marketing.error) throw marketing.error;
 if (marketing.status !== 0) process.exit(marketing.status ?? 1);
+// site/_headers allows inline scripts by SHA-256 hash (no 'unsafe-inline'). If a page's inline
+// script changed without updating the header, production would block it, so fail the build.
+const csp = checkHeaderHashes(join(root, 'site'));
+if (csp.unsafeInline || csp.missing.length || csp.stale.length) {
+  throw new Error(`site/_headers script-src is out of date (missing: ${csp.missing.join(', ') || 'none'}; stale: ${csp.stale.join(', ') || 'none'}; unsafe-inline: ${csp.unsafeInline}). Run: node scripts/csp-hashes.mjs --write`);
+}
 const output = join(root, 'dist-site');
 const marker = join(output, '.venue-site-build');
 if (existsSync(output)) {

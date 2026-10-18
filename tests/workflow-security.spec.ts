@@ -75,4 +75,56 @@ describe('CI workflow security', () => {
     }
     expect(offenders).toEqual([]);
   });
+
+  it('encrypts database backups client-side and refuses to run without a recipient', () => {
+    const backup = read('supabase-database-backup.yml');
+    expect(backup).toMatch(/environment:\s*production-backups/);
+    expect(backup).toContain('BACKUP_AGE_RECIPIENT');
+    expect(backup).toMatch(/:\s*"\$\{BACKUP_AGE_RECIPIENT:\?/);
+    expect(backup).toMatch(/age --recipient/);
+    expect(backup).toContain('.dump.gz.age');
+    // Never upload the plaintext archive.
+    expect(backup).not.toMatch(/aws s3 cp "\$archive"/);
+  });
+
+  it('has a restore drill that decrypts, restores and asserts row counts without uploading', () => {
+    const drill = read('supabase-restore-drill.yml');
+    expect(drill).toContain('workflow_dispatch');
+    expect(drill).toMatch(/schedule:/);
+    expect(drill).toContain('BACKUP_AGE_IDENTITY');
+    expect(drill).toContain('pg_restore');
+    for (const table of ['public.organizations', 'public.venues', 'public.memberships']) {
+      expect(drill).toContain(table);
+    }
+    expect(drill).not.toMatch(/upload-artifact/);
+    expect(drill).not.toMatch(/aws s3 cp\s+"?\$\{?[A-Za-z_]*dump/);
+  });
+
+  it('requires the production environment for the web deploy and watches no legacy Expo paths', () => {
+    const deploy = read('deploy-cloudflare-pages.yml');
+    expect(deploy).toMatch(/environment:\s*production/);
+    for (const legacy of ['app/**', 'components/**', 'lib/**', 'modules/**', 'assets/**', 'app.json', 'app.config.js', 'metro.config.js', 'babel.config.js']) {
+      expect(deploy).not.toContain(`- '${legacy}'`);
+    }
+  });
+
+  it('gates production npm dependencies on high-severity advisories in CI and deploy', () => {
+    for (const file of ['site-ci.yml', 'deploy-cloudflare-pages.yml']) {
+      expect(read(file)).toContain('npm audit --omit=dev --audit-level=high');
+    }
+  });
+
+  it('keeps the Edge Function lockfile frozen in CI', () => {
+    expect(read('supabase-ci.yml')).toContain('deno install --frozen');
+  });
+
+  it('keeps the Prowler workflow manual-only and free of backup AWS keys', () => {
+    const prowler = read('prowler-compliance.yml');
+    expect(prowler).not.toMatch(/^\s*schedule:/m);
+    expect(prowler).not.toContain('BACKUP_AWS');
+  });
+
+  it('does not ship the retired NestJS audit gate', () => {
+    expect(() => readFileSync('scripts/audit-gate.mjs', 'utf8')).toThrow();
+  });
 });

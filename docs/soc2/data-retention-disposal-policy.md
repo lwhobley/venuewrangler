@@ -1,63 +1,66 @@
 # Data Classification, Retention & Disposal Policy
 
-**Document Owner**: Security & Engineering  
-**Effective Date**: August 2026  
-**Review Cycle**: Annual  
+**Document Owner**: Principal (Loungeability LLC)
+**Last reviewed**: 2026-10-17
+**Review Cycle**: Annual
+
+States current behaviour as implemented in `supabase/migrations`, and separates roadmap items. See also the privacy policy (`docs/privacy-policy.md`), which must stay consistent with this document.
 
 ---
 
 ## 1. Purpose & Scope
 
-This policy defines the data classification tiers, retention periods, and secure cryptographic sanitization and disposal procedures for customer records, employee information, and audit trails processed by Venue Wrangler.
+Data classification, retention and disposal for data processed by Venue Wrangler. For staff and guest data entered by venues, **the venue is the controller and Venue Wrangler is the processor**; for account, billing and security data Loungeability LLC is the controller.
 
 ---
 
-## 2. Data Classification Matrix
+## 2. Data classification
 
-| Classification Tier | Description | Examples | Protection Controls |
-|---------------------|-------------|----------|---------------------|
-| **Restricted (Confidential)** | Highly sensitive business or security assets whose disclosure causes severe operational or financial harm. | Passwords (salted/hashed), POS connection secrets, Stripe customer IDs, JWT signing secrets, database credentials. | One-way hashing (PBKDF2/SHA-256), encrypted secrets manager, never logged, excluded from API responses. |
-| **Confidential (PII & Business Data)** | Sensitive customer operational and personal data. | Staff names, phone numbers, email addresses, shift schedules, time-clock entries, payroll exports, reservations, guest notes. | Multi-tenant isolation enforced, TLS in transit, AES-256 at rest, role-based access control. |
-| **Internal** | Non-public company documentation and aggregated operational telemetry. | System architectures, internal Slack communications, aggregated analytics. | Authentication required, internal access only. |
-| **Public** | Information intended for public distribution. | Marketing website content, public help documentation, Terms of Service, Privacy Policy. | Publicly accessible over HTTPS. |
-
----
-
-## 3. Data Retention Lifecycle
-
-| Data Category | Retention Window | Storage Medium | Deletion Method |
-|---------------|------------------|----------------|-----------------|
-| **Active Tenant Operational Data** | Duration of active subscription | Supabase PostgreSQL | Hard delete cascade upon tenant offboarding request. |
-| **Nightly Database Backups** | **30 Days** | Cloudflare R2 Bucket (encrypted at rest) | Automated R2 Object Lifecycle Rule (`Delete after 30 days`). |
-| **Security & System Audit Logs** | **365 Days** (1 Year) | PostgreSQL `AuditLog` table | Automated hard deletion by the daily `retention-cleanup` pg_cron job in Supabase. No immutable archive is currently claimed. |
-| **Application Error Traces (Sentry)** | **30 Days** | Sentry Cloud | Automated Sentry retention expiration. |
-| **Device Attestation Challenges** | **5 Minutes** | PostgreSQL `AttestationChallenge` | Ephemeral single-use expiration. |
+| Tier | Description | Examples | Controls today |
+|---|---|---|---|
+| **Restricted** | Disclosure causes severe harm | Service-role keys, database credentials, signing keys, OAuth client secrets, payroll/POS OAuth tokens, age backup identity, auth password hashes | Supabase/GitHub/Codemagic secret stores; never in the repository; backups of the `auth` schema are encrypted client-side |
+| **Confidential** | Personal and business data of customers | Staff names, emails, phones, schedules, time entries and punch GPS, HR pay data, guest records and allergy notes, reservations, chat, incident reports and photos | Tenant isolation by RLS, role-based access, TLS in transit, encryption at rest by the providers |
+| **Internal** | Non-public company information | Internal audits, architecture notes | The repository is currently public; internal audit documents should not be published (decision pending) |
+| **Public** | Intended for publication | Marketing site, terms, privacy policy | Served over HTTPS |
 
 ---
 
-## 4. Account Deletion & "Right to be Forgotten" Protocol
+## 3. Retention
 
-**Implementation status**: Non-owner self-deletion (items 1, 4, 5 below) is implemented —
-`public.request_account_deletion`, `supabase/migrations/20261007180000_account_deletion.sql`,
-exposed in-app via Settings → Delete account. Tenant offboarding (items 2's cascade-deletion
-half and item 3's media purge) is **not yet implemented**; a user who is the sole
-`organization_owner` of any organization is blocked from self-deleting rather than triggering
-it, with a message to add another owner first. Item 6 (written confirmation within 30 days)
-is a process commitment, not a system behavior, and isn't automated by anything below.
-
-When a customer cancels their subscription or requests account deletion under GDPR/CCPA:
-1. **Verification**: Request must originate from the authenticated account itself (the
-   in-app flow requires an active, signed-in session — there is no separate out-of-band
-   verification step for a request made by the account owner directly).
-2. **Cascade Deletion**: A final owner can explicitly confirm tenant offboarding in the app; the API deletes all venue-owned models (profiles, shifts, time entries, floor plans, reservations) transactionally. Non-owner account deletion removes only that user's account and profile.
-3. **Media Purge**: On tenant offboarding, the venue's images and documents are written to a durable deletion outbox in the same transaction. The API attempts deletion immediately and retries failed AWS S3 deletes hourly, escalating a job for manual review after repeated failures rather than retrying indefinitely. Non-owner account deletion purges that user's own profile photo the same way (queued via `storage_deletion_jobs`); it does not purge venue media: files uploaded into a venue are that venue's operational records and are removed when the venue is deleted.
-4. **Anonymization**: Timeclock or audit records belonging to the departing account that are retained for legal/tax purposes replace personal names and emails with synthetic identifiers (`deleted_user_[profile_id]`). Records belonging to *other* employees at the venue keep their identifying name, because FLSA §516.2 requires wage records to be attributable to the employee who worked them.
-5. **Wage-record retention**: Before a venue is deleted, its timeclock rows are copied to `RetainedTimeEntry` (`public.retained_time_entries`), which holds no foreign key to the venue, organization or the departed user's `auth.users` row and therefore survives both this deletion and any future venue/org cascade. This preserves the FLSA-required three-year payroll history for *all* staff at that venue, not only the account being deleted.
-6. **Confirmation**: Written confirmation of data destruction is provided to the customer within 30 days.
+| Data | Retention | Mechanism | Status |
+|---|---|---|---|
+| Active tenant operational data | While the subscription/account is active | Deleted when the venue or account is deleted | Implemented (self-deletion); tenant offboarding workflow partial |
+| `audit_log` | 365 days; `time_entry.correct` / `time_entry.void` rows 3 years | Daily pg_cron job `retention-cleanup` calling `app_hidden.run_retention_cleanup()` (06:17 UTC) | Implemented |
+| Wage and time records the law requires (retained time entries and wage profiles) | 3 years | Same job; held in restricted tables with no foreign key to the venue or the departed user | Implemented |
+| Raw GPS on finished time punches | 365 days by default (`app_hidden.platform_settings.gps_retention_days`) | Same job nulls the coordinates; times and verdicts are kept | Implemented in migration `20261017110000` (confirm applied) |
+| Raw POS webhook payloads | 90 days | Same job nulls `raw_payload` | Same migration |
+| Guest PII on finished reservations | Anonymized after 24 months | Same job | Same migration |
+| Invites | Resolved: 90 days; pending: 30 days after expiry | Same job | Same migration |
+| Notification events | 180 days | Same job | Same migration |
+| Device attestation challenges | Purged an hour after expiry | Same job | Implemented |
+| Rate-limit counters | 2 days | Same job | Same migration |
+| Database backups (Cloudflare R2, age-encrypted) | 30 days | R2 lifecycle rule on `database-backups/` | Partial **[verify rule in Cloudflare]** |
+| Storage mirror change journal | 30 days | R2 lifecycle rule on `storage-changes/` | Partial **[verify rule in Cloudflare]** |
+| Error diagnostics (Sentry) | About 30 days | Sentry project setting | **[verify in Sentry]** |
+| Email delivery records (Resend) | Per Resend defaults | Resend | **[verify in Resend]** |
 
 ---
 
-## 5. Media & Workstation Sanitization
+## 4. Account deletion & data-subject requests
 
-* **Cloud Storage**: Cloud disks (Cloud Run container ephemeral storage, Supabase volumes) are encrypted with provider-managed cryptographic erasure upon deletion.
-* **Employee Devices**: When laptops or storage drives reach end-of-life or are returned upon employee separation, drives undergo cryptographic zeroing (NIST SP 800-88 Rev. 1 compliant sanitize command).
+**Self-deletion (implemented).** A signed-in user can delete their own account in the app (Settings, Delete account; `public.request_account_deletion`). A user who is the sole owner of an organization is blocked until another owner exists. Deletion removes the sign-in and profile; wage records the law requires are retained in a restricted store for 3 years; files the user uploaded into a venue remain the venue's records, and the user's own profile photo is queued for deletion from Storage via `storage_deletion_jobs`. Pseudonymous traces (for example identifiers in older audit rows) are scrubbed by the privacy migration where applied; confirm with the migration notes.
+
+**Guest and lead erasure.** `erase_guest` (migration `20261017110000`, confirm applied) anonymizes reservation guest fields, removes CRM notes/activity/leads and POS guest names for a guest. There is no in-app button for guests themselves; venues request it.
+
+**Requests by email.** Requests to `admin@venuewrangler.com` are answered within 30 days **by manual process**; no ticketing or SLA tracking exists. For venue-controlled data the request is forwarded to the venue.
+
+**Tenant offboarding.** Final-owner deletion of an organization cascades its data; media purge runs through the deletion outbox and a worker. Written confirmation of destruction is a manual process and is not automated or evidenced.
+
+**Backups.** Deleted data persists in backups for up to 30 days and is not individually removed.
+
+---
+
+## 5. Media & workstation sanitization
+
+- **Cloud storage**: managed by Supabase and Cloudflare; deletion relies on their provider-side erasure.
+- **Workstations**: no formal sanitization procedure is performed. Roadmap: document wipe steps for retired devices; and keep the repository and credentials off cloud-synced folders (see `docs/security/secrets-handling.md`).

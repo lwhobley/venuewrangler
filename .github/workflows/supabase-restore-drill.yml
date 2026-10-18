@@ -1,0 +1,285 @@
+name: Supabase Restore Drill
+
+# Proves the nightly backup is actually restorable. Monthly (and on demand) it:
+#   1. finds the newest database-backups/*.dump.gz.age object in Cloudflare R2,
+#   2. downloads and decrypts it with the offline-held age identity,
+#   3. restores it with pg_restore into a throwaway supabase/postgres container, and
+#   4. asserts that organizations, venues and memberships contain rows.
+#
+# It fails loudly if any step does not hold. Nothing sensitive is uploaded: the plaintext dump
+# lives only on the ephemeral runner (deleted at the end of the job, which is destroyed anyway)
+# and the job summary contains table names and row COUNTS only, never row contents.
+#
+# The run log and step summary are the SOC 2 evidence that a restore was tested
+# (docs/soc2/soc2-controls-matrix.md, A1.2/A1.3).
+#
+# Required in the `backup-restore-drill` GitHub environment (add required reviewers there so
+# the private age identity can only be used with a human approval):
+#   secrets: BACKUP_AGE_IDENTITY   the PRIVATE age identity (AGE-SECRET-KEY-1...)
+#            R2_RESTORE_ACCESS_KEY_ID / R2_RESTORE_SECRET_ACCESS_KEY   an R2 token with
+#            Object READ ONLY on the backup bucket (do not reuse the backup job's read/write token)
+#   vars:    R2_ACCOUNT_ID, R2_BACKUP_BUCKET, optional R2_JURISDICTION
+#
+# The database dump is restored into a local container only. This workflow never connects to
+# the production database or to Supabase.
+
+on:
+  workflow_dispatch:
+  schedule:
+    # 07:00 UTC on the 1st of every month.
+    - cron: '0 7 1 * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-restore-drill
+  cancel-in-progress: false
+
+jobs:
+  restore-drill:
+    name: Restore latest backup into an ephemeral database
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: backup-restore-drill
+
+    services:
+      # Same image/tag as supabase-ci.yml (major_version 15 in supabase/config.toml). It already
+      # provides the Supabase roles (anon, authenticated, service_role, ...) a restore expects.
+      postgres:
+        image: supabase/postgres:15.19.0.004
+        env:
+          POSTGRES_USER: supabase_admin
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.R2_RESTORE_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_RESTORE_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: auto
+      R2_ACCOUNT_ID: ${{ vars.R2_ACCOUNT_ID }}
+      BACKUP_BUCKET: ${{ vars.R2_BACKUP_BUCKET }}
+      R2_JURISDICTION: ${{ vars.R2_JURISDICTION }}
+      BACKUP_AGE_IDENTITY: ${{ secrets.BACKUP_AGE_IDENTITY }}
+      # The throwaway database in the service container. Not a real credential.
+      PGHOST: localhost
+      PGPORT: '5432'
+      PGUSER: supabase_admin
+      PGPASSWORD: postgres
+      PG_CLIENT_IMAGE: postgres:17-alpine@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193
+      # The newest backup must be younger than this, otherwise the nightly job is not running.
+      MAX_BACKUP_AGE_HOURS: '36'
+
+    steps:
+      - name: Verify configuration
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          : "${AWS_ACCESS_KEY_ID:?R2_RESTORE_ACCESS_KEY_ID is not configured}"
+          : "${AWS_SECRET_ACCESS_KEY:?R2_RESTORE_SECRET_ACCESS_KEY is not configured}"
+          : "${R2_ACCOUNT_ID:?R2_ACCOUNT_ID is not configured}"
+          : "${BACKUP_BUCKET:?R2_BACKUP_BUCKET is not configured}"
+          : "${BACKUP_AGE_IDENTITY:?BACKUP_AGE_IDENTITY is not configured}"
+          clean() { printf '%s' "$1" | tr -d '[:space:]'; }
+          account="$(clean "$R2_ACCOUNT_ID")"
+          if [ "${#account}" -ne 32 ]; then
+            echo "::error::R2_ACCOUNT_ID must be the 32-character Cloudflare account ID"
+            exit 1
+          fi
+          case "$(clean "$BACKUP_AGE_IDENTITY")" in
+            AGE-SECRET-KEY-1*) ;;
+            *) echo "::error::BACKUP_AGE_IDENTITY must be an age identity (AGE-SECRET-KEY-1...)"; exit 1 ;;
+          esac
+          echo "::add-mask::$(clean "$AWS_ACCESS_KEY_ID")"
+          echo "::add-mask::$(clean "$AWS_SECRET_ACCESS_KEY")"
+          echo "::add-mask::$(clean "$BACKUP_AGE_IDENTITY")"
+          jur="$(clean "${R2_JURISDICTION:-}" | tr '[:upper:]' '[:lower:]')"
+          case "$jur" in
+            '') host="${account}.r2.cloudflarestorage.com" ;;
+            *[!a-z]*) echo "::error::R2_JURISDICTION must be letters only (e.g. us, eu)"; exit 1 ;;
+            *) host="${account}.${jur}.r2.cloudflarestorage.com" ;;
+          esac
+          {
+            echo "BACKUP_BUCKET=$(clean "$BACKUP_BUCKET")"
+            echo "R2_ENDPOINT=https://${host}"
+          } >> "$GITHUB_ENV"
+
+      - name: Install pinned AWS CLI (S3 client for R2)
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          curl --fail --silent --show-error --location \
+            https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.36.19.zip \
+            --output /tmp/awscliv2.zip
+          unzip -q /tmp/awscliv2.zip -d /tmp
+          sudo /tmp/aws/install --update
+
+      - name: Install age
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends age
+          version="$(age --version)"
+          echo "age ${version}"
+          case "$version" in
+            1.1.*|1.2.*|1.3.*) ;;
+            *) echo "::error::Unexpected age version ${version}"; exit 1 ;;
+          esac
+
+      - name: Find the newest backup
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          AWS_ACCESS_KEY_ID="$(printf '%s' "$AWS_ACCESS_KEY_ID" | tr -d '[:space:]')"
+          AWS_SECRET_ACCESS_KEY="$(printf '%s' "$AWS_SECRET_ACCESS_KEY" | tr -d '[:space:]')"
+          export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY
+          # Key names embed a UTC timestamp, so the lexicographically greatest key is the newest.
+          # Legacy un-encrypted *.dump.gz objects are deliberately ignored.
+          latest="$(aws s3api list-objects-v2 --bucket "$BACKUP_BUCKET" --prefix database-backups/ \
+            --endpoint-url "$R2_ENDPOINT" --query 'Contents[].Key' --output text \
+            | tr '\t' '\n' | { grep -E '\.dump\.gz\.age$' || true; } | sort | tail -n 1)"
+          if [ -z "$latest" ]; then
+            echo "::error::No database-backups/*.dump.gz.age object found in the backup bucket"
+            exit 1
+          fi
+          stamp="$(printf '%s' "$latest" | sed -nE 's/.*-([0-9]{8}T[0-9]{6}Z)\.dump\.gz\.age$/\1/p')"
+          if [ -z "$stamp" ]; then
+            echo "::error::Could not parse a timestamp from the newest backup key"
+            exit 1
+          fi
+          iso="${stamp:0:4}-${stamp:4:2}-${stamp:6:2}T${stamp:9:2}:${stamp:11:2}:${stamp:13:2}Z"
+          age_hours=$(( ( $(date -u +%s) - $(date -u -d "$iso" +%s) ) / 3600 ))
+          echo "Newest backup: ${latest} (${age_hours}h old)"
+          if [ "$age_hours" -gt "$MAX_BACKUP_AGE_HOURS" ]; then
+            echo "::error::Newest backup is ${age_hours}h old (limit ${MAX_BACKUP_AGE_HOURS}h). The nightly backup job is not producing backups."
+            exit 1
+          fi
+          echo "BACKUP_KEY=${latest}" >> "$GITHUB_ENV"
+          echo "BACKUP_AGE_HOURS=${age_hours}" >> "$GITHUB_ENV"
+
+      - name: Download and decrypt the backup
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          AWS_ACCESS_KEY_ID="$(printf '%s' "$AWS_ACCESS_KEY_ID" | tr -d '[:space:]')"
+          AWS_SECRET_ACCESS_KEY="$(printf '%s' "$AWS_SECRET_ACCESS_KEY" | tr -d '[:space:]')"
+          export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY
+          work="$(mktemp -d "${RUNNER_TEMP}/drill.XXXXXX")"
+          chmod 700 "$work"
+          echo "DRILL_DIR=${work}" >> "$GITHUB_ENV"
+          aws s3 cp "s3://${BACKUP_BUCKET}/${BACKUP_KEY}" "${work}/backup.dump.gz.age" \
+            --endpoint-url "$R2_ENDPOINT" --only-show-errors
+          expected="$(aws s3api head-object --bucket "$BACKUP_BUCKET" --key "$BACKUP_KEY" \
+            --endpoint-url "$R2_ENDPOINT" --query ContentLength --output text)"
+          actual="$(stat -c %s "${work}/backup.dump.gz.age")"
+          if [ "$expected" != "$actual" ]; then
+            echo "::error::Downloaded size ${actual} does not match object size ${expected}"
+            exit 1
+          fi
+          # The identity is written to a 0600 file in a 0700 directory and removed right away.
+          umask 077
+          printf '%s\n' "$BACKUP_AGE_IDENTITY" | tr -d '\r' > "${work}/identity.txt"
+          age --decrypt --identity "${work}/identity.txt" --output "${work}/backup.dump.gz" \
+            "${work}/backup.dump.gz.age"
+          shred -u "${work}/identity.txt" 2>/dev/null || rm -f "${work}/identity.txt"
+          gzip --test "${work}/backup.dump.gz"
+          gunzip "${work}/backup.dump.gz"
+          docker run --rm --volume "${work}:/work:ro" "$PG_CLIENT_IMAGE" \
+            pg_restore --list /work/backup.dump > "${work}/toc.txt"
+          echo "Backup decrypted and its table of contents is readable ($(wc -l < "${work}/toc.txt") entries)."
+
+      - name: Prepare the ephemeral database
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          psql_c() { docker run --rm -i --network host -e PGPASSWORD -e PGHOST -e PGPORT -e PGUSER \
+            "$PG_CLIENT_IMAGE" psql -v ON_ERROR_STOP=1 "$@"; }
+          until docker run --rm --network host -e PGPASSWORD -e PGHOST -e PGPORT -e PGUSER \
+            "$PG_CLIENT_IMAGE" pg_isready -q; do sleep 3; done
+          psql_c -d postgres -c 'CREATE DATABASE restore_drill;'
+          # The dump holds only public/app_hidden/auth/storage; extensions are created by the
+          # platform, so recreate the ones the schemas depend on (pgcrypto is used by defaults).
+          psql_c -d restore_drill <<'SQL'
+          CREATE SCHEMA IF NOT EXISTS extensions;
+          CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
+          CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA extensions;
+          SQL
+
+      - name: Restore with pg_restore
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          # --no-owner/--no-privileges: ownership and grants belong to the hosted platform and
+          # are not part of what the drill proves. Object errors are logged (not fatal) because
+          # a managed-platform dump replayed into a stock image can legitimately differ in
+          # platform-owned objects; the row-count assertions below are the hard gate.
+          set +e
+          docker run --rm --network host -e PGPASSWORD -e PGHOST -e PGPORT -e PGUSER \
+            --volume "${DRILL_DIR}:/work:ro" "$PG_CLIENT_IMAGE" \
+            pg_restore --no-owner --no-privileges --dbname restore_drill --jobs 2 \
+            /work/backup.dump > "${DRILL_DIR}/restore.log" 2>&1
+          status=$?
+          set -e
+          errors="$(grep -c 'pg_restore: error' "${DRILL_DIR}/restore.log" || true)"
+          echo "pg_restore exit status: ${status}; error lines: ${errors}"
+          echo "RESTORE_STATUS=${status}" >> "$GITHUB_ENV"
+          echo "RESTORE_ERRORS=${errors}" >> "$GITHUB_ENV"
+          if [ "$errors" -gt 0 ]; then
+            echo "::warning::pg_restore reported ${errors} error line(s). First lines follow (object names only; row data is never logged):"
+            grep 'pg_restore: error' "${DRILL_DIR}/restore.log" | head -n 20 | cut -c1-300
+          fi
+
+      - name: Assert restored data and print summary
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          count() {
+            docker run --rm --network host -e PGPASSWORD -e PGHOST -e PGPORT -e PGUSER \
+              "$PG_CLIENT_IMAGE" psql -v ON_ERROR_STOP=1 -At -d restore_drill -c "select count(*) from $1"
+          }
+          failed=0
+          {
+            echo "## Supabase restore drill"
+            echo
+            echo "- Backup object: \`${BACKUP_KEY}\` (${BACKUP_AGE_HOURS}h old)"
+            echo "- pg_restore exit status: ${RESTORE_STATUS}; error lines: ${RESTORE_ERRORS}"
+            echo
+            echo "| Table | Rows | Result |"
+            echo "|---|---:|---|"
+          } >> "$GITHUB_STEP_SUMMARY"
+          for table in public.organizations public.venues public.memberships auth.users; do
+            if rows="$(count "$table")"; then :; else rows=""; fi
+            if [ -z "$rows" ] || [ "$rows" -le 0 ]; then
+              echo "::error::${table} has no rows (or could not be read) after restore"
+              echo "| ${table} | ${rows:-n/a} | FAIL |" >> "$GITHUB_STEP_SUMMARY"
+              failed=1
+            else
+              echo "${table}: ${rows} rows"
+              echo "| ${table} | ${rows} | ok |" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          done
+          if [ "$failed" -ne 0 ]; then
+            echo "::error::Restore drill FAILED: the latest backup did not restore usable data."
+            echo >> "$GITHUB_STEP_SUMMARY"
+            echo "**Result: FAILED**" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          echo >> "$GITHUB_STEP_SUMMARY"
+          echo "**Result: PASSED**: the newest backup decrypts and restores with non-empty core tables." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove decrypted material
+        if: always()
+        shell: bash
+        run: |
+          if [ -n "${DRILL_DIR:-}" ] && [ -d "$DRILL_DIR" ]; then
+            find "$DRILL_DIR" -type f -exec shred -u {} + 2>/dev/null || rm -rf "$DRILL_DIR"
+            rm -rf "$DRILL_DIR"
+          fi

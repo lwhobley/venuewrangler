@@ -1,7 +1,19 @@
 # Cloudflare Pages security headers for the static marketing/join site.
-# script-src/style-src keep 'unsafe-inline' because the pages ship inline
-# scripts and <style> blocks; the remaining directives still block framing,
-# object embeds, and cross-origin exfiltration to anything but the API.
+# script-src has NO 'unsafe-inline': each executable inline <script> in site/**/*.html is
+# allowed by its SHA-256 hash instead, so injected markup cannot run script (audit F-06).
+# Do not edit the hashes by hand. After changing an inline script run
+# `node scripts/csp-hashes.mjs --write`; tests/site-csp.spec.ts and `npm run build:site`
+# fail if this list and the pages drift apart. (JSON-LD blocks are data, not executed, and
+# need no hash.)
+# style-src keeps 'unsafe-inline' deliberately: the marketing build (Tailwind/React) and the
+# static pages use inline style attributes and <style> blocks. Style injection is a much
+# weaker primitive than script injection and CSS-only exfiltration is blocked by
+# connect-src/img-src/font-src, so the cost of nonce-ing every style outweighs the benefit.
+# The remaining directives block framing, object embeds, and cross-origin exfiltration.
+#
+# Cross-Origin-Opener-Policy: same-origin-allow-popups isolates the browsing context group
+# but still lets the app open provider/checkout tabs. Cross-Origin-Resource-Policy:
+# same-site stops third parties embedding or hot-linking our assets (images, scripts, wasm).
 #
 # HSTS is set here as well as by helmet on the API, because this site serves
 # the invite/join flow and the tokens that go with it. `preload` is
@@ -10,12 +22,14 @@
 # HTTPS. Add it only as a separate, deliberate decision once every subdomain is
 # confirmed HTTPS-only.
 /*
-  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; media-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'sha256-KQIs7Jr13j3VDIIMUDNRwBUWBbH9Bk01sbyF0CiNZ6w=' 'sha256-Y0RFDgNxaSarV5gGm2RcV00pgUtl+I24C1GlgbWSC0Q='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; media-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'
   Strict-Transport-Security: max-age=31536000; includeSubDomains
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(), microphone=(), geolocation=()
+  Cross-Origin-Opener-Policy: same-origin-allow-popups
+  Cross-Origin-Resource-Policy: same-site
 
 # Apple fetches this through its CDN and requires application/json. The file
 # is deliberately extensionless (Apple mandates the exact name), so Pages has

@@ -1,98 +1,91 @@
 # Production operations
 
+Venue Wrangler runs on **Supabase** (Postgres, Auth, Storage, Edge Functions) and **Cloudflare** (Pages for the website and the Flutter web app at `/app`, R2 for backups). Mobile apps are built and signed in **Codemagic**. Earlier versions of this document described a NestJS/Prisma API on Google Cloud Run deployed by `deploy-api.yml`; that is decommissioned (see "Legacy" at the end).
+
+## Subprocessors
+
+This list must match `docs/privacy-policy.md`, `site/privacy/index.html` and `docs/soc2/vendor-management-policy.md`. Change all four together.
+
+| Subprocessor | Use |
+|---|---|
+| Supabase | Database, authentication, file storage, Edge Functions |
+| Cloudflare | Pages hosting and CDN; R2 backup storage |
+| Stripe | Subscription payments |
+| Resend | Transactional email |
+| Sentry | Crash and error diagnostics |
+| Groq | AI assistant, only when an organization enables AI |
+| Google Firebase Cloud Messaging, Apple APNs | Push notifications |
+| Google Play Integrity, Apple App Attest | Device/app integrity |
+| Cloudmersive, ClamAV | Malware scanning of uploaded documents |
+| Square, Toast, QuickBooks (Intuit), Gusto | Optional integrations a venue connects |
+
+Not used by the current product and not to be listed: AWS S3, Google Cloud Run/Cloud Storage, Google Gemini, Apple In-App Purchase.
+
 ## Health and monitoring
 
-- API: `https://venue-wrangler-api-922889404273.us-east1.run.app/api/health`
-- Cloud Run service: `venue-wrangler-api` in `us-east1`
-- The `venue_wrangler_5xx` log-based metric counts HTTP 5xx responses.
-- Alert policy: `Venue Wrangler API 5xx errors` (`projects/venuewrangler/alertPolicies/7994759751285739344`).
-- The policy is enabled and sends email notifications to both the primary notification channel (`projects/venuewrangler/notificationChannels/526772857379885924`, `lwhobley@gmail.com`) and secondary destination (`projects/venuewrangler/notificationChannels/5688119539037926179`, `venuewrangler@gmail.com`).
+- Supabase dashboard: database health, API/Auth/Edge Function logs, advisors (security and performance).
+- Sentry: client and Edge Function errors (alerts go to the principal's email).
+- GitHub Actions: failed scheduled runs of the backup, storage-backup and restore-drill workflows are the backup alarm. Make sure GitHub notifies on failed workflow runs.
+- `public.ops_health_report()` (service role) lists silent failures such as stuck deletion jobs; any `critical` or `warning` row needs action.
+- There is no staging environment and no on-call rota; the principal is the only responder.
 
-## Rollback
+## Release and rollback
 
-Cloud Run keeps immutable revisions. To roll back, list revisions and route traffic to the last known-good one:
+**Web app and site.** Pushing to `main` runs `.github/workflows/deploy-cloudflare-pages.yml` (tests, `npm audit` gate, Flutter analyze/test, build, `wrangler pages deploy`). The job is bound to the GitHub `production` environment: configure required reviewers and a `main`-only deployment rule on it so a push alone cannot ship. To roll back, promote the previous deployment in the Cloudflare Pages dashboard or revert the commit and let the workflow redeploy. Then verify `https://venuewrangler.com/app/` loads and sign-in works.
 
-```bash
-gcloud run revisions list --service=venue-wrangler-api --region=us-east1 --project=venuewrangler
-gcloud run services update-traffic venue-wrangler-api \
-  --to-revisions=venue-wrangler-api-REVISION=100 \
-  --region=us-east1 --project=venuewrangler
-```
+**Database and Edge Functions.** There is no automated deployment. Migrations (`supabase db push` or the SQL editor) and functions (`supabase functions deploy`) are applied by hand by the principal. Migrations are forward-only; to undo one, write a new forward migration. Take a manual backup (run `Supabase Database Backup` via `workflow_dispatch`) before a risky migration.
 
-After rollback, verify `/api/health`, `/api/v1/documents` (expect `401` without a session), and the mobile client login flow.
+**Mobile apps.** Codemagic builds TestFlight/Play builds from tags on `main`; store review and phased rollout are the rollback levers (expedited review for fixes).
+
+**Release checklist**
+1. CI is green: Site CI, Supabase CI (pgTAP + Deno), Flutter CI.
+2. Review pending migrations; back up first if destructive.
+3. Merge to `main` (approve the `production` environment if reviewers are configured).
+4. Smoke test sign-in, the time clock, and checkout against Stripe.
+5. Record the previous Pages deployment ID for rollback.
+6. Confirm the `retention-cleanup` pg_cron job's latest run succeeded.
 
 ## Database backups and restore
 
-The Flutter production database is Supabase. Confirm the current project and plan in the Supabase dashboard before treating managed backups as the primary recovery path. `.github/workflows/supabase-database-backup.yml` is its nightly logical backup. Cloudflare R2 is the only backup destination. Deploys also require `backups_and_restore_verified=true`.
+**What exists.**
+- `.github/workflows/supabase-database-backup.yml`: nightly at 04:00 UTC. It takes a logical `pg_dump` of `public`, `app_hidden`, `auth` and `storage`, checks it with `pg_restore --list`, gzips it, **encrypts it client-side with `age`** to the public recipient `BACKUP_AGE_RECIPIENT`, and uploads `database-backups/supabase-<ref>-<UTC timestamp>.dump.gz.age` to the Cloudflare R2 bucket, then verifies the uploaded size. It **fails** if no recipient is configured, so a plaintext dump can never be uploaded. The job runs in the GitHub environment `production-backups`.
+- `.github/workflows/supabase-storage-backup.yml`: daily at 05:00 UTC; mirrors every Storage bucket to `storage-mirror/<bucket>/` and keeps changed/deleted objects under `storage-changes/<date>/` for 30 days; fails if file count or bytes differ. The database dump holds Storage metadata only, not file bytes.
+- `.github/workflows/supabase-restore-drill.yml`: monthly (and on demand). Downloads the newest backup, decrypts it with `BACKUP_AGE_IDENTITY`, restores it with `pg_restore` into an ephemeral `supabase/postgres` container, and asserts that `organizations`, `venues`, `memberships` and `auth.users` have rows. It fails loudly otherwise and uploads nothing. **The drill's run summary is the SOC 2 evidence that a restore was tested.** Until it has passed once, backups are unproven.
 
-For the Flutter Supabase project, configure `SUPABASE_PRODUCTION_DB_URL` with the authoritative session-pooler or direct database URL and set `SUPABASE_PRODUCTION_PROJECT_REF` to that project's ref. The backup workflow also needs an R2 API token (Object Read & Write, scoped to the backup bucket) in the secrets `R2_BACKUP_ACCESS_KEY_ID` and `R2_BACKUP_SECRET_ACCESS_KEY`, and the repository variables `R2_ACCOUNT_ID` and `R2_BACKUP_BUCKET`. It takes a nightly logical dump of `public`, `app_hidden`, `auth`, and `storage`, checks archive readability, uploads it to R2 under `database-backups/` (R2 encrypts all objects at rest), and confirms the uploaded size. Retention is a 30-day R2 object lifecycle rule on the `database-backups/` prefix, configured on the bucket. A successful scheduled run and a restore drill are required before claiming the backup is operational. Database dumps contain Storage metadata, not object bytes. `.github/workflows/supabase-storage-backup.yml` backs up the files: daily at 05:00 UTC it mirrors every Storage bucket to R2 under `storage-mirror/<bucket>/`, and anything changed or deleted since the last run is kept under `storage-changes/<date>/`. It needs the secrets `SUPABASE_STORAGE_S3_ACCESS_KEY_ID` and `SUPABASE_STORAGE_S3_SECRET_ACCESS_KEY` (Supabase dashboard → Project Settings → Storage → S3 Connection → New access key) and optionally the variable `SUPABASE_STORAGE_S3_REGION` (default `us-east-1`; use the project's region). Add an R2 lifecycle rule that deletes the `storage-changes/` prefix after 30 days; never put one on `storage-mirror/`. The run fails if any bucket's file count or byte total in the mirror differs from the source. To restore a bucket, copy `storage-mirror/<bucket>/` back with `rclone copy`, then fix up any object listed under `storage-changes/` that should be restored.
+**Recovery point.** The nightly dump means an RPO of **up to 24 hours**. **Enable Supabase PITR** (paid add-on) if the plan allows: it brings the RPO to minutes and is the recommended control for payroll and time records. RTO has not been measured.
 
-Never store a database password in this repository. The Cloud Run `DATABASE_URL` and Prisma migration steps below apply to the legacy API. Restore the Flutter Supabase database into a separate Supabase project, verify Auth and application data there, and only then plan a production cutover.
+**One-time setup the operator must do.**
+1. Generate an age key pair offline (`age-keygen`). Store the identity offline in two places.
+2. Create GitHub environments `production-backups` and `backup-restore-drill` (required reviewer on the latter). Put these in `production-backups`: `SUPABASE_PRODUCTION_DB_URL` (secret), `R2_BACKUP_ACCESS_KEY_ID`, `R2_BACKUP_SECRET_ACCESS_KEY` (secrets), `BACKUP_AGE_RECIPIENT` (public key; secret or variable), and the variables `SUPABASE_PRODUCTION_PROJECT_REF`, `R2_ACCOUNT_ID`, `R2_BACKUP_BUCKET`, optionally `R2_JURISDICTION`. Put these in `backup-restore-drill`: `BACKUP_AGE_IDENTITY` (secret), `R2_RESTORE_ACCESS_KEY_ID`, `R2_RESTORE_SECRET_ACCESS_KEY` (an R2 **read-only** token on the bucket), and the variables `R2_ACCOUNT_ID`, `R2_BACKUP_BUCKET`, `R2_JURISDICTION`.
+3. On the R2 bucket: add a lifecycle rule deleting `database-backups/` after 30 days and `storage-changes/` after 30 days (never on `storage-mirror/`), and enable **bucket lock** (a retention rule on `database-backups/` for at least 30 days, and versioning if available) so a leaked token cannot delete or overwrite backups. Cloudflare R2 tokens are not write-only (the backup job also needs read for its size check), so immutability must come from bucket lock, not from the token. Use a token scoped to this one bucket.
+4. Run `Supabase Database Backup` manually, confirm a `.dump.gz.age` object appears, then run `Supabase Restore Drill` and keep the passing run.
 
-Production credentials on the Cloud Run service and both release jobs must use
-Secret Manager references (`--update-secrets` / `--set-secrets`), never literal
-`--set-env-vars` values. The deployment workflow rejects literal database, JWT,
-AWS, billing, email, and Gemini credentials before it changes production.
+**Restoring for real.** Create a new Supabase project, apply `supabase/migrations`, or restore the decrypted dump into it with `pg_restore --no-owner`; verify Auth and application data there before pointing the app at it. The app's Supabase URL/anon key (`FLUTTER_PRODUCTION_ENV_JSON`, Codemagic) and the host in the `/app` CSP (`site/_worker.js`) must change together. Never store a database password in this repository. To restore a Storage bucket, `rclone copy` from `storage-mirror/<bucket>/`.
 
-Serving revisions must not contain `DATABASE_DIRECT_URL`; that owner/direct
-credential belongs only on the single-run migration job. Production startup
-also requires TLS (`sslmode=require`) on `DATABASE_URL`.
-
-Pin serving and release-job credentials to numbered Secret Manager versions.
-The deployment workflow copies the traffic-serving revision's database version
-to both jobs; migration's direct credential must also be pinned and address the
-same Supabase project, database, and schema. Never use `latest` for these
-credentials: a secret rotation previously redirected retention to a database
-without `RetainedTimeEntry` while the serving API remained on version `1`.
-Retention now checks the migration history before it can delete any records.
-
-## Client edition and clock behavior
-
-EAS preview/production and the hosted web build explicitly select the restaurant
-edition with `EXPO_PUBLIC_RESTAURANT_CORE_ONLY=true`. Select
-`restaurant_core_only=true` in API deployment to match. Full venue builds set
-both client/API edition flags to false and retain the original dashboard.
-Unconfigured local flags default to the full venue edition on both sides.
-
-Clock punches require an online response. Failed requests display an error and
-are never automatically replayed under another identity or at a later punch
-time. Staff should check their current status before retrying after an ambiguous
-network failure and request a time correction for a missed punch. Shared tablet
-clock mode is not exposed until its identity and punch workflow is implemented.
-The supported native production platform remains iOS; Android is not signed off
-until Play Integrity verification is implemented.
-
-## Document malware scanning
-
-Production document uploads stream every validated file through a private
-ClamAV daemon before S3 upload. Configure `CLAMAV_HOST` and ensure Cloud Run can
-reach TCP port `3310`; the deployment workflow records the approved host on the
-candidate revision. Uploads fail closed if the scanner is absent, times out, or
-returns an indeterminate result. Do not expose the ClamAV daemon to the public
-internet. In the production GCP project, ClamAV is deployed in the GKE cluster
-`stadium-wrangler-broker` under the `clamav` namespace with an internal load
-balancer service (`10.142.15.221:3310`), reachable from Cloud Run via the
-`stadium-cloud-run` Serverless VPC Access connector. Legacy OLE Office formats
-(`.doc`, `.xls`, `.ppt`) are intentionally blocked; use modern `.docx`, `.xlsx`,
-or `.pptx` files.
+Decryption: `age --decrypt -i identity.txt -o dump.gz file.dump.gz.age && gunzip dump.gz`.
 
 ## Retention cleanup
 
-Retention runs inside the Supabase database: pg_cron calls `app_hidden.run_retention_cleanup()` daily at 06:17 UTC (`supabase/migrations/20261010120000_retention_cleanup_in_database.sql`). It deletes audit log rows older than 365 days, attestation challenges more than an hour past expiry, and retained wage records (`retained_time_entries`) older than three years. No external cloud account is involved. To check it, run `select * from cron.job_run_details where jobid = (select jobid from cron.job where jobname = 'retention-cleanup') order by start_time desc limit 5;` in the Supabase SQL editor. Treat a failed or missing run as an operational alert.
+pg_cron calls `app_hidden.run_retention_cleanup()` daily at 06:17 UTC (`supabase/migrations/20261010120000_retention_cleanup_in_database.sql`, extended by later migrations such as `20261017110000_audit_privacy_retention_and_evidence.sql`). It deletes audit-log rows after 365 days (time-entry corrections/voids after 3 years), attestation challenges after expiry, and retained wage records after 3 years, and in the later migration nulls raw POS payloads after 90 days, anonymizes guest data on reservations after 24 months, purges old invites and notification events, and nulls raw punch GPS after the configured period (default 365 days). To check it, run `select * from cron.job_run_details where jobid = (select jobid from cron.job where jobname = 'retention-cleanup') order by start_time desc limit 5;` in the Supabase SQL editor. Treat a failed or missing run as an operational alert.
 
-### Connection budget
+## Document malware scanning
 
-Set `DATABASE_POOL_SIZE=5` for each Cloud Run revision unless the Supabase connection budget and Cloud Run maximum instance count have been reviewed together. The current database permits 60 backend connections. Cloud Run service-level autoscaling is capped at 8 instances (40 pooled connections), leaving 20 connections for Supabase administration, migrations, and incident response. Recheck this budget before changing either limit.
+The `documents-upload` Edge Function scans every validated file (ClamAV daemon via `CLAMAV_HOST`/`CLAMAV_PORT`, and/or Cloudmersive via `CLOUDMERSIVE_API_KEY`) before storing it and rejects the upload if scanning fails. Do not expose the ClamAV daemon to the public internet. **[operator to confirm where the ClamAV daemon runs now; earlier notes referred to a Google Kubernetes Engine cluster that is part of the decommissioned Google Cloud setup.]** Legacy OLE Office formats (`.doc`, `.xls`, `.ppt`) are intentionally blocked; use `.docx`, `.xlsx` or `.pptx`.
 
-## POS webhook secret rotation
+## POS and OAuth secrets
 
-Managers can rotate a compromised or stale POS secret with `POST /api/v1/pos/connections/:id/rotate-secret`. The connection lookup is venue-scoped. The response displays the new plaintext secret once; only its SHA-256 digest is stored. Update the POS integration immediately because the old secret stops authenticating as soon as rotation completes. Never paste the plaintext secret into source control, tickets, or logs.
+POS webhook secrets are stored only as SHA-256 digests; rotate a stale or exposed one through the app's POS connection settings (the new secret is displayed once). OAuth client secrets for Square, QuickBooks and Gusto live in Supabase secrets; rotation steps are in `docs/security/secrets-handling.md`. Never paste plaintext secrets into source control, tickets or logs.
 
-## Release checklist
+## Clock behavior
 
-1. Confirm GitHub Mobile CI and API CI are green.
-2. Deploy through `.github/workflows/deploy-api.yml`; its production gate requires verified backups/restore, secondary alerting, billing configuration, an approved attestation mode and Team ID, and a successful migration job before traffic changes.
-3. Confirm Stripe live checkout creates a subscription for an authenticated venue.
-4. Confirm the alert notification channel is verified.
-5. Record the current revision ID before every deploy for rollback.
-6. Confirm the `retention-cleanup` pg_cron job's most recent run succeeded (see Retention cleanup above).
+Clock punches require an online response. Failed requests display an error and are never replayed later under another identity or time; staff should check their status before retrying and request a time correction for a missed punch. Punch location is reported by the client and can be spoofed, so geofencing is a deterrent rather than proof.
+
+## Security configuration
+
+- Hosted auth settings the operator must apply by hand: `docs/security/hosted-auth-settings.md`.
+- Secrets, rotation and GitHub environment/branch-protection settings: `docs/security/secrets-handling.md`.
+- Compliance posture (honest status): `docs/soc2/soc2-controls-matrix.md`.
+
+## Legacy (decommissioned, do not use)
+
+The following existed in earlier versions of this document and no longer apply: the NestJS/Prisma API on Google Cloud Run (`venue-wrangler-api`), `.github/workflows/deploy-api.yml` and its production gate, Secret Manager credential pinning for Cloud Run, the Cloud Run `DATABASE_POOL_SIZE` connection budget, the `retention-cleanup` Cloud Run job, the Expo/EAS clients and `EXPO_PUBLIC_RESTAURANT_CORE_ONLY` edition flags, and `POST /api/v1/pos/connections/:id/rotate-secret`. If any Google Cloud project, Cloud Run service, GKE cluster or AWS account from that era still exists, decommission it and revoke its credentials.

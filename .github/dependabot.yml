@@ -1,5 +1,10 @@
 version: 2
 updates:
+  # npm / pub: semver-major updates are ignored on purpose, because a major bump of the
+  # marketing build chain or a Flutter plugin needs a deliberate migration. That also means
+  # majors never surface automatically; review them by hand at least quarterly
+  # (docs/security/secrets-handling.md, "Dependency review"). Security advisories still raise
+  # Dependabot security updates regardless of this ignore list, and CI runs `npm audit`.
   - package-ecosystem: npm
     directory: "/"
     schedule:
@@ -23,11 +28,19 @@ updates:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
 
+  # GitHub Actions: majors are NOT ignored. Every action is SHA-pinned, so a major bump
+  # arrives as a reviewable PR that changes the pin; ignoring majors would freeze the
+  # pipeline on unmaintained action versions forever. Updates are grouped into one PR.
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
-    ignore:
-      - dependency-name: "*"
-        update-types: ["version-update:semver-major"]
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+
+  # supabase/functions has no package.json (Deno: deno.json + deno.lock), which Dependabot's
+  # npm ecosystem cannot read, so Edge Function dependencies are only checked by the frozen
+  # lockfile step in supabase-ci.yml. Add a Deno/npm entry here if/when supported.

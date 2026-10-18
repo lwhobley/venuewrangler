@@ -1,4 +1,15 @@
-name: Continuous Security & Compliance Scan (Prowler)
+name: Security & Compliance Scan (Prowler, manual)
+
+# MANUAL ONLY. This workflow scans a Google Cloud project and an AWS account. The current
+# product (Flutter app, Supabase, Cloudflare Pages/R2) no longer runs on either, so a weekly
+# schedule only produced red runs and kept long-lived cloud credentials in play. The schedule
+# was removed (audit O-07); run it by hand only if a GCP/AWS account is brought back into
+# scope, e.g. for the legacy account decommissioning check. Cloud-security evidence for the
+# current stack lives in docs/soc2/ and the Supabase/Cloudflare dashboards.
+#
+# It authenticates to GCP keylessly (Workload Identity Federation). AWS scanning requires
+# dedicated PROWLER_AWS_* secrets; the former fallback to the backup job's AWS keys was
+# removed because backups now go to Cloudflare R2, not AWS.
 
 on:
   workflow_dispatch:
@@ -17,9 +28,6 @@ on:
           - 'soc2'
           - 'cis'
           - 'all'
-  schedule:
-    # Run every Monday at 06:00 UTC
-    - cron: '0 6 * * 1'
 
 permissions:
   contents: read
@@ -34,9 +42,9 @@ jobs:
     env:
       GCP_WIF_PROVIDER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
       GCP_SA_EMAIL: ${{ secrets.GCP_SERVICE_ACCOUNT }}
-      AWS_ACCESS_KEY_ID: ${{ secrets.PROWLER_AWS_ACCESS_KEY_ID || secrets.BACKUP_AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.PROWLER_AWS_SECRET_ACCESS_KEY || secrets.BACKUP_AWS_SECRET_ACCESS_KEY }}
-      AWS_DEFAULT_REGION: ${{ secrets.PROWLER_AWS_REGION || secrets.BACKUP_AWS_REGION || 'us-east-1' }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.PROWLER_AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.PROWLER_AWS_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: ${{ secrets.PROWLER_AWS_REGION || 'us-east-1' }}
       # Passed via env rather than interpolated straight into a run: block.
       # The input is a validated `choice`, so this is defence-in-depth, not a
       # live injection — but this workflow holds cloud credentials.
@@ -84,7 +92,7 @@ jobs:
       - name: Require keyless GCP authentication
         if: env.GCP_WIF_PROVIDER == '' || env.GCP_SA_EMAIL == ''
         run: |
-          echo "::error::GCP_WORKLOAD_IDENTITY_PROVIDER and GCP_SERVICE_ACCOUNT must both be set. This job authenticates keyless via Workload Identity Federation, matching deploy-api and retention-cleanup. Bind the Prowler service account to the workload identity pool rather than reintroducing an exported key."
+          echo "::error::GCP_WORKLOAD_IDENTITY_PROVIDER and GCP_SERVICE_ACCOUNT must both be set. This job authenticates keyless via Workload Identity Federation, as the rest of this repository does. Bind the Prowler service account to the workload identity pool rather than reintroducing an exported key."
           exit 1
 
       - name: Run Prowler GCP Compliance Scan

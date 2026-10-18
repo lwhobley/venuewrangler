@@ -9,6 +9,8 @@ workflows:
       app_store_connect: Venue Wrangler Wine
     environment:
       flutter: 3.47.7
+      # TODO(audit O-05): `latest` is not reproducible. Pin to the exact Xcode version used for
+      # the last accepted TestFlight build (shown in that build's Codemagic log) once confirmed.
       xcode: latest
       cocoapods: default
       # Signs with the original app's App Store distribution certificate + profile, both
@@ -76,6 +78,8 @@ workflows:
           echo "Building with build number $NEXT (latest on TestFlight: $LATEST)"
           flutter build ipa --release \
             -t lib/main_production.dart \
+            --obfuscate \
+            --split-debug-info=build/symbols \
             --build-number=$NEXT \
             --dart-define=SUPABASE_URL=$SUPABASE_URL \
             --dart-define=SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY \
@@ -83,6 +87,9 @@ workflows:
             --export-options-plist=/Users/builder/export_options.plist
     artifacts:
       - build/ios/ipa/*.ipa
+      # Dart obfuscation symbol maps: required to de-obfuscate production stack traces. Codemagic
+      # artifacts are private to the team; do not publish them.
+      - build/symbols/**
       - "/tmp/xcodebuild_logs/*.log"
       - flutter_drive.log
     publishing:

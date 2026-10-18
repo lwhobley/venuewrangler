@@ -1,55 +1,70 @@
 # Access Control & Authentication Policy
 
-**Document Owner**: Security & Engineering Leadership  
-**Effective Date**: August 2026  
-**Review Cycle**: Annual  
+**Document Owner**: Principal (Loungeability LLC)
+**Last reviewed**: 2026-10-17
+**Review Cycle**: Annual
+
+This policy states what is in place today and separates it from the roadmap. Statuses use the legend in [soc2-controls-matrix.md](./soc2-controls-matrix.md).
 
 ---
 
 ## 1. Purpose & Scope
 
-This policy governs identity verification, authentication mechanisms, password standards, session management, and role-based access controls across Venue Wrangler's customer-facing application and internal production infrastructure.
+Identity, authentication, session management and role-based access for the Venue Wrangler application (Flutter app and web app on Supabase) and for the internal systems used to operate it (GitHub, Supabase, Cloudflare, Stripe, Codemagic, Firebase, Apple and Google developer consoles).
 
 ---
 
 ## 2. Customer Application Access Controls
 
-### 2.1 Role-Based Access Control (RBAC) Hierarchy
-Venue Wrangler enforces strict authorization tiers for venue members:
+### 2.1 Roles (Implemented)
 
-| Role | Permissions & Scope |
-|------|---------------------|
-| **Admin** | Full system administration, billing, venue settings, staff management, payroll, and audit logs. |
-| **Owner** | Venue owner authority, billing administration, manager assignments, and operational reporting. |
-| **Manager** | Operational management: scheduling, shift approval, time-clock oversight, prep boards, and logbook entries. |
-| **Server / Staff** | Self-service operations: schedule viewing, shift swap requests, time clock punching, and chat communication. |
+Access is decided in Postgres by row-level security using the live `memberships` table (not stale token claims). Roles include `organization_owner`, `organization_admin`, venue manager roles and staff roles; exact permissions are defined by the RLS policies and helper functions in `supabase/migrations` and covered by tests in `supabase/tests/database`.
 
-### 2.2 Password Standards
-* **Minimum Length**: Newly created or changed passwords must be at least 8 characters.
-* **Hashing Algorithm**: PBKDF2 with SHA-256 digest, 32-byte salt, and 600,000 iterations (OWASP recommended minimum).
-* **Brute-Force Protection**: 
-  * Rate-limited to 12 attempts per 15-minute window per IP and email.
-  * Account locked after 8 consecutive failed sign-in attempts.
+Known gaps (tracked, not yet closed): no deprovisioning or ownership-transfer flow for members; administrators can edit their own pay data; managers can approve their own staff requests; line staff can read some guest and incident data they may not need.
 
-### 2.3 Session Management & Token Lifecycles
-* **Session Duration**: JSON Web Tokens (JWT) and database session rows expire after 30 days.
-* **Immediate Revocation**: 
-  * Explicit logout deletes the active device session from PostgreSQL immediately.
-  * Password change automatically revokes all other concurrent sessions for that account.
-  * Staff termination or role revocation instantly terminates active profile permissions.
+### 2.2 Passwords
+
+| Item | Current state | Status |
+|---|---|---|
+| Hashing | Supabase Auth (bcrypt-based salted hashes); the application never sees or stores passwords | Implemented |
+| Minimum length and complexity | `supabase/config.toml` requires 12 characters with lower case, upper case and digits for the local stack. **The hosted project's setting must be applied by hand** (`docs/security/hosted-auth-settings.md`); until then the hosted default (6 characters) applies | Partial **[verify in dashboard]** |
+| Leaked-password check | Hosted-only, Pro plan; not enabled | Planned |
+| Brute-force protection | Supabase Auth rate limits; no CAPTCHA | Partial |
+| Reauthentication for password change | `secure_password_change` set locally; app-side reauthentication flow is being added | Planned |
+
+The previous version of this policy described PBKDF2 hashing, an 8-attempt lockout and 30-day sessions. Those described the retired NestJS API and are not current.
+
+### 2.3 Multi-factor authentication
+
+MFA (TOTP) is available in the Supabase project configuration. **It is not enforced in the app or by database policy today.** Roadmap: in-app TOTP enrolment, mandatory for owners and admins, and RLS requiring `aal2` for HR pay data, billing, payroll/POS connections and account deletion.
+
+### 2.4 Sessions and tokens
+
+- Access tokens (JWT) expire after 1 hour; refresh-token rotation is enabled with a 10-second reuse window (Implemented).
+- Absolute session time-box and inactivity timeout are Supabase Pro features and are **not enabled**; they are documented in `config.toml` as commented settings (Planned).
+- Sign-out on the device clears local session data. Sign-out triggered by the server (revoked refresh token) does not yet clear every local cache (tracked).
+
+### 2.5 Invitations
+
+Invitation redemption requires a confirmed email. Pending invitations expire and are purged on a schedule.
 
 ---
 
-## 3. Internal Infrastructure Access Controls
+## 3. Internal Infrastructure Access
 
-### 3.1 Production Cloud Environments (GCP, Supabase, AWS, Cloudflare)
-* **MFA Requirement**: Multi-Factor Authentication (TOTP or FIDO2/WebAuthn hardware security keys) is strictly mandatory on all cloud provider and identity provider accounts.
-* **Principle of Least Privilege**: Access to Google Cloud Platform, Supabase production dashboard, and Stripe live dashboard is restricted to authorized engineering personnel.
-* **Access Reviews**: Production access lists are audited on a quarterly basis.
-* **Immediate Deprovisioning**: Upon employee or contractor departure, all access (GitHub, GCP, Supabase, Google Workspace, Slack) is revoked within 24 hours of notification.
+| Control | Current state | Status |
+|---|---|---|
+| Accounts | Production consoles (GitHub, Supabase, Cloudflare, Stripe, Codemagic, Apple, Google, Firebase) are held by the principal; there are no other staff with access | Implemented |
+| MFA on vendor accounts | Required by policy; the operator must confirm it is enabled on each account **[verify in each console]** | Partial |
+| Least privilege | API tokens are scoped where the provider allows (Stripe restricted key, Cloudflare tokens); see `docs/security/secrets-handling.md` | Partial |
+| Access reviews | None performed. Roadmap: quarterly review of members, tokens and installed GitHub apps, recorded in the rotation log | Not operated |
+| Deprovisioning | No staff or contractors exist, so no offboarding has been exercised. Roadmap: written checklist before the first hire or contractor: revoke GitHub, Supabase, Cloudflare, Stripe, Codemagic and store-console access and rotate shared secrets the same day | Planned |
+| Secrets | Held in Supabase secrets, GitHub Environments and Codemagic; not to be stored in the repository or in a cloud-synced folder | Partial (see secrets-handling.md) |
+| Source control | `main` is **not** branch-protected and does not require pull-request review. CODEOWNERS and a PR template exist. Protection must be enabled by the operator | Not operated (setting required) |
+| Production database | Reached only through the Supabase dashboard/CLI by the principal and through the backup job's credential (GitHub Environment `production-backups`) | Partial |
 
 ---
 
 ## 4. Audit Trail & Monitoring
 
-All authentication events (successful login, failed login, account creation, password reset request, password reset completion, session revocation) are immutably recorded in the `AuditLog` table with IP address, user-agent, and sanitized metadata.
+Administrative and security-relevant events are written to `public.audit_log` (actor, action, target, metadata) and kept for 365 days (time-entry corrections and voids for 3 years). Sign-in events are recorded by Supabase Auth. There is no scheduled review of these logs and no alerting rules; reads of guest and incident data by line staff are not audited (tracked).

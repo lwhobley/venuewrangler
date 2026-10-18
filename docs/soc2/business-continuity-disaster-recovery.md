@@ -1,67 +1,84 @@
 # Business Continuity & Disaster Recovery (BC/DR) Plan
 
-**Document Owner**: Infrastructure Lead  
-**Effective Date**: August 2026  
-**Review Cycle**: Annual  
+**Document Owner**: Principal (Loungeability LLC)
+**Last reviewed**: 2026-10-17
+**Review Cycle**: Annual
+
+This plan states the recovery capability that exists **today** and the roadmap to improve it. Earlier versions referred to Google Cloud Run, AWS S3, Prisma migrations and semi-annual restore drills to a staging environment. None of those apply to the current product or were performed; they have been removed.
 
 ---
 
-## 1. Objectives & Metrics
+## 1. Objectives & metrics
 
-Venue Wrangler is engineered to ensure continuous business operations and rapid recovery in the event of major infrastructure disruptions, cloud provider outages, or catastrophic data corruption.
-
-### Service Recovery Targets
-* **Recovery Time Objective (RTO)**: **< 4 hours** (Maximum acceptable duration to restore service following a total region/database failure).
-* **Current Recovery Point Objective (RPO)**: **< 24 hours**, based on the nightly verified logical backup. The target becomes **< 1 hour** only after Supabase PITR is enabled and tested.
-
----
-
-## 2. Infrastructure Architecture & Redundancy
-
-* **API Compute Layer**: Google Cloud Run (`venue-wrangler-api` in `us-east1`) with automated multi-zone container replication, autoscaling (up to 8 instances), and instant zero-downtime revision rollbacks.
-* **Database Layer**: Managed PostgreSQL on the Supabase Free plan. Scheduled provider backups and PITR are not currently available; the nightly off-site logical backup is the recovery source.
-* **Media & File Storage**: Amazon Web Services (AWS S3) in `us-east-1` with cross-zone durability (99.999999999% durability SLA) and SSE-S3 encryption.
-* **DNS & Web Routing**: Cloudflare Anycast edge network with automated SSL and DDoS mitigation.
+| Objective | Current | Notes |
+|---|---|---|
+| **RPO** (data loss tolerated) | **Up to 24 hours** | Based on the nightly logical backup. Supabase point-in-time recovery (PITR) is **not** enabled. Enabling PITR (paid add-on) would reduce RPO to minutes and is recommended because the product holds payroll and time records. |
+| **RTO** (time to restore) | **Not yet measured** | No restore had been timed before the restore drill workflow was added. The drill's run duration provides the first measurement. A target of 24 hours is a goal, not a tested figure. |
 
 ---
 
-## 3. Database Backup & Recovery Strategy
+## 2. System architecture (what must be recovered)
 
-### 3.1 Point-in-Time Recovery (PITR)
-* PITR is a launch prerequisite, not a current control. Upgrade Supabase, enable PITR, and record a restore drill before changing the stated RPO.
+- **Database, authentication and Edge Functions**: Supabase (Postgres 15). Schema is reproducible from `supabase/migrations`; Edge Functions from `supabase/functions`.
+- **File storage**: Supabase Storage buckets (photos, documents, chat attachments, incident evidence).
+- **Web app and marketing site**: Cloudflare Pages (`dist-site`, built by `.github/workflows/deploy-cloudflare-pages.yml`).
+- **Backups**: Cloudflare R2 bucket (database dumps and Storage mirror).
+- **Mobile apps**: built and signed in Codemagic and distributed through TestFlight/App Store and Google Play. Signing identities live in Codemagic and Play App Signing.
+- **Other providers** (Stripe, Resend, Groq, Firebase/APNs, Sentry): replaceable; their configuration is in Supabase secrets.
 
-### 3.2 Nightly Logical Backups (Cloudflare R2)
-* Automated GitHub Action (`.github/workflows/supabase-database-backup.yml`) runs nightly logical dumps (`pg_dump`) of the Supabase database to a dedicated Cloudflare R2 bucket, the only backup destination. R2 encrypts all objects at rest.
-* Uploaded files (Supabase Storage) are mirrored daily to the same R2 bucket by `.github/workflows/supabase-storage-backup.yml`; changed or deleted files are retained under `storage-changes/` for 30 days. The run fails if the mirror's file count or size differs from the source.
-* The workflow verifies archive readability and the uploaded object size. Backups expire through a **30-day R2 object lifecycle rule**. Bucket locks are not claimed unless separately enabled and evidenced in Cloudflare.
-
-### 3.3 Backup Restoration Drill Protocol
-* **Cadence**: Conducted semi-annually (every 6 months).
-* **Procedure**:
-  1. Pull latest nightly backup snapshot from R2.
-  2. Restore database into an isolated staging Postgres container/cluster.
-  3. Execute Prisma schema migration checks and automated integration test suite (`npm run test:integration`).
-  4. Record drill timestamp, duration, RTO achievement, and sign-off in SOC 2 evidence logs.
+There is **no staging environment**. There is a single production Supabase project.
 
 ---
 
-## 4. Disaster Recovery Scenarios & Playbooks
+## 3. Backups
 
-### Scenario A: Cloud Run Service Disruption or Bad Release
-1. List available immutable revisions:
-   ```bash
-   gcloud run revisions list --service=venue-wrangler-api --region=us-east1 --project=venuewrangler
-   ```
-2. Shift 100% of traffic to the last verified revision:
-   ```bash
-   gcloud run services update-traffic venue-wrangler-api --to-revisions=LAST_KNOWN_GOOD_REV=100 --region=us-east1 --project=venuewrangler
-   ```
-3. Verify `/api/health` and mobile login flows.
+| Control | State |
+|---|---|
+| Nightly database backup | `.github/workflows/supabase-database-backup.yml`, 04:00 UTC. `pg_dump` of `public`, `app_hidden`, `auth` and `storage`, verified readable with `pg_restore --list`, compressed, **encrypted client-side with age**, uploaded to R2 as `database-backups/*.dump.gz.age`, size verified. The job fails if the age recipient is not configured. |
+| Storage mirror | `.github/workflows/supabase-storage-backup.yml`, 05:00 UTC, full mirror to R2 plus a 30-day journal of changes/deletions; file counts and bytes are compared. |
+| Retention | 30 days, via an R2 lifecycle rule that must exist on the bucket **[verify in Cloudflare]** |
+| Immutability | R2 bucket lock / versioning is recommended and **not evidenced**. The backup token can currently overwrite or delete backups. Roadmap: bucket lock with a retention period on `database-backups/` and a separate read-only token for restores |
+| Key custody | The age **private** identity is held offline, never in the backup job. The restore drill uses it from a protected GitHub Environment |
+| PITR | Not enabled (see RPO) |
 
-### Scenario B: Primary Database Outage or Data Corruption
-1. Pause API traffic or enable maintenance mode.
-2. Restore the latest R2 logical backup into an isolated replacement database. Once PITR is enabled and tested, a point-in-time restore may be used instead.
-3. Update `DATABASE_URL` in GCP Secret Manager.
-4. Deploy a new Cloud Run revision pointing to the restored database.
-5. Run Prisma migrations: `npm run prisma:migrate:deploy`.
-6. Verify smoke tests and restore public traffic.
+**A restore has not yet been verified.** Treat the backups as unproven until `Supabase Restore Drill` completes successfully at least once.
+
+### 3.1 Restore drill
+
+`.github/workflows/supabase-restore-drill.yml` runs monthly (1st, 07:00 UTC) and on demand. It downloads the newest `.dump.gz.age` from R2, decrypts it, restores it with `pg_restore` into a throwaway `supabase/postgres` container, asserts that `organizations`, `venues`, `memberships` and `auth.users` contain rows, checks the newest backup is under 36 hours old, and prints a summary of counts only. It fails loudly otherwise and uploads nothing. The run log is the SOC 2 evidence for recovery testing. Status: **not yet run**.
+
+Semi-annual full disaster-recovery exercises (rebuilding a new Supabase project from migrations plus the dump and pointing the app at it) have **not been performed**. Roadmap: run one once a safe scratch Supabase project is available and record its duration as the first measured RTO.
+
+---
+
+## 4. Recovery scenarios
+
+### A. Bad web release
+1. Open the Cloudflare Pages project, find the last good deployment and roll back to it (or `git revert` and let the deploy workflow redeploy).
+2. Verify `https://venuewrangler.com/app/` loads and sign-in works.
+
+### B. Bad database migration or data corruption
+1. Stop making further changes. If PITR is not enabled, the recovery point is the last nightly backup (up to 24 hours of data lost).
+2. Create a new Supabase project. Apply `supabase/migrations` in order, or restore the latest decrypted dump into it (`pg_restore --no-owner`), following the same steps as the restore drill workflow.
+3. Verify row counts and sign-in in the new project.
+4. Point the app at the new project by updating the Supabase URL and anon key in `FLUTTER_PRODUCTION_ENV_JSON` and Codemagic and shipping a new release, and update the Content-Security-Policy host in `site/_worker.js`. Re-set Edge Function secrets in the new project and re-register provider webhooks (Stripe, POS, OAuth redirect URLs).
+5. Mobile clients already in the field still point at the old project until updated. **This is the slowest step and is not rehearsed.**
+
+### C. Supabase regional or provider outage
+No secondary region or provider exists; recovery is waiting for Supabase, or scenario B in a new project. Not rehearsed.
+
+### D. Loss of the age identity
+Backups become unreadable. Keep two offline copies of the identity (see `docs/security/secrets-handling.md`).
+
+### E. Loss of the operator account or machine
+GitHub, Supabase, Cloudflare, Stripe and Codemagic are each recoverable only through that vendor's account recovery. There is no second administrator. Roadmap: add a break-glass second owner on critical accounts and keep recovery codes offline.
+
+---
+
+## 5. Roadmap (not yet implemented)
+
+1. Run the restore drill successfully and record the result.
+2. Enable Supabase PITR; re-baseline RPO.
+3. R2 bucket lock and a read-only token for restores; verify the 30-day lifecycle rule.
+4. A staging Supabase project for migration rehearsal and DR exercises.
+5. A documented, rehearsed project-rebuild runbook and a measured RTO.
