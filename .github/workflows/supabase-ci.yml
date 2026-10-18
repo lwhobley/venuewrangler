@@ -111,9 +111,14 @@ jobs:
         run: |
           psql -v ON_ERROR_STOP=1 -c "CREATE SCHEMA IF NOT EXISTS tap; CREATE EXTENSION IF NOT EXISTS pgtap SCHEMA tap;"
           psql -v ON_ERROR_STOP=1 -c "GRANT USAGE ON SCHEMA tap TO PUBLIC; GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA tap TO PUBLIC;"
-          psql -v ON_ERROR_STOP=1 -c "ALTER DATABASE $PGDATABASE SET search_path = public, tap;"
 
       - name: Run RLS authorization tests
+        # Put the tap schema on the test sessions' search path. ALTER DATABASE ... SET search_path
+        # is not enough: the supabase/postgres image sets a search_path on the postgres role, and a
+        # role setting overrides a database setting, so pgTAP's plan() was not found. PGOPTIONS is
+        # applied at connection start and overrides both.
+        env:
+          PGOPTIONS: -c search_path=public,extensions,tap
         run: pg_prove --dbname "$PGDATABASE" supabase/tests/database/*.test.sql
 
   edge-functions-check:
