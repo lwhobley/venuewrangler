@@ -155,9 +155,11 @@ select lives_ok(
 -- DELETE with no applicable policy is a silent no-op in Postgres RLS (the implicit USING
 -- clause matches zero rows) rather than an error, so assert on the row's survival, not on
 -- an exception.
-select lives_ok(
+select throws_ok(
   $$ delete from public.venues where id = '20000000-0000-0000-0000-0000000000a1' $$,
-  'org_a_owner''s delete attempt executes without error (no delete policy exists)'
+  '42501',
+  null,
+  'org_a_owner''s delete attempt is denied (no delete policy and no DELETE grant)'
 );
 
 select is(
@@ -270,10 +272,11 @@ reset role;
 set local role authenticated;
 set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-000000000002';
 
-select is(
-  (select count(*)::int from public.platform_admins),
-  0,
-  'platform_admins is fully invisible to a non-platform-admin client (no select policy at all)'
+select throws_ok(
+  $$ select count(*) from public.platform_admins $$,
+  '42501',
+  null,
+  'platform_admins is fully inaccessible to a non-platform-admin client (no select policy, no SELECT grant)'
 );
 
 select throws_ok(

@@ -123,9 +123,11 @@ select is(
 -- not an exception, per Postgres RLS semantics — assert the text is unchanged, don't expect a
 -- thrown error).
 -- ---------------------------------------------------------------------------
-select lives_ok(
+select throws_ok(
   $$ update public.crm_notes set text = 'edited' where lead_id = '60000000-0000-0000-0000-000000000001' $$,
-  'updating a note is a silent no-op (no update policy exists), not an error'
+  '42501',
+  null,
+  'updating a note is denied outright (no update policy and no UPDATE grant)'
 );
 
 select is(
@@ -230,7 +232,10 @@ select isnt(
   'contract_number is auto-generated when not supplied'
 );
 
+-- Seed the signed state the way record_contract_signature would (the guard refuses direct writes).
+do $$ begin perform set_config('app.contract_signing', 'on', true); end $$;
 update public.crm_contracts set status = 'fully_signed' where id = '80000000-0000-0000-0000-000000000001';
+do $$ begin perform set_config('app.contract_signing', 'off', true); end $$;
 
 select throws_ok(
   $$ update public.crm_contracts set event_name = 'Changed Name' where id = '80000000-0000-0000-0000-000000000001' $$,

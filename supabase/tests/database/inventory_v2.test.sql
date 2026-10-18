@@ -9,6 +9,7 @@ begin execute statement; return false; exception when others then return sqlstat
 create temporary table inventory_test_ids(key text primary key,id uuid);
 grant all on inventory_test_ids to authenticated;
 create function pg_temp.inv_id(k text) returns uuid language sql as $$select id from pg_temp.inventory_test_ids where key=k$$;
+grant execute on function pg_temp.inv_ok(boolean,text), pg_temp.inv_error(text,text), pg_temp.inv_id(text) to public;
 
 insert into auth.users(id,email) values
 ('81000000-0000-0000-0000-000000000001','inv-owner@test.example'),

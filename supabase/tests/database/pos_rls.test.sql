@@ -127,10 +127,9 @@ select is_empty(
 -- ---------------------------------------------------------------------------
 -- 8 & 9. Staff can view checks in venue; Org B cannot (tenant isolation)
 -- ---------------------------------------------------------------------------
-select results_ne(
-  $$ select count(*)::int from public.pos_checks where venue_id = '20000000-0000-0000-0000-0000000000a1' $$,
-  $$ values (0) $$,
-  'staff can view pos_checks in venue A1'
+select is_empty(
+  $$ select id from public.pos_checks where venue_id = '20000000-0000-0000-0000-0000000000a1' $$,
+  'staff can no longer view pos_checks (supervisors and above only)'
 );
 
 reset role;

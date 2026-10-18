@@ -78,9 +78,11 @@ select throws_ok(
 -- No update policy exists for `authenticated` at all, so this UPDATE's USING clause matches
 -- zero rows and is a silent no-op (Postgres RLS behavior) rather than raising an exception —
 -- same pattern documented in operational_tasks_rls.test.sql.
-select lives_ok(
+select throws_ok(
   $$ update public.subscriptions set status = 'canceled' where organization_id = '10000000-0000-0000-0000-00000000000a' $$,
-  'a client''s update attempt executes without error but matches no rows (no update policy exists)'
+  '42501',
+  null,
+  'a client''s update attempt is denied (no update policy and no UPDATE grant)'
 );
 
 select is(
