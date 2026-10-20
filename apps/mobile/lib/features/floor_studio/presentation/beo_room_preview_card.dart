@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/theme/ops_colors.dart';
 import '../../crm/domain/crm_beo.dart';
 import '../../venues/application/venues_providers.dart';
 import '../application/floor_studio_providers.dart';
@@ -109,7 +110,7 @@ class _BeoRoomPreviewCardState extends ConsumerState<BeoRoomPreviewCard> {
                 child: Text(
                   'The reservation headcount ($reservationGuests) does not match the confirmed order '
                   '(${beo.guestCount}). Showing the order count.',
-                  style: TextStyle(color: Colors.amber.shade900),
+                  style: TextStyle(color: context.ops.warning.fg),
                 ),
               ),
             const SizedBox(height: 12),
@@ -179,10 +180,8 @@ class _BeoRoomPreviewCardState extends ConsumerState<BeoRoomPreviewCard> {
                   padding: const EdgeInsets.only(top: 8),
                   child: Text(
                     'This room layout seats up to ${layout.capacity} guests, fewer than the $guests expected.',
-                    style: TextStyle(
-                      color: theme.colorScheme.error,
-                      fontWeight: FontWeight.w600,
-                    ),
+                    style: theme.textTheme.labelLarge
+                        ?.copyWith(color: theme.colorScheme.error),
                   ),
                 ),
               const SizedBox(height: 12),
@@ -203,10 +202,10 @@ class _BeoRoomPreviewCardState extends ConsumerState<BeoRoomPreviewCard> {
                       buildStudioSceneData(layout: layout, guestCount: guests),
                 ),
                 const SizedBox(height: 6),
-                const Text(
+                Text(
                   '3D preview is an illustrative render of this layout, not a photograph. '
                   'People and food are stylized placeholders, not the actual guests or menu.',
-                  style: TextStyle(fontSize: 12),
+                  style: Theme.of(context).textTheme.bodySmall,
                 ),
               ],
             ],

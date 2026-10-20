@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/theme/app_radii.dart';
 import '../application/chat_providers.dart';
 import '../domain/chat_contact.dart';
 import '../domain/chat_message.dart';
@@ -73,7 +74,7 @@ class _ConversationListView extends ConsumerWidget {
                   ),
                   title: Text(
                     conv.displayName,
-                    style: const TextStyle(fontWeight: FontWeight.bold),
+                    style: Theme.of(context).textTheme.titleMedium,
                   ),
                   subtitle: Text(
                     conv.lastMessageText ?? 'No messages yet',
@@ -326,7 +327,7 @@ class _MessageBubble extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
           color: Theme.of(context).colorScheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(AppRadii.tile),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -334,7 +335,7 @@ class _MessageBubble extends StatelessWidget {
             if (message.text != null && message.text!.isNotEmpty)
               Text(
                 message.text!,
-                style: const TextStyle(fontSize: 15),
+                style: Theme.of(context).textTheme.bodyLarge,
               ),
             if (message.hasAttachment)
               Padding(
@@ -346,8 +347,10 @@ class _MessageBubble extends StatelessWidget {
                     const SizedBox(width: 4),
                     Text(
                       'Photo Attachment',
-                      style:
-                          TextStyle(fontSize: 12, color: context.ops.info.fg),
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(color: context.ops.info.fg),
                     ),
                   ],
                 ),

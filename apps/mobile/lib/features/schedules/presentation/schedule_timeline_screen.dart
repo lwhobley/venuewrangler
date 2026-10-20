@@ -725,7 +725,6 @@ class _ScheduleTimelineScreenState
                             softWrap: false,
                             style: theme.textTheme.labelMedium?.copyWith(
                               color: colors.fg,
-                              fontWeight: FontWeight.w700,
                             ),
                           ),
                         ),

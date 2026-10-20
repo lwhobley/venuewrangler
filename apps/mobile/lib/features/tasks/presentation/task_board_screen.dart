@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/auth/auth_providers.dart';
 import '../../../core/offline/offline_queue_providers.dart';
+import '../../../core/theme/app_radii.dart';
 import '../../../core/theme/ops_colors.dart';
 import '../../../core/widgets/state_views.dart';
 import '../../../core/widgets/status_chip.dart';
@@ -306,7 +307,7 @@ class _LaneTab extends StatelessWidget {
         final hovering = candidates.isNotEmpty;
         return InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(AppRadii.tile),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 120),
             padding: const EdgeInsets.symmetric(vertical: 10),
@@ -316,7 +317,7 @@ class _LaneTab extends StatelessWidget {
                   : selected
                       ? theme.colorScheme.primary.withValues(alpha: 0.15)
                       : theme.colorScheme.surfaceContainerHigh,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(AppRadii.tile),
               border: Border.all(
                 color: hovering
                     ? theme.colorScheme.secondary
@@ -330,8 +331,7 @@ class _LaneTab extends StatelessWidget {
               children: [
                 Text(
                   '$count',
-                  style: theme.textTheme.titleLarge
-                      ?.copyWith(fontWeight: FontWeight.w800),
+                  style: theme.textTheme.titleLarge,
                 ),
                 Text(lane.label, style: theme.textTheme.labelMedium),
               ],
@@ -369,7 +369,7 @@ class _LaneColumn extends StatelessWidget {
         return Container(
           decoration: BoxDecoration(
             color: theme.colorScheme.surfaceContainerLow,
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(AppRadii.card),
             border: Border.all(
               color: hovering
                   ? theme.colorScheme.secondary
@@ -429,7 +429,7 @@ class _TaskCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 10),
       elevation: dragging ? 8 : 0,
       child: InkWell(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(AppRadii.card),
         onTap: dragging ? null : onTap,
         child: Padding(
           padding: const EdgeInsets.all(12),

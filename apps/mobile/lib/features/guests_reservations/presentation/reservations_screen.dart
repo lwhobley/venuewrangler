@@ -271,7 +271,6 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
                                         .textTheme
                                         .titleSmall
                                         ?.copyWith(
-                                          fontWeight: FontWeight.bold,
                                           color: Theme.of(context)
                                               .colorScheme
                                               .primary,
@@ -554,15 +553,14 @@ class _ReservationListTile extends StatelessWidget {
         backgroundColor: Theme.of(context).colorScheme.primaryContainer,
         child: Text(
           '${reservation.partySize}p',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            color: Theme.of(context).colorScheme.onPrimaryContainer,
-          ),
+          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                color: Theme.of(context).colorScheme.onPrimaryContainer,
+              ),
         ),
       ),
       title: Text(
         reservation.guestName,
-        style: const TextStyle(fontWeight: FontWeight.bold),
+        style: Theme.of(context).textTheme.titleMedium,
       ),
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -588,8 +586,10 @@ class _ReservationListTile extends StatelessWidget {
               padding: const EdgeInsets.only(top: 2.0),
               child: Text(
                 'Note: ${reservation.specialRequests}',
-                style:
-                    const TextStyle(fontStyle: FontStyle.italic, fontSize: 12),
+                style: Theme.of(context)
+                    .textTheme
+                    .bodySmall
+                    ?.copyWith(fontStyle: FontStyle.italic),
               ),
             ),
         ],

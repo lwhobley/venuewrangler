@@ -1,46 +1,83 @@
 import 'package:flutter/material.dart';
 
-/// Raw palette. Screens should not use these directly — read `Theme.of(context).colorScheme`
-/// or the semantic [OpsColors] extension so light/dark stay consistent.
+/// Raw palette, Organic design system. Screens should not use these directly: read
+/// `Theme.of(context).colorScheme` or the semantic [OpsColors] extension so light and dark
+/// stay consistent.
+///
+/// Legacy names (charcoal*, ivory*, teal*, coral*, cobalt*) are kept so existing imports keep
+/// compiling; their values now come from the Organic ramps. `teal` is the primary accent
+/// (terracotta) and `tealLight` its dark-mode counterpart.
 class AppColors {
   const AppColors._();
 
+  // Organic neutrals (ramp steps 100..900)
+  static const neutral100 = Color(0xFFF9F4ED);
+  static const neutral200 = Color(0xFFEEE7DB);
+  static const neutral300 = Color(0xFFDCD3C4);
+  static const neutral400 = Color(0xFFC0B6A5);
+  static const neutral500 = Color(0xFFA19786);
+  static const neutral600 = Color(0xFF82796A);
+  static const neutral700 = Color(0xFF645C50);
+  static const neutral800 = Color(0xFF474238);
+  static const neutral900 = Color(0xFF2E2B25);
+
+  // Terracotta accent ramp
+  static const accent100 = Color(0xFFFFF2EB);
+  static const accent200 = Color(0xFFFFE1D0);
+  static const accent300 = Color(0xFFFFC6A5);
+  static const accent400 = Color(0xFFF6A06B);
+  static const accent = Color(0xFFC67139);
+  static const accent600 = Color(0xFFB2622D);
+  static const accent700 = Color(0xFF8C491A);
+  static const accent800 = Color(0xFF643312);
+  static const accent900 = Color(0xFF402310);
+
+  // Sage second accent ramp
+  static const sage100 = Color(0xFFF0FAE1);
+  static const sage200 = Color(0xFFE1EECC);
+  static const sage300 = Color(0xFFCCDBB2);
+  static const sage400 = Color(0xFFAEBF92);
+  static const sage500 = Color(0xFF8FA073);
+  static const sage600 = Color(0xFF728157);
+  static const sage700 = Color(0xFF56633F);
+  static const sage800 = Color(0xFF3D472B);
+  static const sage900 = Color(0xFF272E1B);
+
   // Workspace + surfaces
-  static const charcoal = Color(0xFF141A22);
-  static const charcoalRaised = Color(0xFF1B2330);
-  static const charcoalPanel = Color(0xFF222C3B);
-  static const charcoalLine = Color(0xFF2F3B4D);
-  static const ivory = Color(0xFFF3F5F7);
-  static const ivoryDeep = Color(0xFFEDF1F4);
-  static const ivoryLine = Color(0xFFDDE4E9);
+  static const charcoal = neutral900;
+  static const charcoalRaised = Color(0xFF3A362E);
+  static const charcoalPanel = neutral800;
+  static const charcoalLine = neutral700;
+  static const ivory = Color(0xFFF5EAD8); // --color-bg
+  static const ivoryDeep = Color(0xFFEBDDC5); // --color-surface
+  static const ivoryLine = neutral300;
   static const white = Color(0xFFFFFFFF);
 
   // Text
-  static const inkOnLight = Color(0xFF141A22);
-  static const mutedOnLight = Color(0xFF566173);
-  static const inkOnDark = Color(0xFFF1EDE5);
-  static const mutedOnDark = Color(0xFFA3AFBF);
+  static const inkOnLight = Color(0xFF201E1D);
+  static const mutedOnLight = neutral700;
+  static const inkOnDark = neutral100;
+  static const mutedOnDark = neutral400;
 
-  static const teal = Color(0xFF194A62);
-  static const tealLight = Color(0xFF9ACEDD);
-  static const tealContainer = Color(0xFFDDEDF2);
+  // Primary (terracotta). `teal*` names retained for compatibility.
+  static const teal = accent;
+  static const tealLight = accent400;
+  static const tealContainer = accent200;
 
-  // Interactive accent (primary) and selection/edit accent (secondary)
-  static const coral = Color(0xFFFF5A5F);
-  static const coralStrongOnLight = Color(0xFFC62F36);
-  static const cobalt = Color(0xFF4D7CFE);
+  // Legacy interactive names, mapped to the Organic accents.
+  static const coral = accent;
+  static const coralStrongOnLight = accent700;
+  static const cobalt = sage600;
+  static const cobaltOnDark = sage400;
+  static const cobaltStrongOnLight = sage700;
 
-  /// Cobalt lightened to stay readable as text/icons on charcoal (plain cobalt is ~3.9:1).
-  static const cobaltOnDark = Color(0xFF7C9FFE);
-  static const cobaltStrongOnLight = Color(0xFF2450CC);
-
-  // Semantic status tones — foreground (text/icon) per brightness, tinted container
-  static const greenOnDark = Color(0xFF5BD39A);
-  static const greenOnLight = Color(0xFF146A43);
-  static const amberOnDark = Color(0xFFF5BC4A);
-  static const amberOnLight = Color(0xFF8A5600);
-  static const purpleOnDark = Color(0xFFB59BFF);
-  static const purpleOnLight = Color(0xFF6742C4);
-  static const redOnDark = Color(0xFFFF8585);
-  static const redOnLight = Color(0xFFB3261E);
+  // Semantic status tones. Danger is the one derived hue: terracotta rotated toward red.
+  static const greenOnDark = sage400;
+  static const greenOnLight = sage800;
+  static const amberOnDark = accent300;
+  static const amberOnLight = accent700;
+  static const purpleOnDark = sage300;
+  static const purpleOnLight = sage800;
+  static const redOnDark = Color(0xFFF08A6B);
+  static const redOnLight = Color(0xFF9A3A22);
 }

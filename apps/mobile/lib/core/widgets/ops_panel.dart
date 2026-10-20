@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../theme/app_radii.dart';
 import '../theme/ops_colors.dart';
 
 /// A purposeful operational panel: thin border, compact header, optional trailing action.
@@ -24,7 +25,7 @@ class OpsPanel extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(AppRadii.card),
         border: Border.all(color: context.ops.panelBorder),
       ),
       child: Column(

@@ -394,8 +394,7 @@ class _Stat extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             value,
-            style: theme.textTheme.headlineSmall
-                ?.copyWith(fontWeight: FontWeight.w800),
+            style: theme.textTheme.headlineSmall,
           ),
         ],
       ),

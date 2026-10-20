@@ -144,10 +144,10 @@ class _StaffRequestTile extends ConsumerWidget {
         children: [
           Text(
             '${request.kind.displayLabel} • ${request.status.displayLabel}',
-            style: TextStyle(
-              color: statusColor,
-              fontWeight: FontWeight.w600,
-            ),
+            style: Theme.of(context)
+                .textTheme
+                .labelLarge
+                ?.copyWith(color: statusColor),
           ),
           if (request.details.isNotEmpty) Text(request.details),
           if (request.requestedRangeStart != null)

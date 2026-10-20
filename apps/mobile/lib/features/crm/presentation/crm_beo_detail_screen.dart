@@ -39,25 +39,33 @@ class CrmBeoDetailScreen extends ConsumerWidget {
                       const SizedBox(height: 8),
                       Chip(label: Text(beo.status.toUpperCase())),
                       const Divider(height: 32),
-                      _detail('Event date', _date(beo.eventDate)),
-                      _detail('Event type', beo.eventType),
-                      _detail('Guests', beo.guestCount?.toString()),
-                      _detail('Space', beo.venueSpace),
-                      _detail('Setup style', beo.setupStyle),
-                      _detail('Lead reference', beo.leadId),
-                      _detail('Assigned representative', beo.assignedRepId),
+                      _detail(context, 'Event date', _date(beo.eventDate)),
+                      _detail(context, 'Event type', beo.eventType),
+                      _detail(context, 'Guests', beo.guestCount?.toString()),
+                      _detail(context, 'Space', beo.venueSpace),
+                      _detail(context, 'Setup style', beo.setupStyle),
+                      _detail(context, 'Lead reference', beo.leadId),
+                      _detail(
+                        context,
+                        'Assigned representative',
+                        beo.assignedRepId,
+                      ),
                     ]),
                     const SizedBox(height: 16),
                     _section(context, 'Food and beverage', [
-                      _detail('Appetizers', beo.menuAppetizers),
-                      _detail('Entrées', beo.menuEntrees),
-                      _detail('Desserts', beo.menuDesserts),
-                      _detail('Bar package', beo.menuBarPackage),
+                      _detail(context, 'Appetizers', beo.menuAppetizers),
+                      _detail(context, 'Entrées', beo.menuEntrees),
+                      _detail(context, 'Desserts', beo.menuDesserts),
+                      _detail(context, 'Bar package', beo.menuBarPackage),
                     ]),
                     const SizedBox(height: 16),
                     _section(context, 'Service instructions', [
-                      _detail('Special requirements', beo.specialRequirements),
-                      _detail('Internal notes', beo.internalNotes),
+                      _detail(
+                        context,
+                        'Special requirements',
+                        beo.specialRequirements,
+                      ),
+                      _detail(context, 'Internal notes', beo.internalNotes),
                     ]),
                     const SizedBox(height: 16),
                     BeoRoomPreviewCard(beo: beo),
@@ -133,6 +141,7 @@ class CrmBeoDetailScreen extends ConsumerWidget {
                                     ),
                                   const Divider(),
                                   _detail(
+                                    context,
                                     'Recorded total',
                                     _money(
                                       rows.fold<int>(
@@ -148,6 +157,7 @@ class CrmBeoDetailScreen extends ConsumerWidget {
                             if (beo.fbMinimumCents != null) ...[
                               const SizedBox(height: 12),
                               _detail(
+                                context,
                                 'Food & beverage minimum',
                                 _money(beo.fbMinimumCents!),
                               ),
@@ -185,14 +195,14 @@ class CrmBeoDetailScreen extends ConsumerWidget {
     );
   }
 
-  static Widget _detail(String label, String? value) {
+  static Widget _detail(BuildContext context, String label, String? value) {
     if (value == null || value.trim().isEmpty) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+          Text(label, style: Theme.of(context).textTheme.labelLarge),
           const SizedBox(height: 3),
           SelectableText(value),
         ],

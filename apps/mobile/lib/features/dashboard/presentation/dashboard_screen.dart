@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/theme/app_radii.dart';
 import '../../../core/theme/ops_colors.dart';
 import '../../events/application/events_providers.dart';
 import '../../inventory/application/inventory_providers.dart';
@@ -251,9 +252,9 @@ class _ShiftModeCard extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     return Material(
       color: scheme.primary,
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(AppRadii.card),
       child: InkWell(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(AppRadii.card),
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -310,11 +311,11 @@ class _StatTile extends StatelessWidget {
     return Material(
       color: theme.colorScheme.surfaceContainerLow,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(AppRadii.card),
         side: BorderSide(color: context.ops.panelBorder),
       ),
       child: InkWell(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(AppRadii.card),
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.all(14),
@@ -335,8 +336,7 @@ class _StatTile extends StatelessWidget {
               ),
               Text(
                 value?.toString() ?? '—',
-                style: theme.textTheme.headlineMedium
-                    ?.copyWith(fontWeight: FontWeight.w800),
+                style: theme.textTheme.headlineMedium,
               ),
               Text(label, style: theme.textTheme.bodySmall),
             ],
@@ -364,11 +364,11 @@ class _JumpTile extends StatelessWidget {
     return Material(
       color: theme.colorScheme.surfaceContainerHigh,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(AppRadii.card),
         side: BorderSide(color: context.ops.panelBorder),
       ),
       child: InkWell(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(AppRadii.card),
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.all(10),

@@ -5,7 +5,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 
-import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/ops_colors.dart';
 import '../domain/annotation.dart';
 
 enum AnnotationTool {
@@ -55,12 +55,14 @@ class PhotoAnnotationScreen extends StatefulWidget {
 }
 
 class _PhotoAnnotationScreenState extends State<PhotoAnnotationScreen> {
-  static const _palette = [
-    AppColors.coral,
-    AppColors.amberOnDark,
+  /// Ink colours. The viewer is always dark (photos need a neutral backdrop), so the status
+  /// tones come from the dark palette whichever theme is active.
+  static final _palette = [
+    OpsColors.dark.danger.fg,
+    OpsColors.dark.warning.fg,
     Colors.white,
-    AppColors.cobaltOnDark,
-    AppColors.greenOnDark,
+    OpsColors.dark.success.fg,
+    OpsColors.dark.vip.fg,
     Colors.black,
   ];
   static const _widths = [('Thin', 0.005), ('Medium', 0.010), ('Thick', 0.018)];

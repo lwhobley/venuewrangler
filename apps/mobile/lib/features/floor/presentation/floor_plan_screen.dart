@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../core/theme/app_radii.dart';
 import '../../../core/theme/ops_colors.dart';
 import '../../../core/widgets/state_views.dart';
 import '../../../core/widgets/status_chip.dart';
@@ -206,7 +207,7 @@ class _FloorPlanScreenState extends ConsumerState<FloorPlanScreen> {
             ListTile(
               title: Text(
                 'Table ${table.label}',
-                style: const TextStyle(fontWeight: FontWeight.bold),
+                style: Theme.of(context).textTheme.titleMedium,
               ),
               subtitle: Text(
                 'Status: ${table.status.toUpperCase()} | Capacity: ${table.capacity}p',
@@ -306,12 +307,12 @@ class _TableGridTile extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       onLongPress: onLongPress,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(AppRadii.tile),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         decoration: BoxDecoration(
           color: statusTone.bg,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(AppRadii.tile),
           border: Border.all(
             color: isSelected
                 ? Theme.of(context).colorScheme.primary
@@ -327,11 +328,10 @@ class _TableGridTile extends StatelessWidget {
                 children: [
                   Text(
                     table.label,
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 18,
-                      color: statusColor,
-                    ),
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleLarge
+                        ?.copyWith(color: statusColor),
                   ),
                   const SizedBox(height: 4),
                   Text(
@@ -350,11 +350,10 @@ class _TableGridTile extends StatelessWidget {
                       const SizedBox(width: 3),
                       Text(
                         table.status.toUpperCase(),
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          color: statusColor,
-                        ),
+                        style: Theme.of(context)
+                            .textTheme
+                            .labelSmall
+                            ?.copyWith(color: statusColor),
                       ),
                     ],
                   ),

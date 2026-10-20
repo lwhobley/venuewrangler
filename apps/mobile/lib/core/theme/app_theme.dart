@@ -1,36 +1,34 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import 'app_colors.dart';
 import 'ops_colors.dart';
 
-/// Venue Wrangler's shared design system: teal headers and actions, calm gray backgrounds,
-/// white cards, compact readable rows, and semantic status tones
-/// (see [OpsColors]). Feature screens must read colours and text styles from
-/// `Theme.of(context)` / `context.ops` rather than hardcoding values.
+/// Venue Wrangler on the Organic design system: cream and sand ground, terracotta primary,
+/// sage second voice, Caprasimo display type over Figtree, pill controls and 28px containers.
+/// Feature screens read colours and styles from `Theme.of(context)` / `context.ops`.
 class AppTheme {
   const AppTheme._();
 
   static ThemeData light() => _build(Brightness.light);
-
   static ThemeData dark() => _build(Brightness.dark);
 
-  static const _radius = 14.0;
-  static const _fieldRadius = 12.0;
+  static const _card = 28.0;
+  static const _field = 999.0;
   static const _touchHeight = 48.0;
 
   static ThemeData _build(Brightness brightness) {
     final isDark = brightness == Brightness.dark;
     final ops = isDark ? OpsColors.dark : OpsColors.light;
-
     final scheme = isDark ? _darkScheme : _lightScheme;
     final textTheme = _textTheme(scheme);
 
     final border = BorderSide(color: ops.panelBorder);
-    final shape = RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(_radius),
-      side: border,
+    final cardShape = RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(_card),
     );
+    const pill = StadiumBorder();
 
     return ThemeData(
       useMaterial3: true,
@@ -43,52 +41,49 @@ class AppTheme {
       dividerTheme:
           DividerThemeData(color: ops.panelBorder, thickness: 1, space: 1),
       appBarTheme: AppBarTheme(
-        backgroundColor: AppColors.teal,
-        foregroundColor: AppColors.white,
+        backgroundColor: scheme.surface,
+        foregroundColor: scheme.onSurface,
         elevation: 0,
         scrolledUnderElevation: 0,
         centerTitle: false,
-        titleTextStyle: textTheme.titleLarge
-            ?.copyWith(fontWeight: FontWeight.w600, color: AppColors.white),
-        iconTheme: const IconThemeData(color: AppColors.white),
-        actionsIconTheme: const IconThemeData(color: AppColors.white),
+        titleTextStyle: textTheme.headlineSmall,
+        iconTheme: IconThemeData(color: scheme.onSurface),
+        actionsIconTheme: IconThemeData(color: scheme.onSurface),
       ),
       cardTheme: CardThemeData(
         color: scheme.surfaceContainerLow,
         elevation: 0,
         margin: EdgeInsets.zero,
-        shape: shape,
+        shape: cardShape,
       ),
       listTileTheme: ListTileThemeData(
         iconColor: scheme.onSurfaceVariant,
         minVerticalPadding: 8,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(_fieldRadius),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: scheme.surfaceContainerHigh,
+        fillColor: scheme.surfaceContainerLow,
         contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(_fieldRadius),
+          borderRadius: BorderRadius.circular(_field),
           borderSide: border,
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(_fieldRadius),
+          borderRadius: BorderRadius.circular(_field),
           borderSide: border,
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(_fieldRadius),
-          borderSide: BorderSide(color: scheme.secondary, width: 2),
+          borderRadius: BorderRadius.circular(_field),
+          borderSide: BorderSide(color: scheme.primary, width: 2),
         ),
         errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(_fieldRadius),
+          borderRadius: BorderRadius.circular(_field),
           borderSide: BorderSide(color: scheme.error),
         ),
         focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(_fieldRadius),
+          borderRadius: BorderRadius.circular(_field),
           borderSide: BorderSide(color: scheme.error, width: 2),
         ),
         labelStyle: TextStyle(color: scheme.onSurfaceVariant),
@@ -96,9 +91,8 @@ class AppTheme {
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           minimumSize: const Size(64, _touchHeight),
-          shape: const StadiumBorder(),
-          textStyle:
-              textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700),
+          shape: pill,
+          textStyle: GoogleFonts.caprasimo(fontSize: 16),
         ),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
@@ -107,25 +101,27 @@ class AppTheme {
           backgroundColor: scheme.primary,
           foregroundColor: scheme.onPrimary,
           elevation: 0,
-          shape: const StadiumBorder(),
-          textStyle:
-              textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700),
+          shape: pill,
+          textStyle: GoogleFonts.caprasimo(fontSize: 16),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           minimumSize: const Size(64, _touchHeight),
-          foregroundColor: ops.primaryStrong,
+          foregroundColor: scheme.onSurface,
           side: border,
-          shape: const StadiumBorder(),
+          shape: pill,
+          textStyle:
+              GoogleFonts.figtree(fontSize: 15, fontWeight: FontWeight.w600),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           minimumSize: const Size(48, _touchHeight),
           foregroundColor: ops.primaryStrong,
+          shape: pill,
           textStyle:
-              textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700),
+              GoogleFonts.figtree(fontSize: 15, fontWeight: FontWeight.w700),
         ),
       ),
       iconButtonTheme: IconButtonThemeData(
@@ -137,87 +133,88 @@ class AppTheme {
         backgroundColor: scheme.primary,
         foregroundColor: scheme.onPrimary,
         elevation: 2,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        shape: const CircleBorder(),
       ),
       chipTheme: ChipThemeData(
-        backgroundColor: scheme.surfaceContainerHigh,
-        selectedColor: ops.info.bg,
+        backgroundColor: Colors.transparent,
+        selectedColor: scheme.primary,
+        secondarySelectedColor: scheme.primary,
         side: border,
-        labelStyle: textTheme.labelMedium,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        labelStyle: textTheme.labelLarge,
+        secondaryLabelStyle:
+            textTheme.labelLarge?.copyWith(color: scheme.onPrimary),
+        checkmarkColor: scheme.onPrimary,
+        shape: pill,
       ),
       tabBarTheme: TabBarThemeData(
         labelColor: scheme.onSurface,
         unselectedLabelColor: scheme.onSurfaceVariant,
         indicatorColor: scheme.primary,
         dividerColor: ops.panelBorder,
-        labelStyle: textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700),
+        labelStyle: textTheme.labelLarge,
       ),
       segmentedButtonTheme: SegmentedButtonThemeData(
         style: SegmentedButton.styleFrom(
           side: border,
-          selectedBackgroundColor: ops.info.bg,
-          selectedForegroundColor: ops.info.fg,
+          shape: pill,
+          selectedBackgroundColor: scheme.primary,
+          selectedForegroundColor: scheme.onPrimary,
         ),
       ),
       switchTheme: SwitchThemeData(
-        thumbColor: WidgetStateProperty.resolveWith(
-          (s) => s.contains(WidgetState.selected)
-              ? scheme.onPrimary
-              : scheme.outline,
+        thumbColor: WidgetStateProperty.all(
+          isDark ? AppColors.neutral100 : AppColors.ivory,
         ),
+        trackOutlineColor: WidgetStateProperty.all(Colors.transparent),
         trackColor: WidgetStateProperty.resolveWith(
           (s) => s.contains(WidgetState.selected)
-              ? scheme.primary
-              : scheme.surfaceContainerHighest,
+              ? AppColors.sage700
+              : AppColors.neutral400,
         ),
       ),
       dialogTheme: DialogThemeData(
         backgroundColor: scheme.surfaceContainerLow,
-        shape: shape,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(32)),
       ),
       bottomSheetTheme: BottomSheetThemeData(
         backgroundColor: scheme.surfaceContainerLow,
         showDragHandle: true,
-        shape: RoundedRectangleBorder(
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-          side: border,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(36)),
         ),
       ),
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
-        backgroundColor: isDark ? AppColors.charcoalPanel : AppColors.charcoal,
+        backgroundColor: isDark ? AppColors.neutral700 : AppColors.charcoal,
         contentTextStyle:
             textTheme.bodyMedium?.copyWith(color: AppColors.inkOnDark),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(_fieldRadius),
-        ),
+        shape: pill,
       ),
+      // Floating dark pill dock, as in the mobile design: charcoal capsule, terracotta-tinted
+      // selection, cream labels.
       navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: scheme.surfaceContainerLow,
-        indicatorColor: scheme.primary.withValues(alpha: 0.18),
+        backgroundColor: isDark ? const Color(0xFF1D1B19) : AppColors.charcoal,
+        indicatorColor: AppColors.accent.withValues(alpha: 0.28),
+        indicatorShape: pill,
         height: 68,
         labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
         iconTheme: WidgetStateProperty.resolveWith(
           (states) => IconThemeData(
             color: states.contains(WidgetState.selected)
-                ? scheme.primary
-                : scheme.onSurfaceVariant,
+                ? AppColors.accent300
+                : AppColors.neutral400,
           ),
         ),
         labelTextStyle: WidgetStateProperty.resolveWith(
-          (states) => textTheme.labelSmall?.copyWith(
-            fontWeight: states.contains(WidgetState.selected)
-                ? FontWeight.w700
-                : FontWeight.w500,
+          (states) => GoogleFonts.figtree(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
             color: states.contains(WidgetState.selected)
-                ? scheme.onSurface
-                : scheme.onSurfaceVariant,
+                ? AppColors.accent300
+                : AppColors.neutral400,
           ),
         ),
       ),
-      // One motion language everywhere: a quick fade-forward on Android, the native slide on
-      // iOS (which also keeps the edge-swipe back gesture).
       pageTransitionsTheme: const PageTransitionsTheme(
         builders: {
           TargetPlatform.android: FadeForwardsPageTransitionsBuilder(),
@@ -226,8 +223,8 @@ class AppTheme {
       ),
       tooltipTheme: TooltipThemeData(
         decoration: BoxDecoration(
-          color: isDark ? AppColors.ivory : AppColors.charcoal,
-          borderRadius: BorderRadius.circular(8),
+          color: isDark ? AppColors.neutral100 : AppColors.charcoal,
+          borderRadius: BorderRadius.circular(999),
         ),
         textStyle: textTheme.bodySmall?.copyWith(
           color: isDark ? AppColors.inkOnLight : AppColors.inkOnDark,
@@ -237,91 +234,103 @@ class AppTheme {
     );
   }
 
-  static final ColorScheme _darkScheme = const ColorScheme.dark().copyWith(
-    primary: AppColors.tealLight,
-    onPrimary: AppColors.charcoal,
-    primaryContainer: AppColors.teal,
-    onPrimaryContainer: AppColors.white,
-    secondary: AppColors.tealLight,
-    onSecondary: AppColors.charcoal,
-    secondaryContainer: const Color(0xFF1F3470),
-    onSecondaryContainer: const Color(0xFFD8E2FF),
-    tertiary: AppColors.purpleOnDark,
-    onTertiary: AppColors.charcoal,
-    error: AppColors.redOnDark,
-    onError: AppColors.charcoal,
-    surface: AppColors.charcoal,
-    onSurface: AppColors.inkOnDark,
-    onSurfaceVariant: AppColors.mutedOnDark,
-    surfaceContainerLowest: const Color(0xFF10151C),
-    surfaceContainerLow: AppColors.charcoalRaised,
-    surfaceContainer: const Color(0xFF1E2735),
-    surfaceContainerHigh: AppColors.charcoalPanel,
-    surfaceContainerHighest: const Color(0xFF2A3547),
-    outline: const Color(0xFF6B7889),
-    outlineVariant: AppColors.charcoalLine,
-  );
-
   static final ColorScheme _lightScheme = const ColorScheme.light().copyWith(
-    primary: AppColors.teal,
-    onPrimary: AppColors.white,
-    primaryContainer: AppColors.tealContainer,
-    onPrimaryContainer: AppColors.teal,
-    secondary: AppColors.teal,
-    onSecondary: AppColors.white,
-    secondaryContainer: const Color(0xFFDCE4FF),
-    onSecondaryContainer: const Color(0xFF0B2468),
-    tertiary: AppColors.purpleOnLight,
-    onTertiary: AppColors.white,
+    primary: AppColors.accent,
+    // Ink, not cream: cream on terracotta is 3.0:1, ink is 4.6:1 (WCAG AA needs 4.5:1).
+    onPrimary: AppColors.inkOnLight,
+    primaryContainer: AppColors.accent200,
+    onPrimaryContainer: AppColors.accent800,
+    secondary: AppColors.sage700,
+    onSecondary: AppColors.ivory,
+    secondaryContainer: AppColors.sage200,
+    onSecondaryContainer: AppColors.sage900,
+    tertiary: AppColors.sage700,
+    onTertiary: AppColors.ivory,
     error: AppColors.redOnLight,
-    onError: AppColors.white,
+    onError: AppColors.ivory,
     surface: AppColors.ivory,
     onSurface: AppColors.inkOnLight,
     onSurfaceVariant: AppColors.mutedOnLight,
-    surfaceContainerLowest: AppColors.white,
-    surfaceContainerLow: AppColors.white,
-    surfaceContainer: const Color(0xFFF5F7F9),
-    surfaceContainerHigh: AppColors.ivoryDeep,
-    surfaceContainerHighest: const Color(0xFFE5EBEF),
-    outline: const Color(0xFF7C8696),
+    surfaceContainerLowest: AppColors.ivory,
+    surfaceContainerLow: AppColors.ivoryDeep,
+    surfaceContainer: AppColors.ivoryDeep,
+    // neutral200, not 300: muted text on neutral300 is 4.4:1.
+    surfaceContainerHigh: AppColors.neutral200,
+    surfaceContainerHighest: AppColors.neutral200,
+    outline: AppColors.neutral600,
     outlineVariant: AppColors.ivoryLine,
   );
 
-  /// Compact operational type scale. Every style uses tabular figures so times, capacities,
-  /// counts and schedules line up in columns.
+  static final ColorScheme _darkScheme = const ColorScheme.dark().copyWith(
+    primary: AppColors.accent400,
+    onPrimary: AppColors.neutral900,
+    primaryContainer: AppColors.accent800,
+    onPrimaryContainer: AppColors.accent200,
+    secondary: AppColors.sage400,
+    onSecondary: AppColors.neutral900,
+    secondaryContainer: AppColors.sage800,
+    onSecondaryContainer: AppColors.sage200,
+    tertiary: AppColors.sage300,
+    onTertiary: AppColors.neutral900,
+    error: AppColors.redOnDark,
+    onError: AppColors.neutral900,
+    surface: AppColors.charcoal,
+    onSurface: AppColors.inkOnDark,
+    onSurfaceVariant: AppColors.mutedOnDark,
+    surfaceContainerLowest: Color(0xFF1D1B19),
+    // Cards use the raised shade and the top step uses the panel shade: muted text on the old
+    // neutral700 step was 3.3:1.
+    surfaceContainerLow: AppColors.charcoalRaised,
+    surfaceContainer: AppColors.charcoalRaised,
+    surfaceContainerHigh: AppColors.charcoalPanel,
+    surfaceContainerHighest: AppColors.charcoalPanel,
+    outline: AppColors.neutral500,
+    outlineVariant: AppColors.charcoalLine,
+  );
+
+  /// Caprasimo for headings and metrics, Figtree for body and labels. Body styles keep tabular
+  /// figures so times, capacities and counts line up in columns.
   static TextTheme _textTheme(ColorScheme scheme) {
     const tabular = [FontFeature.tabularFigures()];
-    TextStyle s(
+    TextStyle head(double size, {double height = 1.12}) =>
+        GoogleFonts.caprasimo(
+          fontSize: size,
+          height: height,
+          letterSpacing: -0.015 * size,
+          color: scheme.onSurface,
+          fontFeatures: tabular,
+        );
+    TextStyle body(
       double size,
-      FontWeight weight, {
-      double height = 1.3,
+      FontWeight w, {
+      double height = 1.4,
       double letter = 0,
     }) =>
-        TextStyle(
+        GoogleFonts.figtree(
           fontSize: size,
-          fontWeight: weight,
+          fontWeight: w,
           height: height,
           letterSpacing: letter,
           color: scheme.onSurface,
           fontFeatures: tabular,
         );
     return TextTheme(
-      displayLarge: s(40, FontWeight.w700, height: 1.15, letter: -0.5),
-      displayMedium: s(32, FontWeight.w700, height: 1.15, letter: -0.4),
-      displaySmall: s(26, FontWeight.w700, height: 1.2, letter: -0.3),
-      headlineLarge: s(24, FontWeight.w700, height: 1.2, letter: -0.2),
-      headlineMedium: s(22, FontWeight.w700, height: 1.25),
-      headlineSmall: s(20, FontWeight.w700, height: 1.25),
-      titleLarge: s(18, FontWeight.w700, height: 1.25),
-      titleMedium: s(15, FontWeight.w600),
-      titleSmall: s(13, FontWeight.w600),
-      bodyLarge: s(15, FontWeight.w400, height: 1.4),
-      bodyMedium: s(14, FontWeight.w400, height: 1.4),
-      bodySmall: s(12, FontWeight.w400, height: 1.35)
+      displayLarge: head(42),
+      displayMedium: head(34),
+      displaySmall: head(28),
+      headlineLarge: head(26),
+      headlineMedium: head(22),
+      headlineSmall: head(20),
+      titleLarge: head(18),
+      titleMedium: body(15, FontWeight.w700),
+      titleSmall: body(13, FontWeight.w700),
+      bodyLarge: body(15, FontWeight.w400),
+      bodyMedium: body(14, FontWeight.w400),
+      bodySmall: body(12, FontWeight.w400, height: 1.35)
           .copyWith(color: scheme.onSurfaceVariant),
-      labelLarge: s(14, FontWeight.w600, letter: 0.1),
-      labelMedium: s(12, FontWeight.w600, letter: 0.2),
-      labelSmall: s(11, FontWeight.w600, letter: 0.3)
+      labelLarge: body(14, FontWeight.w600, height: 1.3, letter: 0.1),
+      labelMedium: body(12, FontWeight.w600, height: 1.3, letter: 0.2),
+      labelSmall: body(11, FontWeight.w700, height: 1.3, letter: 0.8)
           .copyWith(color: scheme.onSurfaceVariant),
     );
   }

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/theme/ops_colors.dart';
 import '../../floor/application/floor_providers.dart';
 import '../../venues/application/venues_providers.dart';
 import '../application/floor_studio_providers.dart';
@@ -534,9 +535,9 @@ class _FloorStudioScreenState extends ConsumerState<FloorStudioScreen> {
                 onMoveEnd: _endMove,
               ),
               const SizedBox(height: 6),
-              const Text(
+              Text(
                 'Drag an object to move it. Tap one to select it.',
-                style: TextStyle(fontSize: 12),
+                style: Theme.of(context).textTheme.bodySmall,
               ),
               for (final object in _objects)
                 ListTile(
@@ -595,7 +596,7 @@ class _FloorStudioScreenState extends ConsumerState<FloorStudioScreen> {
                           : issues.join('\n'),
                       style: TextStyle(
                         color: issues.isEmpty
-                            ? Colors.green.shade800
+                            ? context.ops.success.fg
                             : Theme.of(context).colorScheme.error,
                       ),
                     );
@@ -632,10 +633,10 @@ class _FloorStudioScreenState extends ConsumerState<FloorStudioScreen> {
                   ),
                 ),
                 const SizedBox(height: 6),
-                const Text(
+                Text(
                   '3D preview is an illustrative render of this layout, not a photograph. '
                   'People and food are stylized placeholders, not the actual guests or menu.',
-                  style: TextStyle(fontSize: 12),
+                  style: Theme.of(context).textTheme.bodySmall,
                 ),
               ],
             ],

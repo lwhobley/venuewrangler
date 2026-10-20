@@ -93,11 +93,11 @@ class ScheduleListScreen extends ConsumerWidget {
                   return ListView(
                     children: [
                       if (pendingSwaps.isNotEmpty) ...[
-                        const Padding(
+                        Padding(
                           padding: EdgeInsets.fromLTRB(16, 16, 16, 4),
                           child: Text(
                             'Open swap requests',
-                            style: TextStyle(fontWeight: FontWeight.bold),
+                            style: Theme.of(context).textTheme.titleMedium,
                           ),
                         ),
                         for (final swap in pendingSwaps)
@@ -315,7 +315,6 @@ class ScheduleListScreen extends ConsumerWidget {
             hintText:
                 'Describe the roster, target headcount, and any constraints '
                 '(time-off requests, required roles)…',
-            border: OutlineInputBorder(),
           ),
         ),
         actions: [

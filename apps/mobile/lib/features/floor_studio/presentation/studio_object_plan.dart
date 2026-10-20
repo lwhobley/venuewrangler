@@ -174,6 +174,8 @@ class _StudioObjectPlanState extends State<StudioObjectPlan> {
                     Theme.of(context).colorScheme.surfaceContainerHighest,
                 tableColor: Theme.of(context).colorScheme.surface,
                 selectionColor: Theme.of(context).colorScheme.primary,
+                scheme: Theme.of(context).colorScheme,
+                labelStyle: Theme.of(context).textTheme.labelMedium,
               ),
             ),
           ),
@@ -208,17 +210,31 @@ class _ObjectPanRecognizer extends PanGestureRecognizer {
   }
 }
 
-Color _fillFor(StudioObjectKind kind) => switch (kind) {
-      StudioObjectKind.stage => const Color(0xFF455A64),
-      StudioObjectKind.bar => const Color(0xFF8D6E63),
-      StudioObjectKind.danceFloor => const Color(0xFFCE93D8),
-      StudioObjectKind.djBooth => const Color(0xFF5C6BC0),
-      StudioObjectKind.podium => const Color(0xFFA1887F),
-      StudioObjectKind.buffet => const Color(0xFFD7CCC8),
-      StudioObjectKind.backdrop => const Color(0xFF90A4AE),
-      StudioObjectKind.planter => const Color(0xFF81C784),
-      StudioObjectKind.placeholder => const Color(0xFFB0BEC5),
+/// Plan fill per object kind, taken from the theme's colour scheme so it follows light and
+/// dark mode. Every kind also carries a text label, so colour is never the only signal.
+Color _fillFor(StudioObjectKind kind, ColorScheme scheme) => switch (kind) {
+      StudioObjectKind.stage => scheme.onSurfaceVariant,
+      StudioObjectKind.bar => scheme.primary,
+      StudioObjectKind.danceFloor => scheme.primaryContainer,
+      StudioObjectKind.djBooth => scheme.onPrimaryContainer,
+      StudioObjectKind.podium => scheme.outline,
+      StudioObjectKind.buffet => scheme.secondaryContainer,
+      StudioObjectKind.backdrop => scheme.tertiary,
+      StudioObjectKind.planter => scheme.secondary,
+      StudioObjectKind.placeholder => scheme.surfaceContainerHigh,
     };
+
+double _contrast(Color a, Color b) {
+  final la = a.computeLuminance();
+  final lb = b.computeLuminance();
+  return (math.max(la, lb) + 0.05) / (math.min(la, lb) + 0.05);
+}
+
+/// Whichever of the scheme's text and surface colours reads better on [fill].
+Color _onFill(Color fill, ColorScheme scheme) =>
+    _contrast(scheme.onSurface, fill) >= _contrast(scheme.surface, fill)
+        ? scheme.onSurface
+        : scheme.surface;
 
 class _StudioPlanPainter extends CustomPainter {
   _StudioPlanPainter({
@@ -232,6 +248,8 @@ class _StudioPlanPainter extends CustomPainter {
     required this.floorColor,
     required this.tableColor,
     required this.selectionColor,
+    required this.scheme,
+    required this.labelStyle,
   });
 
   final double widthFeet;
@@ -244,6 +262,8 @@ class _StudioPlanPainter extends CustomPainter {
   final Color floorColor;
   final Color tableColor;
   final Color selectionColor;
+  final ColorScheme scheme;
+  final TextStyle? labelStyle;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -305,31 +325,25 @@ class _StudioPlanPainter extends CustomPainter {
         true,
       );
 
-    final fill = _fillFor(object.kind);
+    final fill = _fillFor(object.kind, scheme);
     canvas.drawPath(path, Paint()..color = fill.withValues(alpha: 0.85));
 
     final selected = object.id == selectedId;
     canvas.drawPath(
       path,
       Paint()
-        ..color = selected ? selectionColor : const Color(0xFF37474F)
+        ..color = selected ? selectionColor : scheme.outline
         ..style = PaintingStyle.stroke
         ..strokeWidth = selected ? 3 : 1,
     );
 
     // Label: horizontal, clipped to the footprint so a long description never spills out.
-    final onFill = ThemeData.estimateBrightnessForColor(fill) == Brightness.dark
-        ? Colors.white
-        : Colors.black87;
+    final onFill = _onFill(fill, scheme);
     final painter = TextPainter(
       text: TextSpan(
         text:
             object.description.isEmpty ? object.kind.label : object.description,
-        style: TextStyle(
-          color: onFill,
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-        ),
+        style: labelStyle?.copyWith(color: onFill),
       ),
       textDirection: TextDirection.ltr,
       maxLines: 1,

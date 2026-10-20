@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'app_colors.dart';
 
 /// Operational status tones. Every status shown in the UI must pair its tone with text or an
-/// icon (see StatusChip) — colour alone is never the only signal.
+/// icon (see StatusChip): colour alone is never the only signal.
 enum Tone {
   /// Ready, completed, available.
   success,
@@ -24,7 +24,6 @@ enum Tone {
   neutral,
 }
 
-/// A tone's text/icon colour and its tinted container colour on the current brightness.
 class ToneColors {
   const ToneColors({required this.fg, required this.bg});
 
@@ -32,7 +31,6 @@ class ToneColors {
   final Color bg;
 }
 
-/// Semantic colours attached to the theme so screens never hardcode `Colors.green` etc.
 @immutable
 class OpsColors extends ThemeExtension<OpsColors> {
   const OpsColors({
@@ -54,7 +52,7 @@ class OpsColors extends ThemeExtension<OpsColors> {
   final ToneColors info;
   final ToneColors neutral;
 
-  /// Coral that still meets text contrast on the current surface (plain coral fails on ivory).
+  /// Terracotta that meets text contrast on the current surface (accent700 on cream).
   final Color primaryStrong;
 
   /// Blueprint-grid line colour.
@@ -73,26 +71,26 @@ class OpsColors extends ThemeExtension<OpsColors> {
       };
 
   static const OpsColors dark = OpsColors(
-    success: ToneColors(fg: AppColors.greenOnDark, bg: Color(0x265BD39A)),
-    warning: ToneColors(fg: AppColors.amberOnDark, bg: Color(0x26F5BC4A)),
-    vip: ToneColors(fg: AppColors.purpleOnDark, bg: Color(0x26B59BFF)),
-    danger: ToneColors(fg: AppColors.redOnDark, bg: Color(0x26FF8585)),
-    info: ToneColors(fg: AppColors.cobaltOnDark, bg: Color(0x264D7CFE)),
-    neutral: ToneColors(fg: AppColors.mutedOnDark, bg: Color(0x1FA3AFBF)),
-    primaryStrong: AppColors.tealLight,
-    gridLine: Color(0x14FFFFFF),
+    success: ToneColors(fg: AppColors.greenOnDark, bg: Color(0x2E8FA073)),
+    warning: ToneColors(fg: AppColors.amberOnDark, bg: Color(0x2EF6A06B)),
+    vip: ToneColors(fg: AppColors.purpleOnDark, bg: Color(0x4756633F)),
+    danger: ToneColors(fg: AppColors.redOnDark, bg: Color(0x0DF08A6B)),
+    info: ToneColors(fg: AppColors.neutral200, bg: Color(0x2EC0B6A5)),
+    neutral: ToneColors(fg: AppColors.mutedOnDark, bg: Color(0x1FC0B6A5)),
+    primaryStrong: AppColors.accent300,
+    gridLine: Color(0x14F9F4ED),
     panelBorder: AppColors.charcoalLine,
   );
 
   static const OpsColors light = OpsColors(
-    success: ToneColors(fg: AppColors.greenOnLight, bg: Color(0x24146A43)),
-    warning: ToneColors(fg: AppColors.amberOnLight, bg: Color(0x24F5BC4A)),
-    vip: ToneColors(fg: AppColors.purpleOnLight, bg: Color(0x1F6742C4)),
-    danger: ToneColors(fg: AppColors.redOnLight, bg: Color(0x1FB3261E)),
-    info: ToneColors(fg: AppColors.cobaltStrongOnLight, bg: Color(0x242450CC)),
-    neutral: ToneColors(fg: AppColors.mutedOnLight, bg: Color(0x1F566173)),
-    primaryStrong: AppColors.teal,
-    gridLine: Color(0x14141A22),
+    success: ToneColors(fg: AppColors.greenOnLight, bg: Color(0x33728157)),
+    warning: ToneColors(fg: AppColors.amberOnLight, bg: Color(0x14C67139)),
+    vip: ToneColors(fg: AppColors.purpleOnLight, bg: Color(0x3356633F)),
+    danger: ToneColors(fg: AppColors.redOnLight, bg: Color(0x149A3A22)),
+    info: ToneColors(fg: AppColors.neutral800, bg: Color(0x33645C50)),
+    neutral: ToneColors(fg: AppColors.mutedOnLight, bg: Color(0x0D645C50)),
+    primaryStrong: AppColors.accent700,
+    gridLine: Color(0x14201E1D),
     panelBorder: AppColors.ivoryLine,
   );
 
@@ -142,6 +140,5 @@ class OpsColors extends ThemeExtension<OpsColors> {
 }
 
 extension OpsColorsContext on BuildContext {
-  /// Semantic operational colours for the current theme.
   OpsColors get ops => Theme.of(this).extension<OpsColors>() ?? OpsColors.dark;
 }
