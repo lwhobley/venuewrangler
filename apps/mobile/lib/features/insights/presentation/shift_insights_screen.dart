@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/theme/app_radii.dart';
 import '../../../core/theme/ops_colors.dart';
 
 import '../../../core/errors/app_error.dart';
@@ -96,12 +97,9 @@ class ShiftInsightsScreen extends ConsumerWidget {
                               color: Theme.of(context).colorScheme.primary,
                             ),
                             const SizedBox(height: 16),
-                            const Text(
+                            Text(
                               'No shift insights yet.',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                              ),
+                              style: Theme.of(context).textTheme.titleLarge,
                             ),
                             const SizedBox(height: 8),
                             const Text(
@@ -181,7 +179,7 @@ class _ShiftInsightCard extends ConsumerWidget {
     return Card(
       elevation: 1,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(AppRadii.card),
         side: BorderSide(color: color.withAlpha(50)),
       ),
       child: Padding(
@@ -203,18 +201,14 @@ class _ShiftInsightCard extends ConsumerWidget {
                     children: [
                       Text(
                         insight.kind.displayLabel,
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: color,
-                        ),
+                        style: Theme.of(context)
+                            .textTheme
+                            .labelMedium
+                            ?.copyWith(color: color),
                       ),
                       Text(
                         insight.title,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
+                        style: Theme.of(context).textTheme.titleMedium,
                       ),
                     ],
                   ),
@@ -419,9 +413,9 @@ class _GenerateInsightsDialogState
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'Enter the shift schedule, roster notes, or operational parameters (e.g. expected covers, station assignments, peak hours):',
-              style: TextStyle(fontSize: 13),
+              style: Theme.of(context).textTheme.bodyMedium,
             ),
             const SizedBox(height: 12),
             TextField(
@@ -430,14 +424,16 @@ class _GenerateInsightsDialogState
               decoration: const InputDecoration(
                 hintText:
                     'e.g. Friday evening shift 5pm-11pm. 5 floor servers, 2 bartenders, 1 host. Projected 190 covers between 6:30pm and 8:30pm.',
-                border: OutlineInputBorder(),
               ),
             ),
             if (_errorMessage != null) ...[
               const SizedBox(height: 12),
               Text(
                 _errorMessage!,
-                style: TextStyle(color: context.ops.danger.fg, fontSize: 13),
+                style: Theme.of(context)
+                    .textTheme
+                    .bodyMedium
+                    ?.copyWith(color: context.ops.danger.fg),
               ),
             ],
           ],

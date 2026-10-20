@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/auth/auth_providers.dart';
 import '../../../core/offline/offline_queue_providers.dart';
+import '../../../core/theme/app_radii.dart';
 import '../../../core/theme/ops_colors.dart';
 import '../../../core/widgets/state_views.dart';
 import '../../../core/widgets/status_chip.dart';
@@ -299,7 +300,7 @@ class _Kpi extends StatelessWidget {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(AppRadii.card),
         border: Border.all(color: context.ops.panelBorder),
       ),
       child: Column(
@@ -322,8 +323,7 @@ class _Kpi extends StatelessWidget {
           ),
           Text(
             value,
-            style: theme.textTheme.titleLarge
-                ?.copyWith(fontWeight: FontWeight.w800),
+            style: theme.textTheme.titleLarge,
           ),
         ],
       ),
@@ -372,8 +372,7 @@ class _ReservationRow extends StatelessWidget {
               width: 64,
               child: Text(
                 clock.clockLabel(r.reservationTime),
-                style: theme.textTheme.titleMedium
-                    ?.copyWith(fontWeight: FontWeight.w800),
+                style: theme.textTheme.titleMedium,
               ),
             ),
             Expanded(

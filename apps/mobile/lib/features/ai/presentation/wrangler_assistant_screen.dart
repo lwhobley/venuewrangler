@@ -59,7 +59,6 @@ class _WranglerAssistantScreenState
               maxLines: 4,
               decoration: const InputDecoration(
                 labelText: 'Your question',
-                border: OutlineInputBorder(),
               ),
             ),
             const SizedBox(height: 12),

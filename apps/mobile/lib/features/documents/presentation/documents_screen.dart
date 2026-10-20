@@ -129,9 +129,12 @@ class DocumentsScreen extends ConsumerWidget {
                 ),
                 if (VenueDocument.managerOnlyCategories.contains(category)) ...[
                   const SizedBox(height: 8),
-                  const Text(
+                  Text(
                     'Only managers can see documents in this category.',
-                    style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodySmall
+                        ?.copyWith(fontStyle: FontStyle.italic),
                   ),
                 ],
               ],

@@ -30,10 +30,10 @@ class StaffAvatar extends ConsumerWidget {
     final fallback = Center(
       child: Text(
         initials.isEmpty ? '?' : initials,
-        style: TextStyle(
-          color: Theme.of(context).colorScheme.onPrimary,
-          fontWeight: FontWeight.w600,
-        ),
+        style: Theme.of(context)
+            .textTheme
+            .labelLarge
+            ?.copyWith(color: Theme.of(context).colorScheme.onPrimary),
       ),
     );
     return Semantics(

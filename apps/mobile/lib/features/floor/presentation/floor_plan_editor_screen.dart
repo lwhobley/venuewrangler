@@ -714,10 +714,7 @@ class _TableNode extends StatelessWidget {
             children: [
               Text(
                 table.label,
-                style: theme.textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w800,
-                  fontSize: 16,
-                ),
+                style: theme.textTheme.titleMedium,
               ),
               Row(
                 mainAxisSize: MainAxisSize.min,
@@ -730,7 +727,7 @@ class _TableNode extends StatelessWidget {
                   const SizedBox(width: 2),
                   Text(
                     '${table.capacity}',
-                    style: theme.textTheme.bodySmall?.copyWith(fontSize: 12),
+                    style: theme.textTheme.bodySmall,
                   ),
                 ],
               ),

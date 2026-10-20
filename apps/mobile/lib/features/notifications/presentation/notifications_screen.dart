@@ -112,9 +112,9 @@ class _NotificationListTile extends ConsumerWidget {
       ),
       title: Text(
         item.title,
-        style: TextStyle(
-          fontWeight: item.isRead ? FontWeight.normal : FontWeight.bold,
-        ),
+        style: item.isRead
+            ? Theme.of(context).textTheme.bodyLarge
+            : Theme.of(context).textTheme.titleMedium,
       ),
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

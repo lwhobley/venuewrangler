@@ -5,6 +5,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
+import '../../../core/theme/app_radii.dart';
 import 'local_asset_server.dart';
 
 /// Hosts the bundled Three.js room scene in a WebView. The scene data is stored in a page
@@ -127,7 +128,7 @@ class _FloorStudio3DViewState extends State<FloorStudio3DView> {
         SizedBox(
           height: 360,
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(AppRadii.card),
             child: WebViewWidget(
               controller: _controller,
               // OrbitControls needs the entire drag/pinch sequence. Otherwise
@@ -145,12 +146,11 @@ class _FloorStudio3DViewState extends State<FloorStudio3DView> {
             padding: const EdgeInsets.only(top: 6),
             child: Text(
               status,
-              style: TextStyle(
-                fontSize: 12,
-                color: _errors.isEmpty
-                    ? null
-                    : Theme.of(context).colorScheme.error,
-              ),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: _errors.isEmpty
+                        ? null
+                        : Theme.of(context).colorScheme.error,
+                  ),
             ),
           ),
       ],

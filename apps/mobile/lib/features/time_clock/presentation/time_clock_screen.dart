@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/theme/app_radii.dart';
 import '../../../core/theme/ops_colors.dart';
 import '../../../core/widgets/status_chip.dart';
 
@@ -294,7 +295,7 @@ class _TimeClockScreenState extends ConsumerState<TimeClockScreen> {
                     return Card(
                       elevation: 2,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
+                        borderRadius: BorderRadius.circular(AppRadii.card),
                         side: BorderSide(
                           color: statusColor.withAlpha(80),
                           width: 1.5,
@@ -318,12 +319,13 @@ class _TimeClockScreenState extends ConsumerState<TimeClockScreen> {
                               ),
                               child: Text(
                                 statusText,
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  color: statusColor,
-                                  letterSpacing: 1.2,
-                                ),
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleMedium
+                                    ?.copyWith(
+                                      color: statusColor,
+                                      letterSpacing: 1.2,
+                                    ),
                               ),
                             ),
                             const SizedBox(height: 16),
@@ -332,33 +334,23 @@ class _TimeClockScreenState extends ConsumerState<TimeClockScreen> {
                               // hours worked, which the "Shift elapsed" line and Recent
                               // Punches below already cover.
                               _formatClockFace(DateTime.now()),
-                              style: const TextStyle(
-                                fontSize: 48,
-                                fontWeight: FontWeight.w800,
-                                fontFamily: 'monospace',
-                              ),
+                              style: Theme.of(context).textTheme.displayLarge,
                             ),
                             if (isClockedIn) ...[
                               const SizedBox(height: 4),
                               Text(
                                 'Shift elapsed: ${_formatDuration(activeEntry.totalElapsed)}',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .onSurfaceVariant,
-                                ),
+                                style: Theme.of(context).textTheme.bodySmall,
                               ),
                               if (isOnBreak &&
                                   activeEntry.activeBreak != null) ...[
                                 const SizedBox(height: 2),
                                 Text(
                                   'Current ${activeEntry.activeBreak!.type} break: ${_formatDuration(activeEntry.activeBreak!.duration)}',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600,
-                                    color: context.ops.warning.fg,
-                                  ),
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .labelLarge
+                                      ?.copyWith(color: context.ops.warning.fg),
                                 ),
                               ],
                             ],
@@ -372,10 +364,10 @@ class _TimeClockScreenState extends ConsumerState<TimeClockScreen> {
                                   'You are clocked in at another venue. '
                                   'Clock out there before clocking in here.',
                                   textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    color: context.ops.warning.fg,
-                                    fontWeight: FontWeight.w600,
-                                  ),
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .labelLarge
+                                      ?.copyWith(color: context.ops.warning.fg),
                                 ),
                                 const SizedBox(height: 12),
                               ],
@@ -455,9 +447,9 @@ class _TimeClockScreenState extends ConsumerState<TimeClockScreen> {
                 const SizedBox(height: 24),
 
                 // Recent Punches Section
-                const Text(
+                Text(
                   'Recent Punches',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  style: Theme.of(context).textTheme.titleLarge,
                 ),
                 const SizedBox(height: 8),
                 myEntriesAsync.when(
@@ -506,8 +498,7 @@ class _TimeClockScreenState extends ConsumerState<TimeClockScreen> {
                             ),
                             title: Text(
                               '${inTime.month}/${inTime.day} — ${_formatDuration(entry.workedDuration)}',
-                              style:
-                                  const TextStyle(fontWeight: FontWeight.bold),
+                              style: Theme.of(context).textTheme.titleMedium,
                             ),
                             subtitle: Text(
                               'In: ${_formatTime(inTime)} • Out: ${outTime != null ? _formatTime(outTime) : 'Active'}',
@@ -527,9 +518,9 @@ class _TimeClockScreenState extends ConsumerState<TimeClockScreen> {
                 ),
               ] else ...[
                 // Clock Board (Active Staff on Duty)
-                const Text(
+                Text(
                   'Active Staff on Duty',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  style: Theme.of(context).textTheme.titleLarge,
                 ),
                 const SizedBox(height: 8),
                 boardAsync.when(
@@ -577,8 +568,7 @@ class _TimeClockScreenState extends ConsumerState<TimeClockScreen> {
                             ),
                             title: Text(
                               'Staff ID: ${entry.userId.substring(0, 8)}...',
-                              style:
-                                  const TextStyle(fontWeight: FontWeight.bold),
+                              style: Theme.of(context).textTheme.titleMedium,
                             ),
                             subtitle: Text(
                               entry.isOnBreak
@@ -587,10 +577,7 @@ class _TimeClockScreenState extends ConsumerState<TimeClockScreen> {
                             ),
                             trailing: Text(
                               _formatDuration(entry.workedDuration),
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w600,
-                                fontFamily: 'monospace',
-                              ),
+                              style: Theme.of(context).textTheme.labelLarge,
                             ),
                           ),
                         );
@@ -633,7 +620,7 @@ class _MobileOnlyNotice extends StatelessWidget {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: context.ops.info.bg,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(AppRadii.tile),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -644,9 +631,9 @@ class _MobileOnlyNotice extends StatelessWidget {
             child: Text.rich(
               TextSpan(
                 children: [
-                  const TextSpan(
+                  TextSpan(
                     text: 'Clock in/out requires the mobile app',
-                    style: TextStyle(fontWeight: FontWeight.w700),
+                    style: Theme.of(context).textTheme.titleMedium,
                   ),
                   TextSpan(
                     text: isClockedIn
