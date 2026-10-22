@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/auth/sign_out_service.dart';
+import '../../invites/application/invites_providers.dart';
 import '../../invites/presentation/pending_invites_entry.dart';
 import '../../venues/application/venues_providers.dart';
 import '../../venues/domain/venue.dart';
@@ -25,6 +26,10 @@ class OrganizationVenueSwitcherScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final organizationsAsync = ref.watch(myOrganizationsProvider);
     final provisioning = ref.watch(workspaceProvisioningProvider);
+    final joiningTeam = ref.watch(
+      inviteRedemptionProvider
+          .select((state) => state.status == InviteRedemptionStatus.joining),
+    );
 
     return Scaffold(
       appBar: AppBar(
@@ -40,7 +45,9 @@ class OrganizationVenueSwitcherScreen extends ConsumerWidget {
         ],
       ),
       body: switch (provisioning.status) {
-        WorkspaceProvisioningStatus.creating => const _CreatingWorkspace(),
+        _ when joiningTeam => const _Progress('Joining your team…'),
+        WorkspaceProvisioningStatus.creating =>
+          const _Progress('Setting up your workspace…'),
         WorkspaceProvisioningStatus.failed =>
           _WorkspaceFailed(message: provisioning.message),
         WorkspaceProvisioningStatus.idle => organizationsAsync.when(
@@ -133,15 +140,29 @@ class _EmptyState extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Why an invitation link or "Join your team" sign-up found nothing to join.
+    final problem = ref.watch(
+      inviteRedemptionProvider.select((state) => state.problem),
+    );
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (problem != null) ...[
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Text(problem, textAlign: TextAlign.center),
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
             const Text(
-              "You don't belong to any organization yet. Ask an administrator "
-              'to invite you, or start your own.',
+              "You don't belong to a team yet. If your manager invited you, "
+              'ask them to resend the invitation to the email you signed in '
+              'with. Or start your own workspace.',
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 16),
@@ -167,18 +188,20 @@ Future<void> _createWorkspace(BuildContext context, WidgetRef ref) async {
       .create(name: details.name, timezone: details.timezone);
 }
 
-class _CreatingWorkspace extends StatelessWidget {
-  const _CreatingWorkspace();
+class _Progress extends StatelessWidget {
+  const _Progress(this.label);
+
+  final String label;
 
   @override
   Widget build(BuildContext context) {
-    return const Center(
+    return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          CircularProgressIndicator(),
-          SizedBox(height: 16),
-          Text('Setting up your workspace…'),
+          const CircularProgressIndicator(),
+          const SizedBox(height: 16),
+          Text(label),
         ],
       ),
     );

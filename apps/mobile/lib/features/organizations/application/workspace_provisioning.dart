@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/auth/auth_providers.dart';
 import '../../../core/network/supabase_providers.dart';
+import '../../invites/application/invites_providers.dart';
 import '../../venues/application/venues_providers.dart';
 import 'organizations_providers.dart';
 
@@ -13,12 +14,19 @@ class WorkspaceProvisioningState {
   const WorkspaceProvisioningState({
     this.status = WorkspaceProvisioningStatus.idle,
     this.message,
+    this.heldName,
+    this.heldTimezone,
   });
 
   final WorkspaceProvisioningStatus status;
 
   /// User-facing explanation when [status] is [WorkspaceProvisioningStatus.failed].
   final String? message;
+
+  /// A "Launch Workspace" sign-up that was not created because invitations are waiting for
+  /// this person: they choose on the invitations screen between joining and creating it.
+  final String? heldName;
+  final String? heldTimezone;
 }
 
 /// Creates a workspace (organization + venue + owner membership, via `public.create_workspace`)
@@ -39,7 +47,12 @@ class WorkspaceProvisioningController
 
   final Ref _ref;
   Future<bool>? _inFlight;
-  ({String name, String timezone, bool fromPendingMetadata})? _lastRequest;
+  ({
+    String name,
+    String timezone,
+    bool fromPendingMetadata,
+    bool checkInvites,
+  })? _lastRequest;
 
   /// Creates a workspace named [name] in [timezone]. Returns whether it now exists.
   Future<bool> create({required String name, required String timezone}) =>
@@ -48,11 +61,33 @@ class WorkspaceProvisioningController
   /// Finishes a "Launch Workspace" sign-up whose name is waiting in auth user metadata. A
   /// no-op if the account already has an organization (the metadata is just cleared), which
   /// is the guard against repeating it on a later sign-in if clearing it ever failed.
+  ///
+  /// Held instead when invitations are waiting for this person (launch review A1: invited
+  /// staff used to end up owning an empty restaurant): see [WorkspaceProvisioningState.heldName].
   Future<bool> provisionFromPendingMetadata({
     required String name,
     required String timezone,
   }) =>
       _start(name, timezone, fromPendingMetadata: true);
+
+  /// Creates the held sign-up workspace after all: the person chose it over their invitations.
+  Future<bool> createHeldWorkspace() {
+    final name = state.heldName;
+    if (name == null) return Future.value(false);
+    return _start(
+      name,
+      state.heldTimezone ?? 'UTC',
+      fromPendingMetadata: true,
+      checkInvites: false,
+    );
+  }
+
+  /// Drops the held sign-up workspace once the person joined a venue instead.
+  Future<void> discardHeldWorkspace() async {
+    if (state.heldName == null) return;
+    state = const WorkspaceProvisioningState();
+    await _clearPendingMetadata();
+  }
 
   /// Re-runs the last attempt, for the Retry button after a failure.
   Future<bool> retry() {
@@ -62,6 +97,7 @@ class WorkspaceProvisioningController
       last.name,
       last.timezone,
       fromPendingMetadata: last.fromPendingMetadata,
+      checkInvites: last.checkInvites,
     );
   }
 
@@ -69,12 +105,17 @@ class WorkspaceProvisioningController
     String name,
     String timezone, {
     required bool fromPendingMetadata,
+    bool checkInvites = true,
   }) {
     final running = _inFlight;
     if (running != null) return running;
     late final Future<bool> attempt;
-    attempt = _run(name, timezone, fromPendingMetadata: fromPendingMetadata)
-        .whenComplete(() {
+    attempt = _run(
+      name,
+      timezone,
+      fromPendingMetadata: fromPendingMetadata,
+      checkInvites: checkInvites,
+    ).whenComplete(() {
       if (identical(_inFlight, attempt)) _inFlight = null;
     });
     _inFlight = attempt;
@@ -85,11 +126,13 @@ class WorkspaceProvisioningController
     String name,
     String timezone, {
     required bool fromPendingMetadata,
+    required bool checkInvites,
   }) async {
     _lastRequest = (
       name: name,
       timezone: timezone,
       fromPendingMetadata: fromPendingMetadata,
+      checkInvites: checkInvites,
     );
     state = const WorkspaceProvisioningState(
       status: WorkspaceProvisioningStatus.creating,
@@ -107,6 +150,15 @@ class WorkspaceProvisioningController
           state = const WorkspaceProvisioningState();
           return true;
         }
+        if (checkInvites && (await _hasPendingInvites())) {
+          if (!mounted) return false;
+          state = WorkspaceProvisioningState(
+            heldName: name,
+            heldTimezone: timezone,
+          );
+          return false;
+        }
+        if (!mounted) return false;
       }
 
       final created = await repo.createWorkspace(
@@ -165,6 +217,16 @@ class WorkspaceProvisioningController
 
   static const _genericFailure =
       'We couldn\'t set up your workspace. Check your connection and try again.';
+
+  /// Any failure reads as "no invitations": they must never block creating the workspace.
+  Future<bool> _hasPendingInvites() async {
+    try {
+      final invites = await _ref.read(invitesRepositoryProvider).fetchPending();
+      return invites.isNotEmpty;
+    } catch (_) {
+      return false;
+    }
+  }
 
   Future<void> _clearPendingMetadata() async {
     try {

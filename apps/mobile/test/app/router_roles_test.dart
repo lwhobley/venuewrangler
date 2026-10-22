@@ -208,7 +208,7 @@ void main() {
 
       expect(location(container), '/select-venue');
       // The switcher offers them instead.
-      expect(find.textContaining('1 pending invitation'), findsOneWidget);
+      expect(find.textContaining("You're invited to join"), findsOneWidget);
     });
 
     testWidgets('Decide later returns to the switcher without looping back',

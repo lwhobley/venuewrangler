@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import '../core/theme/app_radii.dart';
+import '../features/invites/presentation/pending_invites_entry.dart';
 
 /// The five top-level destinations, always one tap away. Each tab keeps its own navigation
 /// stack (StatefulShellRoute.indexedStack), so switching tabs and coming back returns you to
@@ -79,7 +80,7 @@ class AppShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: navigationShell,
+      body: PendingInvitesShellBanner(child: navigationShell),
       // Floating dark pill dock: the theme colours the bar, this gives it the capsule shape.
       // The outer SafeArea handles the home-indicator inset, so the bar itself drops its own.
       bottomNavigationBar: SafeArea(

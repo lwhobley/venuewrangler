@@ -5,16 +5,23 @@ Staff roster + invites, backed by `supabase/migrations/20261002100000_workforce_
 - `domain/workforce_models.dart` — `RosterMember` (a `memberships` row joined with its
   `profiles.display_name`), `Invite`, `WorkforceRole`.
 - `data/workforce_repository.dart` — `WorkforceRepository` interface + Supabase
-  implementation: `fetchRosterForVenue`, `fetchInvitesForVenue`, `createInvite`,
-  `revokeInvite`.
+  implementation: `fetchRosterForVenue`, `fetchInvitesForVenue`, `createInvite` /
+  `resendInvite` (the `create_invite` / `resend_invite` RPCs in
+  `supabase/migrations/20261022110000_invite_onboarding.sql`), `sendInviteEmail` (the
+  `invite-send-email` Edge Function) and `revokeInvite`.
 - `application/workforce_providers.dart` — repository + roster/invites providers.
 - `presentation/workforce_roster_screen.dart` — routed at `/workforce`: lists the roster and
-  pending invites, lets a manager invite someone by email/role or revoke a pending invite, and
-  has an "Import from paste" action that calls `AiRepository.parseStaffImport` and turns each
-  parsed row with an email into a one-tap invite.
+  pending invites (`pending_invites_section.dart`: emailed/expired status, Resend, Revoke).
+- `presentation/invite_staff_dialog.dart` — the invite form (full name, email, role) and the
+  "Paste a staff list" import (`AiRepository.parseStaffImport`, each parsed row with an email
+  becomes a pre-filled invite). Both validate and save inside the dialog and close only on
+  success.
 
-**Not implemented (by design, see the migration's header comment):** invite *redemption* — an
-invitee accepting and becoming an actual `memberships` row. That requires a server-mediated
-Edge Function (matching the migration plan's "invite-member Edge Function" item) so a new
-user's signup can be safely matched to a pending invite; it's a reasonable next slice once
-Phase 3's Edge Function pattern (see `supabase/functions/ai-assistant/`) is extended here.
+Invites: the name the manager types becomes the member's display name when they join. An
+expired invite never blocks a new one (it is marked `expired` and replaced). Managers can
+invite supervisors and staff only; inviting a venue manager takes an organization owner or
+admin (owner decision, enforced by `app_hidden.can_manage_member_role`).
+
+Redemption lives in `features/invites`: the invitation email links to `/join`, where the
+person signs up ("Join your team", no venue fields) or signs in, and the invite is accepted
+once their email is verified (`inviteRedemptionTriggerProvider`).

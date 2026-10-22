@@ -25,4 +25,9 @@ Both that flow and the switcher screen's "Create your own workspace" button (for
 user with no organization) go through `workspaceProvisioningProvider`: single-flight, per
 signed-in user, and visible — the switcher shows progress, or the failure with Try again.
 
+A "Launch Workspace" sign-up is held, not created, while invitations are waiting for the
+person (`WorkspaceProvisioningState.heldName`): the invitations screen offers to join them or
+to create the held workspace after all, so invited staff no longer end up owning an empty
+restaurant (launch review A1).
+
 Not yet implemented: organization renaming, and a general organization settings screen.

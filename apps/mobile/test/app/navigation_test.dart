@@ -133,7 +133,10 @@ void main() {
     addTearDown(router.dispose);
 
     await tester.pumpWidget(
-      MaterialApp.router(theme: AppTheme.dark(), routerConfig: router),
+      // AppShell's invitation banner reads providers (none pending here: signed out).
+      ProviderScope(
+        child: MaterialApp.router(theme: AppTheme.dark(), routerConfig: router),
+      ),
     );
     expect(find.text('Home'), findsWidgets);
     expect(find.byType(NavigationBar), findsOneWidget);

@@ -4,6 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:venuewrangler_mobile/core/auth/auth_providers.dart';
+import 'package:venuewrangler_mobile/features/invites/application/invites_providers.dart';
+import 'package:venuewrangler_mobile/features/invites/data/invites_repository.dart';
+import 'package:venuewrangler_mobile/features/invites/domain/pending_invite.dart';
 import 'package:venuewrangler_mobile/features/organizations/application/organizations_providers.dart';
 import 'package:venuewrangler_mobile/features/organizations/application/workspace_provisioning.dart';
 import 'package:venuewrangler_mobile/features/organizations/data/organizations_repository.dart';
@@ -210,4 +213,74 @@ void main() {
     expect(container.read(activeVenueProvider), isNull);
     expect(state().status, WorkspaceProvisioningStatus.idle);
   });
+
+  group('with invitations waiting (launch review A1)', () {
+    late ProviderContainer invited;
+
+    setUp(() {
+      invited = ProviderContainer(
+        overrides: [
+          organizationsRepositoryProvider.overrideWithValue(repo),
+          currentUserIdProvider.overrideWith((ref) => 'user-a'),
+          invitesRepositoryProvider.overrideWithValue(
+            _OneInviteRepository(),
+          ),
+        ],
+      );
+      addTearDown(invited.dispose);
+    });
+
+    test('a Launch Workspace sign-up is held instead of created', () async {
+      final ok = await invited
+          .read(workspaceProvisioningProvider.notifier)
+          .provisionFromPendingMetadata(
+            name: 'Lone Oak Kitchen',
+            timezone: 'America/Chicago',
+          );
+
+      expect(ok, isFalse);
+      expect(repo.created, isEmpty);
+      final held = invited.read(workspaceProvisioningProvider);
+      expect(held.heldName, 'Lone Oak Kitchen');
+      expect(held.status, WorkspaceProvisioningStatus.idle);
+    });
+
+    test('the held workspace is created when the person chooses it', () async {
+      final controller = invited.read(workspaceProvisioningProvider.notifier);
+      await controller.provisionFromPendingMetadata(
+        name: 'Lone Oak Kitchen',
+        timezone: 'America/Chicago',
+      );
+
+      expect(await controller.createHeldWorkspace(), isTrue);
+      expect(repo.created.single.organization, 'Lone Oak Kitchen');
+      expect(repo.created.single.timezone, 'America/Chicago');
+    });
+
+    test('the in-app Create workspace button is never held', () async {
+      final ok = await invited
+          .read(workspaceProvisioningProvider.notifier)
+          .create(name: 'Second Venue', timezone: 'UTC');
+
+      expect(ok, isTrue);
+      expect(repo.created, hasLength(1));
+    });
+  });
+}
+
+class _OneInviteRepository implements InvitesRepository {
+  @override
+  Future<List<PendingInvite>> fetchPending() async => const [
+        PendingInvite(
+          inviteId: 'i1',
+          organizationId: 'org-9',
+          organizationName: 'Lone Oak Hospitality',
+          venueId: 'v9',
+          venueName: 'Lone Oak Kitchen',
+          role: 'staff',
+        ),
+      ];
+
+  @override
+  Future<void> accept(String inviteId) async {}
 }

@@ -11,6 +11,7 @@ class _FakeAuthRepository implements AuthRepository {
   String? capturedEmail;
   String? capturedWorkspaceName;
   String? capturedTimezone;
+  Map<String, dynamic>? capturedData;
   bool sessionOnSignUp = true;
 
   @override
@@ -32,6 +33,7 @@ class _FakeAuthRepository implements AuthRepository {
     capturedEmail = email;
     capturedWorkspaceName = data?['pending_workspace_name'] as String?;
     capturedTimezone = data?['pending_timezone'] as String?;
+    capturedData = data;
     return sessionOnSignUp;
   }
 
@@ -235,5 +237,62 @@ void main() {
       findsOneWidget,
     );
     expect(find.textContaining('store the device location'), findsOneWidget);
+  });
+
+  group('Join your team (launch review A1)', () {
+    Future<_FakeAuthRepository> pumpJoin(WidgetTester tester) async {
+      final fakeAuth = _FakeAuthRepository()..sessionOnSignUp = false;
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [authRepositoryProvider.overrideWithValue(fakeAuth)],
+          child: const MaterialApp(
+            home: SignUpScreen(
+              joining: true,
+              inviteId: 'invite-1',
+              initialEmail: 'camila@example.com',
+            ),
+          ),
+        ),
+      );
+      return fakeAuth;
+    }
+
+    testWidgets('asks for no venue and marks the account as joining',
+        (tester) async {
+      final fakeAuth = await pumpJoin(tester);
+
+      expect(find.text('Join your team'), findsOneWidget);
+      expect(find.widgetWithText(TextFormField, 'Venue name'), findsNothing);
+      expect(find.text('camila@example.com'), findsOneWidget);
+
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Password'),
+        'Correct-Horse-1',
+      );
+      final checkbox = find.byType(Checkbox);
+      await tester.ensureVisible(checkbox);
+      await tester.tap(checkbox);
+      final submit = find.widgetWithText(FilledButton, 'Create my account');
+      await tester.ensureVisible(submit);
+      await tester.tap(submit);
+      await tester.pumpAndSettle();
+
+      expect(fakeAuth.capturedEmail, 'camila@example.com');
+      expect(fakeAuth.capturedData, {
+        'joining_team': true,
+        'pending_invite_id': 'invite-1',
+      });
+      expect(fakeAuth.capturedWorkspaceName, isNull);
+      expect(find.textContaining('join your team'), findsOneWidget);
+    });
+  });
+
+  testWidgets('the workspace form points invited staff to Join your team',
+      (tester) async {
+    await pumpSignUp(tester);
+
+    final join = find.text('Invited by your manager? Join your team');
+    await tester.ensureVisible(join);
+    expect(join, findsOneWidget);
   });
 }

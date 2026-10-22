@@ -10,6 +10,7 @@ import '../../core/auth/auth_repository.dart';
 import '../../core/errors/app_error.dart';
 import '../../core/theme/app_radii.dart';
 import '../../core/theme/ops_colors.dart';
+import '../invites/application/invites_providers.dart';
 import '../organizations/domain/workspace_name.dart';
 import '../organizations/domain/workspace_timezones.dart';
 import 'legal_acceptance_field.dart';
@@ -22,8 +23,22 @@ import 'legal_acceptance_field.dart';
 /// (features/organizations/application/workspace_provisioning.dart) once a session exists —
 /// immediately here if this project doesn't require email confirmation, or later (possibly a
 /// different app launch) once the user confirms their email and signs in.
+///
+/// With [joining] it is "Join your team" instead (launch review A1: invited staff had only the
+/// workspace form): no venue fields, and the account is marked as joining (plus the
+/// invitation link's [inviteId]) so the invitation is accepted as soon as a verified session
+/// exists, see inviteRedemptionTriggerProvider.
 class SignUpScreen extends ConsumerStatefulWidget {
-  const SignUpScreen({super.key});
+  const SignUpScreen({
+    super.key,
+    this.joining = false,
+    this.inviteId,
+    this.initialEmail,
+  });
+
+  final bool joining;
+  final String? inviteId;
+  final String? initialEmail;
 
   @override
   ConsumerState<SignUpScreen> createState() => _SignUpScreenState();
@@ -32,7 +47,8 @@ class SignUpScreen extends ConsumerStatefulWidget {
 class _SignUpScreenState extends ConsumerState<SignUpScreen> {
   final _formKey = GlobalKey<FormState>();
   final _workspaceController = TextEditingController();
-  final _emailController = TextEditingController();
+  late final _emailController =
+      TextEditingController(text: widget.initialEmail);
   final _passwordController = TextEditingController();
 
   bool _isSubmitting = false;
@@ -59,16 +75,26 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
       _error = null;
     });
 
+    if (widget.inviteId != null) {
+      ref.read(pendingInviteLinkProvider.notifier).state = widget.inviteId;
+    }
     try {
       final hasSession =
           await ref.read(authRepositoryProvider).signUpWithPassword(
-        email: _emailController.text.trim(),
-        password: _passwordController.text,
-        data: {
-          'pending_workspace_name': _workspaceController.text.trim(),
-          'pending_timezone': _timezone,
-        },
-      );
+                email: _emailController.text.trim(),
+                password: _passwordController.text,
+                data: widget.joining
+                    ? {
+                        kJoiningTeamMetadataKey: true,
+                        if (widget.inviteId != null)
+                          kPendingInviteMetadataKey: widget.inviteId,
+                      }
+                    : {
+                        'pending_workspace_name':
+                            _workspaceController.text.trim(),
+                        'pending_timezone': _timezone,
+                      },
+              );
       if (!mounted) return;
       if (hasSession) {
         // isSignedInProvider flips true and go_router's redirect (app/router.dart) takes the
@@ -92,10 +118,20 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
     }
   }
 
+  String _withInvite(String path) => Uri(
+        path: path,
+        queryParameters: {
+          if (widget.inviteId != null) 'invite': widget.inviteId!,
+          if (_emailController.text.trim().isNotEmpty)
+            'email': _emailController.text.trim(),
+        },
+      ).toString();
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final joining = widget.joining;
 
     return Scaffold(
       body: Stack(
@@ -119,6 +155,8 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
                         child: _checkYourEmail
                             ? _CheckYourEmailPanel(
                                 email: _emailController.text.trim(),
+                                joining: joining,
+                                signInLocation: _withInvite('/sign-in'),
                               )
                             : Form(
                                 key: _formKey,
@@ -128,13 +166,18 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
                                       CrossAxisAlignment.stretch,
                                   children: [
                                     Text(
-                                      'Launch your workspace',
+                                      joining
+                                          ? 'Join your team'
+                                          : 'Launch your workspace',
                                       textAlign: TextAlign.center,
                                       style: theme.textTheme.headlineSmall,
                                     ),
                                     const SizedBox(height: 4),
                                     Text(
-                                      'Bring your team, your floor, and your next big night together.',
+                                      joining
+                                          ? 'Use the email address your manager invited. '
+                                              'Once you confirm it, you go straight to your venue.'
+                                          : 'Bring your team, your floor, and your next big night together.',
                                       textAlign: TextAlign.center,
                                       style:
                                           theme.textTheme.bodyMedium?.copyWith(
@@ -143,52 +186,57 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
                                       ),
                                     ),
                                     const SizedBox(height: 20),
-                                    TextFormField(
-                                      controller: _workspaceController,
-                                      textCapitalization:
-                                          TextCapitalization.words,
-                                      autofillHints: const [
-                                        AutofillHints.organizationName,
-                                      ],
-                                      decoration: const InputDecoration(
-                                        labelText: 'Venue name',
-                                        hintText: 'The name above your door',
-                                        prefixIcon:
-                                            Icon(Icons.storefront_outlined),
+                                    if (!joining) ...[
+                                      TextFormField(
+                                        controller: _workspaceController,
+                                        textCapitalization:
+                                            TextCapitalization.words,
+                                        autofillHints: const [
+                                          AutofillHints.organizationName,
+                                        ],
+                                        decoration: const InputDecoration(
+                                          labelText: 'Venue name',
+                                          hintText: 'The name above your door',
+                                          prefixIcon:
+                                              Icon(Icons.storefront_outlined),
+                                        ),
+                                        validator: workspaceNameProblem,
                                       ),
-                                      validator: workspaceNameProblem,
-                                    ),
-                                    const SizedBox(height: 12),
-                                    DropdownButtonFormField<String>(
-                                      initialValue: _timezone,
-                                      isExpanded: true,
-                                      decoration: const InputDecoration(
-                                        labelText: 'Time zone',
-                                        prefixIcon: Icon(Icons.schedule),
+                                      const SizedBox(height: 12),
+                                      DropdownButtonFormField<String>(
+                                        initialValue: _timezone,
+                                        isExpanded: true,
+                                        decoration: const InputDecoration(
+                                          labelText: 'Time zone',
+                                          prefixIcon: Icon(Icons.schedule),
+                                        ),
+                                        items: [
+                                          for (final zone
+                                              in kWorkspaceTimezones)
+                                            DropdownMenuItem(
+                                              value: zone.id,
+                                              child: Text(zone.label),
+                                            ),
+                                        ],
+                                        onChanged: (value) =>
+                                            setState(() => _timezone = value),
+                                        validator: (value) => value == null
+                                            ? 'Select your time zone'
+                                            : null,
                                       ),
-                                      items: [
-                                        for (final zone in kWorkspaceTimezones)
-                                          DropdownMenuItem(
-                                            value: zone.id,
-                                            child: Text(zone.label),
-                                          ),
-                                      ],
-                                      onChanged: (value) =>
-                                          setState(() => _timezone = value),
-                                      validator: (value) => value == null
-                                          ? 'Select your time zone'
-                                          : null,
-                                    ),
-                                    const SizedBox(height: 12),
+                                      const SizedBox(height: 12),
+                                    ],
                                     TextFormField(
                                       controller: _emailController,
                                       keyboardType: TextInputType.emailAddress,
                                       autofillHints: const [
                                         AutofillHints.email,
                                       ],
-                                      decoration: const InputDecoration(
-                                        labelText: 'Work email',
-                                        prefixIcon: Icon(Icons.mail_outline),
+                                      decoration: InputDecoration(
+                                        labelText:
+                                            joining ? 'Email' : 'Work email',
+                                        prefixIcon:
+                                            const Icon(Icons.mail_outline),
                                       ),
                                       validator: (value) => (value == null ||
                                               !value.contains('@'))
@@ -233,17 +281,36 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
                                                 strokeWidth: 2,
                                               ),
                                             )
-                                          : const Text(
-                                              "Let's get you in command",
+                                          : Text(
+                                              joining
+                                                  ? 'Create my account'
+                                                  : "Let's get you in command",
                                             ),
                                     ),
                                     const SizedBox(height: 8),
                                     TextButton(
                                       onPressed: _isSubmitting
                                           ? null
-                                          : () => context.go('/sign-in'),
-                                      child: const Text(
-                                        'Already have a workspace? Sign in',
+                                          : () => context
+                                              .go(_withInvite('/sign-in')),
+                                      child: Text(
+                                        joining
+                                            ? 'Already have an account? Sign in'
+                                            : 'Already have a workspace? Sign in',
+                                      ),
+                                    ),
+                                    TextButton(
+                                      onPressed: _isSubmitting
+                                          ? null
+                                          : () => context.go(
+                                                joining
+                                                    ? '/sign-up'
+                                                    : _withInvite('/join'),
+                                              ),
+                                      child: Text(
+                                        joining
+                                            ? 'Opening a new venue? Launch your workspace'
+                                            : 'Invited by your manager? Join your team',
                                       ),
                                     ),
                                   ],
@@ -263,9 +330,15 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
 }
 
 class _CheckYourEmailPanel extends StatelessWidget {
-  const _CheckYourEmailPanel({required this.email});
+  const _CheckYourEmailPanel({
+    required this.email,
+    required this.joining,
+    required this.signInLocation,
+  });
 
   final String email;
+  final bool joining;
+  final String signInLocation;
 
   @override
   Widget build(BuildContext context) {
@@ -286,14 +359,17 @@ class _CheckYourEmailPanel extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         Text(
-          'We sent a confirmation link to $email. Open it, then come back '
-          'and sign in — your workspace is created the moment you do.',
+          joining
+              ? 'We sent a confirmation link to $email. Open it, then come '
+                  'back and sign in: you join your team the moment you do.'
+              : 'We sent a confirmation link to $email. Open it, then come back '
+                  'and sign in — your workspace is created the moment you do.',
           textAlign: TextAlign.center,
           style: theme.textTheme.bodyMedium,
         ),
         const SizedBox(height: 20),
         OutlinedButton(
-          onPressed: () => context.go('/sign-in'),
+          onPressed: () => context.go(signInLocation),
           child: const Text('Back to sign in'),
         ),
       ],

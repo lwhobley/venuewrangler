@@ -9,6 +9,7 @@ import '../core/offline/offline_queue_connectivity.dart';
 import '../core/privacy/privacy_overlay.dart';
 import '../core/security/app_attest_providers.dart';
 import '../core/theme/app_theme.dart';
+import '../features/invites/application/invites_providers.dart';
 import '../features/notifications/application/notifications_providers.dart';
 import '../features/organizations/application/workspace_provisioning.dart';
 import 'intro_video_screen.dart';
@@ -63,6 +64,9 @@ class _VenueWranglerAppState extends ConsumerState<VenueWranglerApp> {
     // Side-effect only: finishes "Launch Workspace" sign-ups once a session exists. See
     // features/organizations/application/workspace_provisioning.dart.
     ref.watch(pendingWorkspaceCreationTriggerProvider);
+    // Side-effect only: accepts the invitation a person signed up or in for. See
+    // features/invites/application/invites_providers.dart.
+    ref.watch(inviteRedemptionTriggerProvider);
 
     final router = ref.watch(routerProvider);
 

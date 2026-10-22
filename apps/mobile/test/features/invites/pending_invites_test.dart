@@ -14,6 +14,8 @@ import 'package:venuewrangler_mobile/features/invites/domain/pending_invite.dart
 import 'package:venuewrangler_mobile/features/invites/presentation/pending_invites_screen.dart';
 import 'package:venuewrangler_mobile/features/organizations/application/organizations_providers.dart';
 import 'package:venuewrangler_mobile/features/organizations/domain/organization.dart';
+import 'package:venuewrangler_mobile/features/venues/application/venues_providers.dart';
+import 'package:venuewrangler_mobile/features/venues/domain/venue.dart';
 
 class _FakeInvitesRepository implements InvitesRepository {
   _FakeInvitesRepository(this.invites);
@@ -241,7 +243,7 @@ void main() {
         (tester) async {
       final repository = await pump(tester, [_invite('i1', 'The Pier')]);
 
-      await tester.tap(find.text('Accept'));
+      await tester.tap(find.text('Join The Pier'));
       await tester.pumpAndSettle();
 
       expect(repository.accepted, ['i1']);
@@ -256,7 +258,7 @@ void main() {
         'is not verified yet.',
       );
 
-      await tester.tap(find.text('Accept'));
+      await tester.tap(find.text('Join The Pier'));
       await tester.pumpAndSettle();
 
       expect(find.textContaining('different email address'), findsOneWidget);
@@ -271,6 +273,100 @@ void main() {
 
       expect(repository.accepted, isEmpty);
       expect(find.text('switcher'), findsOneWidget);
+    });
+  });
+
+  group('InviteRedemptionController', () {
+    late _FakeInvitesRepository repository;
+
+    ProviderContainer containerWith(List<PendingInvite> invites) {
+      repository = _FakeInvitesRepository(invites);
+      final container = ProviderContainer(
+        overrides: [
+          currentUserIdProvider.overrideWithValue('user-1'),
+          invitesRepositoryProvider.overrideWithValue(repository),
+          myOrganizationsProvider.overrideWith((ref) async => const []),
+          venuesForOrganizationProvider.overrideWith(
+            (ref, organizationId) async => [
+              for (final id in ['i1', 'i2'])
+                Venue(
+                  id: 'venue-$id',
+                  organizationId: organizationId,
+                  name: 'Venue $id',
+                  createdAt: DateTime(2026),
+                ),
+            ],
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      return container;
+    }
+
+    test('an invitation link joins that invite and selects its venue',
+        () async {
+      final container =
+          containerWith([_invite('i1', 'The Pier'), _invite('i2', 'Dock')]);
+
+      final venue = await container
+          .read(inviteRedemptionProvider.notifier)
+          .redeem(inviteId: 'i2');
+
+      expect(repository.accepted, ['i2']);
+      expect(venue?.id, 'venue-i2');
+      expect(container.read(activeVenueProvider)?.id, 'venue-i2');
+    });
+
+    test('Join your team with exactly one invitation joins it', () async {
+      final container = containerWith([_invite('i1', 'The Pier')]);
+
+      await container
+          .read(inviteRedemptionProvider.notifier)
+          .redeem(joiningTeam: true);
+
+      expect(repository.accepted, ['i1']);
+      expect(container.read(activeVenueProvider)?.id, 'venue-i1');
+    });
+
+    test('several invitations and no matching link: nothing is accepted',
+        () async {
+      final container =
+          containerWith([_invite('i1', 'The Pier'), _invite('i2', 'Dock')]);
+
+      final venue = await container
+          .read(inviteRedemptionProvider.notifier)
+          .redeem(joiningTeam: true);
+
+      expect(venue, isNull);
+      expect(repository.accepted, isEmpty);
+      expect(container.read(inviteRedemptionProvider).problem, isNull);
+    });
+
+    test('no invitation at all explains what to do', () async {
+      final container = containerWith(const []);
+
+      await container
+          .read(inviteRedemptionProvider.notifier)
+          .redeem(inviteId: 'gone');
+
+      expect(
+        container.read(inviteRedemptionProvider).problem,
+        contains('Ask your manager to send a new one'),
+      );
+    });
+
+    test('the invites prompt is not due while a link is being redeemed',
+        () async {
+      final container = containerWith([_invite('i1', 'The Pier')]);
+      await container.read(pendingInvitesProvider.future);
+      await container.read(myOrganizationsProvider.future);
+      expect(container.read(invitesPromptDueProvider), isTrue);
+
+      final pending = container.read(inviteRedemptionProvider.notifier).redeem(
+            inviteId: 'i1',
+          );
+      expect(container.read(invitesPromptDueProvider), isFalse);
+      await pending;
     });
   });
 }

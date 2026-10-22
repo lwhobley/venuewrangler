@@ -87,4 +87,82 @@ void main() {
 
     expect(fakeAuth.signInCalled, isTrue);
   });
+
+  group('rejected email links (launch review A2)', () {
+    testWidgets('explain the link expired and offer a new one', (tester) async {
+      final fakeAuth = _FakeAuthRepository();
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authRepositoryProvider.overrideWithValue(fakeAuth),
+            authLinkErrorProvider.overrideWith((ref) => true),
+          ],
+          child: const MaterialApp(home: SignInScreen()),
+        ),
+      );
+
+      expect(
+        find.textContaining('expired or was already used'),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.text('Send a new reset link'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.byType(TextField),
+        ),
+        'host@example.com',
+      );
+      await tester.tap(find.text('Send link'));
+      await tester.pumpAndSettle();
+
+      expect(fakeAuth.resetEmail, 'host@example.com');
+      expect(find.textContaining('expired or was already used'), findsNothing);
+    });
+
+    testWidgets('no notice on a plain sign-in', (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authRepositoryProvider.overrideWithValue(_FakeAuthRepository()),
+          ],
+          child: const MaterialApp(home: SignInScreen()),
+        ),
+      );
+
+      expect(find.textContaining('expired or was already used'), findsNothing);
+    });
+
+    test('only link failures count, not refresh or network errors', () {
+      expect(
+        isRejectedAuthLink(
+          const AuthException(
+            'Email link is invalid or has expired',
+            statusCode: 'otp_expired',
+            code: 'access_denied',
+          ),
+        ),
+        isTrue,
+      );
+      expect(
+        isRejectedAuthLink(
+          const AuthException(
+            'Code verifier could not be found in local storage.',
+          ),
+        ),
+        isTrue,
+      );
+      expect(
+        isRejectedAuthLink(AuthRetryableFetchException(message: 'offline')),
+        isFalse,
+      );
+      expect(
+        isRejectedAuthLink(const AuthException('Invalid Refresh Token')),
+        isFalse,
+      );
+      expect(isRejectedAuthLink(Exception('boom')), isFalse);
+    });
+  });
 }

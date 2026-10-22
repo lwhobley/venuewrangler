@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -40,12 +41,49 @@ final currentUserIdProvider = Provider<String?>((ref) {
 /// session can't be used to wander into the app without choosing a password.
 final passwordRecoveryPendingProvider = StateProvider<bool>((ref) => false);
 
+/// Set when the app was opened from an emailed auth link (password reset, email
+/// confirmation) that Supabase rejected: expired (15 minutes, `otp_expiry`), already used, or
+/// opened in a different browser/device from the one that asked for it (PKCE). The sign-in
+/// screen explains it and offers a new link (launch review A2: it used to show plain sign-in).
+final authLinkErrorProvider = StateProvider<bool>((ref) => false);
+
+/// Whether [error], reported on the auth state stream, is a rejected email link rather than,
+/// say, a failed token refresh.
+@visibleForTesting
+bool isRejectedAuthLink(Object error) {
+  if (error is! AuthException || error is AuthRetryableFetchException) {
+    return false;
+  }
+  const codes = {
+    'otp_expired',
+    'access_denied',
+    'flow_state_not_found',
+    'flow_state_expired',
+    'bad_code_verifier',
+  };
+  final message = error.message.toLowerCase();
+  return codes.contains(error.code) ||
+      codes.contains(error.statusCode) ||
+      error is AuthPKCEGrantCodeExchangeError ||
+      message.contains('code verifier') ||
+      message.contains('invalid or has expired');
+}
+
 /// Side-effect only, watched once at the app root: flips [passwordRecoveryPendingProvider]
-/// when Supabase reports a password-recovery sign-in, and clears it on sign-out.
+/// when Supabase reports a password-recovery sign-in, and clears it on sign-out. Also records
+/// a rejected email link for [authLinkErrorProvider].
 final passwordRecoveryTriggerProvider = Provider<void>((ref) {
   ref.listen<AsyncValue<AuthState>>(
     authStateChangesProvider,
     (_, next) {
+      final error = next.error;
+      if (next.hasError && error != null && isRejectedAuthLink(error)) {
+        // Outside this callback: it can run while providers are still initialising.
+        scheduleMicrotask(
+          () => ref.read(authLinkErrorProvider.notifier).state = true,
+        );
+        return;
+      }
       final event = next.valueOrNull?.event;
       final pending = ref.read(passwordRecoveryPendingProvider.notifier);
       if (event == AuthChangeEvent.passwordRecovery) {

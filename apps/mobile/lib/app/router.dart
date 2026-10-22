@@ -28,6 +28,7 @@ import '../features/insights/presentation/shift_insights_screen.dart';
 import '../features/integrations/presentation/integration_complete_screen.dart';
 import '../features/integrations/presentation/integrations_screen.dart';
 import '../features/invites/application/invites_providers.dart';
+import '../features/invites/presentation/join_team_screen.dart';
 import '../features/invites/presentation/pending_invites_screen.dart';
 import '../features/inventory/presentation/inventory_list_screen.dart';
 import '../features/mfa/presentation/mfa_challenge_screen.dart';
@@ -129,6 +130,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       final goingToReset = state.matchedLocation == '/reset-password';
       final goingToMfaChallenge = state.matchedLocation == '/mfa-challenge';
       final goingToInvites = state.matchedLocation == '/invites';
+      // Invitation links: the join sign-up when signed out, joining the venue when signed in.
+      final goingToJoin = state.matchedLocation == '/join';
 
       // A verified authenticator exists but this session only passed the password: nothing
       // else (not even a password-reset) until the code is entered.
@@ -144,9 +147,12 @@ final routerProvider = Provider<GoRouter>((ref) {
       if (goingToReset) return '/';
 
       if (!isSignedIn) {
-        return (goingToSignIn || goingToSignUp) ? null : '/sign-in';
+        return (goingToSignIn || goingToSignUp || goingToJoin)
+            ? null
+            : '/sign-in';
       }
       if (isSignedIn && (goingToSignIn || goingToSignUp)) return '/';
+      if (goingToJoin) return null;
       if (!hasActiveVenue) {
         if (goingToInvites) return null;
         if (!goingToSelectVenue) return '/select-venue';
@@ -185,7 +191,17 @@ final routerProvider = Provider<GoRouter>((ref) {
       // Outside the tab shell: auth, venue choice, and full-screen editors.
       GoRoute(
         path: '/sign-in',
-        builder: (context, state) => const SignInScreen(),
+        builder: (context, state) => SignInScreen(
+          inviteId: state.uri.queryParameters['invite'],
+          initialEmail: state.uri.queryParameters['email'],
+        ),
+      ),
+      GoRoute(
+        path: '/join',
+        builder: (context, state) => JoinTeamRoute(
+          inviteId: state.uri.queryParameters['invite'],
+          email: state.uri.queryParameters['email'],
+        ),
       ),
       GoRoute(
         path: '/sign-up',
@@ -205,7 +221,9 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/invites',
-        builder: (context, state) => const PendingInvitesScreen(),
+        builder: (context, state) => PendingInvitesScreen(
+          highlightInviteId: state.uri.queryParameters['invite'],
+        ),
       ),
       GoRoute(
         path: '/mfa',
@@ -240,6 +258,7 @@ bool employeeCanOpen(String path) => const {
       '/reset-password',
       '/loading',
       '/invites',
+      '/join',
       '/mfa',
       '/mfa-challenge',
     }.contains(path);

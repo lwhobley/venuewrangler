@@ -9,9 +9,15 @@ import '../../core/auth/auth_providers.dart';
 import '../../core/errors/app_error.dart';
 import '../../core/theme/app_radii.dart';
 import '../../core/theme/ops_colors.dart';
+import '../invites/application/invites_providers.dart';
 
 class SignInScreen extends ConsumerStatefulWidget {
-  const SignInScreen({super.key});
+  const SignInScreen({super.key, this.inviteId, this.initialEmail});
+
+  /// From an invitation link (`/sign-in?invite=…&email=…`, reached from the join screen):
+  /// accepted once signed in, see inviteRedemptionTriggerProvider.
+  final String? inviteId;
+  final String? initialEmail;
 
   @override
   ConsumerState<SignInScreen> createState() => _SignInScreenState();
@@ -19,7 +25,8 @@ class SignInScreen extends ConsumerStatefulWidget {
 
 class _SignInScreenState extends ConsumerState<SignInScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _emailController = TextEditingController();
+  late final _emailController =
+      TextEditingController(text: widget.initialEmail);
   final _passwordController = TextEditingController();
 
   bool _isSubmitting = false;
@@ -40,6 +47,10 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
       _error = null;
     });
 
+    if (widget.inviteId != null) {
+      ref.read(pendingInviteLinkProvider.notifier).state = widget.inviteId;
+    }
+    ref.read(authLinkErrorProvider.notifier).state = false;
     try {
       await ref.read(authRepositoryProvider).signInWithPassword(
             email: _emailController.text.trim(),
@@ -68,6 +79,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
       ),
     );
     if (sent == true && mounted) {
+      ref.read(authLinkErrorProvider.notifier).state = false;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
@@ -78,10 +90,20 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
     }
   }
 
+  String get _joinLocation => Uri(
+        path: '/join',
+        queryParameters: {
+          if (widget.inviteId != null) 'invite': widget.inviteId!,
+          if (_emailController.text.trim().isNotEmpty)
+            'email': _emailController.text.trim(),
+        },
+      ).toString();
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final linkRejected = ref.watch(authLinkErrorProvider);
 
     return Scaffold(
       body: Stack(
@@ -100,6 +122,15 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                     children: [
                       const _BrandMark(),
                       const SizedBox(height: 28),
+                      if (linkRejected) ...[
+                        _RejectedLinkNotice(
+                          onSendNewLink: _forgotPassword,
+                          onDismiss: () => ref
+                              .read(authLinkErrorProvider.notifier)
+                              .state = false,
+                        ),
+                        const SizedBox(height: 16),
+                      ],
                       _GlassCard(
                         isDark: isDark,
                         child: Form(
@@ -109,7 +140,9 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               Text(
-                                'Welcome back',
+                                widget.inviteId == null
+                                    ? 'Welcome back'
+                                    : 'Sign in to join your team',
                                 textAlign: TextAlign.center,
                                 style: theme.textTheme.headlineSmall,
                               ),
@@ -174,9 +207,17 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                               TextButton(
                                 onPressed: _isSubmitting
                                     ? null
+                                    : () => context.go(_joinLocation),
+                                child: const Text(
+                                  'Invited by your manager? Join your team',
+                                ),
+                              ),
+                              TextButton(
+                                onPressed: _isSubmitting
+                                    ? null
                                     : () => context.go('/sign-up'),
                                 child: const Text(
-                                  'New here? Launch your workspace',
+                                  'Opening a new venue? Launch your workspace',
                                 ),
                               ),
                             ],
@@ -187,6 +228,71 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                   ),
                 ),
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Launch review A2: an expired, used, or other-browser reset link used to land on plain
+/// sign-in with no explanation.
+class _RejectedLinkNotice extends StatelessWidget {
+  const _RejectedLinkNotice({
+    required this.onSendNewLink,
+    required this.onDismiss,
+  });
+
+  final VoidCallback onSendNewLink;
+  final VoidCallback onDismiss;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final tone = context.ops.warning;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHigh,
+        borderRadius: BorderRadius.circular(AppRadii.tile),
+        border: Border.all(color: tone.fg),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.link_off, color: tone.fg),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'That email link has expired or was already used',
+                  style: theme.textTheme.titleSmall,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Password reset links work once, for 15 minutes, and only in the '
+            'app or browser where you asked for them. Send yourself a new one. '
+            'If you were confirming your email address, it may already be '
+            'confirmed: try signing in.',
+            style: theme.textTheme.bodyMedium,
+          ),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerRight,
+            child: Wrap(
+              spacing: 8,
+              children: [
+                TextButton(onPressed: onDismiss, child: const Text('Dismiss')),
+                FilledButton(
+                  onPressed: onSendNewLink,
+                  child: const Text('Send a new reset link'),
+                ),
+              ],
             ),
           ),
         ],

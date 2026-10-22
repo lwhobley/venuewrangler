@@ -89,7 +89,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      find.textContaining("don't belong to any organization"),
+      find.textContaining("don't belong to a team"),
       findsOneWidget,
     );
     expect(find.text('Create your own workspace'), findsOneWidget);

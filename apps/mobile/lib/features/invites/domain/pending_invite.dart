@@ -9,6 +9,8 @@ class PendingInvite {
     required this.venueName,
     required this.role,
     this.invitedAt,
+    this.invitedByName,
+    this.expiresAt,
   });
 
   final String inviteId;
@@ -19,6 +21,10 @@ class PendingInvite {
   final String role;
   final DateTime? invitedAt;
 
+  /// The inviting manager's display name, when they have one.
+  final String? invitedByName;
+  final DateTime? expiresAt;
+
   factory PendingInvite.fromJson(Map<String, dynamic> json) => PendingInvite(
         inviteId: json['invite_id'] as String,
         organizationId: json['organization_id'] as String,
@@ -28,5 +34,7 @@ class PendingInvite {
         venueName: json['venue_name'] as String? ?? 'Venue',
         role: json['role'] as String,
         invitedAt: DateTime.tryParse(json['invited_at'] as String? ?? ''),
+        invitedByName: json['invited_by_name'] as String?,
+        expiresAt: DateTime.tryParse(json['expires_at'] as String? ?? ''),
       );
 }
