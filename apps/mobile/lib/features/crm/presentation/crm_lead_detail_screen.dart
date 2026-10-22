@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../application/crm_providers.dart';
 import '../domain/crm_lead.dart';
+import 'crm_form_dialogs.dart';
 
 /// A lead's full record: notes (immutable once added) and the automatically-logged activity
 /// trail (status changes, notes) — both written by DB triggers in crm_schema.sql, not by this
@@ -108,43 +109,13 @@ class CrmLeadDetailScreen extends ConsumerWidget {
   }
 
   Future<void> _showAddNoteDialog(BuildContext context, WidgetRef ref) async {
-    final controller = TextEditingController();
-    final text = await showDialog<String>(
+    final added = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Add note'),
-        content:
-            TextField(controller: controller, autofocus: true, maxLines: 4),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(controller.text.trim()),
-            child: const Text('Add'),
-          ),
-        ],
-      ),
+      builder: (_) => AddLeadNoteDialog(leadId: lead.id),
     );
-
-    if (text == null || text.isEmpty || !context.mounted) return;
-
-    try {
-      await ref
-          .read(crmRepositoryProvider)
-          .addNote(leadId: lead.id, text: text);
-      ref.invalidate(crmNotesProvider(lead.id));
-      ref.invalidate(crmActivityProvider(lead.id));
-    } catch (_) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Could not add note. Please try again.'),
-          ),
-        );
-      }
-    }
+    if (added != true) return;
+    ref.invalidate(crmNotesProvider(lead.id));
+    ref.invalidate(crmActivityProvider(lead.id));
   }
 }
 

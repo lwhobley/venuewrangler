@@ -45,6 +45,12 @@ abstract class CrmRepository {
     String? venueSpace,
   });
   Future<void> updateBeoStatus({required String beoId, required String status});
+
+  /// Restores a cancelled BEO to the status it had (`restore_crm_beo`), returning that status. A
+  /// confirmed one gets its reservation hold back, so this fails with a
+  /// `reservation_hold_conflict` when the time has since been booked, and with `beo_restore_past`
+  /// once its date has passed.
+  Future<String> restoreBeo({required String beoId});
   Future<List<CrmBeoCharge>> getBeoCharges({required String beoId});
   Future<void> addBeoCharge({
     required String beoId,
@@ -238,6 +244,13 @@ class SupabaseCrmRepository implements CrmRepository {
     required String status,
   }) async {
     await _client.from('crm_beos').update({'status': status}).eq('id', beoId);
+  }
+
+  @override
+  Future<String> restoreBeo({required String beoId}) async {
+    final status =
+        await _client.rpc('restore_crm_beo', params: {'p_beo_id': beoId});
+    return status as String;
   }
 
   @override

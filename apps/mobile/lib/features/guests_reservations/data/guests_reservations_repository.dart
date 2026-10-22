@@ -156,8 +156,10 @@ class SupabaseGuestsReservationsRepository
             .eq('venue_id', venueId)
             .gte('reservation_time', windowFrom.toIso8601String())
             .lte('reservation_time', windowTo.toIso8601String())
-            .order('reservation_time')
-            .order('id')
+            // postgrest's order() is descending unless told otherwise; a stable ascending
+            // order keeps the range pages from skipping or repeating rows.
+            .order('reservation_time', ascending: true)
+            .order('id', ascending: true)
             .range(rangeFrom, rangeTo);
         return rows.map(Reservation.fromJson).toList();
       },
@@ -222,6 +224,9 @@ class SupabaseGuestsReservationsRepository
       updates['completed_at'] = DateTime.now().toUtc().toIso8601String();
     } else if (status == 'cancelled') {
       updates['cancelled_at'] = DateTime.now().toUtc().toIso8601String();
+    } else {
+      // Restoring a cancelled booking clears its cancellation time.
+      updates['cancelled_at'] = null;
     }
 
     await _client.from('reservations').update(updates).eq('id', reservationId);

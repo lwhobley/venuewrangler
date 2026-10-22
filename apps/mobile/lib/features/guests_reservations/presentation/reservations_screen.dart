@@ -14,16 +14,38 @@ import '../../venues/presentation/venue_time_widgets.dart';
 import '../../workforce/application/workforce_providers.dart';
 import '../../workforce/domain/workforce_models.dart';
 import '../application/guests_reservations_providers.dart';
+import '../domain/hold_conflict.dart';
 import '../domain/reservation.dart';
+import '../domain/reservation_book.dart';
 
-/// The BEO hold trigger (guard_reservation_against_confirmed_beos) raises 23505 with a
-/// `reservation_hold_conflict` message when a time overlaps a confirmed event. Give that case a
-/// message the person can act on; anything else keeps the caller's generic [fallback].
-String _reservationWriteErrorMessage(Object error, {required String fallback}) {
-  if (error is PostgrestException &&
-      error.code == '23505' &&
-      error.message.contains('reservation_hold_conflict')) {
-    return 'This time overlaps a confirmed event. Choose another time.';
+/// Turns a failed reservation write into a message the person can act on; anything unexpected
+/// keeps the caller's generic [fallback]. The hold triggers raise 23505
+/// `reservation_hold_conflict` with the bookings in the way in DETAIL, and the private-event
+/// sync (20261022130000_beo_cancel_restore_and_hold_sync.sql) raises 42501
+/// `beo_hold_managed_in_crm` and 22023 `beo_restore_past`.
+String _reservationWriteErrorMessage(
+  Object error, {
+  required String fallback,
+  required VenueClock clock,
+}) {
+  if (error is! PostgrestException) return fallback;
+  if (error.code == '23505' && isHoldConflictMessage(error.message)) {
+    return describeHoldConflict(
+      HoldConflict.parse(error.details),
+      clock,
+      subject: 'This time',
+    );
+  }
+  if (error.message.contains('beo_hold_managed_in_crm')) {
+    if (error.message.contains('ask a manager')) {
+      return 'This booking holds a private event. Ask a manager to change '
+          'the event in CRM.';
+    }
+    return 'This booking holds a private event. Change the event in CRM '
+        'instead.';
+  }
+  if (error.message.contains('beo_restore_past')) {
+    return "This private event's date has passed, so it can't be restored.";
   }
   return fallback;
 }
@@ -81,16 +103,62 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
     );
   }
 
-  Future<void> _updateStatus(String reservationId, String status) async {
+  Future<void> _updateStatus(Reservation r, String status) async {
+    final changesEvent = r.isPrivateEventHold &&
+        (status == 'cancelled' || r.status == 'cancelled');
+    final restoring = status != 'cancelled';
+    if (changesEvent &&
+        !await _confirmPrivateEventChange(r, restoring: restoring)) {
+      return;
+    }
     await _runReservationMutation(
-      reservationId,
+      r.id,
       () => ref
           .read(guestsReservationsRepositoryProvider)
-          .updateReservationStatus(
-            reservationId: reservationId,
-            status: status,
-          ),
+          .updateReservationStatus(reservationId: r.id, status: status),
     );
+  }
+
+  /// Cancelling or restoring a private event's booking does the same to the event, so say so
+  /// (and who may do it) before anything is sent.
+  Future<bool> _confirmPrivateEventChange(
+    Reservation r, {
+    required bool restoring,
+  }) async {
+    final clock = ref.read(venueClockProvider);
+    final summary = '${r.guestName} · ${r.partySize} guests · '
+        '${clock.formatDateTime(r.reservationTime)}';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(
+          restoring
+              ? 'Restore this private event?'
+              : 'Cancel this private event?',
+        ),
+        content: Text(
+          restoring
+              ? '$summary\n\nThis booking holds a private event. Restoring it '
+                  'restores the event and holds the venue again, if that time is '
+                  'still free. Only a manager can do this.'
+              : '$summary\n\nThis booking holds a private event. Cancelling it '
+                  'also cancels the event in CRM and opens the night to other '
+                  'bookings. Only a manager can do this; a manager can restore it '
+                  'before the event date if the time is still free.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(restoring ? 'Not now' : 'Keep event'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(restoring ? 'Restore event' : 'Cancel event'),
+          ),
+        ],
+      ),
+    );
+    return confirmed == true && mounted;
   }
 
   Future<void> _runReservationMutation(
@@ -110,6 +178,7 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
               _reservationWriteErrorMessage(
                 error,
                 fallback: 'Could not update this reservation. Try again.',
+                clock: ref.read(venueClockProvider),
               ),
             ),
           ),
@@ -228,72 +297,66 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
                   );
                 }
 
+                // One entry per row: a night header (reservation == null) or a booking.
+                final rows = <({DateTime night, Reservation? reservation})>[
+                  for (final night in reservationBook(
+                    filtered,
+                    tz,
+                    today: today,
+                  )) ...[
+                    (night: night.night, reservation: null),
+                    for (final r in night.reservations)
+                      (night: night.night, reservation: r),
+                  ],
+                ];
+
                 return RefreshIndicator(
                   onRefresh: () async =>
                       ref.refresh(reservationsListProvider.future),
                   child: ListView.builder(
                     padding: const EdgeInsets.all(12),
-                    itemCount: filtered.length,
+                    itemCount: rows.length,
                     itemBuilder: (context, index) {
-                      final item = filtered[index];
-                      final itemDate = VenueTimezone.businessDateFor(
-                        item.reservationTime,
-                        tz,
-                      );
-                      final showDateHeader = index == 0 ||
-                          VenueTimezone.businessDateFor(
-                                filtered[index - 1].reservationTime,
-                                tz,
-                              ) !=
-                              itemDate;
-
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          if (showDateHeader)
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(4, 12, 4, 6),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    Icons.calendar_today,
-                                    size: 14,
-                                    color:
-                                        Theme.of(context).colorScheme.primary,
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    VenueTimezone.formatDayAndDate(
-                                      item.reservationTime,
-                                      tz,
-                                    ),
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .titleSmall
-                                        ?.copyWith(
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .primary,
-                                        ),
-                                  ),
-                                ],
+                      final row = rows[index];
+                      final item = row.reservation;
+                      if (item == null) {
+                        return Padding(
+                          padding: const EdgeInsets.fromLTRB(4, 12, 4, 6),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.calendar_today,
+                                size: 14,
+                                color: Theme.of(context).colorScheme.primary,
                               ),
-                            ),
-                          Card(
-                            margin: const EdgeInsets.only(bottom: 8),
-                            child: _ReservationListTile(
-                              reservation: item,
-                              timezone: tz,
-                              busy: _savingReservationIds.contains(item.id),
-                              assigneeName: item.assignedTo == null
-                                  ? null
-                                  : names[item.assignedTo] ?? 'Team member',
-                              onAssign: () => _assign(item, roster),
-                              onStatusChanged: (newStatus) =>
-                                  _updateStatus(item.id, newStatus),
-                            ),
+                              const SizedBox(width: 6),
+                              Text(
+                                formatNight(row.night),
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleSmall
+                                    ?.copyWith(
+                                      color:
+                                          Theme.of(context).colorScheme.primary,
+                                    ),
+                              ),
+                            ],
                           ),
-                        ],
+                        );
+                      }
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        child: _ReservationListTile(
+                          reservation: item,
+                          timezone: tz,
+                          busy: _savingReservationIds.contains(item.id),
+                          assigneeName: item.assignedTo == null
+                              ? null
+                              : names[item.assignedTo] ?? 'Team member',
+                          onAssign: () => _assign(item, roster),
+                          onStatusChanged: (newStatus) =>
+                              _updateStatus(item, newStatus),
+                        ),
                       );
                     },
                   ),
@@ -491,6 +554,7 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
                               error,
                               fallback:
                                   'Could not create reservation. Please try again.',
+                              clock: clock,
                             );
                           });
                         }
@@ -624,7 +688,9 @@ class _ReservationListTile extends StatelessWidget {
                   child: Text('Complete'),
                 ),
               if (reservation.status != 'cancelled')
-                const PopupMenuItem(value: 'cancelled', child: Text('Cancel')),
+                const PopupMenuItem(value: 'cancelled', child: Text('Cancel'))
+              else
+                const PopupMenuItem(value: 'confirmed', child: Text('Restore')),
             ],
           ),
         ],

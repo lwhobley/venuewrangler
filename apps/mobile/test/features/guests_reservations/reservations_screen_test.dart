@@ -270,4 +270,110 @@ void main() {
       expect(find.textContaining("isn't supported"), findsWidgets);
     });
   });
+
+  Future<_FakeGuestsReservationsRepository> pumpBook(
+    WidgetTester tester,
+    List<Reservation> reservations,
+  ) async {
+    final repo =
+        _FakeGuestsReservationsRepository(initialReservations: reservations);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          activeVenueProvider.overrideWith((ref) => testVenue),
+          guestsReservationsRepositoryProvider.overrideWithValue(repo),
+        ],
+        child: const MaterialApp(home: ReservationsScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    return repo;
+  }
+
+  Reservation booking(
+    String id,
+    String guest,
+    DateTime at, {
+    String? beoId,
+    String status = 'confirmed',
+    int party = 2,
+  }) =>
+      Reservation(
+        id: id,
+        organizationId: 'org-1',
+        venueId: 'venue-1',
+        guestName: guest,
+        partySize: party,
+        reservationTime: at,
+        status: status,
+        beoId: beoId,
+        source: beoId == null ? 'direct' : 'private_event',
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
+
+  testWidgets('the book lists the earliest booking first (launch review U6)',
+      (tester) async {
+    final now = DateTime.now().toUtc();
+    await pumpBook(tester, [
+      booking('late', 'Late Guest', now.add(const Duration(hours: 3))),
+      booking('early', 'Early Guest', now.add(const Duration(hours: 1))),
+    ]);
+    expect(
+      tester.getTopLeft(find.text('Early Guest')).dy,
+      lessThan(tester.getTopLeft(find.text('Late Guest')).dy),
+    );
+  });
+
+  testWidgets(
+      "cancelling a private event's booking asks first and says it cancels "
+      'the event (launch review D4)', (tester) async {
+    final repo = await pumpBook(tester, [
+      booking(
+        'hold',
+        'Caroline Whitmore',
+        DateTime.now().toUtc().add(const Duration(days: 3)),
+        beoId: 'beo-w',
+        party: 45,
+      ),
+    ]);
+
+    await tester.tap(find.byIcon(Icons.more_vert));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(find.text('Cancel this private event?'), findsOneWidget);
+    expect(
+      find.textContaining('also cancels the event in CRM'),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text('Keep event'));
+    await tester.pumpAndSettle();
+    expect(repo.updateStatusCalled, isFalse);
+
+    await tester.tap(find.byIcon(Icons.more_vert));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Cancel event'));
+    await tester.pumpAndSettle();
+    expect(repo.updatedStatus, 'cancelled');
+  });
+
+  testWidgets('a cancelled booking can be restored', (tester) async {
+    final repo = await pumpBook(tester, [
+      booking(
+        'res-c',
+        'Hannah Brooks',
+        DateTime.now().toUtc().add(const Duration(days: 1)),
+        status: 'cancelled',
+      ),
+    ]);
+    await tester.tap(find.byIcon(Icons.more_vert));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Restore'));
+    await tester.pumpAndSettle();
+    expect(repo.updatedStatus, 'confirmed');
+  });
 }

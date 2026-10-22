@@ -21,4 +21,6 @@ Port of legacy NestJS `guests` and `reservations` modules to native Supabase + F
   - Manager-only deletion policy.
   - Column-level grant on `reservation_connections` withholding secret hashes from client access.
 - **Flutter UI**:
-  - `ReservationsScreen`: Filterable reservation feed by status (`All`, `Confirmed`, `Seated`, `Completed`, `Cancelled`), party size badges, quick status transition popups, and new booking dialog.
+  - `ReservationsScreen`: Filterable reservation feed by status (`All`, `Confirmed`, `Seated`, `Completed`, `Cancelled`), party size badges, quick status transition popups (including Restore for a cancelled booking), and new booking dialog.
+  - The book is grouped by night on the venue clock (`domain/reservation_book.dart`): a booking before 6 AM belongs to the previous night, each night lists the earliest arrival first, and tonight and later nights come before past ones. (The repository must request `ascending: true` — postgrest's `order()` defaults to descending.)
+  - A private event's booking (`beo_id` set) follows its CRM BEO: cancelling or restoring it asks first and, server-side, does the same to the event (managers only). Hold conflicts name the bookings or event in the way (`domain/hold_conflict.dart`).

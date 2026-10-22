@@ -41,6 +41,20 @@ event orders), contracts, and a pipeline forecast — to Supabase + Flutter.
   protects reads and writes. Discounts subtract from the recorded total. The food and
   beverage minimum is shown separately because it is a commitment, not another charge.
 
+- **Cancel / restore and the reservation hold**
+  (`supabase/migrations/20261022130000_beo_cancel_restore_and_hold_sync.sql`): cancelling a
+  BEO records `cancelled_at` and `status_before_cancel` (server-maintained). A manager can
+  restore it with `restore_crm_beo` until its date passes; a restored confirmed BEO re-confirms
+  its same reservation row after re-checking the four-hour window. The hold reservation
+  follows its BEO from the reservation book too: a manager cancelling or restoring the booking
+  cancels or restores the event; anyone else is refused (`beo_hold_managed_in_crm`), and a live
+  hold can't be moved or deleted from the book. `reservation_hold_conflict` errors carry the
+  bookings in the way as JSON in DETAIL (`app_hidden.reservation_hold_conflicts`); the app
+  names them (`guests_reservations/domain/hold_conflict.dart`) instead of blaming "another
+  confirmed event" when dinner reservations block the night.
+- **Time zone**: BEO dates are entered and shown on the venue's clock (`venueClockProvider`,
+  `domain/beo_time.dart`), never the device's.
+
 ## Not built here (documented gap, not silently skipped)
 
 - **Resend email delivery** (BEO emails, template sends): no Resend integration exists anywhere
@@ -54,6 +68,10 @@ event orders), contracts, and a pipeline forecast — to Supabase + Flutter.
 The BEO tab opens `presentation/crm_beo_detail_screen.dart`, which displays the order's
 event, menu, instructions, and itemized charges. Managers can add and remove charge
 lines there; tax and service amounts must be entered explicitly rather than inferred.
+Cancelling a BEO asks first (naming its date, guests and recorded charges) and offers Undo;
+a cancelled BEO whose date hasn't passed shows Restore (`presentation/beo_cancellation.dart`).
+The New lead / New BEO / Add note forms (`presentation/crm_form_dialogs.dart`) save from
+inside the dialog and close only on success, so a blank field or failed save never loses input.
 `presentation/crm_lead_detail_screen.dart` — a lead's notes and activity trail, plus inline
 status change. Both rely entirely on RLS for authorization, same as every other feature in this
 app — no client-side role check duplicates what the database already enforces.

@@ -6,6 +6,7 @@ import '../../venues/application/venues_providers.dart';
 import '../../venues/presentation/venue_time_widgets.dart';
 import '../application/events_providers.dart';
 import '../domain/event.dart';
+import 'event_details_sheet.dart';
 
 /// A venue's calendar of planned events. Every venue member can view; only a manager tier can
 /// create/update/delete (see events_schema.sql). This is a simple event list, not the
@@ -90,104 +91,159 @@ class EventListScreen extends ConsumerWidget {
   ) async {
     final clock = ref.read(venueClockProvider);
     if (!ensureSupported(context, clock)) return;
-    final nameController = TextEditingController();
-    final notesController = TextEditingController();
-    var start = clock.now;
-    var end = start.add(const Duration(hours: 3));
-
-    final confirmed = await showDialog<bool>(
+    final added = await showDialog<bool>(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: const Text('Add event'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameController,
-                autofocus: true,
-                decoration: const InputDecoration(labelText: 'Event name'),
+      builder: (_) => AddEventDialog(venueId: venueId, clock: clock),
+    );
+    if (added == true) ref.invalidate(eventsForVenueProvider(venueId));
+  }
+}
+
+/// The "Add event" form. It saves from inside the dialog and closes only once the event is
+/// stored: a blank name or a refused save is shown in place, so nothing typed is lost. Owns its
+/// controllers so they are disposed only after the route has finished animating away.
+class AddEventDialog extends ConsumerStatefulWidget {
+  const AddEventDialog({super.key, required this.venueId, required this.clock});
+
+  final String venueId;
+  final VenueClock clock;
+
+  @override
+  ConsumerState<AddEventDialog> createState() => _AddEventDialogState();
+}
+
+class _AddEventDialogState extends ConsumerState<AddEventDialog> {
+  final _name = TextEditingController();
+  final _notes = TextEditingController();
+  late DateTime _start = widget.clock.now;
+  late DateTime _end = _start.add(const Duration(hours: 3));
+  String? _nameError;
+  String? _error;
+  bool _saving = false;
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _notes.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final name = _name.text.trim();
+    setState(() {
+      _nameError = name.isEmpty ? 'Enter a name for the event.' : null;
+      _error = !_end.isAfter(_start)
+          ? 'The event end time must be after its start time.'
+          : null;
+    });
+    if (_nameError != null || _error != null) return;
+    setState(() => _saving = true);
+    try {
+      final notes = _notes.text.trim();
+      await ref.read(eventsRepositoryProvider).createEvent(
+            venueId: widget.venueId,
+            name: name,
+            startTime: widget.clock.instant(_start),
+            endTime: widget.clock.instant(_end),
+            notes: notes.isEmpty ? null : notes,
+          );
+      if (mounted) Navigator.of(context).pop(true);
+    } catch (error) {
+      if (!mounted) return;
+      final code = error is PostgrestException ? error.code : null;
+      setState(() {
+        _saving = false;
+        _error = switch (code) {
+          '42501' => "You don't have permission to add events here.",
+          '23514' => 'The event end time must be after its start time.',
+          _ => 'Could not add the event. Check your connection and try again.',
+        };
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final clock = widget.clock;
+    return AlertDialog(
+      title: const Text('Add event'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _name,
+              autofocus: true,
+              enabled: !_saving,
+              decoration: InputDecoration(
+                labelText: 'Event name',
+                errorText: _nameError,
               ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: notesController,
-                decoration:
-                    const InputDecoration(labelText: 'Notes (optional)'),
-                maxLines: 2,
-              ),
-              const SizedBox(height: 12),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Start'),
-                subtitle: Text(VenueClock.formatWallDateTime(start)),
-                trailing: const Icon(Icons.edit_calendar_outlined),
-                onTap: () async {
-                  final picked = await pickVenueDateTime(
-                    context,
-                    initial: start,
-                    nowWall: clock.now,
-                  );
-                  if (picked != null) setState(() => start = picked);
-                },
-              ),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('End'),
-                subtitle: Text(VenueClock.formatWallDateTime(end)),
-                trailing: const Icon(Icons.edit_calendar_outlined),
-                onTap: () async {
-                  final picked = await pickVenueDateTime(
-                    context,
-                    initial: end,
-                    nowWall: clock.now,
-                  );
-                  if (picked != null) setState(() => end = picked);
-                },
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancel'),
             ),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Add'),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _notes,
+              enabled: !_saving,
+              decoration: const InputDecoration(
+                labelText: 'Notes for the team (optional)',
+              ),
+              maxLines: 3,
             ),
+            const SizedBox(height: 12),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Start'),
+              subtitle: Text(VenueClock.formatWallDateTime(_start)),
+              trailing: const Icon(Icons.edit_calendar_outlined),
+              onTap: _saving
+                  ? null
+                  : () async {
+                      final picked = await pickVenueDateTime(
+                        context,
+                        initial: _start,
+                        nowWall: clock.now,
+                      );
+                      if (picked != null) setState(() => _start = picked);
+                    },
+            ),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('End'),
+              subtitle: Text(VenueClock.formatWallDateTime(_end)),
+              trailing: const Icon(Icons.edit_calendar_outlined),
+              onTap: _saving
+                  ? null
+                  : () async {
+                      final picked = await pickVenueDateTime(
+                        context,
+                        initial: _end,
+                        nowWall: clock.now,
+                      );
+                      if (picked != null) setState(() => _end = picked);
+                    },
+            ),
+            if (_error != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  _error!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ),
           ],
         ),
       ),
+      actions: [
+        TextButton(
+          onPressed: _saving ? null : () => Navigator.of(context).pop(false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _saving ? null : _save,
+          child: Text(_saving ? 'Adding…' : 'Add'),
+        ),
+      ],
     );
-
-    if (confirmed != true ||
-        nameController.text.trim().isEmpty ||
-        !context.mounted) {
-      return;
-    }
-
-    try {
-      await ref.read(eventsRepositoryProvider).createEvent(
-            venueId: venueId,
-            name: nameController.text.trim(),
-            startTime: clock.instant(start),
-            endTime: clock.instant(end),
-            notes: notesController.text.trim().isEmpty
-                ? null
-                : notesController.text.trim(),
-          );
-      ref.invalidate(eventsForVenueProvider(venueId));
-    } catch (error) {
-      if (!context.mounted) return;
-      final code = error is PostgrestException ? error.code : null;
-      final message = switch (code) {
-        '42501' => "You don't have permission to add events here.",
-        '23514' => 'The event end time must be after its start time.',
-        _ => 'Something went wrong. Please try again.',
-      };
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(message)));
-    }
   }
 }
 
@@ -208,6 +264,8 @@ class _EventTile extends ConsumerWidget {
         '${formatTime(event.startTime)} → ${formatTime(event.endTime)}\n${event.status.name}',
       ),
       isThreeLine: true,
+      // Opens the times and the notes left for the team (launch review D5).
+      onTap: () => showEventDetailsSheet(context, event),
       trailing: IconButton(
         icon: const Icon(Icons.delete_outline),
         onPressed: () => _delete(context, ref),

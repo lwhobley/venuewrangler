@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../floor_studio/presentation/beo_room_preview_card.dart';
+import '../../venues/application/venue_clock.dart';
 import '../application/crm_providers.dart';
+import '../domain/beo_time.dart';
 import '../domain/crm_beo.dart';
 import '../domain/crm_beo_charge.dart';
 
@@ -15,6 +17,8 @@ class CrmBeoDetailScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final charges = ref.watch(crmBeoChargesProvider(beo.id));
     final theme = Theme.of(context);
+    // Event times are the venue's, whatever the device's time zone (launch review D6).
+    final clock = ref.watch(venueClockProvider);
     return Scaffold(
       appBar: AppBar(title: const Text('Banquet event order')),
       body: RefreshIndicator(
@@ -39,7 +43,19 @@ class CrmBeoDetailScreen extends ConsumerWidget {
                       const SizedBox(height: 8),
                       Chip(label: Text(beo.status.toUpperCase())),
                       const Divider(height: 32),
-                      _detail(context, 'Event date', _date(beo.eventDate)),
+                      _detail(
+                        context,
+                        'Event date',
+                        beo.eventDate == null
+                            ? null
+                            : beoWhenLabel(beo.eventDate!, clock),
+                      ),
+                      if (beo.cancelledAt != null)
+                        _detail(
+                          context,
+                          'Cancelled',
+                          clock.formatDateTime(beo.cancelledAt!),
+                        ),
                       _detail(context, 'Event type', beo.eventType),
                       _detail(context, 'Guests', beo.guestCount?.toString()),
                       _detail(context, 'Space', beo.venueSpace),
@@ -176,12 +192,12 @@ class CrmBeoDetailScreen extends ConsumerWidget {
                     ),
                     const SizedBox(height: 16),
                     Text(
-                      'Created ${_date(beo.createdAt) ?? ''}',
+                      'Created ${clock.formatDateTime(beo.createdAt)}',
                       textAlign: TextAlign.end,
                       style: theme.textTheme.bodySmall,
                     ),
                     Text(
-                      'Updated ${_date(beo.updatedAt) ?? ''}',
+                      'Updated ${clock.formatDateTime(beo.updatedAt)}',
                       textAlign: TextAlign.end,
                       style: theme.textTheme.bodySmall,
                     ),
@@ -230,26 +246,7 @@ class CrmBeoDetailScreen extends ConsumerWidget {
     );
   }
 
-  static String? _date(DateTime? value) {
-    if (value == null) return null;
-    final local = value.toLocal().toString();
-    return local.length >= 16 ? local.substring(0, 16) : local;
-  }
-
-  static String _money(int cents) {
-    final absolute = cents.abs();
-    final dollars = (absolute ~/ 100).toString().replaceAllMapped(
-          RegExp(r'\B(?=(\d{3})+(?!\d))'),
-          (_) => ',',
-        );
-    final result = StringBuffer();
-    if (cents < 0) result.write('-');
-    result.write(r'$');
-    result.write(dollars);
-    result.write('.');
-    result.write((absolute % 100).toString().padLeft(2, '0'));
-    return result.toString();
-  }
+  static String _money(int cents) => formatBeoMoney(cents);
 
   Future<void> _addCharge(BuildContext context, WidgetRef ref) async {
     final draft = await AddBeoChargeDialog.show(context);
@@ -308,6 +305,22 @@ class CrmBeoDetailScreen extends ConsumerWidget {
       }
     }
   }
+}
+
+/// "$6,440.00" (or "-$100.00") for an amount in cents.
+String formatBeoMoney(int cents) {
+  final absolute = cents.abs();
+  final dollars = (absolute ~/ 100).toString().replaceAllMapped(
+        RegExp(r'\B(?=(\d{3})+(?!\d))'),
+        (_) => ',',
+      );
+  final result = StringBuffer();
+  if (cents < 0) result.write('-');
+  result.write(r'$');
+  result.write(dollars);
+  result.write('.');
+  result.write((absolute % 100).toString().padLeft(2, '0'));
+  return result.toString();
 }
 
 /// Amount in cents from user input ("12", "12.5", "12.50"); null unless positive with at most two

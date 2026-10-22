@@ -18,6 +18,8 @@ class CrmBeo {
     this.internalNotes,
     this.assignedRepId,
     required this.status,
+    this.cancelledAt,
+    this.statusBeforeCancel,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -43,6 +45,10 @@ class CrmBeo {
         internalNotes: json['internal_notes'] as String?,
         assignedRepId: json['assigned_rep_id'] as String?,
         status: json['status'] as String,
+        cancelledAt: json['cancelled_at'] != null
+            ? DateTime.parse(json['cancelled_at'] as String)
+            : null,
+        statusBeforeCancel: json['status_before_cancel'] as String?,
         createdAt: DateTime.parse(json['created_at'] as String),
         updatedAt: DateTime.parse(json['updated_at'] as String),
       );
@@ -65,6 +71,11 @@ class CrmBeo {
   final String? internalNotes;
   final String? assignedRepId;
   final String status;
+
+  /// When the BEO was cancelled, and the status it had then (what a restore returns it to).
+  /// Both are maintained by the database.
+  final DateTime? cancelledAt;
+  final String? statusBeforeCancel;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -76,6 +87,11 @@ class CrmBeo {
     'amended',
     'cancelled',
   ];
+
+  /// Whether a manager may restore this BEO at [now]: it is cancelled and its date (if any) has
+  /// not passed. The database enforces the same rule and also re-checks that the time is free.
+  bool canRestoreAt(DateTime now) =>
+      status == 'cancelled' && (eventDate == null || eventDate!.isAfter(now));
 
   @override
   bool operator ==(Object other) => other is CrmBeo && other.id == id;

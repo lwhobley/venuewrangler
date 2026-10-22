@@ -10,6 +10,8 @@ import '../../../core/theme/app_radii.dart';
 import '../../../core/theme/ops_colors.dart';
 import '../../../core/widgets/state_views.dart';
 import '../../../core/widgets/status_chip.dart';
+import '../../events/application/events_providers.dart';
+import '../../events/presentation/event_details_sheet.dart';
 import '../../floor/application/floor_providers.dart';
 import '../../floor/domain/floor_table.dart';
 import '../../floor/domain/table_status_style.dart';
@@ -59,6 +61,7 @@ class _EmployeeHomeScreenState extends ConsumerState<EmployeeHomeScreen> {
     ref.invalidate(tasksForVenueProvider(venueId));
     ref.invalidate(activeTimeEntryProvider(venueId));
     ref.invalidate(todaysReservationsProvider);
+    ref.invalidate(eventsForVenueProvider(venueId));
     if (ref.read(myVenueRoleProvider).hasError) {
       ref.invalidate(myVenueRoleProvider);
     }
@@ -233,6 +236,7 @@ class _EmployeeHomeScreenState extends ConsumerState<EmployeeHomeScreen> {
                 ),
               ),
             const SizedBox(height: 20),
+            UpcomingEventsSection(now: _now),
             const SectionTitle('My reservations today'),
             if (reservationsAsync.isLoading && myReservations.isEmpty)
               const Padding(
