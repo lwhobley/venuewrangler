@@ -448,6 +448,47 @@ class _FloorPlanEditorScreenState extends ConsumerState<FloorPlanEditorScreen> {
                 label: const Text('Add table'),
               ),
         body: _buildBody(state, editor),
+        // The selection panel is the Scaffold's bottom bar rather than the bottom of the body,
+        // so the floating "Add table" button is laid out above it and can never cover its
+        // Edit/Delete buttons, whatever the screen width.
+        bottomNavigationBar: _ready ? _buildBottomBar(state, editor) : null,
+      ),
+    );
+  }
+
+  bool get _ready =>
+      ref.watch(canManageActiveVenueProvider).valueOrNull == true &&
+      !_loading &&
+      _loadError == null &&
+      !_noPlan;
+
+  Widget _buildBottomBar(FloorEditorState state, FloorEditorController editor) {
+    final selected = state.selected;
+    if (selected != null) {
+      return _Inspector(
+        table: selected,
+        overlaps: state.overlappingIds.contains(state.selectedId),
+        onEdit: _editSelected,
+        onDelete: _delete,
+        onRotate: (delta) {
+          editor.beginChange();
+          editor.rotateTo(selected.id, selected.rotation + delta);
+        },
+      );
+    }
+    final theme = Theme.of(context);
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Text(
+          state.tables.isEmpty
+              ? 'Tap "Add table" to start laying out the floor.'
+              : 'Tap a table to select it. Drag to move; pinch to zoom.',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
       ),
     );
   }
@@ -550,30 +591,6 @@ class _FloorPlanEditorScreenState extends ConsumerState<FloorPlanEditorScreen> {
             },
           ),
         ),
-        if (state.selected != null)
-          _Inspector(
-            table: state.selected!,
-            overlaps: overlapping.contains(state.selectedId),
-            onEdit: _editSelected,
-            onDelete: _delete,
-            onRotate: (delta) {
-              final t = state.selected!;
-              editor.beginChange();
-              editor.rotateTo(t.id, t.rotation + delta);
-            },
-          )
-        else
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Text(
-              state.tables.isEmpty
-                  ? 'Tap "Add table" to start laying out the floor.'
-                  : 'Tap a table to select it. Drag to move; pinch to zoom.',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-            ),
-          ),
       ],
     );
   }

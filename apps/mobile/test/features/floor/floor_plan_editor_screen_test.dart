@@ -78,9 +78,10 @@ void main() {
   Future<(ProviderContainer, _Repo)> pumpEditor(
     WidgetTester tester, {
     bool manager = true,
+    Size size = const Size(800, 1400),
   }) async {
     FlutterSecureStorage.setMockInitialValues({});
-    tester.view.physicalSize = const Size(800, 1400);
+    tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
 
@@ -158,4 +159,49 @@ void main() {
     expect(find.text('T1'), findsNothing);
     expect(find.text('Add table'), findsNothing);
   });
+
+  for (final (name, size) in [
+    ('phone', const Size(390, 844)),
+    ('wide', const Size(1440, 900)),
+  ]) {
+    testWidgets(
+        'on a $name screen the selected table\'s Edit and Delete stay clear '
+        'of Add table', (tester) async {
+      final (container, _) = await pumpEditor(tester, size: size);
+      container.read(floorEditorProvider.notifier).select('t1');
+      await tester.pumpAndSettle();
+
+      final fab = tester.getRect(find.byType(FloatingActionButton));
+      for (final tooltip in [
+        'Edit table',
+        'Delete table',
+        'Rotate left 15°',
+        'Rotate right 15°',
+      ]) {
+        final button = tester.getRect(find.byTooltip(tooltip));
+        expect(
+          button.overlaps(fab),
+          isFalse,
+          reason: '$tooltip ($button) is under Add table ($fab)',
+        );
+      }
+
+      // Tapping Edit opens the edit form, not Add table, and the change sticks.
+      await tester.tap(find.byTooltip('Edit table'));
+      await tester.pumpAndSettle();
+      expect(find.text('Edit T1'), findsOneWidget);
+      await tester.tap(find.byTooltip('More seats'));
+      await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+      await tester.pumpAndSettle();
+      expect(
+        container.read(floorEditorProvider).tables.single.capacity,
+        5,
+      );
+
+      await tester.tap(find.byTooltip('Delete table'));
+      await tester.pumpAndSettle();
+      expect(container.read(floorEditorProvider).tables, isEmpty);
+      expect(find.text('Add table'), findsOneWidget);
+    });
+  }
 }
