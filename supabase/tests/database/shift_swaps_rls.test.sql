@@ -3,7 +3,7 @@
 -- members (...005 and ...008) to exercise accept/offered-to logic.
 
 begin;
-select plan(18);
+select plan(21);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-000000000002', 'org-a-owner@example.com'),
@@ -113,16 +113,42 @@ reset role;
 set local role authenticated;
 set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-000000000008';
 
-select lives_ok(
+select throws_ok(
   $$ update public.shift_swaps set status = 'accepted', accepted_by = '00000000-0000-0000-0000-000000000008' where id = '50000000-0000-0000-0000-000000000001' $$,
-  'another staff member can accept an open swap request'
+  '42501', null,
+  'a teammate cannot accept a swap by writing the row directly'
+);
+
+select is(
+  public.claim_shift_swap('50000000-0000-0000-0000-000000000001'),
+  'claimed',
+  'another staff member can offer to take an open swap request'
+);
+
+select is(
+  (select staff_id from public.shifts where id = '40000000-0000-0000-0000-000000000001'),
+  '00000000-0000-0000-0000-000000000005'::uuid,
+  'a claimed swap waits for a manager before the shift moves'
+);
+
+reset role;
+set local role authenticated;
+set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-000000000004';
+
+select lives_ok(
+  $$ select public.approve_shift_swap('50000000-0000-0000-0000-000000000001') $$,
+  'the venue manager approves the claimed swap'
 );
 
 select is(
   (select staff_id from public.shifts where id = '40000000-0000-0000-0000-000000000001'),
   '00000000-0000-0000-0000-000000000008'::uuid,
-  'accepting the swap reassigns the underlying shift to the accepter'
+  'approving the swap reassigns the underlying shift to the teammate who took it'
 );
+
+reset role;
+set local role authenticated;
+set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-000000000008';
 
 select throws_ok(
   $$ update public.shift_swaps set status = 'cancelled' where id = '50000000-0000-0000-0000-000000000001' $$,
@@ -149,10 +175,10 @@ set local role authenticated;
 set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-000000000008';
 
 select throws_ok(
-  $$ update public.shift_swaps set status = 'accepted', accepted_by = '00000000-0000-0000-0000-000000000008' where id = '50000000-0000-0000-0000-000000000002' $$,
+  $$ select public.claim_shift_swap('50000000-0000-0000-0000-000000000002') $$,
   '42501',
   null,
-  'a swap offered to a specific user cannot be accepted by someone else'
+  'a swap offered to a specific user cannot be taken by someone else'
 );
 
 -- ---------------------------------------------------------------------------
@@ -211,9 +237,7 @@ reset role;
 set local role authenticated;
 set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-000000000008';
 select throws_ok(
-  $$ update public.shift_swaps set status='accepted',
-       accepted_by='00000000-0000-0000-0000-000000000008'
-     where id='50000000-0000-0000-0000-000000000004' $$,
+  $$ select public.claim_shift_swap('50000000-0000-0000-0000-000000000004') $$,
   '40001', null, 'stale swap cannot reassign a shift that changed owners'
 );
 
