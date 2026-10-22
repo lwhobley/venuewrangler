@@ -23,7 +23,7 @@ Columns "DPA on file", "SOC 2 / ISO report on file" and "Last review" record evi
 | **Supabase** | Postgres, Auth, Storage, Edge Functions | All application data | `supabase/` | No | No | Never |
 | **Cloudflare** | Pages hosting, CDN, R2 backups | Web traffic metadata; encrypted backups and file mirrors | `site/`, backup workflows | No | No | Never |
 | **Stripe** | Subscription billing | Billing contact, subscription IDs; card data goes to Stripe directly | `supabase/functions/stripe-*` | No | No | Never |
-| **Resend** | Transactional email | Recipient email, name, message content | `supabase/functions/crm-send-email` | No | No | Never |
+| **Resend** | Transactional email | Recipient email, name, message content | `supabase/functions/crm-send-email`, `supabase/functions/invite-send-email` | No | No | Never |
 | **Sentry** | Error diagnostics | Technical error data | `_shared/observability.ts`, `error_reporter.dart` | No | No | Never |
 | **Groq** | AI assistant, only when an organization enables AI | Text and context submitted to the assistant | `_shared/groq.ts` | No | No | Never (confirm zero-retention setting) |
 | **Google (Firebase Cloud Messaging)** | Android push | Push token, notification content | `_shared/push-delivery.ts` | No | No | Never |

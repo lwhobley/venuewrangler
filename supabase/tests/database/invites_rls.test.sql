@@ -67,6 +67,12 @@ select is(
   'email is normalized to lowercase/trimmed'
 );
 
+-- Run as the org owner: a manager is already stopped by RLS (role above their own,
+-- 20261022110000), so only an owner reaches the check constraint.
+reset role;
+set local role authenticated;
+set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-000000000002';
+
 select throws_ok(
   $$ insert into public.invites (venue_id, email, role) values ('20000000-0000-0000-0000-0000000000a1', 'new-hire@example.com', 'organization_owner') $$,
   '23514',
