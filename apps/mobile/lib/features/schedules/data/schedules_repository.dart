@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/errors/unapplied_update.dart';
@@ -19,9 +21,16 @@ abstract interface class SchedulesRepository {
     required DateTime endTime,
   });
 
+  /// Fires whenever a shift or swap at [venueId] changes (realtime, RLS-filtered), so open
+  /// schedule screens can reload instead of showing — and later saving over — stale data.
+  Stream<void> watchScheduleChanges(String venueId);
+
   /// Moves/reassigns/edits a shift. [staffId] null with [clearStaff] makes it an open shift.
+  /// Pass only the fields that changed. With [expectedVersion] the write applies only if the
+  /// shift is still at that version, and throws [StaleShiftException] if someone changed it.
   Future<void> updateShift({
     required String shiftId,
+    int? expectedVersion,
     String? staffId,
     bool clearStaff = false,
     String? roleLabel,
@@ -40,11 +49,19 @@ abstract interface class SchedulesRepository {
   /// (shift_swaps_insert_own_shift), not duplicated here.
   Future<void> requestSwap({required String shiftId, String? offeredTo});
 
-  /// Accepting reassigns the shift automatically via a database trigger — this call does not
-  /// separately update the shift.
-  Future<void> acceptSwap({
+  /// Offers to take a swap as the signed-in user (`claim_shift_swap`). Staff then wait for a
+  /// manager; a manager taking it themselves is applied at once. Returns the new status.
+  /// Refused with code 23P01 when it would double-book, unless [allowOverlap].
+  Future<ShiftSwapStatus> claimSwap({
     required String swapId,
-    required String accepterUserId,
+    bool allowOverlap = false,
+  });
+
+  /// Manager approval on behalf of whoever is taking the shift (`approve_shift_swap`). The
+  /// database trigger then reassigns it; the manager is never put on the shift.
+  Future<void> approveSwap({
+    required String swapId,
+    bool allowOverlap = false,
   });
 
   Future<void> cancelSwap(String swapId);
@@ -84,6 +101,46 @@ class SupabaseSchedulesRepository implements SchedulesRepository {
   }
 
   @override
+  Stream<void> watchScheduleChanges(String venueId) {
+    late final RealtimeChannel channel;
+    late final StreamController<void> controller;
+    void emit(PostgresChangePayload _) {
+      if (!controller.isClosed) controller.add(null);
+    }
+
+    controller = StreamController<void>(
+      onListen: () {
+        final filter = PostgresChangeFilter(
+          type: PostgresChangeFilterType.eq,
+          column: 'venue_id',
+          value: venueId,
+        );
+        channel = _client
+            .channel('schedule:$venueId')
+            .onPostgresChanges(
+              event: PostgresChangeEvent.all,
+              schema: 'public',
+              table: 'shifts',
+              filter: filter,
+              callback: emit,
+            )
+            .onPostgresChanges(
+              event: PostgresChangeEvent.all,
+              schema: 'public',
+              table: 'shift_swaps',
+              filter: filter,
+              callback: emit,
+            )
+            .subscribe();
+      },
+      onCancel: () {
+        unawaited(_client.removeChannel(channel));
+      },
+    );
+    return controller.stream;
+  }
+
+  @override
   Future<void> createShift({
     required String venueId,
     String? staffId,
@@ -105,6 +162,7 @@ class SupabaseSchedulesRepository implements SchedulesRepository {
   @override
   Future<void> updateShift({
     required String shiftId,
+    int? expectedVersion,
     String? staffId,
     bool clearStaff = false,
     String? roleLabel,
@@ -118,7 +176,8 @@ class SupabaseSchedulesRepository implements SchedulesRepository {
         'staff_id': null
       else if (staffId != null)
         'staff_id': staffId,
-      if (roleLabel != null) 'role_label': roleLabel,
+      // Empty string clears the role.
+      if (roleLabel != null) 'role_label': roleLabel.isEmpty ? null : roleLabel,
       // Empty string clears the section.
       if (section != null) 'section': section.isEmpty ? null : section,
       if (startTime != null) 'start_time': startTime.toUtc().toIso8601String(),
@@ -126,13 +185,21 @@ class SupabaseSchedulesRepository implements SchedulesRepository {
       if (status != null) 'status': status.toDb(),
     };
     if (patch.isEmpty) return;
-    final row = await _client
-        .from('shifts')
-        .update(patch)
-        .eq('id', shiftId)
-        .select('id')
-        .maybeSingle();
+    var query = _client.from('shifts').update(patch).eq('id', shiftId);
+    if (expectedVersion != null) query = query.eq('version', expectedVersion);
+    final row = await query.select('id').maybeSingle();
     if (row == null) {
+      if (expectedVersion != null) {
+        final current = await _client
+            .from('shifts')
+            .select('version')
+            .eq('id', shiftId)
+            .maybeSingle();
+        final version = (current?['version'] as num?)?.toInt();
+        if (version != null && version != expectedVersion) {
+          throw const StaleShiftException();
+        }
+      }
       await throwForUnappliedUpdate(
         rowExists: () => rowExistsById(_client, 'shifts', shiftId),
         denialMessage: 'Shift update was not applied',
@@ -168,24 +235,26 @@ class SupabaseSchedulesRepository implements SchedulesRepository {
   }
 
   @override
-  Future<void> acceptSwap({
+  Future<ShiftSwapStatus> claimSwap({
     required String swapId,
-    required String accepterUserId,
+    bool allowOverlap = false,
   }) async {
-    final row = await _client
-        .from('shift_swaps')
-        .update(
-          {'status': 'accepted', 'accepted_by': accepterUserId},
-        )
-        .eq('id', swapId)
-        .select('id')
-        .maybeSingle();
-    if (row == null) {
-      await throwForUnappliedUpdate(
-        rowExists: () => rowExistsById(_client, 'shift_swaps', swapId),
-        denialMessage: 'Swap acceptance was not applied',
-      );
-    }
+    final status = await _client.rpc(
+      'claim_shift_swap',
+      params: {'p_swap_id': swapId, 'p_allow_overlap': allowOverlap},
+    );
+    return ShiftSwapStatus.fromDb(status as String);
+  }
+
+  @override
+  Future<void> approveSwap({
+    required String swapId,
+    bool allowOverlap = false,
+  }) async {
+    await _client.rpc(
+      'approve_shift_swap',
+      params: {'p_swap_id': swapId, 'p_allow_overlap': allowOverlap},
+    );
   }
 
   @override

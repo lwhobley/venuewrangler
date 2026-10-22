@@ -25,6 +25,7 @@ class Shift {
     required this.startTime,
     required this.endTime,
     required this.status,
+    this.version = 1,
   });
 
   final String id;
@@ -41,6 +42,10 @@ class Shift {
   final DateTime startTime;
   final DateTime endTime;
   final ShiftStatus status;
+
+  /// Bumped by the database on every update. An edit filters on the version it was made
+  /// against, so a stale board cannot write over a newer change (see [StaleShiftException]).
+  final int version;
 
   Shift copyWith({
     String? staffId,
@@ -60,6 +65,7 @@ class Shift {
         startTime: startTime ?? this.startTime,
         endTime: endTime ?? this.endTime,
         status: status ?? this.status,
+        version: version,
       );
 
   factory Shift.fromJson(Map<String, dynamic> json) => Shift(
@@ -71,6 +77,7 @@ class Shift {
         startTime: DateTime.parse(json['start_time'] as String).toUtc(),
         endTime: DateTime.parse(json['end_time'] as String).toUtc(),
         status: ShiftStatus.fromDb(json['status'] as String),
+        version: (json['version'] as num?)?.toInt() ?? 1,
       );
 
   @override
@@ -80,14 +87,32 @@ class Shift {
   int get hashCode => id.hashCode;
 }
 
+/// Thrown when a shift edit was made against an older version than the one now stored —
+/// someone else changed the shift first. Reload and redo the edit.
+class StaleShiftException implements Exception {
+  const StaleShiftException();
+
+  @override
+  String toString() =>
+      'StaleShiftException: the shift changed since it was loaded';
+}
+
+/// pending: open for a teammate to take. claimed: a teammate offered to take it and a manager
+/// has to approve. accepted: approved and applied — the shift is the taker's.
 enum ShiftSwapStatus {
   pending,
+  claimed,
   accepted,
   declined,
   cancelled;
 
+  /// Still in flight (not yet applied, declined or withdrawn).
+  bool get isOpen =>
+      this == ShiftSwapStatus.pending || this == ShiftSwapStatus.claimed;
+
   static ShiftSwapStatus fromDb(String value) => switch (value) {
         'pending' => ShiftSwapStatus.pending,
+        'claimed' => ShiftSwapStatus.claimed,
         'accepted' => ShiftSwapStatus.accepted,
         'declined' => ShiftSwapStatus.declined,
         'cancelled' => ShiftSwapStatus.cancelled,
@@ -97,9 +122,10 @@ enum ShiftSwapStatus {
 
 /// A request from `shift_id`'s current assignee to give it up — to anyone (`offeredTo` is
 /// null) or to one named person. See
-/// supabase/migrations/20261002160000_shift_swaps_schema.sql for who may create/accept/cancel
-/// one; this app never applies the reassignment itself, the database trigger does it the
-/// moment a swap's status becomes accepted.
+/// supabase/migrations/20261002184109_shift_swaps_schema.sql and
+/// 20261022120002_manager_approved_swaps.sql: a teammate takes it (`claim_shift_swap`), a manager
+/// approves it on that teammate's behalf (`approve_shift_swap`), and only then does a database
+/// trigger move the shift. This app never writes the reassignment itself.
 class ShiftSwap {
   const ShiftSwap({
     required this.id,
@@ -109,6 +135,7 @@ class ShiftSwap {
     this.offeredTo,
     required this.status,
     this.acceptedBy,
+    this.approvedBy,
   });
 
   final String id;
@@ -117,7 +144,14 @@ class ShiftSwap {
   final String requestedBy;
   final String? offeredTo;
   final ShiftSwapStatus status;
+
+  /// Who is taking (claimed) or took (accepted) the shift — never the approving manager.
   final String? acceptedBy;
+  final String? approvedBy;
+
+  /// The person a manager's approval would give the shift to, if anyone yet.
+  String? get taker =>
+      status == ShiftSwapStatus.claimed ? acceptedBy : offeredTo;
 
   factory ShiftSwap.fromJson(Map<String, dynamic> json) => ShiftSwap(
         id: json['id'] as String,
@@ -127,5 +161,6 @@ class ShiftSwap {
         offeredTo: json['offered_to'] as String?,
         status: ShiftSwapStatus.fromDb(json['status'] as String),
         acceptedBy: json['accepted_by'] as String?,
+        approvedBy: json['approved_by'] as String?,
       );
 }

@@ -273,10 +273,6 @@ StatefulShellRoute _employeeShell() {
             path: '/notifications',
             builder: (context, state) => const NotificationsScreen(),
           ),
-          GoRoute(
-            path: '/staff-requests',
-            builder: (context, state) => const StaffRequestsScreen(),
-          ),
         ],
       ),
       StatefulShellBranch(
@@ -299,6 +295,12 @@ StatefulShellRoute _employeeShell() {
                 builder: (context, state) => const ScheduleTimelineScreen(),
               ),
             ],
+          ),
+          // Requests live with the schedule (as in the manager shell), opened from the
+          // schedule screens and from Home.
+          GoRoute(
+            path: '/staff-requests',
+            builder: (context, state) => const StaffRequestsScreen(),
           ),
         ],
       ),

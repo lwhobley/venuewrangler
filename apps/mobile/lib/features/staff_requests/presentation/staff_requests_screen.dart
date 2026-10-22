@@ -6,11 +6,51 @@ import '../../../core/auth/auth_providers.dart';
 import '../../../core/theme/ops_colors.dart';
 import '../../schedules/application/schedules_providers.dart';
 import '../../schedules/domain/shift.dart';
+import '../../schedules/domain/shift_labels.dart';
 import '../../venues/application/venue_clock.dart';
 import '../../venues/application/venues_providers.dart';
+import '../../workforce/domain/workforce_models.dart';
 import '../application/staff_requests_providers.dart';
 import '../domain/staff_request.dart';
 
+const _weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const _months = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+];
+
+/// "Sat Oct 24" for a calendar date (a `yyyy-mm-dd` string or a picked date).
+String _dayLabel(DateTime d) =>
+    '${_weekdays[d.weekday - 1]} ${_months[d.month - 1]} ${d.day}';
+
+String? _dateText(String? isoDate) {
+  final parsed = DateTime.tryParse(isoDate ?? '');
+  return parsed == null ? isoDate : _dayLabel(parsed);
+}
+
+/// Display names by user id for the venue's schedule roster — the same name source as the
+/// schedule screens (empty until it loads).
+Map<String, String> _rosterNames(WidgetRef ref, String venueId) {
+  final roster = ref.watch(scheduleRosterForVenueProvider(venueId)).valueOrNull;
+  return {
+    for (final m in roster ?? const <RosterMember>[])
+      m.userId: m.displayName ?? 'Team member',
+  };
+}
+
+/// Requests for the active venue. Staff see and file their own (time off, dropping one of their
+/// shifts, picking up an open one); managers see everyone's, with names and shift details, and
+/// approve or deny them. RLS enforces both (20261002205115_staff_requests_schema.sql).
 class StaffRequestsScreen extends ConsumerWidget {
   const StaffRequestsScreen({super.key});
 
@@ -27,14 +67,18 @@ class StaffRequestsScreen extends ConsumerWidget {
 
     final requestsAsync = ref.watch(staffRequestsForVenueProvider(venue.id));
     final currentUserId = ref.watch(currentUserIdProvider);
+    final canReview =
+        ref.watch(canManageActiveVenueProvider).valueOrNull ?? false;
+    final theme = Theme.of(context);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Staff Requests'),
+        title: const Text('Requests'),
       ),
       body: RefreshIndicator(
         onRefresh: () async {
           ref.invalidate(staffRequestsForVenueProvider(venue.id));
+          ref.invalidate(shiftsForVenueProvider(venue.id));
         },
         child: requestsAsync.when(
           loading: () => const Center(
@@ -55,52 +99,54 @@ class StaffRequestsScreen extends ConsumerWidget {
             ),
           ),
           data: (requests) {
-            if (requests.isEmpty) {
-              return LayoutBuilder(
-                builder: (context, constraints) => SingleChildScrollView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  child: ConstrainedBox(
-                    constraints:
-                        BoxConstraints(minHeight: constraints.maxHeight),
-                    child: const Center(
-                      child: Text('No staff requests yet.'),
+            // Pending first, newest first within each group (the fetch order).
+            final sorted = [
+              ...requests.where((r) => r.isPending),
+              ...requests.where((r) => !r.isPending),
+            ];
+            return ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.only(bottom: 96),
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                  child: Text(
+                    canReview
+                        ? 'Time off and shift changes from your team. Approving a '
+                            'drop or pick-up updates the schedule.'
+                        : 'Ask for time off, or to drop or pick up a shift. A '
+                            'manager reviews every request and you will be notified.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
                     ),
                   ),
                 ),
-              );
-            }
-
-            return ListView.separated(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              itemCount: requests.length,
-              separatorBuilder: (_, __) => const Divider(height: 1),
-              itemBuilder: (context, index) {
-                final request = requests[index];
-                return _StaffRequestTile(
-                  request: request,
-                  isOwner: request.userId == currentUserId,
-                );
-              },
+                if (sorted.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.all(32),
+                    child: Center(child: Text('No staff requests yet.')),
+                  ),
+                for (final request in sorted) ...[
+                  _StaffRequestTile(
+                    request: request,
+                    isOwner: request.userId == currentUserId,
+                    canReview: canReview,
+                  ),
+                  const Divider(height: 1),
+                ],
+              ],
             );
           },
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showCreateRequestDialog(context, ref, venue.id),
+        onPressed: () => showDialog<void>(
+          context: context,
+          builder: (context) => _CreateStaffRequestDialog(venueId: venue.id),
+        ),
         icon: const Icon(Icons.add),
         label: const Text('New Request'),
       ),
-    );
-  }
-
-  void _showCreateRequestDialog(
-    BuildContext context,
-    WidgetRef ref,
-    String venueId,
-  ) {
-    showDialog<void>(
-      context: context,
-      builder: (context) => _CreateStaffRequestDialog(venueId: venueId),
     );
   }
 }
@@ -109,10 +155,12 @@ class _StaffRequestTile extends ConsumerWidget {
   const _StaffRequestTile({
     required this.request,
     required this.isOwner,
+    required this.canReview,
   });
 
   final StaffRequest request;
   final bool isOwner;
+  final bool canReview;
 
   Tone _statusTone() {
     return switch (request.status) {
@@ -123,11 +171,23 @@ class _StaffRequestTile extends ConsumerWidget {
     };
   }
 
+  Shift? _shift(WidgetRef ref) {
+    final id = request.requestedShiftId;
+    if (id == null) return null;
+    final shifts =
+        ref.watch(shiftsForVenueProvider(request.venueId)).valueOrNull;
+    return shifts?.where((s) => s.id == id).firstOrNull;
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final statusColor = context.ops.of(_statusTone()).fg;
-    final canReview =
-        ref.watch(canManageActiveVenueProvider).valueOrNull ?? false;
+    final clock = ref.watch(venueClockProvider);
+    final names = _rosterNames(ref, request.venueId);
+    final shift = _shift(ref);
+    final who = isOwner ? 'You' : (names[request.userId] ?? 'Team member');
+    final start = _dateText(request.requestedRangeStart);
+    final end = _dateText(request.requestedRangeEnd);
 
     return ListTile(
       leading: CircleAvatar(
@@ -149,12 +209,21 @@ class _StaffRequestTile extends ConsumerWidget {
                 .labelLarge
                 ?.copyWith(color: statusColor),
           ),
-          if (request.details.isNotEmpty) Text(request.details),
-          if (request.requestedRangeStart != null)
+          Text('From: $who'),
+          if (shift != null)
             Text(
-              'Dates: ${request.requestedRangeStart}'
-              '${request.requestedRangeEnd != null ? ' – ${request.requestedRangeEnd}' : ''}',
+              'Shift: ${shiftDayLabel(clock, shift)} · '
+              '${shiftTimeRangeLabel(clock, shift)} · ${shiftRoleLabel(shift)}',
+            )
+          else if (request.requestedShiftId != null)
+            const Text('Shift: no longer on the schedule'),
+          if (start != null)
+            Text(
+              end != null && end != start
+                  ? 'Dates: $start – $end'
+                  : 'Date: $start',
             ),
+          if (request.details.isNotEmpty) Text(request.details),
           if (request.responseNotes != null &&
               request.responseNotes!.isNotEmpty)
             Text(
@@ -173,25 +242,26 @@ class _StaffRequestTile extends ConsumerWidget {
                     onPressed: () => _cancelRequest(context, ref),
                     child: const Text('Cancel'),
                   ),
-                if (canReview)
+                if (canReview && !isOwner)
                   PopupMenuButton<String>(
-                    onSelected: (action) {
-                      if (action == 'approve') {
-                        _reviewRequest(
-                          context,
-                          ref,
-                          StaffRequestStatus.approved,
-                        );
-                      } else if (action == 'deny') {
-                        _reviewRequest(context, ref, StaffRequestStatus.denied);
-                      }
-                    },
-                    itemBuilder: (context) => [
-                      const PopupMenuItem(
+                    tooltip: 'Review',
+                    onSelected: (action) => showDialog<void>(
+                      context: context,
+                      builder: (context) => _ReviewDialog(
+                        request: request,
+                        requesterName: who,
+                        shift: shift,
+                        status: action == 'approve'
+                            ? StaffRequestStatus.approved
+                            : StaffRequestStatus.denied,
+                      ),
+                    ),
+                    itemBuilder: (context) => const [
+                      PopupMenuItem(
                         value: 'approve',
                         child: Text('Approve'),
                       ),
-                      const PopupMenuItem(
+                      PopupMenuItem(
                         value: 'deny',
                         child: Text('Deny'),
                       ),
@@ -232,56 +302,142 @@ class _StaffRequestTile extends ConsumerWidget {
       );
     }
   }
+}
 
-  Future<void> _reviewRequest(
-    BuildContext context,
-    WidgetRef ref,
-    StaffRequestStatus status,
-  ) async {
-    final notesController = TextEditingController();
-    final shouldProceed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('${status.displayLabel} Request'),
-        content: TextField(
-          controller: notesController,
-          decoration: const InputDecoration(
-            labelText: 'Response notes (optional)',
-          ),
-          maxLines: 2,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: Text(status.displayLabel),
-          ),
-        ],
-      ),
-    );
+/// Approve/deny with optional notes. Saves from inside the dialog and keeps it open with the
+/// error on failure; approving a pick-up that would double-book the requester warns first and
+/// needs "Approve anyway".
+class _ReviewDialog extends ConsumerStatefulWidget {
+  const _ReviewDialog({
+    required this.request,
+    required this.requesterName,
+    required this.shift,
+    required this.status,
+  });
 
-    if (shouldProceed != true) return;
-    if (!context.mounted) return;
+  final StaffRequest request;
+  final String requesterName;
+  final Shift? shift;
+  final StaffRequestStatus status;
 
+  @override
+  ConsumerState<_ReviewDialog> createState() => _ReviewDialogState();
+}
+
+class _ReviewDialogState extends ConsumerState<_ReviewDialog> {
+  final _notes = TextEditingController();
+  bool _saving = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _notes.dispose();
+    super.dispose();
+  }
+
+  List<Shift> _clashes() {
+    final shift = widget.shift;
+    if (widget.status != StaffRequestStatus.approved ||
+        widget.request.kind != StaffRequestKind.addShift ||
+        shift == null) {
+      return const [];
+    }
+    final shifts =
+        ref.watch(shiftsForVenueProvider(widget.request.venueId)).valueOrNull ??
+            const <Shift>[];
+    return overlappingShiftsFor(shifts, widget.request.userId, shift);
+  }
+
+  Future<void> _submit({required bool allowOverlap}) async {
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
     try {
       await ref.read(staffRequestsRepositoryProvider).reviewRequest(
-            requestId: request.id,
-            status: status,
-            responseNotes: notesController.text.trim(),
+            requestId: widget.request.id,
+            status: widget.status,
+            responseNotes: _notes.text.trim(),
+            allowOverlap: allowOverlap,
           );
-      ref.invalidate(staffRequestsForVenueProvider(request.venueId));
+      ref.invalidate(staffRequestsForVenueProvider(widget.request.venueId));
+      ref.invalidate(shiftsForVenueProvider(widget.request.venueId));
+      if (mounted) Navigator.of(context).pop();
     } catch (error) {
-      if (!context.mounted) return;
-      final message = error is PostgrestException && error.code == '42501'
-          ? 'You do not have permission to review staff requests.'
-          : 'Could not review request. Please try again.';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message)),
-      );
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _error = switch (error) {
+          PostgrestException(code: '42501') =>
+            'You do not have permission to review this request.',
+          PostgrestException(code: '23P01') =>
+            'This would double-book ${widget.requesterName}: '
+                '${error.message.replaceFirst('shift_overlap: ', '')}.',
+          PostgrestException(code: '40001' || '22023') => error.message,
+          _ => 'Could not review request. Please try again.',
+        };
+      });
     }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final clock = ref.watch(venueClockProvider);
+    final clashes = _clashes();
+    final shift = widget.shift;
+    final approving = widget.status == StaffRequestStatus.approved;
+    final danger = context.ops.danger.fg;
+    return AlertDialog(
+      title: Text('${widget.status.displayLabel} Request'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${widget.requesterName}: ${widget.request.kind.displayLabel}'
+              '${shift != null ? ', ${shiftSentenceLabel(clock, shift)}' : ''}',
+            ),
+            for (final clash in clashes) ...[
+              const SizedBox(height: 12),
+              Text(
+                '${widget.requesterName} already works ${shiftRoleLabel(clash)} '
+                '${shiftDayLabel(clock, clash)}, ${shiftTimeRangeLabel(clock, clash)}. '
+                'Approving would double-book them.',
+                style: TextStyle(color: danger),
+              ),
+            ],
+            const SizedBox(height: 12),
+            TextField(
+              controller: _notes,
+              decoration: const InputDecoration(
+                labelText: 'Response notes (optional)',
+              ),
+              maxLines: 2,
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 8),
+              Text(_error!, style: TextStyle(color: danger)),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _saving ? null : () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed:
+              _saving ? null : () => _submit(allowOverlap: clashes.isNotEmpty),
+          child: Text(
+            approving && clashes.isNotEmpty
+                ? 'Approve anyway'
+                : widget.status.displayLabel,
+          ),
+        ),
+      ],
+    );
   }
 }
 
@@ -305,6 +461,7 @@ class _CreateStaffRequestDialogState
   DateTime? _endDate;
   String? _selectedShiftId;
   bool _submitting = false;
+  String? _error;
 
   @override
   void dispose() {
@@ -314,17 +471,20 @@ class _CreateStaffRequestDialogState
   }
 
   Future<void> _pickDate({required bool isStart}) async {
-    final initial = (isStart ? _startDate : _endDate) ?? DateTime.now();
+    final today = DateTime.now();
+    final initial = (isStart ? _startDate : _endDate) ?? _startDate ?? today;
     final picked = await showDatePicker(
       context: context,
       initialDate: initial,
-      firstDate: DateTime.now().subtract(const Duration(days: 1)),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
+      firstDate: today.subtract(const Duration(days: 1)),
+      lastDate: today.add(const Duration(days: 365)),
     );
     if (picked == null) return;
     setState(() {
+      _error = null;
       if (isStart) {
         _startDate = picked;
+        if (_endDate != null && _endDate!.isBefore(picked)) _endDate = null;
       } else {
         _endDate = picked;
       }
@@ -334,50 +494,108 @@ class _CreateStaffRequestDialogState
   String _formatDate(DateTime date) =>
       '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
 
+  bool get _needsDates =>
+      _kind == StaffRequestKind.timeOff || _kind == StaffRequestKind.sickLeave;
+
+  List<Shift> _shiftChoices() {
+    final userId = ref.watch(currentUserIdProvider);
+    final shifts =
+        ref.watch(shiftsForVenueProvider(widget.venueId)).valueOrNull ??
+            const <Shift>[];
+    final now = DateTime.now().toUtc();
+    return [
+      for (final shift in shifts)
+        if (shift.status != ShiftStatus.cancelled &&
+            shift.startTime.isAfter(now) &&
+            (_kind == StaffRequestKind.addShift
+                ? shift.staffId == null
+                : shift.staffId == userId))
+          shift,
+    ];
+  }
+
+  /// A title for the manager's list when the person leaves it blank.
+  String _defaultTitle(VenueClock clock, Shift? shift) {
+    switch (_kind) {
+      case StaffRequestKind.dropShift:
+      case StaffRequestKind.addShift:
+        final verb = _kind == StaffRequestKind.addShift ? 'Pick up' : 'Drop';
+        return shift == null
+            ? '$verb shift'
+            : '$verb ${shiftDayLabel(clock, shift)} ${shiftRoleLabel(shift)}';
+      case StaffRequestKind.timeOff:
+      case StaffRequestKind.sickLeave:
+        final label = _kind.displayLabel;
+        final start = _startDate;
+        if (start == null) return label;
+        final end = _endDate;
+        return end == null || end == start
+            ? '$label ${_dayLabel(start)}'
+            : '$label ${_dayLabel(start)} – ${_dayLabel(end)}';
+      default:
+        return _kind.displayLabel;
+    }
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
-    if (_needsShift && _selectedShiftId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Choose the shift for this request.')),
-      );
+    if (_kind.needsShift && _selectedShiftId == null) {
+      setState(() => _error = 'Choose the shift for this request.');
       return;
     }
+    if (_needsDates && _startDate == null) {
+      setState(() => _error = 'Choose the first day you need off.');
+      return;
+    }
+    final clock = ref.read(venueClockProvider);
+    final shift = _shiftChoices().where((s) => s.id == _selectedShiftId);
+    final typed = _titleController.text.trim();
 
-    setState(() => _submitting = true);
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
     try {
       await ref.read(staffRequestsRepositoryProvider).createRequest(
             venueId: widget.venueId,
             kind: _kind,
-            title: _titleController.text.trim(),
+            title:
+                typed.isEmpty ? _defaultTitle(clock, shift.firstOrNull) : typed,
             details: _detailsController.text.trim(),
-            requestedRangeStart:
-                _startDate == null ? null : _formatDate(_startDate!),
-            requestedRangeEnd: _endDate == null ? null : _formatDate(_endDate!),
-            requestedShiftId: _needsShift ? _selectedShiftId : null,
+            requestedRangeStart: !_needsDates || _startDate == null
+                ? null
+                : _formatDate(_startDate!),
+            requestedRangeEnd: !_needsDates || _endDate == null
+                ? null
+                : _formatDate(_endDate!),
+            requestedShiftId: _kind.needsShift ? _selectedShiftId : null,
           );
       if (!mounted) return;
       ref.invalidate(staffRequestsForVenueProvider(widget.venueId));
       Navigator.of(context).pop();
     } catch (error) {
-      // Reset on every failure so the form is usable again (network errors included).
+      // Keep the dialog and everything typed; say what went wrong in place.
       if (!mounted) return;
-      setState(() => _submitting = false);
-      final message = error is PostgrestException && error.code == '42501'
-          ? 'You do not have permission to submit requests for this venue.'
-          : 'Could not submit request. Please try again.';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message)),
-      );
+      setState(() {
+        _submitting = false;
+        _error = switch (error) {
+          PostgrestException(code: '42501') =>
+            'You can only ask to drop your own shifts at this venue.',
+          PostgrestException(code: '22023') => error.message,
+          _ => 'Could not submit request. Please try again.',
+        };
+      });
     }
   }
 
-  bool get _needsShift =>
-      _kind == StaffRequestKind.addShift ||
-      _kind == StaffRequestKind.dropShift ||
-      _kind == StaffRequestKind.openShift;
-
   @override
   Widget build(BuildContext context) {
+    final clock = ref.watch(venueClockProvider);
+    final userId = ref.watch(currentUserIdProvider);
+    final allShifts =
+        ref.watch(shiftsForVenueProvider(widget.venueId)).valueOrNull ??
+            const <Shift>[];
+    final choices = _kind.needsShift ? _shiftChoices() : const <Shift>[];
     return AlertDialog(
       title: const Text('New Staff Request'),
       content: SingleChildScrollView(
@@ -388,68 +606,65 @@ class _CreateStaffRequestDialogState
             children: [
               DropdownButtonFormField<StaffRequestKind>(
                 initialValue: _kind,
+                isExpanded: true,
                 decoration: const InputDecoration(labelText: 'Request Type'),
-                items: StaffRequestKind.values.map((k) {
-                  return DropdownMenuItem(
-                    value: k,
-                    child: Text(k.displayLabel),
-                  );
-                }).toList(),
+                items: [
+                  for (final k in StaffRequestKind.creatable)
+                    DropdownMenuItem(value: k, child: Text(k.displayLabel)),
+                ],
                 onChanged: (val) {
                   if (val != null) {
                     setState(() {
                       _kind = val;
                       _selectedShiftId = null;
+                      _error = null;
                     });
                   }
                 },
               ),
-              if (_needsShift) ...[
+              if (_kind.needsShift) ...[
                 const SizedBox(height: 12),
-                Builder(
-                  builder: (context) {
-                    final userId = ref.watch(currentUserIdProvider);
-                    final shifts = ref
-                            .watch(shiftsForVenueProvider(widget.venueId))
-                            .valueOrNull ??
-                        const <Shift>[];
-                    final choices = shifts.where(
-                      (shift) =>
-                          shift.status != ShiftStatus.cancelled &&
-                          shift.startTime.isAfter(DateTime.now()) &&
-                          (_kind == StaffRequestKind.addShift
-                              ? shift.staffId == null
-                              : shift.staffId == userId),
-                    );
-                    return DropdownButtonFormField<String>(
-                      initialValue: _selectedShiftId,
-                      decoration: const InputDecoration(labelText: 'Shift'),
-                      items: [
-                        for (final shift in choices)
-                          DropdownMenuItem(
-                            value: shift.id,
-                            child: Text(
-                              '${ref.watch(venueClockProvider).formatDateTime(shift.startTime)} · ${shift.roleLabel ?? 'Shift'}',
-                            ),
+                if (choices.isEmpty)
+                  Text(
+                    _kind == StaffRequestKind.addShift
+                        ? 'There are no open shifts to pick up right now.'
+                        : 'You have no upcoming shifts to drop.',
+                  )
+                else
+                  DropdownButtonFormField<String>(
+                    initialValue: _selectedShiftId,
+                    isExpanded: true,
+                    decoration: InputDecoration(
+                      labelText: _kind == StaffRequestKind.addShift
+                          ? 'Open shift'
+                          : 'Your shift',
+                    ),
+                    items: [
+                      for (final shift in choices)
+                        DropdownMenuItem(
+                          value: shift.id,
+                          child: Text(
+                            '${shiftDayLabel(clock, shift)} · '
+                            '${shiftTimeRangeLabel(clock, shift)} · '
+                            '${shiftRoleLabel(shift)}'
+                            '${_kind == StaffRequestKind.addShift && userId != null && overlappingShiftsFor(allShifts, userId, shift).isNotEmpty ? ' (overlaps your shift)' : ''}',
+                            overflow: TextOverflow.ellipsis,
                           ),
-                      ],
-                      onChanged: (value) => setState(
-                        () => _selectedShiftId = value,
-                      ),
-                    );
-                  },
-                ),
+                        ),
+                    ],
+                    onChanged: (value) => setState(() {
+                      _selectedShiftId = value;
+                      _error = null;
+                    }),
+                  ),
               ],
               const SizedBox(height: 12),
               TextFormField(
                 controller: _titleController,
                 decoration: const InputDecoration(
                   labelText: 'Title',
-                  hintText: 'e.g. Time off for doctor appointment',
+                  hintText: 'Optional, e.g. Family wedding',
                 ),
-                validator: (val) => (val == null || val.trim().isEmpty)
-                    ? 'Title is required'
-                    : null,
               ),
               const SizedBox(height: 12),
               TextFormField(
@@ -459,24 +674,35 @@ class _CreateStaffRequestDialogState
                 ),
                 maxLines: 2,
               ),
-              const SizedBox(height: 12),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Start date (optional)'),
-                subtitle: Text(
-                  _startDate == null ? 'Not set' : _formatDate(_startDate!),
+              if (_needsDates) ...[
+                const SizedBox(height: 12),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('First day'),
+                  subtitle: Text(
+                    _startDate == null ? 'Not set' : _dayLabel(_startDate!),
+                  ),
+                  trailing: const Icon(Icons.edit_calendar_outlined),
+                  onTap: () => _pickDate(isStart: true),
                 ),
-                trailing: const Icon(Icons.edit_calendar_outlined),
-                onTap: () => _pickDate(isStart: true),
-              ),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('End date (optional)'),
-                subtitle:
-                    Text(_endDate == null ? 'Not set' : _formatDate(_endDate!)),
-                trailing: const Icon(Icons.edit_calendar_outlined),
-                onTap: () => _pickDate(isStart: false),
-              ),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Last day (optional)'),
+                  subtitle: Text(
+                    _endDate == null ? 'Same day' : _dayLabel(_endDate!),
+                  ),
+                  trailing: const Icon(Icons.edit_calendar_outlined),
+                  onTap: () => _pickDate(isStart: false),
+                ),
+              ],
+              if (_error != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    _error!,
+                    style: TextStyle(color: context.ops.danger.fg),
+                  ),
+                ),
             ],
           ),
         ),

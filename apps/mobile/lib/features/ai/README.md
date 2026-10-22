@@ -35,7 +35,9 @@ previewed/advisory for the user to accept, edit, or ignore.
 - `wrangler_ask` — this feature's own screen.
 - `staff_import_parse` — "Import from paste" on the roster (`features/workforce`).
 - `inventory_parse` — `features/inventory` import screen.
-- `scheduling_suggestion` — the schedule list (`features/schedules`).
+- `scheduling_suggestion` — the schedule list (`features/schedules`). The input carries today's
+  venue date and roster names keyed `staff_1`… (see `schedules/domain/coverage_request.dart`);
+  the prompt asks for those keys plus `staff_name`/`role_label` back.
 - `shift_insights` — `features/insights`.
 
 ## Behaviour to keep

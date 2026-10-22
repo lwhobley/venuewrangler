@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:venuewrangler_mobile/core/auth/auth_providers.dart';
 import 'package:venuewrangler_mobile/core/theme/app_theme.dart';
 import 'package:venuewrangler_mobile/features/schedules/application/schedules_providers.dart';
@@ -29,12 +30,39 @@ class _FakeRepo implements SchedulesRepository {
   List<Shift> shifts;
   final calls = <Map<String, Object?>>[];
 
+  /// When set, the next update fails as if someone changed the shift first.
+  bool stale = false;
+  int fetches = 0;
+
   @override
-  Future<List<Shift>> fetchShiftsForVenue(String venueId) async => shifts;
+  Future<List<Shift>> fetchShiftsForVenue(String venueId) async {
+    fetches++;
+    return shifts;
+  }
+
+  @override
+  Stream<void> watchScheduleChanges(String venueId) => const Stream.empty();
+
+  final created = <String?>[];
+  PostgrestException? createError;
+
+  @override
+  Future<void> createShift({
+    required String venueId,
+    String? staffId,
+    String? roleLabel,
+    String? section,
+    required DateTime startTime,
+    required DateTime endTime,
+  }) async {
+    if (createError != null) throw createError!;
+    created.add(staffId);
+  }
 
   @override
   Future<void> updateShift({
     required String shiftId,
+    int? expectedVersion,
     String? staffId,
     bool clearStaff = false,
     String? roleLabel,
@@ -45,17 +73,22 @@ class _FakeRepo implements SchedulesRepository {
   }) async {
     calls.add({
       'id': shiftId,
+      'version': expectedVersion,
       'staffId': staffId,
       'clearStaff': clearStaff,
+      'role': roleLabel,
+      'section': section,
       'start': startTime,
       'end': endTime,
     });
+    if (stale) throw const StaleShiftException();
     shifts = [
       for (final s in shifts)
         if (s.id == shiftId)
           s.copyWith(
             staffId: staffId,
             clearStaff: clearStaff,
+            section: section,
             startTime: startTime,
             endTime: endTime,
           )
@@ -333,6 +366,131 @@ void main() {
 
       expect(repo.calls, isEmpty);
       expect(find.textContaining("isn't supported"), findsWidgets);
+    });
+  });
+
+  group('editing from the board (launch review D2)', () {
+    Future<_FakeRepo> pump(WidgetTester tester) async {
+      tester.view.physicalSize = const Size(900, 1400);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      const clock = VenueClock('UTC');
+      final start = businessDayStart(businessDateFor(clock.now))
+          .add(const Duration(hours: 12));
+      final repo = _FakeRepo([
+        Shift(
+          id: 's1',
+          venueId: 'venue-1',
+          staffId: 'alice',
+          roleLabel: 'Server',
+          section: 'main',
+          startTime: start,
+          endTime: start.add(const Duration(hours: 4)),
+          status: ShiftStatus.scheduled,
+          version: 3,
+        ),
+      ]);
+      final venue = Venue(
+        id: 'venue-1',
+        organizationId: 'org',
+        name: 'Venue',
+        createdAt: DateTime(2026),
+      );
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            activeVenueProvider.overrideWith((ref) => venue),
+            currentUserIdProvider.overrideWithValue('boss'),
+            schedulesRepositoryProvider.overrideWithValue(repo),
+            canManageActiveVenueProvider.overrideWith((ref) async => true),
+            scheduleRosterForVenueProvider.overrideWith(
+              (ref, venueId) async => const [
+                RosterMember(
+                  userId: 'alice',
+                  role: 'staff',
+                  displayName: 'Alice',
+                ),
+                RosterMember(userId: 'bob', role: 'staff', displayName: 'Bob'),
+              ],
+            ),
+          ],
+          child: MaterialApp(
+            theme: AppTheme.dark(),
+            home: const ScheduleTimelineScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      return repo;
+    }
+
+    Future<void> openAndRetarget(WidgetTester tester) async {
+      await tester.tap(find.textContaining('Server'));
+      await tester.pumpAndSettle();
+      expect(find.text('Edit shift'), findsOneWidget);
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Section (e.g. patio, bar)'),
+        'patio',
+      );
+      await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets(
+        'saving a section change sends only the section, at the '
+        'version the board showed', (tester) async {
+      final repo = await pump(tester);
+      await openAndRetarget(tester);
+
+      final call = repo.calls.single;
+      expect(call['section'], 'patio');
+      expect(call['version'], 3);
+      // Nothing else is written back — in particular not the stale assignee.
+      expect(call['staffId'], isNull);
+      expect(call['clearStaff'], isFalse);
+      expect(call['role'], isNull);
+      expect(call['start'], isNull);
+      expect(call['end'], isNull);
+      expect(find.text('Edit shift'), findsNothing);
+    });
+
+    testWidgets('a stale save keeps the sheet open, says why and reloads',
+        (tester) async {
+      final repo = await pump(tester)
+        ..stale = true;
+      final fetchesBefore = repo.fetches;
+      await openAndRetarget(tester);
+
+      expect(find.text('Edit shift'), findsOneWidget);
+      expect(
+        find.textContaining('Someone else changed this shift first'),
+        findsOneWidget,
+      );
+      expect(repo.fetches, greaterThan(fetchesBefore));
+    });
+
+    testWidgets('a refused add keeps the sheet and what was typed',
+        (tester) async {
+      final repo = await pump(tester)
+        ..createError = const PostgrestException(message: 'no', code: '42501');
+      final bob = tester.getCenter(find.text('Bob'));
+      await tester.tapAt(Offset(bob.dx + 300, bob.dy));
+      await tester.pumpAndSettle();
+      expect(find.text('Add shift'), findsOneWidget);
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Role (e.g. bartender)'),
+        'Host',
+      );
+      await tester.tap(find.widgetWithText(FilledButton, 'Add'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Add shift'), findsOneWidget);
+      expect(
+        find.text('Only managers can change the schedule.'),
+        findsOneWidget,
+      );
+      expect(find.text('Host'), findsOneWidget);
+      expect(repo.created, isEmpty);
     });
   });
 }

@@ -37,8 +37,24 @@ enum StaffRequestKind {
         StaffRequestKind.other => 'other',
       };
 
+  /// The kinds anyone can file from the Requests screen. Swaps have their own flow on the
+  /// schedule; the rest are kept only so older rows still display.
+  static const creatable = [
+    StaffRequestKind.timeOff,
+    StaffRequestKind.dropShift,
+    StaffRequestKind.addShift,
+    StaffRequestKind.sickLeave,
+    StaffRequestKind.other,
+  ];
+
+  /// Requests that name one shift (`requested_shift_id`).
+  bool get needsShift =>
+      this == StaffRequestKind.addShift ||
+      this == StaffRequestKind.dropShift ||
+      this == StaffRequestKind.openShift;
+
   String get displayLabel => switch (this) {
-        StaffRequestKind.addShift => 'Add Shift',
+        StaffRequestKind.addShift => 'Pick Up Shift',
         StaffRequestKind.dropShift => 'Drop Shift',
         StaffRequestKind.timeOff => 'Time Off',
         StaffRequestKind.shiftSwap => 'Shift Swap',

@@ -87,25 +87,33 @@ class InventoryParseResult {
 class ShiftSuggestion {
   const ShiftSuggestion({
     required this.staffId,
+    this.staffName,
     this.shiftId,
+    this.roleLabel,
     this.startTime,
     this.endTime,
     required this.reason,
   });
 
+  /// The roster key the app sent with the request (see `schedule_list_screen.dart`), or
+  /// whatever the model put there — callers resolve it against the roster, never trust it.
   final String staffId;
+  final String? staffName;
   final String? shiftId;
+  final String? roleLabel;
   final String? startTime;
   final String? endTime;
   final String reason;
 
   factory ShiftSuggestion.fromJson(Map<String, dynamic> json) =>
       ShiftSuggestion(
-        staffId: json['staff_id'] as String,
+        staffId: json['staff_id']?.toString() ?? '',
+        staffName: json['staff_name'] as String?,
         shiftId: json['shift_id'] as String?,
+        roleLabel: json['role_label'] as String?,
         startTime: json['start_time'] as String?,
         endTime: json['end_time'] as String?,
-        reason: json['reason'] as String,
+        reason: json['reason'] as String? ?? '',
       );
 }
 

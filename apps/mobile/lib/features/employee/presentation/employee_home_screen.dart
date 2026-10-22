@@ -150,6 +150,12 @@ class _EmployeeHomeScreenState extends ConsumerState<EmployeeHomeScreen> {
             ),
             const SizedBox(height: 12),
             ClockCard(entry: clockAsync, now: _now),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: () => context.push('/staff-requests'),
+              icon: const Icon(Icons.assignment_outlined),
+              label: const Text('Request time off or a shift change'),
+            ),
             const SizedBox(height: 20),
             const SectionTitle('This shift'),
             GridView.count(

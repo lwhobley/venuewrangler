@@ -20,10 +20,13 @@ abstract interface class StaffRequestsRepository {
 
   Future<void> cancelRequest(String requestId);
 
+  /// Approve or deny (`review_staff_request`). Approving a pick-up that would double-book the
+  /// requester is refused (code 23P01) unless [allowOverlap].
   Future<void> reviewRequest({
     required String requestId,
     required StaffRequestStatus status,
     String? responseNotes,
+    bool allowOverlap = false,
   });
 }
 
@@ -88,22 +91,17 @@ class SupabaseStaffRequestsRepository implements StaffRequestsRepository {
     required String requestId,
     required StaffRequestStatus status,
     String? responseNotes,
+    bool allowOverlap = false,
   }) async {
-    final row = await _client
-        .from('staff_requests')
-        .update({
-          'status': status.toDb(),
-          if (responseNotes != null && responseNotes.isNotEmpty)
-            'response_notes': responseNotes,
-        })
-        .eq('id', requestId)
-        .select('id')
-        .maybeSingle();
-    if (row == null) {
-      await throwForUnappliedUpdate(
-        rowExists: () => rowExistsById(_client, 'staff_requests', requestId),
-        denialMessage: 'Request review was not applied',
-      );
-    }
+    await _client.rpc(
+      'review_staff_request',
+      params: {
+        'p_request_id': requestId,
+        'p_status': status.toDb(),
+        'p_response_notes':
+            (responseNotes?.isEmpty ?? true) ? null : responseNotes,
+        'p_allow_overlap': allowOverlap,
+      },
+    );
   }
 }

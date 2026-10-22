@@ -56,6 +56,10 @@ class _Row {
 /// Drag-and-drop schedule board: one row per person (plus open shifts), a 24-hour business
 /// day across. Drag a shift sideways to retime it, between rows to reassign it, or pull its
 /// edges to change start/end. Changes save immediately and revert if the database refuses.
+///
+/// The board reloads on realtime schedule changes and when the app returns to the foreground.
+/// Each save sends only the fields that changed and only applies to the version of the shift
+/// the board showed, so a board left open can never undo a teammate's swap (launch review D2).
 class ScheduleTimelineScreen extends ConsumerStatefulWidget {
   const ScheduleTimelineScreen({super.key});
 
@@ -81,11 +85,26 @@ class _ScheduleTimelineScreenState
   late final ScrollController _hScroll = ScrollController(
     initialScrollOffset: 10 * _hourWidth,
   );
+  late final AppLifecycleListener _lifecycle;
+
+  @override
+  void initState() {
+    super.initState();
+    _lifecycle = AppLifecycleListener(onResume: _reload);
+  }
 
   @override
   void dispose() {
+    _lifecycle.dispose();
     _hScroll.dispose();
     super.dispose();
+  }
+
+  void _reload() {
+    final venue = ref.read(activeVenueProvider);
+    if (venue == null) return;
+    ref.invalidate(shiftsForVenueProvider(venue.id));
+    ref.invalidate(shiftSwapsForVenueProvider(venue.id));
   }
 
   /// Zooms the hour scale while keeping the same time at the left edge in view.
@@ -123,6 +142,10 @@ class _ScheduleTimelineScreenState
   }
 
   String _errorMessage(Object e) {
+    if (e is StaleShiftException) {
+      return 'Someone else changed this shift first. The board has reloaded — '
+          'check it and make your change again.';
+    }
     if (e is PostgrestException) {
       return switch (e.code) {
         '42501' => 'Only managers can change the schedule.',
@@ -218,13 +241,19 @@ class _ScheduleTimelineScreenState
     if (!ensureSupported(context, _clock)) return;
     final venueId = orig.venueId;
     setState(() => _pending[orig.id] = updated);
+    final reassigned = updated.staffId != orig.staffId;
     try {
       await ref.read(schedulesRepositoryProvider).updateShift(
             shiftId: orig.id,
-            staffId: updated.staffId,
-            clearStaff: updated.staffId == null && orig.staffId != null,
-            startTime: _clock.instant(updated.startTime),
-            endTime: _clock.instant(updated.endTime),
+            expectedVersion: orig.version,
+            staffId: reassigned ? updated.staffId : null,
+            clearStaff: reassigned && updated.staffId == null,
+            startTime: updated.startTime == orig.startTime
+                ? null
+                : _clock.instant(updated.startTime),
+            endTime: updated.endTime == orig.endTime
+                ? null
+                : _clock.instant(updated.endTime),
           );
       ref.invalidate(shiftsForVenueProvider(venueId));
       await ref.read(shiftsForVenueProvider(venueId).future);
@@ -239,6 +268,9 @@ class _ScheduleTimelineScreenState
       }
     } catch (e) {
       if (mounted) setState(() => _pending.remove(orig.id));
+      if (e is StaleShiftException) {
+        ref.invalidate(shiftsForVenueProvider(venueId));
+      }
       _toast(_errorMessage(e), error: true);
     }
   }
@@ -250,7 +282,7 @@ class _ScheduleTimelineScreenState
     required DateTime start,
   }) async {
     if (!ensureSupported(context, _clock)) return;
-    final result = await _showShiftForm(
+    await _showShiftForm(
       title: 'Add shift',
       confirmLabel: 'Add',
       rows: rows,
@@ -261,26 +293,28 @@ class _ScheduleTimelineScreenState
         start: start,
         end: start.add(const Duration(hours: 4)),
       ),
+      onSave: (result) async {
+        try {
+          await ref.read(schedulesRepositoryProvider).createShift(
+                venueId: venueId,
+                staffId: result.staffId,
+                roleLabel: result.role.isEmpty ? null : result.role,
+                section: result.section.isEmpty ? null : result.section,
+                startTime: _clock.instant(result.start),
+                endTime: _clock.instant(result.end),
+              );
+          ref.invalidate(shiftsForVenueProvider(venueId));
+          return null;
+        } catch (e) {
+          return _errorMessage(e);
+        }
+      },
     );
-    if (result == null) return;
-    try {
-      await ref.read(schedulesRepositoryProvider).createShift(
-            venueId: venueId,
-            staffId: result.staffId,
-            roleLabel: result.role.isEmpty ? null : result.role,
-            section: result.section.isEmpty ? null : result.section,
-            startTime: _clock.instant(result.start),
-            endTime: _clock.instant(result.end),
-          );
-      ref.invalidate(shiftsForVenueProvider(venueId));
-    } catch (e) {
-      _toast(_errorMessage(e), error: true);
-    }
   }
 
   Future<void> _edit(Shift shift, List<_Row> rows) async {
     if (!ensureSupported(context, _clock)) return;
-    final result = await _showShiftForm(
+    await _showShiftForm(
       title: 'Edit shift',
       confirmLabel: 'Save',
       rows: rows,
@@ -292,33 +326,52 @@ class _ScheduleTimelineScreenState
         start: shift.startTime,
         end: shift.endTime,
       ),
+      onSave: (result) async {
+        final repo = ref.read(schedulesRepositoryProvider);
+        try {
+          if (result.delete) {
+            await repo.deleteShift(shift.id);
+            _toast(
+              'Shift removed locally or marked cancelled. Publish the schedule to sync a connected POS.',
+            );
+          } else {
+            // Only what the manager changed in the form; everything else stays as stored.
+            final reassigned = result.staffId != shift.staffId;
+            await repo.updateShift(
+              shiftId: shift.id,
+              expectedVersion: shift.version,
+              staffId: reassigned ? result.staffId : null,
+              clearStaff: reassigned && result.staffId == null,
+              roleLabel:
+                  result.role == (shift.roleLabel ?? '') ? null : result.role,
+              section: result.section == (shift.section ?? '')
+                  ? null
+                  : result.section,
+              startTime: result.start == shift.startTime
+                  ? null
+                  : _clock.instant(result.start),
+              endTime: result.end == shift.endTime
+                  ? null
+                  : _clock.instant(result.end),
+            );
+          }
+          ref.invalidate(shiftsForVenueProvider(shift.venueId));
+          return null;
+        } on StaleShiftException catch (e) {
+          // The sheet still shows the old shift; reload the board behind it and ask the
+          // manager to reopen it rather than save over the newer change.
+          ref.invalidate(shiftsForVenueProvider(shift.venueId));
+          return '${_errorMessage(e)} Close this and open the shift again.';
+        } catch (e) {
+          return _errorMessage(e);
+        }
+      },
     );
-    if (result == null) return;
-    final repo = ref.read(schedulesRepositoryProvider);
-    try {
-      if (result.delete) {
-        await repo.deleteShift(shift.id);
-        _toast(
-          'Shift removed locally or marked cancelled. Publish the schedule to sync a connected POS.',
-        );
-      } else {
-        await repo.updateShift(
-          shiftId: shift.id,
-          staffId: result.staffId,
-          clearStaff: result.staffId == null,
-          roleLabel: result.role,
-          section: result.section,
-          startTime: _clock.instant(result.start),
-          endTime: _clock.instant(result.end),
-        );
-      }
-      ref.invalidate(shiftsForVenueProvider(shift.venueId));
-    } catch (e) {
-      _toast(_errorMessage(e), error: true);
-    }
   }
 
-  Future<_ShiftFormResult?> _showShiftForm({
+  /// Opens the add/edit sheet. [onSave] runs from inside it and returns an error to show in
+  /// place (the sheet stays open with what was entered) or null to close it.
+  Future<void> _showShiftForm({
     required String title,
     required String confirmLabel,
     required List<_Row> rows,
@@ -329,9 +382,10 @@ class _ScheduleTimelineScreenState
       DateTime start,
       DateTime end
     }) initial,
+    required Future<String?> Function(_ShiftFormResult result) onSave,
     bool allowDelete = false,
   }) {
-    return showModalBottomSheet<_ShiftFormResult>(
+    return showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
@@ -346,6 +400,7 @@ class _ScheduleTimelineScreenState
           initial: initial,
           allowDelete: allowDelete,
           nowWall: _clock.now,
+          onSave: onSave,
         ),
       ),
     );
@@ -374,6 +429,7 @@ class _ScheduleTimelineScreenState
     if (venue == null) {
       return const Scaffold(body: Center(child: Text('No venue selected.')));
     }
+    ref.watch(scheduleLiveUpdatesProvider(venue.id));
     final shiftsAsync = ref.watch(shiftsForVenueProvider(venue.id));
     final rosterAsync = ref.watch(scheduleRosterForVenueProvider(venue.id));
 
@@ -381,6 +437,16 @@ class _ScheduleTimelineScreenState
       appBar: AppBar(
         title: const Text('Schedule board'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Reload schedule',
+            onPressed: _reload,
+          ),
+          IconButton(
+            icon: const Icon(Icons.assignment_outlined),
+            tooltip: 'Requests (time off, drop or pick up shifts)',
+            onPressed: () => context.push('/staff-requests'),
+          ),
           IconButton(
             icon: const Icon(Icons.zoom_out),
             tooltip: 'Zoom out',
@@ -1058,7 +1124,11 @@ class _ShiftForm extends StatefulWidget {
     required this.initial,
     required this.allowDelete,
     required this.nowWall,
+    required this.onSave,
   });
+
+  /// Saves; returns an error to show in place, or null to close the sheet.
+  final Future<String?> Function(_ShiftFormResult result) onSave;
 
   /// The venue's wall time now, for bounding the pickers.
   final DateTime nowWall;
@@ -1085,6 +1155,7 @@ class _ShiftFormState extends State<_ShiftForm> {
   late DateTime _start = widget.initial.start;
   late DateTime _end = widget.initial.end;
   String? _error;
+  bool _saving = false;
 
   @override
   void dispose() {
@@ -1103,21 +1174,34 @@ class _ShiftFormState extends State<_ShiftForm> {
   String _fmt(DateTime t) =>
       '${_weekdays[t.weekday - 1]} ${_months[t.month - 1]} ${t.day}, ${clockLabel(t)}';
 
-  void _submit() {
-    if (!_end.isAfter(_start)) {
+  Future<void> _submit({bool delete = false}) async {
+    if (!delete && !_end.isAfter(_start)) {
       setState(() => _error = 'The end time must be after the start.');
       return;
     }
-    Navigator.pop(
-      context,
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    final error = await widget.onSave(
       _ShiftFormResult(
         staffId: _staffId,
         role: _role.text.trim(),
         section: _section.text.trim(),
         start: _start,
         end: _end,
+        delete: delete,
       ),
     );
+    if (!mounted) return;
+    if (error == null) {
+      Navigator.pop(context);
+    } else {
+      setState(() {
+        _saving = false;
+        _error = error;
+      });
+    }
   }
 
   @override
@@ -1191,21 +1275,14 @@ class _ShiftFormState extends State<_ShiftForm> {
                 ),
               ),
             const SizedBox(height: 16),
-            FilledButton(onPressed: _submit, child: Text(widget.confirmLabel)),
+            FilledButton(
+              onPressed: _saving ? null : _submit,
+              child: Text(widget.confirmLabel),
+            ),
             if (widget.allowDelete) ...[
               const SizedBox(height: 8),
               TextButton.icon(
-                onPressed: () => Navigator.pop(
-                  context,
-                  _ShiftFormResult(
-                    staffId: _staffId,
-                    role: _role.text.trim(),
-                    section: _section.text.trim(),
-                    start: _start,
-                    end: _end,
-                    delete: true,
-                  ),
-                ),
+                onPressed: _saving ? null : () => _submit(delete: true),
                 icon: Icon(Icons.delete_outline, color: context.ops.danger.fg),
                 label: Text(
                   'Remove or cancel shift',

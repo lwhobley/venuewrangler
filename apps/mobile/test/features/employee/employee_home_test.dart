@@ -321,5 +321,7 @@ void main() {
     expect(find.text('Other guest'), findsNothing);
     expect(find.text('Polish glasses'), findsOneWidget);
     expect(find.textContaining('Someone else'), findsNothing);
+    // Staff can reach Requests (time off, drop or pick up shifts) from Home (U2).
+    expect(find.text('Request time off or a shift change'), findsOneWidget);
   });
 }
