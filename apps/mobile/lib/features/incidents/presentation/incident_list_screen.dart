@@ -100,7 +100,7 @@ class IncidentListScreen extends ConsumerWidget {
           ),
         ),
         floatingActionButton: FloatingActionButton.extended(
-          onPressed: () => _showReportDialog(context, ref, venue),
+          onPressed: () => _showReportDialog(context, venue),
           icon: const Icon(Icons.report_outlined),
           label: const Text('Report incident'),
         ),
@@ -108,46 +108,107 @@ class IncidentListScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _showReportDialog(
-    BuildContext context,
-    WidgetRef ref,
-    Venue venue,
-  ) async {
-    final titleController = TextEditingController();
-    final descriptionController = TextEditingController();
-    var severity = IncidentSeverity.medium;
-    String? photoPath;
+  Future<void> _showReportDialog(BuildContext context, Venue venue) =>
+      showDialog<bool>(
+        context: context,
+        builder: (_) => _ReportIncidentDialog(venue: venue),
+      );
+}
 
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: const Text('Report an incident'),
-          content: Column(
+/// The report form. It saves from inside the dialog and only closes once the report has been
+/// filed (or queued offline): a missing title is flagged on the field, and a rejected save is
+/// shown inline, so nothing the reporter typed is lost.
+class _ReportIncidentDialog extends ConsumerStatefulWidget {
+  const _ReportIncidentDialog({required this.venue});
+
+  final Venue venue;
+
+  @override
+  ConsumerState<_ReportIncidentDialog> createState() =>
+      _ReportIncidentDialogState();
+}
+
+class _ReportIncidentDialogState extends ConsumerState<_ReportIncidentDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _titleController = TextEditingController();
+  final _descriptionController = TextEditingController();
+  var _severity = IncidentSeverity.medium;
+  String? _photoPath;
+  bool _saving = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _descriptionController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    final description = _descriptionController.text.trim();
+    final error = await _reportIncident(
+      ScaffoldMessenger.of(context),
+      ref,
+      venue: widget.venue,
+      title: _titleController.text.trim(),
+      description: description.isEmpty ? null : description,
+      severity: _severity,
+      photoPath: _photoPath,
+    );
+    if (!mounted) return;
+    if (error == null) {
+      Navigator.of(context).pop(true);
+    } else {
+      setState(() {
+        _saving = false;
+        _error = error;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return AlertDialog(
+      title: const Text('Report an incident'),
+      content: SingleChildScrollView(
+        child: Form(
+          key: _formKey,
+          child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              TextField(
-                controller: titleController,
+              TextFormField(
+                controller: _titleController,
                 autofocus: true,
+                textInputAction: TextInputAction.next,
                 decoration: const InputDecoration(labelText: 'What happened?'),
+                validator: (value) => (value ?? '').trim().isEmpty
+                    ? 'Add a short summary of what happened.'
+                    : null,
               ),
               const SizedBox(height: 12),
               TextField(
-                controller: descriptionController,
+                controller: _descriptionController,
                 decoration:
                     const InputDecoration(labelText: 'Details (optional)'),
                 maxLines: 3,
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<IncidentSeverity>(
-                initialValue: severity,
+                initialValue: _severity,
                 decoration: const InputDecoration(labelText: 'Severity'),
                 items: [
                   for (final value in IncidentSeverity.values)
                     DropdownMenuItem(value: value, child: Text(value.name)),
                 ],
-                onChanged: (value) =>
-                    setState(() => severity = value ?? severity),
+                onChanged: _saving
+                    ? null
+                    : (value) => setState(() => _severity = value ?? _severity),
               ),
               // Photo evidence is captured, annotated and uploaded by file path, which a browser
               // doesn't have (dart:io File/FileImage throw on web), so the option is native-only.
@@ -156,61 +217,60 @@ class IncidentListScreen extends ConsumerWidget {
                 Align(
                   alignment: Alignment.centerLeft,
                   child: TextButton.icon(
-                    onPressed: () async {
-                      final picked = await ref
-                          .read(imagePickerServiceProvider)
-                          .pickImage(source: ImageSource.camera);
-                      if (picked == null || !context.mounted) return;
-                      // Let the reporter mark up the photo (circle the damage, add a label…)
-                      // before it's attached; backing out keeps the original.
-                      final annotate = ref.read(photoAnnotatorProvider);
-                      final annotated = await annotate(context, picked);
-                      if (!context.mounted) return;
-                      setState(() => photoPath = annotated ?? picked);
-                    },
+                    onPressed: _saving ? null : _pickPhoto,
                     icon: const Icon(Icons.camera_alt_outlined),
                     label: Text(
-                      photoPath == null ? 'Attach photo' : 'Photo attached',
+                      _photoPath == null ? 'Attach photo' : 'Photo attached',
                     ),
                   ),
                 ),
+              if (_error != null) ...[
+                const SizedBox(height: 12),
+                Text(
+                  _error!,
+                  style: TextStyle(color: theme.colorScheme.error),
+                ),
+              ],
             ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Report'),
-            ),
-          ],
         ),
       ),
-    );
-
-    if (confirmed != true ||
-        titleController.text.trim().isEmpty ||
-        !context.mounted) {
-      return;
-    }
-
-    await _reportIncident(
-      context,
-      ref,
-      venue: venue,
-      title: titleController.text.trim(),
-      description: descriptionController.text.trim().isEmpty
-          ? null
-          : descriptionController.text.trim(),
-      severity: severity,
-      photoPath: photoPath,
+      actions: [
+        TextButton(
+          onPressed: _saving ? null : () => Navigator.of(context).pop(false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _saving ? null : _submit,
+          child: _saving
+              ? const SizedBox.square(
+                  dimension: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Report'),
+        ),
+      ],
     );
   }
 
-  Future<void> _reportIncident(
-    BuildContext context,
+  Future<void> _pickPhoto() async {
+    final picked = await ref
+        .read(imagePickerServiceProvider)
+        .pickImage(source: ImageSource.camera);
+    if (picked == null || !mounted) return;
+    // Let the reporter mark up the photo (circle the damage, add a label…)
+    // before it's attached; backing out keeps the original.
+    final annotate = ref.read(photoAnnotatorProvider);
+    final annotated = await annotate(context, picked);
+    if (!mounted) return;
+    setState(() => _photoPath = annotated ?? picked);
+  }
+
+  /// Files the report, falling back to the offline queue on a transport failure. Returns null
+  /// once the report is saved or queued, or a message to show in the form when it was rejected
+  /// (the dialog then stays open with everything the reporter typed).
+  Future<String?> _reportIncident(
+    ScaffoldMessengerState messenger,
     WidgetRef ref, {
     required Venue venue,
     required String title,
@@ -218,7 +278,6 @@ class IncidentListScreen extends ConsumerWidget {
     required IncidentSeverity severity,
     String? photoPath,
   }) async {
-    final messenger = ScaffoldMessenger.of(context);
     final incidentId = _uuid.v4();
 
     try {
@@ -232,22 +291,12 @@ class IncidentListScreen extends ConsumerWidget {
       ref.invalidate(incidentsForVenueProvider(venue.id));
     } catch (error) {
       if (error is PostgrestException && error.code == '42501') {
-        messenger.showSnackBar(
-          const SnackBar(
-            content:
-                Text("You don't have permission to report incidents here."),
-          ),
-        );
-        return; // the incident was never created; there is nothing to attach a photo to.
+        // The incident was never created; there is nothing to attach a photo to.
+        return "You don't have permission to report incidents here.";
       }
       if (!isTransportFailure(error)) {
         // A deterministic rejection would never succeed on retry, so do not queue it.
-        messenger.showSnackBar(
-          const SnackBar(
-            content: Text("Couldn't report the incident. Please try again."),
-          ),
-        );
-        return;
+        return "Couldn't report the incident. Please try again.";
       }
       await _queueIncidentOffline(
         messenger,
@@ -266,7 +315,7 @@ class IncidentListScreen extends ConsumerWidget {
           photoPath: photoPath,
         );
       }
-      return;
+      return null;
     }
 
     if (photoPath != null) {
@@ -278,6 +327,7 @@ class IncidentListScreen extends ConsumerWidget {
         photoPath: photoPath,
       );
     }
+    return null;
   }
 
   Future<void> _attachPhoto(

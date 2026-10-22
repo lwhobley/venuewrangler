@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:venuewrangler_mobile/core/auth/auth_providers.dart';
 import 'package:venuewrangler_mobile/core/offline/offline_queue_providers.dart';
 import 'package:venuewrangler_mobile/core/offline/offline_queue_store.dart';
@@ -36,6 +37,7 @@ class _FakeIncidentsRepository implements IncidentsRepository {
 
   List<Incident> incidents;
   bool simulateOffline = false;
+  Object? reportError;
   String? lastReportedTitle;
   String? lastResolvedId;
   Object? evidenceError;
@@ -62,6 +64,7 @@ class _FakeIncidentsRepository implements IncidentsRepository {
     if (simulateOffline) {
       throw const SocketException('network unreachable');
     }
+    if (reportError != null) throw reportError!;
     lastReportedTitle = title;
   }
 
@@ -180,6 +183,80 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(fakeRepo.lastReportedTitle, 'Broken glass');
+  });
+
+  testWidgets(
+      'a blank summary keeps the form open with its details and flags the field',
+      (tester) async {
+    final fakeRepo = _FakeIncidentsRepository([]);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: baseOverrides(fakeRepo),
+        child: const MaterialApp(home: IncidentListScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester
+        .tap(find.widgetWithText(FloatingActionButton, 'Report incident'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Details (optional)'),
+      'Busser cut hand on broken glass at station 3',
+    );
+    await tester.tap(find.widgetWithText(FilledButton, 'Report'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Report an incident'), findsOneWidget);
+    expect(find.text('Add a short summary of what happened.'), findsOneWidget);
+    expect(
+      find.text('Busser cut hand on broken glass at station 3'),
+      findsOneWidget,
+    );
+    expect(fakeRepo.lastReportedTitle, isNull);
+
+    // Filling the summary in then saves everything in one go.
+    await tester.enterText(
+      find.widgetWithText(TextField, 'What happened?'),
+      'Cut hand',
+    );
+    await tester.tap(find.widgetWithText(FilledButton, 'Report'));
+    await tester.pumpAndSettle();
+
+    expect(fakeRepo.lastReportedTitle, 'Cut hand');
+    expect(find.text('Report an incident'), findsNothing);
+  });
+
+  testWidgets('a rejected save shows an error and keeps the form open',
+      (tester) async {
+    final fakeRepo = _FakeIncidentsRepository([])
+      ..reportError = const PostgrestException(message: 'bad', code: '23514');
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: baseOverrides(fakeRepo),
+        child: const MaterialApp(home: IncidentListScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester
+        .tap(find.widgetWithText(FloatingActionButton, 'Report incident'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextField, 'What happened?'),
+      'Cut hand',
+    );
+    await tester.tap(find.widgetWithText(FilledButton, 'Report'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Report an incident'), findsOneWidget);
+    expect(
+      find.text("Couldn't report the incident. Please try again."),
+      findsOneWidget,
+    );
+    expect(find.text('Cut hand'), findsOneWidget);
   });
 
   testWidgets(
