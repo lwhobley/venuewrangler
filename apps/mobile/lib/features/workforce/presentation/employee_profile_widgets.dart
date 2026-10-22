@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
@@ -76,39 +77,44 @@ class _ProfilePhotoButtonState extends ConsumerState<ProfilePhotoButton> {
   Future<void> _pick() async {
     if (_busy) return;
     final actor = ref.read(currentUserIdProvider);
-    final source = await showModalBottomSheet<ImageSource>(
-      context: context,
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.photo_library_outlined),
-              title: const Text('Choose from photos'),
-              onTap: () => Navigator.pop(context, ImageSource.gallery),
+    // A browser opens its own file chooser (which offers the camera on phones), so there is
+    // nothing to choose between first.
+    final source = kIsWeb
+        ? ImageSource.gallery
+        : await showModalBottomSheet<ImageSource>(
+            context: context,
+            builder: (context) => SafeArea(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ListTile(
+                    leading: const Icon(Icons.photo_library_outlined),
+                    title: const Text('Choose from photos'),
+                    onTap: () => Navigator.pop(context, ImageSource.gallery),
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.camera_alt_outlined),
+                    title: const Text('Take a photo'),
+                    onTap: () => Navigator.pop(context, ImageSource.camera),
+                  ),
+                ],
+              ),
             ),
-            ListTile(
-              leading: const Icon(Icons.camera_alt_outlined),
-              title: const Text('Take a photo'),
-              onTap: () => Navigator.pop(context, ImageSource.camera),
-            ),
-          ],
-        ),
-      ),
-    );
+          );
     if (source == null || !mounted) return;
     setState(() => _busy = true);
     try {
-      final path =
-          await ref.read(imagePickerServiceProvider).pickImage(source: source);
-      if (path == null || !mounted) return;
+      final bytes = await ref
+          .read(imagePickerServiceProvider)
+          .pickImageBytes(source: source);
+      if (bytes == null || !mounted) return;
       if (ref.read(currentUserIdProvider) != actor ||
           ref.read(activeVenueProvider)?.id != widget.profileKey.venueId) {
         throw StateError('Your workplace changed. Open the profile again.');
       }
       await ref
           .read(employeeProfilesRepositoryProvider)
-          .uploadPhoto(widget.profileKey, widget.organizationId, path);
+          .uploadPhoto(widget.profileKey, widget.organizationId, bytes);
       if (!mounted) return;
       ref.invalidate(staffPhotoProvider(widget.profileKey));
       ScaffoldMessenger.of(context).showSnackBar(

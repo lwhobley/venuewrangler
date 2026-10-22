@@ -1,5 +1,4 @@
 import 'dart:typed_data';
-import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../media/application/image_sanitizer.dart';
 import '../domain/employee_hr_profile.dart';
@@ -11,7 +10,7 @@ abstract interface class EmployeeProfilesRepository {
   Future<void> uploadPhoto(
     StaffProfileKey key,
     String organizationId,
-    String filePath,
+    Uint8List imageBytes,
   );
 }
 
@@ -93,10 +92,11 @@ class SupabaseEmployeeProfilesRepository implements EmployeeProfilesRepository {
   Future<void> uploadPhoto(
     StaffProfileKey key,
     String organizationId,
-    String filePath,
+    Uint8List imageBytes,
   ) async {
-    // Re-sanitized here (the picker already did) so a file from any source is clean at upload.
-    final bytes = sanitizeImageBytes(await XFile(filePath).readAsBytes());
+    // Takes bytes rather than a file path so it works in a browser too. Re-sanitized here (the
+    // picker already did) so an image from any source is clean at upload.
+    final bytes = sanitizeImageBytes(imageBytes);
     final mime = profileImageMime(bytes);
     final path = '$organizationId/${key.venueId}/${key.userId}.photo';
     await client.storage.from('profile-photos').uploadBinary(
@@ -109,6 +109,5 @@ class SupabaseEmployeeProfilesRepository implements EmployeeProfilesRepository {
       {'venue_id': key.venueId, 'user_id': key.userId, 'storage_path': path},
       onConflict: 'venue_id,user_id',
     );
-    await deleteTempImage(filePath);
   }
 }

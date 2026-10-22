@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -82,6 +83,10 @@ class _FakeImagePickerService implements ImagePickerService {
   @override
   Future<String?> pickImage({required ImageSource source}) async =>
       pathToReturn;
+
+  @override
+  Future<Uint8List?> pickImageBytes({required ImageSource source}) async =>
+      null;
 }
 
 class _FakeMediaRepository implements MediaRepository {

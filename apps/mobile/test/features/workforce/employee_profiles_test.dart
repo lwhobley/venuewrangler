@@ -2,8 +2,10 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:venuewrangler_mobile/core/auth/auth_providers.dart';
 import 'package:venuewrangler_mobile/core/theme/app_theme.dart';
+import 'package:venuewrangler_mobile/features/media/application/image_picker_service.dart';
 import 'package:venuewrangler_mobile/features/venues/application/venues_providers.dart';
 import 'package:venuewrangler_mobile/features/venues/domain/venue.dart';
 import 'package:venuewrangler_mobile/features/workforce/application/employee_profiles_providers.dart';
@@ -25,12 +27,26 @@ class _Profiles implements EmployeeProfilesRepository {
 
   @override
   Future<StaffPhoto?> fetchPhoto(StaffProfileKey key) async => null;
+  Uint8List? uploadedBytes;
   @override
   Future<void> uploadPhoto(
     StaffProfileKey key,
     String organizationId,
-    String filePath,
-  ) async {}
+    Uint8List imageBytes,
+  ) async {
+    uploadedBytes = imageBytes;
+  }
+}
+
+class _Picker implements ImagePickerService {
+  _Picker(this.bytes);
+  final Uint8List? bytes;
+  @override
+  Future<String?> pickImage({required ImageSource source}) =>
+      throw UnsupportedError('profile photos must not pick by file path');
+  @override
+  Future<Uint8List?> pickImageBytes({required ImageSource source}) async =>
+      bytes;
 }
 
 const _key = (venueId: 'venue-1', userId: 'user-1');
@@ -183,5 +199,37 @@ void main() {
     await tester.pumpAndSettle();
     expect(repo.saved, isNull);
     expect(tester.takeException(), isNull);
+  });
+  testWidgets(
+      'a profile photo is uploaded from the picked bytes, never a file path',
+      (tester) async {
+    final repo = _Profiles();
+    final photo = Uint8List.fromList([255, 216, 255, 0xD9]);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          currentUserIdProvider.overrideWithValue('user-1'),
+          activeVenueProvider.overrideWith((ref) => _venue('venue-1')),
+          employeeProfilesRepositoryProvider.overrideWithValue(repo),
+          imagePickerServiceProvider.overrideWithValue(_Picker(photo)),
+        ],
+        child: MaterialApp(
+          theme: AppTheme.light(),
+          home: const Scaffold(
+            body: ProfilePhotoButton(
+              profileKey: _key,
+              organizationId: 'org-1',
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Add or change photo'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Choose from photos'));
+    await tester.pumpAndSettle();
+
+    expect(repo.uploadedBytes, photo);
+    expect(find.text('Profile photo updated.'), findsOneWidget);
   });
 }

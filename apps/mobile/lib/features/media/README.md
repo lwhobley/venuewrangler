@@ -7,7 +7,10 @@ responses, incident drafts, media-upload retry).
 
 `application/image_picker_service.dart` — a thin interface over `image_picker` so UI code and
 widget tests never depend on the plugin directly; override `imagePickerServiceProvider` with
-a fake in tests instead of mocking a platform channel.
+a fake in tests instead of mocking a platform channel. `pickImage` returns a sanitized local
+file path (native only: a browser has no file paths); `pickImageBytes` returns sanitized bytes
+and works on every platform including web, which is what `features/workforce`'s profile photo
+upload (`ProfilePhotoButton`, used on the roster, profile and settings screens) uses.
 
 `data/media_repository.dart` — `MediaRepository.uploadIncidentEvidence` does two idempotent
 steps: upload the file to the `incident-evidence` Storage bucket (`upsert: true`, safe to
