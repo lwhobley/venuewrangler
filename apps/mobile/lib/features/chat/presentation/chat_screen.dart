@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/auth/auth_providers.dart';
 import '../../../core/theme/app_radii.dart';
 import '../application/chat_providers.dart';
 import '../domain/chat_contact.dart';
@@ -219,6 +220,17 @@ class _ChatThreadViewState extends ConsumerState<_ChatThreadView> {
   Widget build(BuildContext context) {
     final messagesAsync =
         ref.watch(conversationMessagesProvider(widget.conversationId));
+    final me = ref.watch(currentUserIdProvider);
+    final conversation = ref
+        .watch(conversationsListProvider)
+        .valueOrNull
+        ?.where((c) => c.id == widget.conversationId)
+        .firstOrNull;
+    // A DM has only one other person, so their name is already the title; group threads
+    // (or one we can't identify yet) label each run of messages with its sender.
+    final showSenderNames = conversation?.type != 'dm';
+    // Null until the team has loaded (or if it can't be): senders then read "Team member".
+    final senderNames = ref.watch(chatSenderNamesProvider).valueOrNull;
 
     return Scaffold(
       appBar: AppBar(
@@ -228,7 +240,7 @@ class _ChatThreadViewState extends ConsumerState<_ChatThreadView> {
             ref.read(activeConversationIdProvider.notifier).state = null;
           },
         ),
-        title: const Text('Conversation'),
+        title: Text(conversation?.displayName ?? 'Conversation'),
       ),
       body: Column(
         children: [
@@ -244,7 +256,25 @@ class _ChatThreadViewState extends ConsumerState<_ChatThreadView> {
                   itemCount: messages.length,
                   itemBuilder: (context, index) {
                     final msg = messages[index];
-                    return _MessageBubble(message: msg);
+                    final previous = index > 0 ? messages[index - 1] : null;
+                    final newDay = previous == null ||
+                        !_sameDay(previous.createdAt, msg.createdAt);
+                    final isMine = me != null && msg.senderId == me;
+                    final startsRun =
+                        newDay || previous.senderId != msg.senderId;
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (newDay) _DaySeparator(day: msg.createdAt),
+                        _MessageBubble(
+                          message: msg,
+                          isMine: isMine,
+                          senderName: !isMine && showSenderNames && startsRun
+                              ? _senderLabel(msg.senderId, senderNames)
+                              : null,
+                        ),
+                      ],
+                    );
                   },
                 );
               },
@@ -313,48 +343,152 @@ class _ChatThreadViewState extends ConsumerState<_ChatThreadView> {
   }
 }
 
-class _MessageBubble extends StatelessWidget {
-  const _MessageBubble({required this.message});
+bool _sameDay(DateTime a, DateTime b) {
+  final x = a.toLocal();
+  final y = b.toLocal();
+  return x.year == y.year && x.month == y.month && x.day == y.day;
+}
 
-  final ChatMessage message;
+String _senderLabel(String? senderId, Map<String, String>? names) {
+  if (names == null || senderId == null) return 'Team member';
+  // The team list covers current members only, so anyone missing from it has left the venue.
+  return names[senderId] ?? 'Former team member';
+}
+
+class _DaySeparator extends StatelessWidget {
+  const _DaySeparator({required this.day});
+
+  final DateTime day;
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final localizations = MaterialLocalizations.of(context);
+    final local = day.toLocal();
+    final now = DateTime.now();
+    final String label;
+    if (_sameDay(local, now)) {
+      label = 'Today';
+    } else if (_sameDay(local, now.subtract(const Duration(days: 1)))) {
+      label = 'Yesterday';
+    } else if (local.year == now.year) {
+      label = localizations.formatMediumDate(local);
+    } else {
+      label = localizations.formatFullDate(local);
+    }
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Row(
+        children: [
+          const Expanded(child: Divider()),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Text(
+              label,
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+          const Expanded(child: Divider()),
+        ],
+      ),
+    );
+  }
+}
+
+/// One message. The signed-in user's own messages sit on the right in the primary container
+/// colour; everyone else's sit on the left, headed by the sender's name in group threads.
+class _MessageBubble extends StatelessWidget {
+  const _MessageBubble({
+    required this.message,
+    required this.isMine,
+    this.senderName,
+  });
+
+  final ChatMessage message;
+  final bool isMine;
+  final String? senderName;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final background =
+        isMine ? scheme.primaryContainer : scheme.surfaceContainerHighest;
+    final foreground = isMine ? scheme.onPrimaryContainer : scheme.onSurface;
+    final time = MaterialLocalizations.of(context)
+        .formatTimeOfDay(TimeOfDay.fromDateTime(message.createdAt.toLocal()));
     return Align(
-      alignment: Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 4),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(AppRadii.tile),
+      alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.sizeOf(context).width * 0.78,
         ),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment:
+              isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
           children: [
-            if (message.text != null && message.text!.isNotEmpty)
-              Text(
-                message.text!,
-                style: Theme.of(context).textTheme.bodyLarge,
-              ),
-            if (message.hasAttachment)
+            if (senderName != null)
               Padding(
-                padding: const EdgeInsets.only(top: 4.0),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
+                padding: const EdgeInsets.only(left: 14, top: 8, bottom: 2),
+                child: Text(
+                  senderName!,
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: scheme.primary,
+                  ),
+                ),
+              ),
+            Semantics(
+              label: isMine ? 'You' : senderName,
+              child: Container(
+                margin: const EdgeInsets.symmetric(vertical: 3),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: background,
+                  borderRadius: BorderRadius.circular(AppRadii.tile),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(Icons.image, size: 16, color: context.ops.info.fg),
-                    const SizedBox(width: 4),
+                    if (message.text != null && message.text!.isNotEmpty)
+                      Text(
+                        message.text!,
+                        style: theme.textTheme.bodyLarge
+                            ?.copyWith(color: foreground),
+                      ),
+                    if (message.hasAttachment)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4.0),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.image,
+                              size: 16,
+                              color: context.ops.info.fg,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Photo Attachment',
+                              style: theme.textTheme.bodySmall
+                                  ?.copyWith(color: context.ops.info.fg),
+                            ),
+                          ],
+                        ),
+                      ),
+                    const SizedBox(height: 2),
                     Text(
-                      'Photo Attachment',
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodySmall
-                          ?.copyWith(color: context.ops.info.fg),
+                      time,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: foreground.withValues(alpha: 0.7),
+                      ),
                     ),
                   ],
                 ),
               ),
+            ),
           ],
         ),
       ),

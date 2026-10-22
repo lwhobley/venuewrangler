@@ -50,6 +50,14 @@ final chatContactsProvider =
       .fetchContacts(venueId: activeVenue.id);
 });
 
+/// The active venue's team by user id, for labelling who sent each chat message. The caller
+/// isn't in `chat_contacts`, which is fine: their own messages are never labelled.
+final chatSenderNamesProvider =
+    FutureProvider.autoDispose<Map<String, String>>((ref) async {
+  final contacts = await ref.watch(chatContactsProvider.future);
+  return {for (final c in contacts) c.userId: c.label};
+});
+
 final activeConversationIdProvider =
     StateProvider.autoDispose<String?>((ref) => null);
 

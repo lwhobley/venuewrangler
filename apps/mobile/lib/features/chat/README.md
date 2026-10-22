@@ -19,3 +19,8 @@ Port of legacy NestJS `chat` module to native Supabase + Flutter with direct int
   - Private DM confidentiality: non-members cannot read DMs between other users.
 - **Flutter UI**:
   - `ChatScreen`: displays conversation list (All Staff announcements and direct messages) with unread and last message previews, tap to open thread, message bubbles, and text input for instant messaging.
+  - Thread view: the signed-in user's own messages sit on the right in the theme's primary
+    container colour; everyone else's sit on the left. In group threads (All Staff) each run
+    of messages from one person is headed by their name, from `chat_contacts` via
+    `chatSenderNamesProvider` (DMs omit it: the title already names the other person). Every
+    bubble shows its send time, with Today / Yesterday / date separators between days.
