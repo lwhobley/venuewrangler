@@ -63,7 +63,9 @@ class _TaskBoardScreenState extends ConsumerState<TaskBoardScreen> {
   }
 
   Future<void> _create(String venueId) async {
-    final result = await showModalBottomSheet<_NewTask>(
+    // The sheet saves before it closes: a failed save is shown in the form, keeping what was
+    // typed, instead of after the form has gone.
+    await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
@@ -71,29 +73,28 @@ class _TaskBoardScreenState extends ConsumerState<TaskBoardScreen> {
         padding: EdgeInsets.only(
           bottom: MediaQuery.of(context).viewInsets.bottom,
         ),
-        child: const _NewTaskForm(),
+        child: _NewTaskForm(onSubmit: (task) => _save(venueId, task)),
       ),
     );
-    if (result == null || !mounted) return;
-    final messenger = ScaffoldMessenger.of(context);
+  }
+
+  /// Returns null once the task is created, or the message to show in the form.
+  Future<String?> _save(String venueId, _NewTask task) async {
     try {
       await ref.read(tasksRepositoryProvider).createTask(
             venueId: venueId,
-            title: result.title,
-            description: result.description,
-            dueAt: result.dueAt,
+            title: task.title,
+            description: task.description,
+            dueAt: task.dueAt,
           );
       ref.invalidate(tasksForVenueProvider(venueId));
+      return null;
     } on PostgrestException catch (e) {
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            e.code == '42501'
-                ? "You don't have permission to create tasks."
-                : 'Something went wrong. Please try again.',
-          ),
-        ),
-      );
+      return e.code == '42501'
+          ? "You don't have permission to create tasks."
+          : 'Something went wrong. Please try again.';
+    } catch (_) {
+      return "Couldn't create the task. Check your connection and try again.";
     }
   }
 
@@ -581,7 +582,10 @@ class _NewTask {
 }
 
 class _NewTaskForm extends StatefulWidget {
-  const _NewTaskForm();
+  const _NewTaskForm({required this.onSubmit});
+
+  /// Saves the task; returns null on success (the sheet then closes) or an error to show.
+  final Future<String?> Function(_NewTask task) onSubmit;
 
   @override
   State<_NewTaskForm> createState() => _NewTaskFormState();
@@ -592,6 +596,8 @@ class _NewTaskFormState extends State<_NewTaskForm> {
   final _description = TextEditingController();
   DateTime? _due;
   String? _error;
+  String? _saveError;
+  bool _saving = false;
 
   @override
   void dispose() {
@@ -620,16 +626,28 @@ class _NewTaskFormState extends State<_NewTaskForm> {
     );
   }
 
-  void _submit() {
+  Future<void> _submit() async {
     final title = _title.text.trim();
     if (title.isEmpty) {
       setState(() => _error = 'Give the task a title');
       return;
     }
-    Navigator.pop(
-      context,
+    setState(() {
+      _saving = true;
+      _saveError = null;
+    });
+    final error = await widget.onSubmit(
       _NewTask(title, _description.text.trim(), _due),
     );
+    if (!mounted) return;
+    if (error == null) {
+      Navigator.pop(context);
+    } else {
+      setState(() {
+        _saving = false;
+        _saveError = error;
+      });
+    }
   }
 
   @override
@@ -675,8 +693,18 @@ class _NewTaskFormState extends State<_NewTaskForm> {
                     ),
               onTap: _pickDue,
             ),
+            if (_saveError != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                _saveError!,
+                style: TextStyle(color: theme.colorScheme.error),
+              ),
+            ],
             const SizedBox(height: 12),
-            FilledButton(onPressed: _submit, child: const Text('Create')),
+            FilledButton(
+              onPressed: _saving ? null : _submit,
+              child: const Text('Create'),
+            ),
           ],
         ),
       ),

@@ -11,7 +11,9 @@ plus `incidentMutationHandlersProvider` (registered into `core/offline`'s handle
 
 `presentation/incident_list_screen.dart` lists a venue's incidents (with any still-queued
 offline drafts shown first, with a "Syncing…" indicator) and a dialog to report a new one
-(title, optional description, severity). A failed online report is queued and retried on
+(title, optional description, severity). The dialog
+saves before it closes: a blank "What happened?" is flagged on the field and a rejected
+save is shown in the form, so nothing typed is lost. A failed online report is queued and retried on
 reconnect, using a client-generated incident id for idempotency — this is the "incident
 drafts" item in the migration plan's offline-writable scope. Open incidents show a "Resolve"
 action for managers (online-only; resolving is not itself offline-writable in this slice,

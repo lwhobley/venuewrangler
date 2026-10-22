@@ -33,6 +33,7 @@ class _FakeTasksRepository implements TasksRepository {
   String? lastStatusUpdateTaskId;
   TaskStatus? lastStatusUpdateValue;
   String? lastCreatedTitle;
+  Object? createError;
 
   /// When true, [updateStatus] throws, simulating no connectivity, so the screen falls back
   /// to queuing the change via the offline queue.
@@ -50,6 +51,7 @@ class _FakeTasksRepository implements TasksRepository {
     DateTime? dueAt,
     String? assignedTo,
   }) async {
+    if (createError != null) throw createError!;
     lastCreatedTitle = title;
   }
 
@@ -180,6 +182,36 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(fakeRepo.lastCreatedTitle, 'New task title');
+    expect(find.text('New task'), findsNothing);
+  });
+
+  testWidgets(
+      'a blank title or a failed save keeps the new-task dialog open with an error',
+      (tester) async {
+    final fakeRepo = _FakeTasksRepository([])
+      ..createError = const SocketException('network unreachable');
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: baseOverrides(fakeRepo),
+        child: const MaterialApp(home: TaskListScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(FloatingActionButton));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Create'));
+    await tester.pumpAndSettle();
+    expect(find.text('Give the task a title.'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField), 'Restock limes');
+    await tester.tap(find.widgetWithText(FilledButton, 'Create'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('New task'), findsOneWidget);
+    expect(find.text('Restock limes'), findsOneWidget);
+    expect(find.textContaining("Couldn't create the task"), findsOneWidget);
   });
 
   group('offline queue is scoped to the signed-in user', () {

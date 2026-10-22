@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:venuewrangler_mobile/core/auth/auth_providers.dart';
 import 'package:venuewrangler_mobile/core/offline/offline_queue_providers.dart';
 import 'package:venuewrangler_mobile/core/offline/offline_queue_store.dart';
@@ -33,6 +34,7 @@ class _Repo implements TasksRepository {
   List<OperationalTask> tasks;
   final moves = <(String, TaskStatus)>[];
   String? createdTitle;
+  Object? createError;
 
   @override
   Future<List<OperationalTask>> fetchTasksForVenue(String venueId) async =>
@@ -51,6 +53,7 @@ class _Repo implements TasksRepository {
     DateTime? dueAt,
     String? assignedTo,
   }) async {
+    if (createError != null) throw createError!;
     createdTitle = title;
   }
 
@@ -198,6 +201,26 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(repo.createdTitle, 'Polish glasses');
+    });
+
+    testWidgets('a failed create keeps the form open with what was typed',
+        (tester) async {
+      final repo = await pump(tester, const []);
+      repo.createError = const PostgrestException(message: 'x', code: '42501');
+
+      await tester.tap(find.text('New task'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).first, 'Polish glasses');
+      await tester.enterText(find.byType(TextField).at(1), 'All the coupes');
+      await tester.tap(find.widgetWithText(FilledButton, 'Create'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text("You don't have permission to create tasks."),
+        findsOneWidget,
+      );
+      expect(find.text('Polish glasses'), findsOneWidget);
+      expect(find.text('All the coupes'), findsOneWidget);
     });
   });
 }

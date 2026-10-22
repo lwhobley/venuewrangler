@@ -114,43 +114,98 @@ class TaskListScreen extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref,
     String venueId,
-  ) async {
-    final controller = TextEditingController();
-    final title = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('New task'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(labelText: 'Title'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(controller.text.trim()),
-            child: const Text('Create'),
-          ),
-        ],
-      ),
-    );
+  ) =>
+      showDialog<void>(
+        context: context,
+        builder: (_) => _CreateTaskDialog(venueId: venueId),
+      );
+}
 
-    if (title == null || title.isEmpty || !context.mounted) return;
+/// Creates the task from inside the dialog, so a blank title is flagged on the field and a
+/// failed save is shown in place; the dialog only closes once the task exists.
+class _CreateTaskDialog extends ConsumerStatefulWidget {
+  const _CreateTaskDialog({required this.venueId});
 
+  final String venueId;
+
+  @override
+  ConsumerState<_CreateTaskDialog> createState() => _CreateTaskDialogState();
+}
+
+class _CreateTaskDialogState extends ConsumerState<_CreateTaskDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _title = TextEditingController();
+  bool _saving = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _title.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
     try {
       await ref
           .read(tasksRepositoryProvider)
-          .createTask(venueId: venueId, title: title);
-      ref.invalidate(tasksForVenueProvider(venueId));
-    } on PostgrestException catch (error) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_messageForPostgrestError(error))),
-      );
+          .createTask(venueId: widget.venueId, title: _title.text.trim());
+      ref.invalidate(tasksForVenueProvider(widget.venueId));
+      if (mounted) Navigator.of(context).pop();
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _error = error is PostgrestException
+            ? _messageForPostgrestError(error)
+            : "Couldn't create the task. Check your connection and try again.";
+      });
     }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('New task'),
+      content: Form(
+        key: _formKey,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextFormField(
+              controller: _title,
+              autofocus: true,
+              decoration: const InputDecoration(labelText: 'Title'),
+              validator: (value) => (value ?? '').trim().isEmpty
+                  ? 'Give the task a title.'
+                  : null,
+              onFieldSubmitted: (_) => _saving ? null : _submit(),
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 12),
+              Text(
+                _error!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _saving ? null : () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _saving ? null : _submit,
+          child: const Text('Create'),
+        ),
+      ],
+    );
   }
 }
 

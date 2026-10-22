@@ -95,90 +95,134 @@ class DocumentsScreen extends ConsumerWidget {
   }) async {
     final picked = await ref.read(documentPickerServiceProvider).pickDocument();
     if (picked == null || !context.mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (_) => _UploadDocumentDialog(venueId: venueId, picked: picked),
+    );
+  }
+}
 
-    final titleController = TextEditingController(text: picked.name);
-    var category = 'sop';
+/// Title/category for a picked file. Uploads from inside the dialog, which closes only once the
+/// document is stored: a blank title is flagged on the field and a failed upload is shown in
+/// place, so neither the picked file nor the typed details are lost.
+class _UploadDocumentDialog extends ConsumerStatefulWidget {
+  const _UploadDocumentDialog({required this.venueId, required this.picked});
 
+  final String venueId;
+  final PickedDocument picked;
+
+  @override
+  ConsumerState<_UploadDocumentDialog> createState() =>
+      _UploadDocumentDialogState();
+}
+
+class _UploadDocumentDialogState extends ConsumerState<_UploadDocumentDialog> {
+  final _formKey = GlobalKey<FormState>();
+  late final _title = TextEditingController(text: widget.picked.name);
+  var _category = 'sop';
+  bool _saving = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _title.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    // Captured while mounted, so the list refreshes even if the screen closes mid-upload.
+    final container = ProviderScope.containerOf(context, listen: false);
     try {
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (context) => StatefulBuilder(
-          builder: (context, setState) => AlertDialog(
-            title: const Text('Upload document'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: titleController,
-                  autofocus: true,
-                  decoration: const InputDecoration(labelText: 'Title'),
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  initialValue: category,
-                  decoration: const InputDecoration(labelText: 'Category'),
-                  items: [
-                    for (final value in VenueDocument.categories)
-                      DropdownMenuItem(
-                        value: value,
-                        child: Text(_categoryLabels[value] ?? value),
-                      ),
-                  ],
-                  onChanged: (value) =>
-                      setState(() => category = value ?? category),
-                ),
-                if (VenueDocument.managerOnlyCategories.contains(category)) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    'Only managers can see documents in this category.',
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodySmall
-                        ?.copyWith(fontStyle: FontStyle.italic),
-                  ),
-                ],
-              ],
+      await ref.read(documentsRepositoryProvider).uploadDocument(
+            venueId: widget.venueId,
+            title: _title.text.trim(),
+            category: _category,
+            fileName: widget.picked.name,
+            localFilePath: widget.picked.path,
+            bytes: widget.picked.bytes,
+          );
+      container.invalidate(documentsProvider(widget.venueId));
+      if (mounted) Navigator.of(context).pop();
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _error = error is AppError
+            ? error.message
+            : "Couldn't upload the document. Please try again.";
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return AlertDialog(
+      title: const Text('Upload document'),
+      content: Form(
+        key: _formKey,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextFormField(
+              controller: _title,
+              autofocus: true,
+              decoration: const InputDecoration(labelText: 'Title'),
+              validator: (value) => (value ?? '').trim().isEmpty
+                  ? 'Give the document a title.'
+                  : null,
             ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('Cancel'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.of(context).pop(true),
-                child: const Text('Upload'),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              initialValue: _category,
+              decoration: const InputDecoration(labelText: 'Category'),
+              items: [
+                for (final value in VenueDocument.categories)
+                  DropdownMenuItem(
+                    value: value,
+                    child: Text(_categoryLabels[value] ?? value),
+                  ),
+              ],
+              onChanged: _saving
+                  ? null
+                  : (value) => setState(() => _category = value ?? _category),
+            ),
+            if (VenueDocument.managerOnlyCategories.contains(_category)) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Only managers can see documents in this category.',
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(fontStyle: FontStyle.italic),
               ),
             ],
-          ),
+            if (_error != null) ...[
+              const SizedBox(height: 12),
+              Text(_error!, style: TextStyle(color: theme.colorScheme.error)),
+            ],
+          ],
         ),
-      );
-
-      if (confirmed != true ||
-          titleController.text.trim().isEmpty ||
-          !context.mounted) {
-        return;
-      }
-
-      // Captured while mounted, so the list refreshes even if this screen closes mid-upload.
-      final container = ProviderScope.containerOf(context, listen: false);
-      try {
-        await ref.read(documentsRepositoryProvider).uploadDocument(
-              venueId: venueId,
-              title: titleController.text.trim(),
-              category: category,
-              fileName: picked.name,
-              localFilePath: picked.path,
-              bytes: picked.bytes,
-            );
-        container.invalidate(documentsProvider(venueId));
-      } on AppError catch (error) {
-        if (!context.mounted) return;
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(error.message)));
-      }
-    } finally {
-      titleController.dispose();
-    }
+      ),
+      actions: [
+        TextButton(
+          onPressed: _saving ? null : () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _saving ? null : _submit,
+          child: _saving
+              ? const SizedBox.square(
+                  dimension: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Upload'),
+        ),
+      ],
+    );
   }
 }
 

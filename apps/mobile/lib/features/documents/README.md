@@ -19,7 +19,8 @@ report listed as unported (`crm`, `documents`, `observability`).
 - `application/document_picker_service.dart` — a thin interface over the new `file_picker`
   dependency, same reasoning as `features/media`'s `ImagePickerService`: UI/tests never depend
   on the plugin directly.
-- `presentation/documents_screen.dart` — list + upload (file picker → title/category dialog) +
+- `presentation/documents_screen.dart` — list + upload (file picker → title/category dialog, which uploads before
+  closing so a blank title or failed upload keeps the picked file and details) +
   delete + open-via-signed-URL. Does not duplicate server-side role checks (same convention as
   `features/crm`): the upload/delete controls are shown to everyone, and a non-manager gets a
   clear `PermissionDeniedError` message back from the server rather than the button being
