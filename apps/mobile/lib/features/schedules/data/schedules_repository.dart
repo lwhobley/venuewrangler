@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/errors/unapplied_update.dart';
@@ -56,6 +57,30 @@ class SupabaseSchedulesRepository implements SchedulesRepository {
   const SupabaseSchedulesRepository(this._client);
 
   final SupabaseClient _client;
+
+  Stream<void> watchShifts(String venueId) {
+    late RealtimeChannel channel;
+    late StreamController<void> changes;
+    changes = StreamController<void>(
+      onListen: () {
+        channel = _client
+            .channel(
+              'schedule:$venueId:${DateTime.now().microsecondsSinceEpoch}',
+            )
+            .onPostgresChanges(
+              event: PostgresChangeEvent.all,
+              schema: 'public',
+              table: 'shifts',
+              callback: (_) => changes.add(null),
+            )
+            .subscribe();
+      },
+      onCancel: () async {
+        await _client.removeChannel(channel);
+      },
+    );
+    return changes.stream;
+  }
 
   @override
   Future<List<Shift>> fetchShiftsForVenue(String venueId) async {

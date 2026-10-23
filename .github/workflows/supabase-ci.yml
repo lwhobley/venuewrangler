@@ -121,6 +121,9 @@ jobs:
           PGOPTIONS: -c search_path=public,extensions,tap
         run: pg_prove --dbname "$PGDATABASE" supabase/tests/database/*.test.sql
 
+      - name: Launch review regression assertions
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/launch_review_assertions.sql
+
   edge-functions-check:
     name: Deno check, lint and test Edge Functions
     runs-on: ubuntu-latest

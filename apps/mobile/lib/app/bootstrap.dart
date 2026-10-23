@@ -48,6 +48,7 @@ Future<void> bootstrap(AppFlavor flavor) async {
 
   final env = EnvConfig.fromDartDefines(flavor);
 
+  final authCallbackError = authCallbackProblem(Uri.base);
   await Supabase.initialize(
     url: env.supabaseUrl,
     publishableKey: env.supabaseAnonKey,
@@ -79,6 +80,7 @@ Future<void> bootstrap(AppFlavor flavor) async {
     env,
     () => ProviderScope(
       overrides: [
+        authCallbackErrorProvider.overrideWith((ref) => authCallbackError),
         passwordRecoveryPendingProvider.overrideWith((ref) => recoveryPending),
         supabaseClientProvider.overrideWithValue(Supabase.instance.client),
         // Composition root for the offline-mutation-queue handler registry: each feature

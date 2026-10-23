@@ -47,6 +47,8 @@ class _FakeRepo implements SchedulesRepository {
       'id': shiftId,
       'staffId': staffId,
       'clearStaff': clearStaff,
+      'section': section,
+      'role': roleLabel,
       'start': startTime,
       'end': endTime,
     });
@@ -275,6 +277,36 @@ void main() {
       await tester.pumpAndSettle();
       return repo;
     }
+
+    testWidgets('a section-only save preserves an assignment changed by a swap',
+        (tester) async {
+      const clock = VenueClock('UTC');
+      final start = businessDayStart(businessDateFor(clock.now))
+          .add(const Duration(hours: 12));
+      final repo = await pumpBoard(
+        tester,
+        'UTC',
+        [_shift('s1', 'alice', start, start.add(const Duration(hours: 4)))],
+      );
+      // Server changed ownership while the board still displays Alice.
+      repo.shifts = [
+        _shift('s1', 'bob', start, start.add(const Duration(hours: 4))),
+      ];
+      await tester.tap(find.textContaining('Server'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Section (e.g. patio, bar)'),
+        'patio',
+      );
+      await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+      await tester.pumpAndSettle();
+      expect(repo.calls.single['staffId'], isNull);
+      expect(repo.calls.single['clearStaff'], false);
+      expect(repo.calls.single['start'], isNull);
+      expect(repo.calls.single['end'], isNull);
+      expect(repo.calls.single['section'], 'patio');
+      expect(repo.shifts.single.staffId, 'bob');
+    });
 
     Future<void> dragShift(WidgetTester tester) async {
       final block = find.textContaining('Server');

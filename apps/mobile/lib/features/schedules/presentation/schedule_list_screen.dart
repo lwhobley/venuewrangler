@@ -172,8 +172,16 @@ class ScheduleListScreen extends ConsumerWidget {
       );
 
     final roleLabelController = TextEditingController(text: prefillRoleLabel);
-    String? staffId =
-        people.any((m) => m.userId == prefillStaffId) ? prefillStaffId : null;
+    final matches = people
+        .where(
+          (m) =>
+              m.userId == prefillStaffId ||
+              (prefillStaffId != null &&
+                  m.displayName?.trim().toLowerCase() ==
+                      prefillStaffId.trim().toLowerCase()),
+        )
+        .toList();
+    String? staffId = matches.length == 1 ? matches.single.userId : null;
     // Venue wall times (see VenueClock): what the manager reads on the venue's clock.
     var start = prefillStart ?? clock.now;
     var end = prefillEnd ?? start.add(const Duration(hours: 4));
@@ -248,7 +256,21 @@ class ScheduleListScreen extends ConsumerWidget {
               child: const Text('Cancel'),
             ),
             FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
+              onPressed: () {
+                if (!end.isAfter(start) ||
+                    start.year < clock.now.year ||
+                    start.year > clock.now.year + 1) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Choose a current or upcoming date and an end after the start.',
+                      ),
+                    ),
+                  );
+                  return;
+                }
+                Navigator.of(context).pop(true);
+              },
               child: const Text('Add'),
             ),
           ],
@@ -335,9 +357,11 @@ class ScheduleListScreen extends ConsumerWidget {
 
     SchedulingSuggestionResult result;
     try {
-      result = await ref
-          .read(aiRepositoryProvider)
-          .suggestScheduling(venueId: venueId, context: context_);
+      result = await ref.read(aiRepositoryProvider).suggestScheduling(
+            venueId: venueId,
+            context:
+                'Today at this venue: ${ref.read(venueClockProvider).now}. Use this year unless specified.\n$context_',
+          );
     } on AppError catch (error) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context)
@@ -378,12 +402,24 @@ class ScheduleListScreen extends ConsumerWidget {
                   isThreeLine: true,
                   trailing: TextButton(
                     onPressed: () {
+                      if (_suggestedWall(ref, suggestion.startTime) == null ||
+                          _suggestedWall(ref, suggestion.endTime) == null) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'This suggestion needs explicit shift dates and times. Request a complete suggestion or add the shift manually.',
+                            ),
+                          ),
+                        );
+                        return;
+                      }
                       Navigator.of(dialogContext).pop();
                       _showAddShiftDialog(
                         context,
                         ref,
                         venueId,
                         prefillStaffId: suggestion.staffId,
+                        prefillRoleLabel: suggestion.roleLabel,
                         prefillStart: _suggestedWall(ref, suggestion.startTime),
                         prefillEnd: _suggestedWall(ref, suggestion.endTime),
                       );
@@ -515,7 +551,11 @@ class _SwapTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final isRequester =
         currentUserId != null && swap.requestedBy == currentUserId;
-    final canAccept = !isRequester &&
+    final shifts = ref.watch(shiftsForVenueProvider(swap.venueId)).valueOrNull;
+    final shift = shifts?.where((s) => s.id == swap.shiftId).firstOrNull;
+    final clock = ref.watch(venueClockProvider);
+    final canAccept = shift != null &&
+        !isRequester &&
         currentUserId != null &&
         (swap.offeredTo == null || swap.offeredTo == currentUserId);
 
@@ -525,7 +565,7 @@ class _SwapTile extends ConsumerWidget {
         swap.offeredTo != null ? 'Offered to one teammate' : 'Open to anyone',
       ),
       subtitle: Text(
-        'Requested by ${_rosterNames(ref, swap.venueId)[swap.requestedBy] ?? 'a teammate'}',
+        'Requested by ${_rosterNames(ref, swap.venueId)[swap.requestedBy] ?? 'a teammate'}\n${shift == null ? 'Loading shift details…' : '${clock.formatDateTime(shift.startTime)} – ${clock.formatDateTime(shift.endTime)} · ${shift.roleLabel ?? 'Shift'}'}',
       ),
       trailing: isRequester
           ? TextButton(
@@ -544,6 +584,26 @@ class _SwapTile extends ConsumerWidget {
   Future<void> _accept(BuildContext context, WidgetRef ref) async {
     final userId = currentUserId;
     if (userId == null) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: const Text('Take this shift yourself?'),
+        content: const Text(
+          'Accepting assigns this shift to you, including when you are a manager. Overlapping shifts are refused.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialog, false),
+            child: const Text('Back'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialog, true),
+            child: const Text('Take shift'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
     try {
       await ref
           .read(schedulesRepositoryProvider)
@@ -552,9 +612,11 @@ class _SwapTile extends ConsumerWidget {
       ref.invalidate(shiftsForVenueProvider(swap.venueId));
     } on PostgrestException catch (error) {
       if (!context.mounted) return;
-      final message = error.code == '42501'
-          ? 'This swap is no longer available to you.'
-          : 'Something went wrong. Please try again.';
+      final message = error.code == '23P01'
+          ? 'You already have a shift at this time. Resolve the overlap before accepting.'
+          : error.code == '42501'
+              ? 'This swap is no longer available to you.'
+              : 'Something went wrong. Please try again.';
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(message)));
     }

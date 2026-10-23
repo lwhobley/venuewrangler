@@ -1,3 +1,4 @@
+import 'package:venuewrangler_mobile/core/auth/auth_providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -108,6 +109,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          currentUserIdProvider.overrideWithValue('user-1'),
           activeVenueProvider.overrideWith((ref) => testVenue),
           chatRepositoryProvider.overrideWithValue(fakeRepo),
         ],
@@ -155,6 +157,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          currentUserIdProvider.overrideWithValue('user-1'),
           activeVenueProvider.overrideWith((ref) => testVenue),
           chatRepositoryProvider.overrideWithValue(fakeRepo),
         ],
@@ -195,6 +198,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          currentUserIdProvider.overrideWithValue('user-1'),
           activeVenueProvider.overrideWith((ref) => testVenue),
           chatRepositoryProvider.overrideWithValue(fakeRepo),
         ],
@@ -237,6 +241,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          currentUserIdProvider.overrideWithValue('user-1'),
           activeVenueProvider.overrideWith((ref) => testVenue),
           chatRepositoryProvider.overrideWithValue(fakeRepo),
         ],

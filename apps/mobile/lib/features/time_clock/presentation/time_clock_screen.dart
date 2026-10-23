@@ -9,6 +9,9 @@ import '../../../core/errors/app_error.dart';
 import '../../venues/application/venues_providers.dart';
 import '../application/time_clock_providers.dart';
 import '../domain/time_entry.dart';
+import '../../venues/application/venue_clock.dart';
+import '../../schedules/application/schedules_providers.dart';
+import 'time_review_screen.dart';
 
 class TimeClockScreen extends ConsumerStatefulWidget {
   const TimeClockScreen({super.key});
@@ -225,6 +228,16 @@ class _TimeClockScreenState extends ConsumerState<TimeClockScreen> {
       appBar: AppBar(
         title: const Text('Time Clock'),
         actions: [
+          if (ref.watch(canManageActiveVenueProvider).valueOrNull == true)
+            IconButton(
+              icon: const Icon(Icons.receipt_long_outlined),
+              tooltip: 'Review hours and export payroll',
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const TimeReviewScreen(),
+                ),
+              ),
+            ),
           IconButton(
             icon: const Icon(Icons.refresh),
             tooltip: 'Refresh',
@@ -479,8 +492,13 @@ class _TimeClockScreenState extends ConsumerState<TimeClockScreen> {
                       separatorBuilder: (_, __) => const SizedBox(height: 8),
                       itemBuilder: (context, index) {
                         final entry = entries[index];
-                        final inTime = entry.clockInAt.toLocal();
-                        final outTime = entry.clockOutAt?.toLocal();
+                        final inTime =
+                            ref.read(venueClockProvider).wall(entry.clockInAt);
+                        final outTime = entry.clockOutAt == null
+                            ? null
+                            : ref
+                                .read(venueClockProvider)
+                                .wall(entry.clockOutAt!);
 
                         return Card(
                           elevation: 1,
@@ -518,6 +536,13 @@ class _TimeClockScreenState extends ConsumerState<TimeClockScreen> {
                 ),
               ] else ...[
                 // Clock Board (Active Staff on Duty)
+                if (ref.watch(canManageActiveVenueProvider).valueOrNull != true)
+                  const Padding(
+                    padding: EdgeInsets.all(12),
+                    child: Text(
+                      'Only managers can view the full clock board. Your own punches appear under My Time Clock.',
+                    ),
+                  ),
                 Text(
                   'Active Staff on Duty',
                   style: Theme.of(context).textTheme.titleLarge,
@@ -567,13 +592,23 @@ class _TimeClockScreenState extends ConsumerState<TimeClockScreen> {
                               ),
                             ),
                             title: Text(
-                              'Staff ID: ${entry.userId.substring(0, 8)}...',
+                              ref
+                                      .watch(
+                                        scheduleRosterForVenueProvider(
+                                          venue.id,
+                                        ),
+                                      )
+                                      .valueOrNull
+                                      ?.where((m) => m.userId == entry.userId)
+                                      .firstOrNull
+                                      ?.displayName ??
+                                  'Team member',
                               style: Theme.of(context).textTheme.titleMedium,
                             ),
                             subtitle: Text(
                               entry.isOnBreak
                                   ? 'On Break (${entry.activeBreak?.type})'
-                                  : 'Clocked in at ${_formatTime(entry.clockInAt.toLocal())}',
+                                  : 'Clocked in at ${_formatTime(ref.read(venueClockProvider).wall(entry.clockInAt))}',
                             ),
                             trailing: Text(
                               _formatDuration(entry.workedDuration),
