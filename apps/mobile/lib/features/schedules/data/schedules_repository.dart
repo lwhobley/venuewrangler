@@ -63,12 +63,32 @@ class SupabaseSchedulesRepository implements SchedulesRepository {
     late StreamController<void> changes;
     changes = StreamController<void>(
       onListen: () {
+        final venueFilter = PostgresChangeFilter(
+          type: PostgresChangeFilterType.eq,
+          column: 'venue_id',
+          value: venueId,
+        );
         channel = _client
             .channel(
               'schedule:$venueId:${DateTime.now().microsecondsSinceEpoch}',
             )
             .onPostgresChanges(
-              event: PostgresChangeEvent.all,
+              event: PostgresChangeEvent.insert,
+              schema: 'public',
+              table: 'shifts',
+              filter: venueFilter,
+              callback: (_) => changes.add(null),
+            )
+            .onPostgresChanges(
+              event: PostgresChangeEvent.update,
+              schema: 'public',
+              table: 'shifts',
+              filter: venueFilter,
+              callback: (_) => changes.add(null),
+            )
+            // Realtime cannot filter DELETE events, so any delete refreshes.
+            .onPostgresChanges(
+              event: PostgresChangeEvent.delete,
               schema: 'public',
               table: 'shifts',
               callback: (_) => changes.add(null),
