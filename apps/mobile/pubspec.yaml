@@ -1,7 +1,7 @@
 name: venuewrangler_mobile
 description: Venue Wrangler mobile app (Flutter + Supabase).
 publish_to: "none"
-version: 1.13.0+1
+version: 1.13.1+1
 
 environment:
   sdk: ">=3.5.0 <4.0.0"
