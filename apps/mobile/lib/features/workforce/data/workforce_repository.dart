@@ -56,11 +56,17 @@ class SupabaseWorkforceRepository implements WorkforceRepository {
     required String email,
     required WorkforceRole role,
   }) async {
-    await _client.from('invites').insert({
-      'venue_id': venueId,
-      'email': email,
-      'role': role.toDb(),
-    });
+    final response = await _client.functions.invoke(
+      'invite-member',
+      body: {
+        'venue_id': venueId,
+        'email': email,
+        'role': role.toDb(),
+      },
+    );
+    if (response.status != 200) {
+      throw StateError('Invitation email was not sent. Please retry.');
+    }
   }
 
   @override

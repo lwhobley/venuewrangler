@@ -1,3 +1,4 @@
+import '../../../core/widgets/dialog_save_button.dart';
 import 'dart:async';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -118,7 +119,7 @@ class IncidentListScreen extends ConsumerWidget {
     var severity = IncidentSeverity.medium;
     String? photoPath;
 
-    final confirmed = await showDialog<bool>(
+    await showDialog<bool>(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
@@ -181,35 +182,33 @@ class IncidentListScreen extends ConsumerWidget {
               onPressed: () => Navigator.of(context).pop(false),
               child: const Text('Cancel'),
             ),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Report'),
+            DialogSaveButton(
+              label: 'Report',
+              validate: () => titleController.text.trim().isEmpty
+                  ? 'What happened? is required'
+                  : null,
+              save: () async {
+                final saved = await _reportIncident(
+                  context,
+                  ref,
+                  venue: venue,
+                  title: titleController.text.trim(),
+                  description: descriptionController.text.trim().isEmpty
+                      ? null
+                      : descriptionController.text.trim(),
+                  severity: severity,
+                  photoPath: photoPath,
+                );
+                if (!saved) throw StateError('Incident was not saved');
+              },
             ),
           ],
         ),
       ),
     );
-
-    if (confirmed != true ||
-        titleController.text.trim().isEmpty ||
-        !context.mounted) {
-      return;
-    }
-
-    await _reportIncident(
-      context,
-      ref,
-      venue: venue,
-      title: titleController.text.trim(),
-      description: descriptionController.text.trim().isEmpty
-          ? null
-          : descriptionController.text.trim(),
-      severity: severity,
-      photoPath: photoPath,
-    );
   }
 
-  Future<void> _reportIncident(
+  Future<bool> _reportIncident(
     BuildContext context,
     WidgetRef ref, {
     required Venue venue,
@@ -238,7 +237,7 @@ class IncidentListScreen extends ConsumerWidget {
                 Text("You don't have permission to report incidents here."),
           ),
         );
-        return; // the incident was never created; there is nothing to attach a photo to.
+        return false; // the incident was never created; there is nothing to attach a photo to.
       }
       if (!isTransportFailure(error)) {
         // A deterministic rejection would never succeed on retry, so do not queue it.
@@ -247,7 +246,7 @@ class IncidentListScreen extends ConsumerWidget {
             content: Text("Couldn't report the incident. Please try again."),
           ),
         );
-        return;
+        return false;
       }
       await _queueIncidentOffline(
         messenger,
@@ -266,7 +265,7 @@ class IncidentListScreen extends ConsumerWidget {
           photoPath: photoPath,
         );
       }
-      return;
+      return true;
     }
 
     if (photoPath != null) {
@@ -278,6 +277,7 @@ class IncidentListScreen extends ConsumerWidget {
         photoPath: photoPath,
       );
     }
+    return true;
   }
 
   Future<void> _attachPhoto(

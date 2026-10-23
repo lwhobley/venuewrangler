@@ -88,6 +88,7 @@ class ShiftSuggestion {
   const ShiftSuggestion({
     required this.staffId,
     this.shiftId,
+    this.roleLabel,
     this.startTime,
     this.endTime,
     required this.reason,
@@ -95,6 +96,7 @@ class ShiftSuggestion {
 
   final String staffId;
   final String? shiftId;
+  final String? roleLabel;
   final String? startTime;
   final String? endTime;
   final String reason;
@@ -103,6 +105,7 @@ class ShiftSuggestion {
       ShiftSuggestion(
         staffId: json['staff_id'] as String,
         shiftId: json['shift_id'] as String?,
+        roleLabel: json['role_label'] as String?,
         startTime: json['start_time'] as String?,
         endTime: json['end_time'] as String?,
         reason: json['reason'] as String,

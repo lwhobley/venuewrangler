@@ -1,3 +1,4 @@
+import '../../venues/application/venue_clock.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -39,7 +40,15 @@ class CrmBeoDetailScreen extends ConsumerWidget {
                       const SizedBox(height: 8),
                       Chip(label: Text(beo.status.toUpperCase())),
                       const Divider(height: 32),
-                      _detail(context, 'Event date', _date(beo.eventDate)),
+                      _detail(
+                        context,
+                        'Event date',
+                        beo.eventDate == null
+                            ? null
+                            : ref
+                                .watch(venueClockProvider)
+                                .formatDateTime(beo.eventDate!),
+                      ),
                       _detail(context, 'Event type', beo.eventType),
                       _detail(context, 'Guests', beo.guestCount?.toString()),
                       _detail(context, 'Space', beo.venueSpace),
@@ -176,12 +185,12 @@ class CrmBeoDetailScreen extends ConsumerWidget {
                     ),
                     const SizedBox(height: 16),
                     Text(
-                      'Created ${_date(beo.createdAt) ?? ''}',
+                      'Created ${ref.watch(venueClockProvider).formatDateTime(beo.createdAt)}',
                       textAlign: TextAlign.end,
                       style: theme.textTheme.bodySmall,
                     ),
                     Text(
-                      'Updated ${_date(beo.updatedAt) ?? ''}',
+                      'Updated ${ref.watch(venueClockProvider).formatDateTime(beo.updatedAt)}',
                       textAlign: TextAlign.end,
                       style: theme.textTheme.bodySmall,
                     ),
@@ -228,12 +237,6 @@ class CrmBeoDetailScreen extends ConsumerWidget {
         ),
       ),
     );
-  }
-
-  static String? _date(DateTime? value) {
-    if (value == null) return null;
-    final local = value.toLocal().toString();
-    return local.length >= 16 ? local.substring(0, 16) : local;
   }
 
   static String _money(int cents) {

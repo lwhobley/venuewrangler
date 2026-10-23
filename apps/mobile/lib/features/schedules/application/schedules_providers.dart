@@ -12,7 +12,15 @@ final schedulesRepositoryProvider = Provider<SchedulesRepository>((ref) {
 
 final shiftsForVenueProvider =
     FutureProvider.autoDispose.family<List<Shift>, String>((ref, venueId) {
-  return ref.watch(schedulesRepositoryProvider).fetchShiftsForVenue(venueId);
+  final repo = ref.watch(schedulesRepositoryProvider);
+  if (repo is SupabaseSchedulesRepository) {
+    final changes =
+        repo.watchShifts(venueId).listen((_) => ref.invalidateSelf());
+    ref.onDispose(() {
+      changes.cancel();
+    });
+  }
+  return repo.fetchShiftsForVenue(venueId);
 });
 
 final scheduleRosterForVenueProvider = FutureProvider.autoDispose

@@ -1,3 +1,4 @@
+import '../../../core/widgets/dialog_save_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -116,7 +117,7 @@ class TaskListScreen extends ConsumerWidget {
     String venueId,
   ) async {
     final controller = TextEditingController();
-    final title = await showDialog<String>(
+    await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('New task'),
@@ -130,27 +131,21 @@ class TaskListScreen extends ConsumerWidget {
             onPressed: () => Navigator.of(context).pop(),
             child: const Text('Cancel'),
           ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(controller.text.trim()),
-            child: const Text('Create'),
+          DialogSaveButton(
+            label: 'Create',
+            validate: () =>
+                controller.text.trim().isEmpty ? 'Title is required' : null,
+            save: () async {
+              await ref.read(tasksRepositoryProvider).createTask(
+                    venueId: venueId,
+                    title: controller.text.trim(),
+                  );
+              ref.invalidate(tasksForVenueProvider(venueId));
+            },
           ),
         ],
       ),
     );
-
-    if (title == null || title.isEmpty || !context.mounted) return;
-
-    try {
-      await ref
-          .read(tasksRepositoryProvider)
-          .createTask(venueId: venueId, title: title);
-      ref.invalidate(tasksForVenueProvider(venueId));
-    } on PostgrestException catch (error) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_messageForPostgrestError(error))),
-      );
-    }
   }
 }
 

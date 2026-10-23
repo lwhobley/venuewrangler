@@ -85,7 +85,12 @@ class Invite {
         venueId: json['venue_id'] as String,
         email: json['email'] as String,
         role: WorkforceRole.fromDb(json['role'] as String),
-        status: InviteStatus.fromDb(json['status'] as String),
+        status: json['status'] == 'pending' &&
+                json['expires_at'] != null &&
+                DateTime.parse(json['expires_at'] as String)
+                    .isBefore(DateTime.now())
+            ? InviteStatus.expired
+            : InviteStatus.fromDb(json['status'] as String),
         createdAt: DateTime.parse(json['created_at'] as String),
       );
 }

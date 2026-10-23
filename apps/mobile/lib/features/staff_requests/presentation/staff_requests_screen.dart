@@ -143,6 +143,28 @@ class _StaffRequestTile extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
+            ref
+                    .watch(scheduleRosterForVenueProvider(request.venueId))
+                    .valueOrNull
+                    ?.where((m) => m.userId == request.userId)
+                    .firstOrNull
+                    ?.displayName ??
+                'Team member',
+          ),
+          if (request.requestedShiftId != null)
+            Text(
+              ref
+                      .watch(shiftsForVenueProvider(request.venueId))
+                      .valueOrNull
+                      ?.where((s) => s.id == request.requestedShiftId)
+                      .map(
+                        (s) =>
+                            '${ref.watch(venueClockProvider).formatDateTime(s.startTime)} - ${s.roleLabel ?? 'Shift'}',
+                      )
+                      .firstOrNull ??
+                  'Shift details unavailable',
+            ),
+          Text(
             '${request.kind.displayLabel} • ${request.status.displayLabel}',
             style: Theme.of(context)
                 .textTheme

@@ -3,7 +3,7 @@
 -- checks impersonate users with `set local role authenticated` and the JWT sub claim.
 
 begin;
-select plan(50);
+select plan(54);
 
 -- Users
 insert into auth.users (id, email) values
@@ -224,6 +224,7 @@ select throws_ok(
 -- F6. reservations.beo_id must reference a BEO in the same venue
 -- ---------------------------------------------------------------------------
 reset role;
+set local "request.jwt.claim.sub" to '';
 insert into public.crm_beos (id, organization_id, venue_id, event_name) values
   ('c0000000-0000-0000-0000-0000000000b1', '10000000-0000-0000-0000-00000000000b',
    '20000000-0000-0000-0000-0000000000b1', 'B1 gala'),
@@ -247,12 +248,10 @@ select lives_ok(
 );
 
 -- ---------------------------------------------------------------------------
--- F7. Two confirmed BEOs may not overlap, even after a hold is cancelled
+-- F7. Confirmed BEOs cannot overlap; manager cancellation releases both BEO and hold
 -- ---------------------------------------------------------------------------
 update public.crm_beos set event_date = '2030-06-01 18:00+00', status = 'confirmed'
   where id = 'c0000000-0000-0000-0000-0000000000a1';
--- The BEO-A1 hold is cancelled directly, which previously freed the window.
-update public.reservations set status = 'cancelled' where beo_id = 'c0000000-0000-0000-0000-0000000000a1';
 
 insert into public.crm_beos (id, organization_id, venue_id, event_name, event_date, status) values
   ('c0000000-0000-0000-0000-0000000000a2', '10000000-0000-0000-0000-00000000000a',
@@ -262,7 +261,7 @@ select throws_ok(
   $$ update public.crm_beos set status = 'confirmed' where id = 'c0000000-0000-0000-0000-0000000000a2' $$,
   '23505',
   null,
-  'F7: a BEO cannot be confirmed over another confirmed BEO even when its hold is cancelled'
+  'F7: a BEO cannot be confirmed over another confirmed BEO'
 );
 
 insert into public.crm_beos (id, organization_id, venue_id, event_name, event_date, status) values
@@ -272,6 +271,32 @@ insert into public.crm_beos (id, organization_id, venue_id, event_name, event_da
 select lives_ok(
   $$ update public.crm_beos set status = 'confirmed' where id = 'c0000000-0000-0000-0000-0000000000a3' $$,
   'F7: a non-overlapping BEO can still be confirmed'
+);
+
+-- A staff cancellation must fail atomically; a manager cancellation synchronizes the BEO.
+set local role authenticated;
+set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-0000000000a5';
+select throws_ok(
+  $$ update public.reservations set status = 'cancelled' where beo_id = 'c0000000-0000-0000-0000-0000000000a1' $$,
+  '42501',
+  'Only managers may cancel a private event',
+  'F7: staff cannot cancel a private event through its reservation'
+);
+set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-0000000000a4';
+select lives_ok(
+  $$ update public.reservations set status = 'cancelled' where beo_id = 'c0000000-0000-0000-0000-0000000000a1' $$,
+  'F7: a manager can cancel the private-event reservation'
+);
+reset role;
+set local "request.jwt.claim.sub" to '';
+select is(
+  (select status from public.crm_beos where id = 'c0000000-0000-0000-0000-0000000000a1'),
+  'cancelled',
+  'F7: cancelling the reservation also cancels its BEO'
+);
+select lives_ok(
+  $$ update public.crm_beos set status = 'confirmed' where id = 'c0000000-0000-0000-0000-0000000000a2' $$,
+  'F7: a cancelled event releases the window for another BEO'
 );
 
 -- ---------------------------------------------------------------------------

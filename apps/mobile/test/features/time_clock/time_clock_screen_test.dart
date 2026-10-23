@@ -1,3 +1,5 @@
+import 'package:venuewrangler_mobile/features/schedules/application/schedules_providers.dart';
+import 'package:venuewrangler_mobile/features/workforce/domain/workforce_models.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -470,6 +472,16 @@ void main() {
       ProviderScope(
         overrides: [
           activeVenueProvider.overrideWith((ref) => _testVenue),
+          canManageActiveVenueProvider.overrideWith((ref) async => true),
+          scheduleRosterForVenueProvider.overrideWith(
+            (ref, venueId) async => const [
+              RosterMember(
+                userId: 'user-abcdef12',
+                role: 'staff',
+                displayName: 'Colin Frazier',
+              ),
+            ],
+          ),
           timeClockRepositoryProvider.overrideWithValue(fakeRepo),
           locationServiceProvider.overrideWithValue(_FakeLocationService()),
         ],
@@ -482,6 +494,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Active Staff on Duty'), findsOneWidget);
-    expect(find.textContaining('user-abc'), findsOneWidget);
+    expect(find.text('Colin Frazier'), findsOneWidget);
+    expect(find.textContaining('user-abc'), findsNothing);
   });
 }
