@@ -147,6 +147,13 @@ class ProfileScreen extends ConsumerWidget {
               ),
               const SizedBox(height: 20),
             ],
+            ListTile(
+              leading: const Icon(Icons.event_note_outlined),
+              title: const Text('Staff requests'),
+              subtitle:
+                  const Text('Time off, drop a shift, or pick up a shift'),
+              onTap: () => context.push('/staff-requests'),
+            ),
             const SectionTitle('This week'),
             Row(
               children: [

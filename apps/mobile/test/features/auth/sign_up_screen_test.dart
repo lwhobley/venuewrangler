@@ -63,6 +63,10 @@ Future<void> _fillAndSubmit(
   bool acceptTerms = true,
 }) async {
   await tester.enterText(
+    find.widgetWithText(TextFormField, 'Your name'),
+    'Alex Manager',
+  );
+  await tester.enterText(
     find.widgetWithText(TextFormField, 'Venue name'),
     venueName,
   );
@@ -124,6 +128,41 @@ void main() {
     );
     return fakeAuth;
   }
+
+  testWidgets('invited signup creates only an account, without a workspace',
+      (tester) async {
+    final fake = _FakeAuthRepository();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [authRepositoryProvider.overrideWithValue(fake)],
+        child: const MaterialApp(home: SignUpScreen(joiningTeam: true)),
+      ),
+    );
+    expect(find.widgetWithText(TextFormField, 'Venue name'), findsNothing);
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Your name'),
+      'Camila Reyes',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Work email'),
+      'camila@example.com',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Password'),
+      'Correct-Horse-1',
+    );
+    await tester.ensureVisible(find.byType(Checkbox));
+    await tester.tap(find.byType(Checkbox));
+    await tester.ensureVisible(
+      find.widgetWithText(FilledButton, "Let's get you in command"),
+    );
+    await tester
+        .tap(find.widgetWithText(FilledButton, "Let's get you in command"));
+    await tester.pumpAndSettle();
+    expect(fake.signUpCalled, true);
+    expect(fake.capturedWorkspaceName, isNull);
+    expect(fake.capturedTimezone, isNull);
+  });
 
   testWidgets(
       'signs up with the venue name and time zone stashed as pending workspace metadata',

@@ -1,4 +1,6 @@
 import 'dart:async';
+import '../../../core/auth/auth_providers.dart';
+import '../../venues/application/venue_clock.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../application/chat_providers.dart';
@@ -312,25 +314,41 @@ class _ChatThreadViewState extends ConsumerState<_ChatThreadView> {
   }
 }
 
-class _MessageBubble extends StatelessWidget {
+class _MessageBubble extends ConsumerWidget {
   const _MessageBubble({required this.message});
 
   final ChatMessage message;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final mine = message.senderId == ref.watch(currentUserIdProvider);
+    final contacts =
+        ref.watch(chatContactsProvider).valueOrNull ?? const <ChatContact>[];
+    final names = {for (final c in contacts) c.userId: c.label};
+    final clock = ref.watch(venueClockProvider);
     return Align(
-      alignment: Alignment.centerLeft,
+      alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 4),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+          color: mine
+              ? Theme.of(context).colorScheme.primaryContainer
+              : Theme.of(context).colorScheme.surfaceContainerHighest,
           borderRadius: BorderRadius.circular(16),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
+            Text(
+              mine ? 'You' : names[message.senderId] ?? 'Former team member',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            Text(
+              clock.formatDateTime(message.createdAt),
+              style: Theme.of(context).textTheme.labelSmall,
+            ),
             if (message.text != null && message.text!.isNotEmpty)
               Text(
                 message.text!,

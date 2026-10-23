@@ -1,3 +1,4 @@
+import '../../../core/widgets/dialog_save_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -185,7 +186,9 @@ class WorkforceRosterScreen extends ConsumerWidget {
                   data: (invites) {
                     final pending = invites
                         .where(
-                          (invite) => invite.status == InviteStatus.pending,
+                          (invite) =>
+                              invite.status == InviteStatus.pending ||
+                              invite.status == InviteStatus.expired,
                         )
                         .toList();
                     if (pending.isEmpty) {
@@ -197,15 +200,30 @@ class WorkforceRosterScreen extends ConsumerWidget {
                           ListTile(
                             leading: const Icon(Icons.mail_outline),
                             title: Text(invite.email),
-                            subtitle: Text(invite.role.label),
+                            subtitle: Text(
+                              invite.status == InviteStatus.expired
+                                  ? 'Expired - invite again to send a fresh email'
+                                  : invite.role.label,
+                            ),
                             trailing: TextButton(
-                              onPressed: () => _revokeInvite(
-                                context,
-                                ref,
-                                invite.id,
-                                venue.id,
+                              onPressed: invite.status == InviteStatus.expired
+                                  ? () => _showInviteDialog(
+                                        context,
+                                        ref,
+                                        venue.id,
+                                        prefillEmail: invite.email,
+                                      )
+                                  : () => _revokeInvite(
+                                        context,
+                                        ref,
+                                        invite.id,
+                                        venue.id,
+                                      ),
+                              child: Text(
+                                invite.status == InviteStatus.expired
+                                    ? 'Resend'
+                                    : 'Revoke',
                               ),
-                              child: const Text('Revoke'),
                             ),
                           ),
                       ],
@@ -242,7 +260,7 @@ class WorkforceRosterScreen extends ConsumerWidget {
     final emailController = TextEditingController(text: prefillEmail);
     var role = WorkforceRole.staff;
 
-    final confirmed = await showDialog<bool>(
+    await showDialog<bool>(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
@@ -273,38 +291,24 @@ class WorkforceRosterScreen extends ConsumerWidget {
               onPressed: () => Navigator.of(context).pop(false),
               child: const Text('Cancel'),
             ),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Invite'),
+            DialogSaveButton(
+              label: 'Invite',
+              validate: () => !emailController.text.contains('@')
+                  ? 'Enter a valid email'
+                  : null,
+              save: () async {
+                await ref.read(workforceRepositoryProvider).createInvite(
+                      venueId: venueId,
+                      email: emailController.text.trim(),
+                      role: role,
+                    );
+                ref.invalidate(invitesForVenueProvider(venueId));
+              },
             ),
           ],
         ),
       ),
     );
-
-    if (confirmed != true ||
-        emailController.text.trim().isEmpty ||
-        !context.mounted) {
-      return;
-    }
-
-    try {
-      await ref.read(workforceRepositoryProvider).createInvite(
-            venueId: venueId,
-            email: emailController.text.trim(),
-            role: role,
-          );
-      ref.invalidate(invitesForVenueProvider(venueId));
-    } on PostgrestException catch (error) {
-      if (!context.mounted) return;
-      final message = switch (error.code) {
-        '42501' => "You don't have permission to invite staff here.",
-        '23505' => 'There is already a pending invite for that email.',
-        _ => 'Something went wrong. Please try again.',
-      };
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(message)));
-    }
   }
 
   Future<void> _revokeInvite(

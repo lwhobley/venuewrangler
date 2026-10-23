@@ -304,7 +304,17 @@ class _HrEditorState extends ConsumerState<_HrEditor> {
   }
 
   Future<void> _save() async {
-    if (_saving || !_form.currentState!.validate()) return;
+    if (_saving) return;
+    if (!_form.currentState!.validate()) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Details were not saved. Check the highlighted fields above, including dates (YYYY-MM-DD).',
+          ),
+        ),
+      );
+      return;
+    }
     if (ref.read(currentUserIdProvider) != _actor ||
         ref.read(activeVenueProvider)?.id != widget.profileKey.venueId) {
       setState(

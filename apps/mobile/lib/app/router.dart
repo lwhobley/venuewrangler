@@ -189,7 +189,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/sign-up',
-        builder: (context, state) => const SignUpScreen(),
+        builder: (context, state) =>
+            SignUpScreen(joiningTeam: state.uri.queryParameters['join'] == '1'),
       ),
       GoRoute(
         path: '/reset-password',

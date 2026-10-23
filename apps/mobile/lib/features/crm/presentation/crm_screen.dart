@@ -1,3 +1,5 @@
+import '../../venues/application/venue_clock.dart';
+import '../../../core/widgets/dialog_save_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -131,7 +133,7 @@ class _LeadsTab extends ConsumerWidget {
     final phoneController = TextEditingController();
     final companyController = TextEditingController();
 
-    final confirmed = await showDialog<bool>(
+    await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('New lead'),
@@ -163,44 +165,31 @@ class _LeadsTab extends ConsumerWidget {
             onPressed: () => Navigator.of(context).pop(false),
             child: const Text('Cancel'),
           ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Create'),
+          DialogSaveButton(
+            label: 'Create',
+            validate: () => nameController.text.trim().isEmpty
+                ? 'Full name is required'
+                : null,
+            save: () async {
+              await ref.read(crmRepositoryProvider).createLead(
+                    venueId: venueId,
+                    fullName: nameController.text.trim(),
+                    email: emailController.text.trim().isEmpty
+                        ? null
+                        : emailController.text.trim(),
+                    phone: phoneController.text.trim().isEmpty
+                        ? null
+                        : phoneController.text.trim(),
+                    company: companyController.text.trim().isEmpty
+                        ? null
+                        : companyController.text.trim(),
+                  );
+              ref.invalidate(crmLeadsProvider(venueId));
+            },
           ),
         ],
       ),
     );
-
-    if (confirmed != true ||
-        nameController.text.trim().isEmpty ||
-        !context.mounted) {
-      return;
-    }
-
-    try {
-      await ref.read(crmRepositoryProvider).createLead(
-            venueId: venueId,
-            fullName: nameController.text.trim(),
-            email: emailController.text.trim().isEmpty
-                ? null
-                : emailController.text.trim(),
-            phone: phoneController.text.trim().isEmpty
-                ? null
-                : phoneController.text.trim(),
-            company: companyController.text.trim().isEmpty
-                ? null
-                : companyController.text.trim(),
-          );
-      ref.invalidate(crmLeadsProvider(venueId));
-    } catch (_) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Could not create lead. Please try again.'),
-          ),
-        );
-      }
-    }
   }
 }
 
@@ -249,9 +238,11 @@ class _BeosTab extends ConsumerWidget {
   Future<void> _showCreateBeoDialog(BuildContext context, WidgetRef ref) async {
     final nameController = TextEditingController();
     final guestCountController = TextEditingController();
+    final clock = ref.read(venueClockProvider);
+    if (!ensureSupported(context, clock)) return;
     DateTime? eventDate;
 
-    final confirmed = await showDialog<bool>(
+    await showDialog<bool>(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
@@ -282,9 +273,9 @@ class _BeosTab extends ConsumerWidget {
                 onTap: () async {
                   final picked = await showDatePicker(
                     context: context,
-                    initialDate: DateTime.now().add(const Duration(days: 30)),
-                    firstDate: DateTime.now(),
-                    lastDate: DateTime.now().add(const Duration(days: 730)),
+                    initialDate: clock.now.add(const Duration(days: 30)),
+                    firstDate: clock.now,
+                    lastDate: clock.now.add(const Duration(days: 730)),
                   );
                   if (picked == null || !context.mounted) return;
                   final time = await showTimePicker(
@@ -293,7 +284,7 @@ class _BeosTab extends ConsumerWidget {
                   );
                   if (time == null || !context.mounted) return;
                   setState(() {
-                    eventDate = DateTime(
+                    eventDate = DateTime.utc(
                       picked.year,
                       picked.month,
                       picked.day,
@@ -310,38 +301,32 @@ class _BeosTab extends ConsumerWidget {
               onPressed: () => Navigator.of(context).pop(false),
               child: const Text('Cancel'),
             ),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Create'),
+            DialogSaveButton(
+              label: 'Create',
+              validate: () => nameController.text.trim().isEmpty
+                  ? 'Event name is required'
+                  : guestCountController.text.trim().isNotEmpty &&
+                          (int.tryParse(guestCountController.text.trim()) ??
+                                  0) <=
+                              0
+                      ? 'Enter a positive guest count'
+                      : null,
+              save: () async {
+                await ref.read(crmRepositoryProvider).createBeo(
+                      venueId: venueId,
+                      eventName: nameController.text.trim(),
+                      eventDate:
+                          eventDate == null ? null : clock.instant(eventDate!),
+                      guestCount:
+                          int.tryParse(guestCountController.text.trim()),
+                    );
+                ref.invalidate(crmBeosProvider(venueId));
+              },
             ),
           ],
         ),
       ),
     );
-
-    if (confirmed != true ||
-        nameController.text.trim().isEmpty ||
-        !context.mounted) {
-      return;
-    }
-
-    try {
-      await ref.read(crmRepositoryProvider).createBeo(
-            venueId: venueId,
-            eventName: nameController.text.trim(),
-            eventDate: eventDate,
-            guestCount: int.tryParse(guestCountController.text.trim()),
-          );
-      ref.invalidate(crmBeosProvider(venueId));
-    } catch (_) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Could not create BEO. Please try again.'),
-          ),
-        );
-      }
-    }
   }
 }
 
@@ -368,8 +353,7 @@ class _BeoTileState extends ConsumerState<_BeoTile> {
         [
           beo.status,
           if (beo.eventDate != null)
-            '${MaterialLocalizations.of(context).formatMediumDate(beo.eventDate!.toLocal())} '
-                '${MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(beo.eventDate!.toLocal()))}',
+            ref.watch(venueClockProvider).formatDateTime(beo.eventDate!),
           if (beo.guestCount != null) '${beo.guestCount} guests',
         ].join(' · '),
       ),
@@ -421,6 +405,26 @@ class _BeoTileState extends ConsumerState<_BeoTile> {
               if (beo.status != 'cancelled')
                 OutlinedButton(
                   onPressed: () async {
+                    final confirmed = await showDialog<bool>(
+                      context: context,
+                      builder: (dialog) => AlertDialog(
+                        title: const Text('Cancel this event?'),
+                        content: Text(
+                          'Cancel ${beo.eventName} and release its reservation? You can restore it from this list.',
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(dialog, false),
+                            child: const Text('Keep event'),
+                          ),
+                          FilledButton(
+                            onPressed: () => Navigator.pop(dialog, true),
+                            child: const Text('Cancel event'),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (confirmed != true || !context.mounted) return;
                     try {
                       await ref
                           .read(crmRepositoryProvider)
@@ -437,6 +441,24 @@ class _BeoTileState extends ConsumerState<_BeoTile> {
                     }
                   },
                   child: const Text('Cancel'),
+                ),
+              if (beo.status == 'cancelled')
+                OutlinedButton(
+                  onPressed: () async {
+                    try {
+                      await ref
+                          .read(crmRepositoryProvider)
+                          .updateBeoStatus(beoId: beo.id, status: 'draft');
+                      ref.invalidate(crmBeosProvider(venueId));
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text(_friendlyError(e))),
+                        );
+                      }
+                    }
+                  },
+                  child: const Text('Restore to draft'),
                 ),
               // Only a confirmed BEO can become a contract; draft/sent/cancelled ones cannot.
               if (beo.status == 'confirmed')
@@ -484,7 +506,7 @@ class _BeoTileState extends ConsumerState<_BeoTile> {
   String _friendlyError(Object error) {
     final message = error.toString();
     if (message.contains('reservation_hold_conflict')) {
-      return 'This time slot is already held by another confirmed event.';
+      return 'This time overlaps an existing reservation or confirmed event. Review the reservation book before confirming.';
     }
     return 'Something went wrong. Please try again.';
   }

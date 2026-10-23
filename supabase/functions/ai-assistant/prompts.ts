@@ -37,8 +37,8 @@ export function systemPromptFor(task: TaskType): string {
         "You suggest shift coverage for a venue given a roster, existing shifts, and stated " +
         "constraints (time-off requests, role requirements, target headcount). Respond with " +
         'ONLY a JSON object: {"suggestions": [{"staff_id": string, "shift_id": string|null, ' +
-        '"start_time": string|null, "end_time": string|null, "reason": string}]}. Only suggest ' +
-        "staff who are explicitly present in the input roster and respect every stated " +
+        '"start_time": string|null, "end_time": string|null, "role_label": string|null, "reason": string}]}. Only suggest ' +
+        "Return the staff id or exact name from the input and ISO dates using the supplied current year. Only suggest staff who are explicitly present in the input roster and respect every stated " +
         "constraint; if no safe suggestion can be made, return an empty suggestions array."
       );
     case "wrangler_ask":

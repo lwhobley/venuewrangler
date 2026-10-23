@@ -221,10 +221,14 @@ class _ScheduleTimelineScreenState
     try {
       await ref.read(schedulesRepositoryProvider).updateShift(
             shiftId: orig.id,
-            staffId: updated.staffId,
+            staffId: updated.staffId != orig.staffId ? updated.staffId : null,
             clearStaff: updated.staffId == null && orig.staffId != null,
-            startTime: _clock.instant(updated.startTime),
-            endTime: _clock.instant(updated.endTime),
+            startTime: updated.startTime != orig.startTime
+                ? _clock.instant(updated.startTime)
+                : null,
+            endTime: updated.endTime != orig.endTime
+                ? _clock.instant(updated.endTime)
+                : null,
           );
       ref.invalidate(shiftsForVenueProvider(venueId));
       await ref.read(shiftsForVenueProvider(venueId).future);
@@ -304,12 +308,17 @@ class _ScheduleTimelineScreenState
       } else {
         await repo.updateShift(
           shiftId: shift.id,
-          staffId: result.staffId,
-          clearStaff: result.staffId == null,
-          roleLabel: result.role,
-          section: result.section,
-          startTime: _clock.instant(result.start),
-          endTime: _clock.instant(result.end),
+          staffId: result.staffId != shift.staffId ? result.staffId : null,
+          clearStaff: result.staffId == null && shift.staffId != null,
+          roleLabel:
+              result.role != (shift.roleLabel ?? '') ? result.role : null,
+          section:
+              result.section != (shift.section ?? '') ? result.section : null,
+          startTime: result.start != shift.startTime
+              ? _clock.instant(result.start)
+              : null,
+          endTime:
+              result.end != shift.endTime ? _clock.instant(result.end) : null,
         );
       }
       ref.invalidate(shiftsForVenueProvider(shift.venueId));

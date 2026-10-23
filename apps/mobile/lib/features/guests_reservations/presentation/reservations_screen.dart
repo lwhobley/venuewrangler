@@ -221,6 +221,9 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
                         .where((r) => r.status == _statusFilter)
                         .toList();
 
+                filtered.sort(
+                  (a, b) => a.reservationTime.compareTo(b.reservationTime),
+                );
                 if (filtered.isEmpty) {
                   return const EmptyState(
                     icon: Icons.event_seat,
@@ -264,8 +267,8 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
                                   const SizedBox(width: 6),
                                   Text(
                                     VenueTimezone.formatDayAndDate(
-                                      item.reservationTime,
-                                      tz,
+                                      itemDate,
+                                      'UTC',
                                     ),
                                     style: Theme.of(context)
                                         .textTheme
@@ -302,7 +305,8 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
               },
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (err, _) => ErrorState(
-                message: 'Failed to load reservations: $err',
+                message:
+                    'Could not load reservations. Check your connection and try again.',
                 onRetry: () => ref.invalidate(reservationsListProvider),
               ),
             ),

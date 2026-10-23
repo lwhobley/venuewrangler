@@ -1,3 +1,4 @@
+import '../../../core/widgets/dialog_save_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -100,7 +101,7 @@ class DocumentsScreen extends ConsumerWidget {
     var category = 'sop';
 
     try {
-      final confirmed = await showDialog<bool>(
+      await showDialog<bool>(
         context: context,
         builder: (context) => StatefulBuilder(
           builder: (context, setState) => AlertDialog(
@@ -141,38 +142,27 @@ class DocumentsScreen extends ConsumerWidget {
                 onPressed: () => Navigator.of(context).pop(false),
                 child: const Text('Cancel'),
               ),
-              FilledButton(
-                onPressed: () => Navigator.of(context).pop(true),
-                child: const Text('Upload'),
+              DialogSaveButton(
+                label: 'Upload',
+                validate: () => titleController.text.trim().isEmpty
+                    ? 'Title is required'
+                    : null,
+                save: () async {
+                  await ref.read(documentsRepositoryProvider).uploadDocument(
+                        venueId: venueId,
+                        title: titleController.text.trim(),
+                        category: category,
+                        fileName: picked.name,
+                        localFilePath: picked.path,
+                        bytes: picked.bytes,
+                      );
+                  ref.invalidate(documentsProvider(venueId));
+                },
               ),
             ],
           ),
         ),
       );
-
-      if (confirmed != true ||
-          titleController.text.trim().isEmpty ||
-          !context.mounted) {
-        return;
-      }
-
-      // Captured while mounted, so the list refreshes even if this screen closes mid-upload.
-      final container = ProviderScope.containerOf(context, listen: false);
-      try {
-        await ref.read(documentsRepositoryProvider).uploadDocument(
-              venueId: venueId,
-              title: titleController.text.trim(),
-              category: category,
-              fileName: picked.name,
-              localFilePath: picked.path,
-              bytes: picked.bytes,
-            );
-        container.invalidate(documentsProvider(venueId));
-      } on AppError catch (error) {
-        if (!context.mounted) return;
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(error.message)));
-      }
     } finally {
       titleController.dispose();
     }

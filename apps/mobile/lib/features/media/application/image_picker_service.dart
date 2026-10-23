@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -22,7 +23,7 @@ class DeviceImagePickerService implements ImagePickerService {
     if (file == null) return null;
     // image_picker can carry the source's GPS tags into its copy; strip them before anything
     // else (annotation, queueing, upload) can see the file.
-    return sanitizeImageFile(file.path);
+    return kIsWeb ? file.path : sanitizeImageFile(file.path);
   }
 }
 

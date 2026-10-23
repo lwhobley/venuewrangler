@@ -1,3 +1,4 @@
+import '../../venues/presentation/venue_location_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -72,6 +73,16 @@ class SettingsScreen extends ConsumerWidget {
               Text(email),
               const SizedBox(height: 24),
             ],
+            if (venue != null && teamManagerRoles.contains(role))
+              ListTile(
+                leading: const Icon(Icons.location_on_outlined),
+                title: const Text('Venue location'),
+                subtitle: const Text('Address and clock-in geofence'),
+                onTap: () => showDialog<bool>(
+                  context: context,
+                  builder: (_) => VenueLocationDialog(venueId: venue.id),
+                ),
+              ),
             const MfaEnrollmentBanner(),
             const PendingInvitesSettingsTile(),
             if (teamManagerRoles.contains(role))

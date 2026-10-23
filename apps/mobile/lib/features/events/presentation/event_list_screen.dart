@@ -1,3 +1,4 @@
+import '../../../core/widgets/dialog_save_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -95,7 +96,7 @@ class EventListScreen extends ConsumerWidget {
     var start = clock.now;
     var end = start.add(const Duration(hours: 3));
 
-    final confirmed = await showDialog<bool>(
+    await showDialog<bool>(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
@@ -151,43 +152,30 @@ class EventListScreen extends ConsumerWidget {
               onPressed: () => Navigator.of(context).pop(false),
               child: const Text('Cancel'),
             ),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Add'),
+            DialogSaveButton(
+              label: 'Add',
+              validate: () => nameController.text.trim().isEmpty
+                  ? 'Event name is required'
+                  : !end.isAfter(start)
+                      ? 'End must be after start'
+                      : null,
+              save: () async {
+                await ref.read(eventsRepositoryProvider).createEvent(
+                      venueId: venueId,
+                      name: nameController.text.trim(),
+                      startTime: clock.instant(start),
+                      endTime: clock.instant(end),
+                      notes: notesController.text.trim().isEmpty
+                          ? null
+                          : notesController.text.trim(),
+                    );
+                ref.invalidate(eventsForVenueProvider(venueId));
+              },
             ),
           ],
         ),
       ),
     );
-
-    if (confirmed != true ||
-        nameController.text.trim().isEmpty ||
-        !context.mounted) {
-      return;
-    }
-
-    try {
-      await ref.read(eventsRepositoryProvider).createEvent(
-            venueId: venueId,
-            name: nameController.text.trim(),
-            startTime: clock.instant(start),
-            endTime: clock.instant(end),
-            notes: notesController.text.trim().isEmpty
-                ? null
-                : notesController.text.trim(),
-          );
-      ref.invalidate(eventsForVenueProvider(venueId));
-    } catch (error) {
-      if (!context.mounted) return;
-      final code = error is PostgrestException ? error.code : null;
-      final message = switch (code) {
-        '42501' => "You don't have permission to add events here.",
-        '23514' => 'The event end time must be after its start time.',
-        _ => 'Something went wrong. Please try again.',
-      };
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(message)));
-    }
   }
 }
 
@@ -205,7 +193,7 @@ class _EventTile extends ConsumerWidget {
       leading: Icon(_iconForStatus(event.status)),
       title: Text(event.name),
       subtitle: Text(
-        '${formatTime(event.startTime)} → ${formatTime(event.endTime)}\n${event.status.name}',
+        '${formatTime(event.startTime)} → ${formatTime(event.endTime)}\n${event.status.name}${event.notes?.isNotEmpty == true ? '\n${event.notes}' : ''}',
       ),
       isThreeLine: true,
       trailing: IconButton(

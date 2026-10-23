@@ -6,6 +6,19 @@ import '../network/supabase_providers.dart';
 import '../storage/secure_session_storage.dart';
 import 'auth_repository.dart';
 
+const expiredAuthLinkMessage =
+    'This link has expired or was already used. Tap Forgot password? to request a new reset link.';
+final authCallbackErrorProvider = StateProvider<String?>((ref) => null);
+String? authCallbackProblem(Uri uri) {
+  final fragment =
+      Uri.tryParse('https://callback/?${uri.fragment}')?.queryParameters ??
+          const <String, String>{};
+  return uri.queryParameters.containsKey('error') ||
+          fragment.containsKey('error')
+      ? expiredAuthLinkMessage
+      : null;
+}
+
 const passwordRecoveryStorageKey = 'password_recovery_pending';
 final passwordRecoveryStorageProvider = Provider<SecureSessionStorage>(
   (ref) => const SecureSessionStorage(),
@@ -46,6 +59,10 @@ final passwordRecoveryTriggerProvider = Provider<void>((ref) {
   ref.listen<AsyncValue<AuthState>>(
     authStateChangesProvider,
     (_, next) {
+      if (next.error is AuthException) {
+        ref.read(authCallbackErrorProvider.notifier).state =
+            expiredAuthLinkMessage;
+      }
       final event = next.valueOrNull?.event;
       final pending = ref.read(passwordRecoveryPendingProvider.notifier);
       if (event == AuthChangeEvent.passwordRecovery) {

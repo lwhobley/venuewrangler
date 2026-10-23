@@ -439,7 +439,8 @@ class _FloorPlanEditorScreenState extends ConsumerState<FloorPlanEditorScreen> {
             ),
           ],
         ),
-        floatingActionButton: _plan == null ||
+        floatingActionButton: state.selected != null ||
+                _plan == null ||
                 ref.watch(canManageActiveVenueProvider).valueOrNull != true
             ? null
             : FloatingActionButton.extended(

@@ -25,6 +25,21 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
   AppError? _error;
 
   @override
+  void initState() {
+    super.initState();
+    final uri = Uri.base;
+    final fragment =
+        Uri.tryParse('https://callback/?${uri.fragment}')?.queryParameters ??
+            const <String, String>{};
+    if (uri.queryParameters.containsKey('error') ||
+        fragment.containsKey('error')) {
+      _error = const AuthError(
+        'This link has expired or was already used. Tap Forgot password? to request a new reset link.',
+      );
+    }
+  }
+
+  @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
@@ -79,6 +94,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final callbackProblem = ref.watch(authCallbackErrorProvider);
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
@@ -148,9 +164,10 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                                   child: const Text('Forgot password?'),
                                 ),
                               ),
-                              if (_error != null) ...[
+                              if (_error != null ||
+                                  callbackProblem != null) ...[
                                 Text(
-                                  _error!.message,
+                                  _error?.message ?? callbackProblem!,
                                   style: TextStyle(
                                     color: theme.colorScheme.error,
                                   ),
@@ -170,6 +187,12 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                                     : const Text('Sign in'),
                               ),
                               const SizedBox(height: 8),
+                              TextButton(
+                                onPressed: _isSubmitting
+                                    ? null
+                                    : () => context.go('/sign-up?join=1'),
+                                child: const Text('Invited? Join your team'),
+                              ),
                               TextButton(
                                 onPressed: _isSubmitting
                                     ? null

@@ -22,7 +22,8 @@ import 'legal_acceptance_field.dart';
 /// immediately here if this project doesn't require email confirmation, or later (possibly a
 /// different app launch) once the user confirms their email and signs in.
 class SignUpScreen extends ConsumerStatefulWidget {
-  const SignUpScreen({super.key});
+  const SignUpScreen({super.key, this.joiningTeam = false});
+  final bool joiningTeam;
 
   @override
   ConsumerState<SignUpScreen> createState() => _SignUpScreenState();
@@ -30,10 +31,12 @@ class SignUpScreen extends ConsumerStatefulWidget {
 
 class _SignUpScreenState extends ConsumerState<SignUpScreen> {
   final _formKey = GlobalKey<FormState>();
+  final _nameController = TextEditingController();
   final _workspaceController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
 
+  late bool _joiningTeam = widget.joiningTeam;
   bool _isSubmitting = false;
   bool _checkYourEmail = false;
   AppError? _error;
@@ -44,6 +47,7 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
 
   @override
   void dispose() {
+    _nameController.dispose();
     _workspaceController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
@@ -64,8 +68,10 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
         email: _emailController.text.trim(),
         password: _passwordController.text,
         data: {
-          'pending_workspace_name': _workspaceController.text.trim(),
-          'pending_timezone': _timezone,
+          'display_name': _nameController.text.trim(),
+          if (!_joiningTeam)
+            'pending_workspace_name': _workspaceController.text.trim(),
+          if (!_joiningTeam) 'pending_timezone': _timezone,
         },
       );
       if (!mounted) return;
@@ -127,13 +133,17 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
                                       CrossAxisAlignment.stretch,
                                   children: [
                                     Text(
-                                      'Launch your workspace',
+                                      _joiningTeam
+                                          ? 'Join your team'
+                                          : 'Launch your workspace',
                                       textAlign: TextAlign.center,
                                       style: theme.textTheme.headlineSmall,
                                     ),
                                     const SizedBox(height: 4),
                                     Text(
-                                      'Bring your team, your floor, and your next big night together.',
+                                      _joiningTeam
+                                          ? 'Use your invited email. After confirmation, accept your invitation to join your venue.'
+                                          : 'Bring your team, your floor, and your next big night together. Set your venue location in Settings before staff clock in.',
                                       textAlign: TextAlign.center,
                                       style:
                                           theme.textTheme.bodyMedium?.copyWith(
@@ -143,41 +153,70 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
                                     ),
                                     const SizedBox(height: 20),
                                     TextFormField(
-                                      controller: _workspaceController,
-                                      textCapitalization:
-                                          TextCapitalization.words,
-                                      autofillHints: const [
-                                        AutofillHints.organizationName,
-                                      ],
+                                      controller: _nameController,
                                       decoration: const InputDecoration(
-                                        labelText: 'Venue name',
-                                        hintText: 'The name above your door',
-                                        prefixIcon:
-                                            Icon(Icons.storefront_outlined),
+                                        labelText: 'Your name',
                                       ),
-                                      validator: workspaceNameProblem,
+                                      validator: (value) =>
+                                          value == null || value.trim().isEmpty
+                                              ? 'Enter your name'
+                                              : null,
                                     ),
+                                    Row(
+                                      children: [
+                                        const Expanded(
+                                          child:
+                                              Text('I was invited to a team'),
+                                        ),
+                                        Switch(
+                                          value: _joiningTeam,
+                                          onChanged: _isSubmitting
+                                              ? null
+                                              : (v) => setState(
+                                                    () => _joiningTeam = v,
+                                                  ),
+                                        ),
+                                      ],
+                                    ),
+                                    if (!_joiningTeam)
+                                      TextFormField(
+                                        controller: _workspaceController,
+                                        textCapitalization:
+                                            TextCapitalization.words,
+                                        autofillHints: const [
+                                          AutofillHints.organizationName,
+                                        ],
+                                        decoration: const InputDecoration(
+                                          labelText: 'Venue name',
+                                          hintText: 'The name above your door',
+                                          prefixIcon:
+                                              Icon(Icons.storefront_outlined),
+                                        ),
+                                        validator: workspaceNameProblem,
+                                      ),
                                     const SizedBox(height: 12),
-                                    DropdownButtonFormField<String>(
-                                      initialValue: _timezone,
-                                      isExpanded: true,
-                                      decoration: const InputDecoration(
-                                        labelText: 'Time zone',
-                                        prefixIcon: Icon(Icons.schedule),
+                                    if (!_joiningTeam)
+                                      DropdownButtonFormField<String>(
+                                        initialValue: _timezone,
+                                        isExpanded: true,
+                                        decoration: const InputDecoration(
+                                          labelText: 'Time zone',
+                                          prefixIcon: Icon(Icons.schedule),
+                                        ),
+                                        items: [
+                                          for (final zone
+                                              in kWorkspaceTimezones)
+                                            DropdownMenuItem(
+                                              value: zone.id,
+                                              child: Text(zone.label),
+                                            ),
+                                        ],
+                                        onChanged: (value) =>
+                                            setState(() => _timezone = value),
+                                        validator: (value) => value == null
+                                            ? 'Select your time zone'
+                                            : null,
                                       ),
-                                      items: [
-                                        for (final zone in kWorkspaceTimezones)
-                                          DropdownMenuItem(
-                                            value: zone.id,
-                                            child: Text(zone.label),
-                                          ),
-                                      ],
-                                      onChanged: (value) =>
-                                          setState(() => _timezone = value),
-                                      validator: (value) => value == null
-                                          ? 'Select your time zone'
-                                          : null,
-                                    ),
                                     const SizedBox(height: 12),
                                     TextFormField(
                                       controller: _emailController,
