@@ -20,7 +20,7 @@
       "dependencies": [
         "npm:@types/node@^26.6.5",
         "npm:typescript@~6.0.3",
-        "npm:vitest@^5.0.3"
+        "npm:vitest@^5.0.5"
       ],
       "overrides": {
         "brace-expansion@^1.1.7": "1.1.18",
@@ -38,8 +38,8 @@
             "npm:@types/react-dom@19",
             "npm:@vitejs/plugin-react@^6.1.2",
             "npm:clsx@^2.1.1",
-            "npm:framer-motion@14",
-            "npm:lucide-react@^1.54.0",
+            "npm:framer-motion@^14.3.0",
+            "npm:lucide-react@^1.57.0",
             "npm:qrcode.react@^4.2.0",
             "npm:react-dom@19.2.3",
             "npm:react@19.2.3",
