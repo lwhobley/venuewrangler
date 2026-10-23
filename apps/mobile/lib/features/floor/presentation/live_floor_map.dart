@@ -162,11 +162,10 @@ class _MapTable extends StatelessWidget {
                 children: [
                   Text(
                     table.label,
-                    style: TextStyle(
-                      color: tone.fg,
-                      fontWeight: FontWeight.w800,
-                      fontSize: 16,
-                    ),
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleMedium
+                        ?.copyWith(color: tone.fg),
                   ),
                   Icon(style.icon, size: 14, color: tone.fg),
                 ],

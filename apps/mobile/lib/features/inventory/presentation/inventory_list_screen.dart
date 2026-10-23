@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/theme/app_radii.dart';
 import '../../../core/theme/ops_colors.dart';
 import '../../venues/application/venues_providers.dart';
 import '../application/inventory_providers.dart';
@@ -186,7 +187,7 @@ class _InventoryListState extends ConsumerState<InventoryListScreen> {
                 decoration: BoxDecoration(
                   color: Theme.of(context).colorScheme.surfaceContainerLow,
                   border: Border.all(color: context.ops.panelBorder),
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(AppRadii.card),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,

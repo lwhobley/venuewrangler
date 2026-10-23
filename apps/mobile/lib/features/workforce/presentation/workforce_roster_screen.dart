@@ -348,7 +348,6 @@ class WorkforceRosterScreen extends ConsumerWidget {
           decoration: const InputDecoration(
             hintText:
                 'Paste names/emails/phones copied from a spreadsheet or email…',
-            border: OutlineInputBorder(),
           ),
         ),
         actions: [

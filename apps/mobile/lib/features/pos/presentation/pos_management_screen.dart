@@ -38,17 +38,14 @@ class PosManagementScreen extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     'Provider access and schedule publication',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    style: Theme.of(context).textTheme.titleMedium,
                   ),
                   const SizedBox(height: 8),
                   Text(
                     'Connections require provider approval, verified permissions, location and workforce mappings, and a configured server worker. Queued work is not a provider acknowledgment.',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
+                    style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ],
               ),
@@ -57,9 +54,9 @@ class PosManagementScreen extends ConsumerWidget {
           const SizedBox(height: 16),
 
           // Active Connections
-          const Text(
+          Text(
             'Connections',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            style: Theme.of(context).textTheme.titleMedium,
           ),
           const SizedBox(height: 8),
           connectionsAsync.when(
@@ -86,9 +83,9 @@ class PosManagementScreen extends ConsumerWidget {
           const SizedBox(height: 24),
 
           // Inbound Checks Feed
-          const Text(
+          Text(
             'Recent POS checks',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            style: Theme.of(context).textTheme.titleMedium,
           ),
           const SizedBox(height: 8),
           checksAsync.when(
@@ -110,9 +107,9 @@ class PosManagementScreen extends ConsumerWidget {
             error: (err, _) => Text('Error loading checks: $err'),
           ),
           const SizedBox(height: 24),
-          const Text(
+          Text(
             'Choose your POS product',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            style: Theme.of(context).textTheme.titleMedium,
           ),
           const SizedBox(height: 8),
           for (final product in _posProducts)
@@ -233,7 +230,7 @@ class _ConnectionTile extends StatelessWidget {
         ),
         title: Text(
           '${connection.provider.toUpperCase()} · ${connection.product}',
-          style: const TextStyle(fontWeight: FontWeight.bold),
+          style: Theme.of(context).textTheme.titleMedium,
         ),
         subtitle: Text('Status: ${connection.readiness.replaceAll('_', ' ')}'),
         trailing: StatusChip(
@@ -363,7 +360,7 @@ class _CheckListTile extends StatelessWidget {
         trailing: Chip(
           label: Text(
             check.status.toUpperCase(),
-            style: const TextStyle(fontSize: 10),
+            style: Theme.of(context).textTheme.labelSmall,
           ),
         ),
       ),

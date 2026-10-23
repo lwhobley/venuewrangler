@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/theme/app_radii.dart';
 import '../../../core/theme/ops_colors.dart';
 import '../../../core/widgets/state_views.dart';
 import '../../../core/widgets/status_chip.dart';
@@ -47,7 +48,7 @@ class CardShell extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: color ?? Theme.of(context).colorScheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(AppRadii.card),
         border: Border.all(color: context.ops.panelBorder),
       ),
       child: child,
@@ -271,13 +272,13 @@ class MyTaskRow extends StatelessWidget {
       child: Material(
         color: theme.colorScheme.surfaceContainerLow,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(AppRadii.tile),
           side: BorderSide(
             color: overdue ? context.ops.danger.fg : context.ops.panelBorder,
           ),
         ),
         child: InkWell(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(AppRadii.tile),
           onTap: onDone,
           child: ConstrainedBox(
             constraints: const BoxConstraints(minHeight: 64),

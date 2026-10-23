@@ -8,7 +8,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/auth/auth_providers.dart';
 import '../../core/auth/auth_repository.dart';
 import '../../core/errors/app_error.dart';
-import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_radii.dart';
+import '../../core/theme/ops_colors.dart';
 import '../organizations/domain/workspace_name.dart';
 import '../organizations/domain/workspace_timezones.dart';
 import 'legal_acceptance_field.dart';
@@ -372,8 +373,7 @@ class _BrandMark extends StatelessWidget {
         Text(
           'Venue Wrangler',
           textAlign: TextAlign.center,
-          style: theme.textTheme.headlineMedium
-              ?.copyWith(fontWeight: FontWeight.w800),
+          style: theme.textTheme.headlineMedium,
         ),
         const SizedBox(height: 4),
         Text(
@@ -398,21 +398,20 @@ class _GlassCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fill = isDark
-        ? Colors.white.withValues(alpha: 0.08)
-        : Colors.white.withValues(alpha: 0.62);
-    final edge = isDark
-        ? Colors.white.withValues(alpha: 0.18)
-        : Colors.white.withValues(alpha: 0.85);
+    final fill = Theme.of(context)
+        .colorScheme
+        .surfaceContainerLow
+        .withValues(alpha: isDark ? 0.6 : 0.72);
+    final edge = context.ops.panelBorder;
     return ClipRRect(
-      borderRadius: BorderRadius.circular(24),
+      borderRadius: BorderRadius.circular(AppRadii.card),
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 22, sigmaY: 22),
         child: Container(
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
             color: fill,
-            borderRadius: BorderRadius.circular(24),
+            borderRadius: BorderRadius.circular(AppRadii.card),
             border: Border.all(color: edge),
           ),
           child: child,
@@ -429,7 +428,8 @@ class _GlassBackdrop extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final base = Theme.of(context).colorScheme.surface;
+    final scheme = Theme.of(context).colorScheme;
+    final base = scheme.surface;
     Widget orb(Color color, double size) => Container(
           width: size,
           height: size,
@@ -447,16 +447,16 @@ class _GlassBackdrop extends StatelessWidget {
       decoration: BoxDecoration(color: base),
       child: Stack(
         children: [
-          Positioned(top: -90, left: -80, child: orb(AppColors.coral, 340)),
+          Positioned(top: -90, left: -80, child: orb(scheme.primary, 340)),
           Positioned(
             bottom: -110,
             right: -90,
-            child: orb(AppColors.cobalt, 380),
+            child: orb(scheme.secondary, 380),
           ),
           Positioned(
             top: 280,
             right: -60,
-            child: orb(AppColors.purpleOnDark, 220),
+            child: orb(scheme.tertiary, 220),
           ),
         ],
       ),

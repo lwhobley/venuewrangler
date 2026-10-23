@@ -1,9 +1,12 @@
 import 'dart:io';
 
 import 'package:firebase_core/firebase_core.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart'
+    show LicenseEntryWithLineBreaks, LicenseRegistry, kIsWeb;
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../core/config/env_config.dart';
@@ -26,6 +29,22 @@ import 'app.dart';
 /// passed at build time, never by divergent bootstrap logic between entrypoints.
 Future<void> bootstrap(AppFlavor flavor) async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Caprasimo and Figtree ship in the app (google_fonts/ in pubspec.yaml): no download on first
+  // launch, they work offline, and no request goes to Google. Their SIL OFL licences are listed
+  // on the app's licences page.
+  GoogleFonts.config.allowRuntimeFetching = false;
+  LicenseRegistry.addLicense(() async* {
+    for (final (name, file) in const [
+      ('Caprasimo', 'google_fonts/OFL-caprasimo.txt'),
+      ('Figtree', 'google_fonts/OFL-figtree.txt'),
+    ]) {
+      yield LicenseEntryWithLineBreaks(
+        [name],
+        await rootBundle.loadString(file),
+      );
+    }
+  });
 
   final env = EnvConfig.fromDartDefines(flavor);
 

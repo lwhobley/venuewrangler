@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+import '../core/theme/app_radii.dart';
 
 /// The five top-level destinations, always one tap away. Each tab keeps its own navigation
 /// stack (StatefulShellRoute.indexedStack), so switching tabs and coming back returns you to
@@ -79,17 +80,30 @@ class AppShell extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       body: navigationShell,
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: navigationShell.currentIndex,
-        destinations: destinations,
-        onDestinationSelected: (index) {
-          HapticFeedback.selectionClick();
-          // Re-tapping the current tab pops it back to its first screen.
-          navigationShell.goBranch(
-            index,
-            initialLocation: index == navigationShell.currentIndex,
-          );
-        },
+      // Floating dark pill dock: the theme colours the bar, this gives it the capsule shape.
+      // The outer SafeArea handles the home-indicator inset, so the bar itself drops its own.
+      bottomNavigationBar: SafeArea(
+        top: false,
+        minimum: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(AppRadii.pill),
+          child: MediaQuery.removePadding(
+            context: context,
+            removeBottom: true,
+            child: NavigationBar(
+              selectedIndex: navigationShell.currentIndex,
+              destinations: destinations,
+              onDestinationSelected: (index) {
+                HapticFeedback.selectionClick();
+                // Re-tapping the current tab pops it back to its first screen.
+                navigationShell.goBranch(
+                  index,
+                  initialLocation: index == navigationShell.currentIndex,
+                );
+              },
+            ),
+          ),
+        ),
       ),
     );
   }
