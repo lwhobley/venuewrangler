@@ -185,6 +185,7 @@ function punchErrorResponse(error: { code?: string; message?: string }): Respons
       if (/mock/i.test(message)) return json({ error: "mocked_location" }, 403);
       if (/identical to an earlier punch/i.test(message)) return json({ error: "location_replayed" }, 403);
       if (/attested_punch_required/.test(message)) return json({ error: "attested_punch_required" }, 403);
+      if (/venue_location_required/.test(message)) return json({ error: "venue_location_required" }, 403);
       return json({ error: "forbidden" }, 403);
     case "P0002":
       return json({ error: "no_open_punch" }, 409);

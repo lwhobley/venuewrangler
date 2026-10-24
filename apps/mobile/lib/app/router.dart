@@ -47,9 +47,12 @@ import '../features/tasks/presentation/task_board_screen.dart';
 import '../features/tasks/presentation/task_list_screen.dart';
 import '../features/team/domain/team_member.dart';
 import '../features/team/presentation/team_screen.dart';
+import '../features/time_clock/presentation/hours_review_screen.dart';
 import '../features/time_clock/presentation/time_clock_screen.dart';
 import '../features/venues/application/venues_providers.dart';
 import '../features/venues/domain/venue.dart';
+import '../features/venues/presentation/venue_location_prompt.dart';
+import '../features/venues/presentation/venue_location_screen.dart';
 import '../features/workforce/presentation/workforce_roster_screen.dart';
 
 /// Redirects between the auth flow, venue selection, and the authenticated app shell based
@@ -233,6 +236,12 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/mfa-challenge',
         builder: (context, state) => const MfaChallengeScreen(),
       ),
+      // Managers only (the server enforces it); pushed from the dashboard, Time Clock and
+      // Settings, so it sits above the tab shell.
+      GoRoute(
+        path: venueLocationRoute,
+        builder: (context, state) => const VenueLocationScreen(),
+      ),
       if (employee) _employeeShell() else _fullShell(rootKey),
     ],
   );
@@ -413,6 +422,12 @@ StatefulShellRoute _fullShell(GlobalKey<NavigatorState> rootKey) {
           GoRoute(
             path: '/time-clock',
             builder: (context, state) => const TimeClockScreen(),
+            routes: [
+              GoRoute(
+                path: 'hours',
+                builder: (context, state) => const HoursReviewScreen(),
+              ),
+            ],
           ),
           GoRoute(
             path: '/staff-requests',

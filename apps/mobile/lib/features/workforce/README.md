@@ -25,3 +25,9 @@ admin (owner decision, enforced by `app_hidden.can_manage_member_role`).
 Redemption lives in `features/invites`: the invitation email links to `/join`, where the
 person signs up ("Join your team", no venue fields) or signs in, and the invite is accepted
 once their email is verified (`inviteRedemptionTriggerProvider`).
+
+**Names** (launch review U5): `domain/member_name.dart` is the one fallback label for a member.
+The name itself comes from `app_hidden.member_display_name` on the server (own display name →
+staff-profile preferred/legal name → name on the accepted invite or sign-up metadata), used by
+`venue_roster`, `venue_schedule_roster`, `team_members`, `chat_contacts` and the time clock RPCs.
+Saving a staff profile refreshes the roster providers so a newly entered name shows at once.

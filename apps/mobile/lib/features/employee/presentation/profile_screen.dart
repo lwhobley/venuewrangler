@@ -16,6 +16,7 @@ import '../../schedules/domain/shift.dart';
 import '../../settings/application/settings_providers.dart';
 import '../../settings/domain/legal_links.dart';
 import '../../settings/presentation/delete_account_button.dart';
+import '../../settings/presentation/display_name_dialog.dart';
 import '../../shift_mode/presentation/shift_widgets.dart';
 import '../../time_clock/application/time_clock_providers.dart';
 import '../../time_clock/domain/time_entry.dart';
@@ -310,49 +311,21 @@ class ProfileScreen extends ConsumerWidget {
     String? current,
   ) async {
     final userId = ref.read(currentUserIdProvider);
-    var editedName = current ?? '';
-    final name = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Display name'),
-        content: TextFormField(
-          initialValue: current,
-          onChanged: (value) => editedName = value,
-          autofocus: true,
-          textCapitalization: TextCapitalization.words,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, editedName.trim()),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
+    if (userId == null) return;
+    final saved = await DisplayNameDialog.show(
+      context,
+      initialName: current,
+      save: (name) async {
+        // The account changed while the dialog was open: never write to the new one.
+        if (ref.read(currentUserIdProvider) != userId) {
+          throw StateError('signed-in user changed');
+        }
+        await ref
+            .read(settingsRepositoryProvider)
+            .updateDisplayName(userId, name);
+      },
     );
-    if (!context.mounted ||
-        name == null ||
-        name.isEmpty ||
-        userId == null ||
-        ref.read(currentUserIdProvider) != userId) {
-      return;
-    }
-    try {
-      await ref
-          .read(settingsRepositoryProvider)
-          .updateDisplayName(userId, name);
-      ref.invalidate(myProfileProvider);
-    } on PostgrestException catch (_) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Something went wrong. Please try again.'),
-        ),
-      );
-    }
+    if (saved) ref.invalidate(myProfileProvider);
   }
 
   Future<void> _changePassword(BuildContext context, WidgetRef ref) async {

@@ -69,10 +69,3 @@ final myTimeEntriesProvider =
     FutureProvider.autoDispose.family<List<TimeEntry>, String>((ref, venueId) {
   return ref.watch(timeClockRepositoryProvider).getMyEntries(venueId: venueId);
 });
-
-final venueClockBoardProvider =
-    FutureProvider.autoDispose.family<List<TimeEntry>, String>((ref, venueId) {
-  return ref
-      .watch(timeClockRepositoryProvider)
-      .getVenueEntries(venueId: venueId);
-});

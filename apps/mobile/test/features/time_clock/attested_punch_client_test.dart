@@ -157,6 +157,7 @@ void main() {
       'location_replayed': 'identical replay',
       'mocked_location': 'Mocked locations',
       'already_clocked_in': 'already clocked in',
+      'venue_location_required': "set this venue's location",
     };
     for (final entry in cases.entries) {
       final client = _client(

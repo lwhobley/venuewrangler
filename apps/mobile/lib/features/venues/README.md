@@ -15,3 +15,11 @@ persisting the last-selected venue across app restarts (currently in-memory only
 in `venues_providers.dart`). The one venue-creation path that does exist is bundled into
 signing up a brand-new organization — see `features/organizations/README.md`'s "Workspace
 creation" section.
+
+**Venue location** (launch review S1): `presentation/venue_location_screen.dart` (`/venue-location`,
+from Settings, the dashboard prompt and the Time Clock) lets managers set the map position
+(typed or "use my current location"), a street address for people, and the clock-in radius via
+`public.set_venue_location` (managers of the venue, validated, audited).
+`presentation/venue_location_prompt.dart` is the manager-only "set your venue's location" card
+shown while none is set; the time clock refuses clock-ins until then. There is no geocoding: the
+address is not turned into a position.

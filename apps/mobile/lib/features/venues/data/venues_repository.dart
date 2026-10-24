@@ -7,6 +7,16 @@ import '../domain/venue.dart';
 /// scope the query to the chosen organization for UX, not for security.
 abstract interface class VenuesRepository {
   Future<List<Venue>> fetchVenuesForOrganization(String organizationId);
+
+  /// Sets where the venue is (`public.set_venue_location`: managers of the venue only,
+  /// validated and audited server-side). Returns the updated venue.
+  Future<Venue> setVenueLocation({
+    required String venueId,
+    required double latitude,
+    required double longitude,
+    required int geofenceRadiusM,
+    String? address,
+  });
 }
 
 class SupabaseVenuesRepository implements VenuesRepository {
@@ -23,5 +33,26 @@ class SupabaseVenuesRepository implements VenuesRepository {
         .order('name');
 
     return rows.map(Venue.fromJson).toList(growable: false);
+  }
+
+  @override
+  Future<Venue> setVenueLocation({
+    required String venueId,
+    required double latitude,
+    required double longitude,
+    required int geofenceRadiusM,
+    String? address,
+  }) async {
+    final row = await _client.rpc(
+      'set_venue_location',
+      params: {
+        'p_venue_id': venueId,
+        'p_latitude': latitude,
+        'p_longitude': longitude,
+        'p_geofence_radius_m': geofenceRadiusM,
+        'p_address': address,
+      },
+    );
+    return Venue.fromJson(Map<String, dynamic>.from(row as Map));
   }
 }

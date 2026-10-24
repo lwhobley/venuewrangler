@@ -1,14 +1,30 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import '../../../core/auth/auth_providers.dart';
 import '../../../core/theme/app_radii.dart';
 import '../../../core/theme/ops_colors.dart';
 import '../../../core/widgets/status_chip.dart';
 
 import '../../../core/errors/app_error.dart';
+import '../../venues/application/venue_clock.dart';
 import '../../venues/application/venues_providers.dart';
+import '../../venues/presentation/venue_location_prompt.dart';
 import '../application/time_clock_providers.dart';
+import '../application/timesheet_providers.dart';
 import '../domain/time_entry.dart';
+import '../domain/timesheet.dart';
+import 'correct_clock_out_dialog.dart';
+import 'hours_review_screen.dart';
+
+/// Roles that may see the clock board (`public.venue_clock_board`).
+const _boardRoles = {
+  'supervisor',
+  'venue_manager',
+  'organization_owner',
+  'organization_admin',
+};
 
 class TimeClockScreen extends ConsumerStatefulWidget {
   const TimeClockScreen({super.key});
@@ -218,13 +234,28 @@ class _TimeClockScreenState extends ConsumerState<TimeClockScreen> {
     final openElsewhere =
         ref.watch(openElsewhereTimeEntryProvider(venue.id)).valueOrNull;
     final myEntriesAsync = ref.watch(myTimeEntriesProvider(venue.id));
-    final boardAsync = ref.watch(venueClockBoardProvider(venue.id));
     final punchSupported = ref.watch(timeClockPunchSupportedProvider);
+    // Times are the venue's clock, not the device's (a manager may be in another zone).
+    final clock = ref.watch(venueClockProvider);
+    final role = ref.watch(myVenueRoleProvider).valueOrNull;
+    final canSeeBoard = _boardRoles.contains(role);
+    final canManage =
+        ref.watch(canManageActiveVenueProvider).valueOrNull ?? false;
+    final showBoard = canSeeBoard && _selectedTab == 1;
+    final boardAsync = canSeeBoard
+        ? ref.watch(venueClockBoardProvider(venue.id))
+        : const AsyncValue<List<ClockBoardRow>>.data([]);
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Time Clock'),
         actions: [
+          if (canManage)
+            IconButton(
+              icon: const Icon(Icons.summarize_outlined),
+              tooltip: 'Hours & payroll export',
+              onPressed: () => context.push(hoursReviewRoute),
+            ),
           IconButton(
             icon: const Icon(Icons.refresh),
             tooltip: 'Refresh',
@@ -240,27 +271,31 @@ class _TimeClockScreenState extends ConsumerState<TimeClockScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Segmented switch between My Punch and Clock Board
-              SegmentedButton<int>(
-                segments: const [
-                  ButtonSegment(
-                    value: 0,
-                    icon: Icon(Icons.timer_outlined),
-                    label: Text('My Time Clock'),
-                  ),
-                  ButtonSegment(
-                    value: 1,
-                    icon: Icon(Icons.people_outline),
-                    label: Text('Clock Board'),
-                  ),
-                ],
-                selected: {_selectedTab},
-                onSelectionChanged: (val) =>
-                    setState(() => _selectedTab = val.first),
-              ),
-              const SizedBox(height: 16),
+              const VenueLocationPrompt(),
+              // Segmented switch between My Punch and Clock Board (supervisors and up; staff
+              // only have their own clock).
+              if (canSeeBoard) ...[
+                SegmentedButton<int>(
+                  segments: const [
+                    ButtonSegment(
+                      value: 0,
+                      icon: Icon(Icons.timer_outlined),
+                      label: Text('My Time Clock'),
+                    ),
+                    ButtonSegment(
+                      value: 1,
+                      icon: Icon(Icons.people_outline),
+                      label: Text('Clock Board'),
+                    ),
+                  ],
+                  selected: {_selectedTab},
+                  onSelectionChanged: (val) =>
+                      setState(() => _selectedTab = val.first),
+                ),
+                const SizedBox(height: 16),
+              ],
 
-              if (_selectedTab == 0) ...[
+              if (!showBoard) ...[
                 // Active Punch Status Banner
                 activeEntryAsync.when(
                   loading: () => const Center(
@@ -330,11 +365,15 @@ class _TimeClockScreenState extends ConsumerState<TimeClockScreen> {
                             ),
                             const SizedBox(height: 16),
                             Text(
-                              // The actual (local) time, ticking live via _ticker — not
-                              // hours worked, which the "Shift elapsed" line and Recent
-                              // Punches below already cover.
-                              _formatClockFace(DateTime.now()),
+                              // The venue's time, ticking live via _ticker — not hours
+                              // worked, which the "Shift elapsed" line and Recent Punches
+                              // below already cover.
+                              _formatClockFace(clock.now),
                               style: Theme.of(context).textTheme.displayLarge,
+                            ),
+                            Text(
+                              'Venue time (${clock.timezoneId})',
+                              style: Theme.of(context).textTheme.bodySmall,
                             ),
                             if (isClockedIn) ...[
                               const SizedBox(height: 4),
@@ -479,8 +518,10 @@ class _TimeClockScreenState extends ConsumerState<TimeClockScreen> {
                       separatorBuilder: (_, __) => const SizedBox(height: 8),
                       itemBuilder: (context, index) {
                         final entry = entries[index];
-                        final inTime = entry.clockInAt.toLocal();
-                        final outTime = entry.clockOutAt?.toLocal();
+                        final inTime = clock.wall(entry.clockInAt);
+                        final outTime = entry.clockOutAt == null
+                            ? null
+                            : clock.wall(entry.clockOutAt!);
 
                         return Card(
                           elevation: 1,
@@ -531,10 +572,9 @@ class _TimeClockScreenState extends ConsumerState<TimeClockScreen> {
                     ),
                   ),
                   error: (error, _) =>
-                      Text('Could not load clock board: $error'),
-                  data: (entries) {
-                    final openEntries = entries.where((e) => e.isOpen).toList();
-                    if (openEntries.isEmpty) {
+                      const Text('Could not load the clock board.'),
+                  data: (rows) {
+                    if (rows.isEmpty) {
                       return const Card(
                         child: Padding(
                           padding: EdgeInsets.all(24),
@@ -545,39 +585,55 @@ class _TimeClockScreenState extends ConsumerState<TimeClockScreen> {
                       );
                     }
 
+                    final me = ref.watch(currentUserIdProvider);
                     return ListView.separated(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
-                      itemCount: openEntries.length,
+                      itemCount: rows.length,
                       separatorBuilder: (_, __) => const SizedBox(height: 8),
                       itemBuilder: (context, index) {
-                        final entry = openEntries[index];
+                        final row = rows[index];
                         return Card(
                           elevation: 1,
                           child: ListTile(
                             leading: CircleAvatar(
-                              backgroundColor: entry.isOnBreak
+                              backgroundColor: row.isOnBreak
                                   ? context.ops.warning.bg
                                   : context.ops.success.bg,
                               child: Icon(
-                                entry.isOnBreak ? Icons.coffee : Icons.person,
-                                color: entry.isOnBreak
+                                row.isOnBreak ? Icons.coffee : Icons.person,
+                                color: row.isOnBreak
                                     ? context.ops.warning.fg
                                     : context.ops.success.fg,
                               ),
                             ),
                             title: Text(
-                              'Staff ID: ${entry.userId.substring(0, 8)}...',
+                              row.name,
                               style: Theme.of(context).textTheme.titleMedium,
                             ),
                             subtitle: Text(
-                              entry.isOnBreak
-                                  ? 'On Break (${entry.activeBreak?.type})'
-                                  : 'Clocked in at ${_formatTime(entry.clockInAt.toLocal())}',
+                              row.isOnBreak
+                                  ? 'On break (${row.activeBreak?.type})'
+                                  : 'Clocked in at ${_formatTime(clock.wall(row.clockInAt))}'
+                                      '${_isOtherDay(clock, row.clockInAt) ? ' on ${clock.formatDate(row.clockInAt)}' : ''}',
                             ),
-                            trailing: Text(
-                              _formatDuration(entry.workedDuration),
-                              style: Theme.of(context).textTheme.labelLarge,
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  _formatDuration(row.workedSoFar()),
+                                  style: Theme.of(context).textTheme.labelLarge,
+                                ),
+                                if (canManage && row.userId != me)
+                                  IconButton(
+                                    tooltip: 'Close missed clock-out',
+                                    icon: const Icon(Icons.more_time),
+                                    onPressed: () => _closeForTeammate(
+                                      row,
+                                      venue.id,
+                                    ),
+                                  ),
+                              ],
                             ),
                           ),
                         );
@@ -590,6 +646,26 @@ class _TimeClockScreenState extends ConsumerState<TimeClockScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  bool _isOtherDay(VenueClock clock, DateTime instant) {
+    final a = clock.wall(instant);
+    final b = clock.now;
+    return a.year != b.year || a.month != b.month || a.day != b.day;
+  }
+
+  Future<void> _closeForTeammate(ClockBoardRow row, String venueId) async {
+    final saved = await CorrectClockOutDialog.show(
+      context,
+      timeEntryId: row.timeEntryId,
+      personName: row.name,
+      clockInAt: row.clockInAt,
+    );
+    if (!saved || !mounted) return;
+    _refresh(venueId);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Closed ${row.name}\'s punch.')),
     );
   }
 

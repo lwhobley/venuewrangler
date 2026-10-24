@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:venuewrangler_mobile/core/auth/auth_providers.dart';
 import 'package:venuewrangler_mobile/core/errors/app_error.dart';
 import 'package:venuewrangler_mobile/core/location/location_service.dart';
 import 'package:venuewrangler_mobile/features/time_clock/application/time_clock_providers.dart';
+import 'package:venuewrangler_mobile/features/time_clock/application/timesheet_providers.dart';
 import 'package:venuewrangler_mobile/features/time_clock/data/time_clock_repository.dart';
 import 'package:venuewrangler_mobile/features/time_clock/domain/time_entry.dart';
+import 'package:venuewrangler_mobile/features/time_clock/domain/timesheet.dart';
 import 'package:venuewrangler_mobile/features/time_clock/presentation/time_clock_screen.dart';
 import 'package:venuewrangler_mobile/features/venues/application/venues_providers.dart';
 import 'package:venuewrangler_mobile/features/venues/domain/venue.dart';
@@ -41,13 +44,6 @@ class _FakeTimeClockRepository implements TimeClockRepository {
     int limit = 20,
   }) async =>
       entries;
-
-  @override
-  Future<List<TimeEntry>> getVenueEntries({
-    required String venueId,
-    int limit = 50,
-  }) async =>
-      activeEntry != null ? [activeEntry!, ...entries] : entries;
 
   @override
   Future<TimeEntry> clockIn({
@@ -448,30 +444,38 @@ void main() {
     expect(find.text('CLOCKED OUT'), findsOneWidget);
   });
 
-  testWidgets('switches to Clock Board tab and renders active staff',
+  testWidgets('the Clock Board lists people by name, in venue time',
       (tester) async {
-    final activeStaffEntry = TimeEntry(
-      id: 'e1',
-      organizationId: 'o1',
-      venueId: 'v1',
-      userId: 'user-abcdef12',
-      clockInAt: DateTime.now().subtract(const Duration(minutes: 45)),
-      clockInLat: 29.7604,
-      clockInLng: -95.3698,
-      clockInAccuracyM: 10.0,
-      isOpen: true,
-      createdAt: DateTime.now(),
-      updatedAt: DateTime.now(),
-    );
-
-    final fakeRepo = _FakeTimeClockRepository(activeEntry: activeStaffEntry);
-
+    final clockIn = DateTime.utc(2026, 10, 22, 6, 25); // 1:25 AM in Chicago
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          activeVenueProvider.overrideWith((ref) => _testVenue),
-          timeClockRepositoryProvider.overrideWithValue(fakeRepo),
+          activeVenueProvider.overrideWith(
+            (ref) => Venue(
+              id: 'v1',
+              organizationId: 'o1',
+              name: 'Fulton & Pine',
+              timezone: 'America/Chicago',
+              latitude: 41.88,
+              longitude: -87.65,
+              createdAt: DateTime(2026),
+            ),
+          ),
+          timeClockRepositoryProvider
+              .overrideWithValue(_FakeTimeClockRepository()),
           locationServiceProvider.overrideWithValue(_FakeLocationService()),
+          myVenueRoleProvider.overrideWith((ref) async => 'venue_manager'),
+          currentUserIdProvider.overrideWithValue('manager-1'),
+          venueClockBoardProvider.overrideWith(
+            (ref, venueId) async => [
+              ClockBoardRow(
+                timeEntryId: 'e1',
+                userId: '942448ed-0000',
+                displayName: 'Colin Park',
+                clockInAt: clockIn,
+              ),
+            ],
+          ),
         ],
         child: const MaterialApp(home: TimeClockScreen()),
       ),
@@ -482,6 +486,55 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Active Staff on Duty'), findsOneWidget);
-    expect(find.textContaining('user-abc'), findsOneWidget);
+    expect(find.text('Colin Park'), findsOneWidget);
+    expect(find.textContaining('Staff ID'), findsNothing);
+    expect(find.textContaining('Clocked in at 01:25'), findsOneWidget);
+    // Managers can close a teammate's missed clock-out from the board.
+    expect(find.byTooltip('Close missed clock-out'), findsOneWidget);
+    expect(find.byTooltip('Hours & payroll export'), findsOneWidget);
+  });
+
+  testWidgets('staff get no Clock Board tab', (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          activeVenueProvider.overrideWith((ref) => _testVenue),
+          timeClockRepositoryProvider
+              .overrideWithValue(_FakeTimeClockRepository()),
+          locationServiceProvider.overrideWithValue(_FakeLocationService()),
+          myVenueRoleProvider.overrideWith((ref) async => 'staff'),
+        ],
+        child: const MaterialApp(home: TimeClockScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Clock Board'), findsNothing);
+    expect(find.text('Clock In'), findsOneWidget);
+    expect(find.byTooltip('Hours & payroll export'), findsNothing);
+    // Staff are not shown the manager prompt either.
+    expect(find.text("Set your venue's location"), findsNothing);
+  });
+
+  testWidgets('managers are told to set a missing venue location',
+      (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          activeVenueProvider.overrideWith((ref) => _testVenue),
+          timeClockRepositoryProvider
+              .overrideWithValue(_FakeTimeClockRepository()),
+          locationServiceProvider.overrideWithValue(_FakeLocationService()),
+          myVenueRoleProvider.overrideWith((ref) async => 'venue_manager'),
+          currentUserIdProvider.overrideWithValue('manager-1'),
+          venueClockBoardProvider.overrideWith((ref, venueId) async => []),
+        ],
+        child: const MaterialApp(home: TimeClockScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text("Set your venue's location"), findsOneWidget);
+    expect(find.text('Set location'), findsOneWidget);
   });
 }

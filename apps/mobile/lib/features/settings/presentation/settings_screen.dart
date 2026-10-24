@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/auth/sign_out_service.dart';
 import '../../../core/network/supabase_providers.dart';
@@ -13,10 +12,12 @@ import '../../invites/presentation/pending_invites_entry.dart';
 import '../../mfa/presentation/mfa_enrollment_banner.dart';
 import '../../team/domain/team_member.dart';
 import '../../venues/application/venues_providers.dart';
+import '../../venues/presentation/venue_location_prompt.dart';
 import '../../workforce/presentation/employee_profile_widgets.dart';
 import '../../workforce/domain/employee_hr_profile.dart';
 import '../domain/legal_links.dart';
 import 'delete_account_button.dart';
+import 'display_name_dialog.dart';
 
 /// Profile, account, and app settings. Deliberately minimal for this first slice — just the
 /// display name every other screen already shows (roster tiles, "created by", etc.) and sign
@@ -81,6 +82,19 @@ class SettingsScreen extends ConsumerWidget {
                 subtitle: const Text('Roles, access and ownership'),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => context.push('/team'),
+              ),
+            if (venue != null && teamManagerRoles.contains(role))
+              ListTile(
+                leading: const Icon(Icons.place_outlined),
+                title: const Text('Venue location'),
+                subtitle: Text(
+                  venue.hasLocation
+                      ? '${venue.address ?? 'Set'} · '
+                          '${venue.geofenceRadiusM} m clock-in radius'
+                      : 'Not set: staff cannot clock in yet',
+                ),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => context.push(venueLocationRoute),
               ),
             ListTile(
               leading: const Icon(Icons.extension_outlined),
@@ -168,45 +182,21 @@ class SettingsScreen extends ConsumerWidget {
     WidgetRef ref,
     String? currentName,
   ) async {
-    final controller = TextEditingController(text: currentName);
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Display name'),
-        content: TextField(controller: controller, autofocus: true),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
+    final userId = ref.read(currentUserIdProvider);
+    if (userId == null) return;
+    final saved = await DisplayNameDialog.show(
+      context,
+      initialName: currentName,
+      save: (name) async {
+        // The account changed while the dialog was open: never write to the new one.
+        if (ref.read(currentUserIdProvider) != userId) {
+          throw StateError('signed-in user changed');
+        }
+        await ref
+            .read(settingsRepositoryProvider)
+            .updateDisplayName(userId, name);
+      },
     );
-
-    if (confirmed != true ||
-        controller.text.trim().isEmpty ||
-        !context.mounted) {
-      return;
-    }
-
-    try {
-      final userId = ref.read(supabaseClientProvider).auth.currentUser!.id;
-      await ref
-          .read(settingsRepositoryProvider)
-          .updateDisplayName(userId, controller.text.trim());
-      ref.invalidate(myProfileProvider);
-    } on PostgrestException catch (_) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Something went wrong. Please try again.'),
-        ),
-      );
-    }
+    if (saved) ref.invalidate(myProfileProvider);
   }
 }

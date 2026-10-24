@@ -158,14 +158,14 @@ insert into public.time_entries (id, venue_id, clock_in_lat, clock_in_lng, clock
 set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-0000000000a4';
 select throws_ok(
   $$ select public.correct_time_entry('80000000-0000-0000-0000-0000000000e3',
-       (select clock_in_at from public.time_entries where id = '80000000-0000-0000-0000-0000000000e3') - interval '1 hour', null, 'x') $$,
+       (select clock_in_at from public.time_entries where id = '80000000-0000-0000-0000-0000000000e3') - interval '1 hour', null, 'clock-out before clock-in') $$,
   '22023',
   null,
   'F4: a clock-out before clock-in is rejected'
 );
 
 select throws_ok(
-  $$ select public.correct_time_entry('80000000-0000-0000-0000-0000000000e3', now() + interval '5 minutes', null, 'x') $$,
+  $$ select public.correct_time_entry('80000000-0000-0000-0000-0000000000e3', now() + interval '5 minutes', null, 'clock-out in the future') $$,
   '22023',
   null,
   'F4: a clock-out in the future is rejected'

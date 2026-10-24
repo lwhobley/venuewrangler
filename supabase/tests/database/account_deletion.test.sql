@@ -13,8 +13,9 @@ insert into auth.users (id, email) values
 insert into public.organizations (id, name, created_by) values
   ('50000000-0000-0000-0000-00000000000a', 'Org A', '40000000-0000-0000-0000-000000000001');
 
-insert into public.venues (id, organization_id, name) values
-  ('60000000-0000-0000-0000-0000000000a1', '50000000-0000-0000-0000-00000000000a', 'Venue A1');
+-- A location so the fixture punch below passes the clock-in location check (20261022100000).
+insert into public.venues (id, organization_id, name, latitude, longitude) values
+  ('60000000-0000-0000-0000-0000000000a1', '50000000-0000-0000-0000-00000000000a', 'Venue A1', 29.7604, -95.3698);
 
 -- User 001 is Org A's ONLY organization_owner (no co-owner anywhere) — the sole-owner guard
 -- must block them. User 003 is plain staff, never an owner of anything.
@@ -32,7 +33,7 @@ insert into public.time_entries (
 ) values (
   '70000000-0000-0000-0000-000000000001',
   '50000000-0000-0000-0000-00000000000a', '60000000-0000-0000-0000-0000000000a1',
-  '40000000-0000-0000-0000-000000000003', 0, 0, 5.0
+  '40000000-0000-0000-0000-000000000003', 29.7604, -95.3698, 5.0
 );
 
 insert into public.audit_log (organization_id, venue_id, actor_user_id, action, target_table, target_id)

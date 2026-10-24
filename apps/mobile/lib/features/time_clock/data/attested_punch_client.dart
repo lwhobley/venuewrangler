@@ -7,6 +7,12 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/errors/app_error.dart';
 import '../domain/time_entry.dart';
 
+/// Shown when the server refuses a clock-in because the venue has no location yet
+/// (`venue_location_required`, supabase/migrations/20261022100000_venue_location_and_hours.sql).
+const venueLocationRequiredMessage =
+    "Clock-in isn't available yet: a manager needs to set this venue's location "
+    '(Settings, then Venue location).';
+
 /// Device proof for one punch request.
 class PunchProof {
   const PunchProof({required this.platform, required this.evidence});
@@ -160,6 +166,8 @@ class AttestedPunchClient {
         return const PermissionDeniedError(
           'This device could not be verified. Update the app and try again, or ask a manager to record your punch.',
         );
+      case 'venue_location_required':
+        return const PermissionDeniedError(venueLocationRequiredMessage);
       case 'already_clocked_in':
         return const UnknownError('You are already clocked in.');
       case 'no_open_punch':

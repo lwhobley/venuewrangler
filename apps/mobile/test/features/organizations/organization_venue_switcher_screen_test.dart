@@ -62,6 +62,16 @@ class _FakeVenuesRepository implements VenuesRepository {
   @override
   Future<List<Venue>> fetchVenuesForOrganization(String organizationId) async =>
       venuesByOrg[organizationId] ?? const [];
+
+  @override
+  Future<Venue> setVenueLocation({
+    required String venueId,
+    required double latitude,
+    required double longitude,
+    required int geofenceRadiusM,
+    String? address,
+  }) =>
+      throw UnimplementedError();
 }
 
 void main() {

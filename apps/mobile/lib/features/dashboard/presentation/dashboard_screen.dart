@@ -12,6 +12,7 @@ import '../../tasks/application/tasks_providers.dart';
 import '../../tasks/domain/operational_task.dart';
 import '../../venues/application/venue_clock.dart';
 import '../../venues/application/venues_providers.dart';
+import '../../venues/presentation/venue_location_prompt.dart';
 
 const _weekdays = [
   'Monday',
@@ -136,6 +137,7 @@ class DashboardScreen extends ConsumerWidget {
               ),
             ),
             const SizedBox(height: 16),
+            const VenueLocationPrompt(),
             _ShiftModeCard(onTap: () => context.push('/shift')),
             const SizedBox(height: 20),
             const _SectionLabel('Today'),

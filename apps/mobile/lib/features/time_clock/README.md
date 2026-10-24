@@ -5,9 +5,18 @@ Phase 4: implemented (port of legacy `packages/api/src/modules/time-clock/`).
 Provides geofenced time attendance, break tracking, and anti-replay GPS fix verification for staff and managers:
 
 - `domain/time_entry.dart` — Hand-written domain models for `TimeEntry` and `TimeBreak` (paid/unpaid intervals, elapsed calculation, active break detection).
-- `data/time_clock_repository.dart` — `TimeClockRepository` interface and `SupabaseTimeClockRepository` implementation supporting `getActiveEntry`, `getMyEntries`, `getVenueEntries` (Clock Board), `clockIn`, `clockOut`, `startBreak`, and `endBreak`.
-- `application/time_clock_providers.dart` — `timeClockRepositoryProvider`, `activeTimeEntryProvider(venueId)`, `myTimeEntriesProvider(venueId)`, and `venueClockBoardProvider(venueId)` Riverpod providers.
-- `presentation/time_clock_screen.dart` — Full time clock UI (clock in/out and breaks are mobile-only: on web the buttons are replaced by a "requires the mobile app" notice because a browser GPS fix can be spoofed; history and the Clock Board stay readable) with live clock timer, punch status banner, break management (paid/unpaid), punch history, and venue-wide active Clock Board.
+- `data/time_clock_repository.dart` — `TimeClockRepository` interface and `SupabaseTimeClockRepository` implementation supporting `getActiveEntry`, `getMyEntries`, `clockIn`, `clockOut`, `startBreak`, and `endBreak`.
+- `application/time_clock_providers.dart` — `timeClockRepositoryProvider`, `activeTimeEntryProvider(venueId)` and `myTimeEntriesProvider(venueId)` Riverpod providers.
+- `presentation/time_clock_screen.dart` — Full time clock UI (clock in/out and breaks are mobile-only: on web the buttons are replaced by a "requires the mobile app" notice because a browser GPS fix can be spoofed; history and the Clock Board stay readable) with live clock timer, punch status banner, break management (paid/unpaid), punch history, and the Clock Board (supervisors and up; staff only see their own clock). Every time is the venue's clock (`venueClockProvider`), never the device's.
+
+### Hours review, corrections and payroll export (launch review D1)
+- `domain/timesheet.dart` — `ClockBoardRow`, `TimesheetEntry`, `TimeCorrection`, `summarizeHours` (closed punches only; overtime is time past 40 h in a Monday–Sunday venue week) and `TimesheetRange` (venue-local days).
+- `domain/timesheet_csv.dart` — punches CSV and per-person totals CSV, in venue time with the zone in its own column; fields are quoted and spreadsheet formulas defused.
+- `data/timesheet_repository.dart` / `application/timesheet_providers.dart` — `public.venue_clock_board` (names, supervisors+), `public.venue_timesheet` (managers; punches with names and their correction history from `audit_log`) and `public.correct_time_entry` (managers, never their own punch, reason required, original value audited). See `supabase/migrations/20261022100000_venue_location_and_hours.sql`.
+- `presentation/hours_review_screen.dart` (`/time-clock/hours`, also under More → Hours & payroll) — date range, per-person totals, every punch, missed clock-outs to close, "Edited" history, CSV export via `core/files/text_file_saver.dart` (browser download on web, the system save sheet on iOS/Android). `presentation/correct_clock_out_dialog.dart` is shared with the Clock Board's "Close missed clock-out" action.
+
+### Venue location (launch review S1)
+A self-recorded clock-in at a venue with no location is refused (`venue_location_required`) rather than skipping the geofence. Managers set it under Settings → Venue location (`features/venues`), and the dashboard and Time Clock show them a prompt until they do. Clock-out is not blocked, so punches opened earlier can still be closed.
 
 ### Authorization & Database Controls
 Authorization is enforced entirely at the database layer via RLS and PostgreSQL triggers in `supabase/migrations/20261002220000_time_clock_schema.sql`:

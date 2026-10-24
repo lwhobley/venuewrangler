@@ -5,7 +5,9 @@ import 'package:image_picker/image_picker.dart';
 import '../../../core/auth/auth_providers.dart';
 import '../../media/application/image_picker_service.dart';
 import '../../venues/application/venues_providers.dart';
+import '../../schedules/application/schedules_providers.dart';
 import '../application/employee_profiles_providers.dart';
+import '../application/workforce_providers.dart';
 import '../domain/employee_hr_profile.dart';
 
 class StaffAvatar extends ConsumerWidget {
@@ -333,6 +335,10 @@ class _HrEditorState extends ConsumerState<_HrEditor> {
           );
       if (!mounted) return;
       ref.invalidate(employeeHrProvider(widget.profileKey));
+      // Rosters show the staff-profile name for anyone without a display name (U5), so
+      // refresh the lists that may still show the old one.
+      ref.invalidate(rosterForVenueProvider(widget.profileKey.venueId));
+      ref.invalidate(scheduleRosterForVenueProvider(widget.profileKey.venueId));
       Navigator.pop(context);
     } catch (_) {
       if (mounted) {

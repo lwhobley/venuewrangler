@@ -32,6 +32,7 @@ const _sections = <(String, List<_Item>)>[
       _Item(Icons.chat_bubble_outline, 'Team chat', '/chat'),
       _Item(Icons.groups_outlined, 'Staff', '/workforce'),
       _Item(Icons.assignment_outlined, 'Staff requests', '/staff-requests'),
+      _Item(Icons.summarize_outlined, 'Hours & payroll', '/time-clock/hours'),
       _Item(Icons.lightbulb_outline, 'Shift insights', '/shift-insights'),
     ],
   ),
@@ -80,6 +81,7 @@ class MoreScreen extends ConsumerWidget {
     final role = ref.watch(myVenueRoleProvider).valueOrNull;
     final canSeeBilling =
         role == 'organization_owner' || role == 'organization_admin';
+    final canSeeHours = canSeeBilling || role == 'venue_manager';
     return Scaffold(
       appBar: AppBar(title: const Text('More')),
       body: ListView(
@@ -96,7 +98,8 @@ class MoreScreen extends ConsumerWidget {
             _Group(
               children: [
                 for (final item in items)
-                  if (item.route != '/billing' || canSeeBilling)
+                  if ((item.route != '/billing' || canSeeBilling) &&
+                      (item.route != '/time-clock/hours' || canSeeHours))
                     ListTile(
                       leading:
                           Icon(item.icon, color: theme.colorScheme.primary),

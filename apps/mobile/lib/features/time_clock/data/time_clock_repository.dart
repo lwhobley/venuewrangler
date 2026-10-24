@@ -21,11 +21,6 @@ abstract interface class TimeClockRepository {
     int limit = 20,
   });
 
-  Future<List<TimeEntry>> getVenueEntries({
-    required String venueId,
-    int limit = 50,
-  });
-
   Future<TimeEntry> clockIn({
     required String venueId,
     String? shiftId,
@@ -112,30 +107,6 @@ class SupabaseTimeClockRepository implements TimeClockRepository {
           .select()
           .eq('venue_id', venueId)
           .eq('user_id', user.id)
-          .order('clock_in_at', ascending: false)
-          .limit(limit);
-
-      return (rows as List<dynamic>)
-          .map((row) => TimeEntry.fromJson(row as Map<String, dynamic>))
-          .toList(growable: false);
-    } on PostgrestException catch (e) {
-      throw _mapPostgrestException(e);
-    } catch (_) {
-      throw const NetworkError();
-    }
-  }
-
-  @override
-  Future<List<TimeEntry>> getVenueEntries({
-    required String venueId,
-    int limit = 50,
-  }) async {
-    try {
-      final rows = await _client
-          .from('time_entries')
-          .select()
-          .eq('venue_id', venueId)
-          .eq('is_open', true)
           .order('clock_in_at', ascending: false)
           .limit(limit);
 
@@ -326,6 +297,9 @@ class SupabaseTimeClockRepository implements TimeClockRepository {
       return const UnknownError('You are already clocked in.');
     }
     if (e.code == '42501') {
+      if (e.message.contains('venue_location_required')) {
+        return const PermissionDeniedError(venueLocationRequiredMessage);
+      }
       if (e.message.contains('geofence')) {
         return const PermissionDeniedError(
           'You are outside the venue geofence. Move closer to the venue to clock in/out.',

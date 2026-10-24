@@ -10,7 +10,9 @@ row).
   `fetchMyProfile`, `updateDisplayName`, `deleteAccount`.
 - `application/settings_providers.dart` — repository + the current user's profile provider.
 - `presentation/settings_screen.dart` — routed at `/settings`: shows the signed-in email,
-  lets the user set/edit their display name, and sign out.
+  lets the user set/edit their display name (`presentation/display_name_dialog.dart`, shared
+  with the staff Profile screen: validates and saves inside the dialog, closes only on success),
+  and sign out. Managers also get a Venue location entry (`features/venues`).
 - `presentation/delete_account_button.dart` — personal "delete my account" (App Store/Play
   Store require this for any app that supports account creation), calling
   `public.request_account_deletion` (supabase/migrations/20261007180000_account_deletion.sql)
