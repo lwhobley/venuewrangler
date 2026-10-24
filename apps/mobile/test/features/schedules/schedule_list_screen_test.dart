@@ -25,6 +25,8 @@ class _Repo implements SchedulesRepository {
       <({String? staffId, String? role, DateTime start, DateTime end})>[];
   final claims = <({String swapId, bool allowOverlap})>[];
   final approvals = <({String swapId, bool allowOverlap})>[];
+  final withdrawals = <String>[];
+  PostgrestException? unclaimError;
   PostgrestException? createError;
 
   @override
@@ -51,6 +53,12 @@ class _Repo implements SchedulesRepository {
     bool allowOverlap = false,
   }) async {
     approvals.add((swapId: swapId, allowOverlap: allowOverlap));
+  }
+
+  @override
+  Future<void> unclaimShiftSwap(String swapId) async {
+    if (unclaimError != null) throw unclaimError!;
+    withdrawals.add(swapId);
   }
 
   @override
@@ -350,6 +358,72 @@ void main() {
 
       expect(repo.approvals.single, (swapId: 'swap-1', allowOverlap: false));
       expect(repo.claims, isEmpty);
+    });
+  });
+
+  group('withdrawing a claimed swap', () {
+    final server = Shift(
+      id: 'server',
+      venueId: 'venue-1',
+      staffId: 'ingrid-id',
+      roleLabel: 'Server',
+      section: 'main',
+      startTime: DateTime.utc(2026, 10, 22, 16, 30),
+      endTime: DateTime.utc(2026, 10, 22, 22, 30),
+      status: ShiftStatus.scheduled,
+    );
+    final claimedSwap = ShiftSwap(
+      id: 'swap-1',
+      venueId: 'venue-1',
+      shiftId: 'server',
+      requestedBy: 'ingrid-id',
+      status: ShiftSwapStatus.claimed,
+      acceptedBy: 'jada-id',
+    );
+
+    testWidgets('the taker can withdraw; others cannot', (tester) async {
+      final repo = await _pump(
+        tester,
+        shifts: [server],
+        swaps: [claimedSwap],
+        me: 'jada-id',
+        manager: false,
+      );
+
+      await tester.tap(find.widgetWithText(TextButton, 'Withdraw'));
+      await tester.pumpAndSettle();
+      expect(repo.withdrawals, ['swap-1']);
+
+      await _pump(
+        tester,
+        shifts: [server],
+        swaps: [claimedSwap],
+        me: 'alice-id',
+        manager: false,
+      );
+      expect(find.text('Withdraw'), findsNothing);
+    });
+
+    testWidgets('a refused withdraw shows the reason in a snackbar',
+        (tester) async {
+      final repo = await _pump(
+        tester,
+        shifts: [server],
+        swaps: [claimedSwap],
+        me: 'jada-id',
+        manager: false,
+      );
+      repo.unclaimError =
+          const PostgrestException(message: 'no', code: '42501');
+
+      await tester.tap(find.widgetWithText(TextButton, 'Withdraw'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('This swap is no longer available to you.'),
+        findsOneWidget,
+      );
+      expect(repo.withdrawals, isEmpty);
     });
   });
 

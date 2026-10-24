@@ -499,6 +499,11 @@ class _SwapCard extends ConsumerWidget {
               alignment: MainAxisAlignment.end,
               spacing: 8,
               children: [
+                if (claimed && me != null && swap.acceptedBy == me)
+                  TextButton(
+                    onPressed: () => _withdraw(context, ref),
+                    child: const Text('Withdraw'),
+                  ),
                 if (isRequester)
                   TextButton(
                     onPressed: () => _cancel(context, ref),
@@ -695,6 +700,15 @@ class _SwapCard extends ConsumerWidget {
   Future<void> _cancel(BuildContext context, WidgetRef ref) async {
     try {
       await ref.read(schedulesRepositoryProvider).cancelSwap(swap.id);
+      _refresh(ref);
+    } on PostgrestException catch (error) {
+      if (context.mounted) _snack(context, _swapError(error));
+    }
+  }
+
+  Future<void> _withdraw(BuildContext context, WidgetRef ref) async {
+    try {
+      await ref.read(schedulesRepositoryProvider).unclaimShiftSwap(swap.id);
       _refresh(ref);
     } on PostgrestException catch (error) {
       if (context.mounted) _snack(context, _swapError(error));

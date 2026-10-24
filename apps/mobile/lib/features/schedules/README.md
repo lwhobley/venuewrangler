@@ -11,7 +11,7 @@ and `20261002160000_shift_swaps_schema.sql`.
 - `data/schedules_repository.dart` — `SchedulesRepository` interface + Supabase
   implementation: `fetchShiftsForVenue`, `createShift`, `updateShift`, `deleteShift`,
   `watchScheduleChanges` (realtime), plus
-  `fetchSwapsForVenue`/`requestSwap`/`claimSwap`/`approveSwap`/`cancelSwap`/`declineSwap`.
+  `fetchSwapsForVenue`/`requestSwap`/`claimSwap`/`unclaimShiftSwap` (taker withdraws a claimed swap)/`approveSwap`/`cancelSwap`/`declineSwap`.
 - `application/schedules_providers.dart` — repository + shifts/swaps-for-venue providers, and
   `scheduleLiveUpdatesProvider`, which reloads both on realtime changes while a schedule
   screen watches it.

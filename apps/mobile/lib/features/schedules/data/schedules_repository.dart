@@ -64,6 +64,10 @@ abstract interface class SchedulesRepository {
     bool allowOverlap = false,
   });
 
+  /// The taker withdraws a claimed swap that is awaiting manager approval
+  /// (`unclaim_shift_swap`); it goes back to open for anyone eligible.
+  Future<void> unclaimShiftSwap(String swapId);
+
   Future<void> cancelSwap(String swapId);
 
   Future<void> declineSwap(String swapId);
@@ -255,6 +259,11 @@ class SupabaseSchedulesRepository implements SchedulesRepository {
       'approve_shift_swap',
       params: {'p_swap_id': swapId, 'p_allow_overlap': allowOverlap},
     );
+  }
+
+  @override
+  Future<void> unclaimShiftSwap(String swapId) async {
+    await _client.rpc('unclaim_shift_swap', params: {'p_swap_id': swapId});
   }
 
   @override
