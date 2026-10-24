@@ -36,9 +36,14 @@ class AiConsentDialog extends StatelessWidget {
             const SizedBox(height: 4),
             const Text(
               'Only the text for that request: the question you type, or the '
-              'roster, invoice or shift details you paste or that the screen '
-              'gathers. A pasted roster can include names, emails and phone '
-              'numbers. Remove anything you do not want shared before sending.',
+              'roster, invoice, client enquiry or shift details you paste or '
+              'that the screen gathers. A pasted roster or client enquiry can '
+              'include names, emails and phone numbers. Remove anything you do '
+              'not want shared before sending. '
+              'When you ask about your venue data, the answer is worked out from '
+              'summary figures (such as counts, totals and hours, with staff '
+              'names where the question is about people), never from raw '
+              'records, contact details, pay rates or notes.',
             ),
             const SizedBox(height: 12),
             Text('What is not', style: theme.textTheme.titleSmall),

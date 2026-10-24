@@ -38,6 +38,46 @@ abstract interface class AiRepository {
     required String venueId,
     required String context,
   });
+
+  /// Manager-only. [facts] is the compact JSON the handover screen gathered deterministically.
+  Future<HandoverSummaryResult> summarizeHandover({
+    required String venueId,
+    required String facts,
+  });
+
+  /// Manager-only. [enquiryText] is the pasted client email/message, prefixed with today's date.
+  Future<EventEnquiryResult> parseEventEnquiry({
+    required String venueId,
+    required String enquiryText,
+  });
+
+  /// Manager-only: drafts a week of shifts from [context] (see
+  /// schedules/domain/schedule_draft.dart). Always previewed, never applied.
+  Future<ScheduleDraftResult> draftSchedule({
+    required String venueId,
+    required String context,
+  });
+
+  /// Manager-only: drafts a reorder list from [context] (see
+  /// inventory/domain/reorder_planner.dart). Always previewed, never applied.
+  Future<InventoryReorderResult> suggestReorder({
+    required String venueId,
+    required String context,
+  });
+
+  /// "Ask about your data" step 1: [input] is JSON with the question, today's venue date and the
+  /// metric catalogue (no data). The result is untrusted until validated.
+  Future<DataQuestionPlan> planDataQuestion({
+    required String venueId,
+    required String input,
+  });
+
+  /// "Ask about your data" step 2: [input] is JSON with the question and the aggregate results of
+  /// the validated calls.
+  Future<DataQuestionAnswer> answerDataQuestion({
+    required String venueId,
+    required String input,
+  });
 }
 
 class SupabaseAiRepository implements AiRepository {
@@ -110,6 +150,84 @@ class SupabaseAiRepository implements AiRepository {
     );
   }
 
+  @override
+  Future<HandoverSummaryResult> summarizeHandover({
+    required String venueId,
+    required String facts,
+  }) async {
+    return _invoke(
+      task: 'handover_summary',
+      venueId: venueId,
+      input: facts,
+      parse: HandoverSummaryResult.fromJson,
+    );
+  }
+
+  @override
+  Future<DataQuestionPlan> planDataQuestion({
+    required String venueId,
+    required String input,
+  }) async {
+    return _invoke(
+      task: 'data_question_plan',
+      venueId: venueId,
+      input: input,
+      parse: DataQuestionPlan.fromJson,
+    );
+  }
+
+  @override
+  Future<ScheduleDraftResult> draftSchedule({
+    required String venueId,
+    required String context,
+  }) async {
+    return _invoke(
+      task: 'schedule_draft',
+      venueId: venueId,
+      input: context,
+      parse: ScheduleDraftResult.fromJson,
+    );
+  }
+
+  @override
+  Future<EventEnquiryResult> parseEventEnquiry({
+    required String venueId,
+    required String enquiryText,
+  }) async {
+    return _invoke(
+      task: 'event_enquiry_parse',
+      venueId: venueId,
+      input: enquiryText,
+      parse: EventEnquiryResult.fromJson,
+    );
+  }
+
+  @override
+  Future<InventoryReorderResult> suggestReorder({
+    required String venueId,
+    required String context,
+  }) async {
+    return _invoke(
+      task: 'inventory_reorder',
+      venueId: venueId,
+      input: context,
+      parse: InventoryReorderResult.fromJson,
+    );
+  }
+
+  @override
+  Future<DataQuestionAnswer> answerDataQuestion({
+    required String venueId,
+    required String input,
+  }) async {
+    return _invoke(
+      task: 'data_question_answer',
+      venueId: venueId,
+      input: input,
+      parse: DataQuestionAnswer.fromJson,
+    );
+  }
+
   /// Shared call path for all four task types. Maps the Edge Function's error-code JSON
   /// bodies (see supabase/functions/ai-assistant/index.ts) to the app's [AppError] types so
   /// every screen gets a consistent, user-facing message rather than a raw exception.
@@ -164,6 +282,9 @@ class SupabaseAiRepository implements AiRepository {
     return switch (code) {
       'venue_not_found_or_not_a_member' => const PermissionDeniedError(
           "You don't have access to AI features for this venue.",
+        ),
+      'manager_permission_required' => const PermissionDeniedError(
+          'Only managers of this venue can use this AI feature.',
         ),
       'ai_disabled_for_org' => const AiUnavailableError(
           'AI features are turned off for this organization. An owner or admin '

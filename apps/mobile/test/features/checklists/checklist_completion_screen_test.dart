@@ -34,6 +34,13 @@ class _FakeChecklistsRepository implements ChecklistsRepository {
   bool simulateOffline = false;
 
   @override
+  Future<Set<String>> fetchCompletedTemplateIdsSince(
+    String venueId,
+    DateTime since,
+  ) async =>
+      {};
+
+  @override
   Future<List<ChecklistTemplate>> fetchTemplatesForVenue(
     String venueId,
   ) async =>

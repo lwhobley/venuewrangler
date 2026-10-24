@@ -54,6 +54,11 @@ event orders), contracts, and a pipeline forecast — to Supabase + Flutter.
 The BEO tab opens `presentation/crm_beo_detail_screen.dart`, which displays the order's
 event, menu, instructions, and itemized charges. Managers can add and remove charge
 lines there; tax and service amounts must be entered explicitly rather than inferred.
+The app bar's "New lead/BEO from enquiry" (`presentation/enquiry_import_dialog.dart`) takes a
+pasted client email/message, has AI (`event_enquiry_parse`, manager-only) extract it into an
+editable, highlighted preview form, and on confirm creates the lead, a note carrying the
+details with no column of their own (end time, items, budget, what to ask), and optionally a
+BEO draft linked to the lead. A retry after a partial failure never duplicates what was saved.
 `presentation/crm_lead_detail_screen.dart` — a lead's notes and activity trail, plus inline
 status change. Both rely entirely on RLS for authorization, same as every other feature in this
 app — no client-side role check duplicates what the database already enforces.

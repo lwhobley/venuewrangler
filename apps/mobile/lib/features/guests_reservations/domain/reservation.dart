@@ -27,6 +27,7 @@ class Reservation {
     this.cancelledAt,
     this.notes,
     this.assignedTo,
+    this.beoId,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -73,6 +74,7 @@ class Reservation {
           : null,
       notes: json['notes'] as String?,
       assignedTo: json['assigned_to'] as String?,
+      beoId: json['beo_id'] as String?,
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
     );
@@ -80,6 +82,10 @@ class Reservation {
 
   /// Team member this reservation is assigned to (its server/host), if any.
   final String? assignedTo;
+
+  /// The private event (CRM BEO) this booking holds the venue for, if any. Its cancellation and
+  /// restoration follow the event (see 20261022130000_beo_cancel_restore_and_hold_sync.sql).
+  final String? beoId;
   final String id;
   final String organizationId;
   final String venueId;
@@ -112,6 +118,7 @@ class Reservation {
   bool get isDepositPaid => depositStatus == 'paid';
   bool get isConfirmed => status == 'confirmed';
   bool get isSeated => status == 'seated';
+  bool get isPrivateEventHold => beoId != null;
 
   Map<String, dynamic> toJson() {
     return {
@@ -149,6 +156,7 @@ class Reservation {
       if (cancelledAt != null)
         'cancelled_at': cancelledAt!.toUtc().toIso8601String(),
       if (notes != null) 'notes': notes,
+      if (beoId != null) 'beo_id': beoId,
       'created_at': createdAt.toUtc().toIso8601String(),
       'updated_at': updatedAt.toUtc().toIso8601String(),
     };

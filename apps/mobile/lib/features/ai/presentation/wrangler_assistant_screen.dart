@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/errors/app_error.dart';
 import '../../venues/application/venues_providers.dart';
@@ -76,6 +77,15 @@ class _WranglerAssistantScreenState
             const SizedBox(height: 16),
             if (_error != null) _ErrorCard(error: _error!),
             if (_result != null) _AnswerCard(result: _result!),
+            if (ref.watch(canManageActiveVenueProvider).valueOrNull ??
+                false) ...[
+              const SizedBox(height: 16),
+              OutlinedButton.icon(
+                onPressed: () => context.go('/ask-data'),
+                icon: const Icon(Icons.query_stats_outlined),
+                label: const Text('Ask about your data'),
+              ),
+            ],
           ],
         ),
       ),

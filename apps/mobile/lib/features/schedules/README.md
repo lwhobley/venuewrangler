@@ -27,5 +27,11 @@ and `20261002160000_shift_swaps_schema.sql`.
   assigned to, and even that goes through a database trigger (`apply_accepted_shift_swap`) —
   the app never writes `shifts.staff_id` directly for a swap.
 
+- `presentation/schedule_draft_screen.dart` + `domain/schedule_draft.dart` — "Draft week" (AI
+  `schedule_draft`, managers only): rules + week + max hours in, a review list out. Warnings
+  (overlap with existing or other ticked proposals, weekly-hours limit, approved time off, past,
+  outside the week) are computed in Dart; nothing is created until "Add selected", which uses
+  `createShift` per shift with venue-clock conversion; a refused shift keeps its line and its tick.
+
 **Not implemented yet:** any notion of a staff member seeing only their own shifts — every
 venue member currently sees the whole schedule, same breadth as `features/tasks`.

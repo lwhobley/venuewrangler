@@ -10,6 +10,7 @@ import 'inventory_item_screen.dart';
 import 'inventory_count_screen.dart';
 import 'inventory_admin_screen.dart';
 import 'inventory_import_screen.dart';
+import 'inventory_reorder_screen.dart';
 import 'inventory_action_sheet.dart';
 
 class InventoryListScreen extends ConsumerStatefulWidget {
@@ -41,6 +42,14 @@ class _InventoryListState extends ConsumerState<InventoryListScreen> {
       appBar: AppBar(
         title: const Text('Inventory Hub'),
         actions: [
+          if (manager)
+            IconButton(
+              tooltip: 'Suggest reorder',
+              icon: const Icon(Icons.shopping_cart_checkout_outlined),
+              onPressed: () => open(
+                InventoryReorderScreen(scope: scope, venueName: venue.name),
+              ),
+            ),
           if (manager)
             IconButton(
               tooltip: 'Review invoice or count sheet',

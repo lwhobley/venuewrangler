@@ -69,6 +69,8 @@ class _ShiftModeScreenState extends ConsumerState<ShiftModeScreen> {
     final queue = ref.watch(offlineQueueControllerProvider);
     final pending = pendingTaskStatuses(queue.pending, userId: userId);
     final unread = ref.watch(unreadNotificationsCountProvider);
+    final canManage =
+        ref.watch(canManageActiveVenueProvider).valueOrNull ?? false;
 
     return Scaffold(
       appBar: AppBar(
@@ -183,6 +185,12 @@ class _ShiftModeScreenState extends ConsumerState<ShiftModeScreen> {
                   badge: unread,
                   onTap: () => context.go('/notifications'),
                 ),
+                if (canManage)
+                  _ActionTile(
+                    icon: Icons.assignment_turned_in_outlined,
+                    label: 'Handover',
+                    onTap: () => context.push('/handover'),
+                  ),
               ],
             ),
           ],

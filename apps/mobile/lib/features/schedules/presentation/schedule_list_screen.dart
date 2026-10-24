@@ -13,6 +13,7 @@ import '../../venues/presentation/venue_time_widgets.dart';
 import '../../workforce/domain/workforce_models.dart';
 import '../application/schedules_providers.dart';
 import '../domain/shift.dart';
+import 'schedule_draft_screen.dart';
 
 /// Shift schedule for the active venue. Every venue member can view; only a manager tier can
 /// create/delete (see schedules_schema.sql). The AI "Suggest coverage" action is advisory
@@ -127,6 +128,17 @@ class ScheduleListScreen extends ConsumerWidget {
                   onPressed: () => _showSuggestDialog(context, ref, venue.id),
                   icon: const Icon(Icons.auto_awesome_outlined),
                   label: const Text('Suggest coverage'),
+                ),
+                const SizedBox(height: 12),
+                FloatingActionButton.extended(
+                  heroTag: 'draft-week',
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => ScheduleDraftScreen(venueId: venue.id),
+                    ),
+                  ),
+                  icon: const Icon(Icons.event_note_outlined),
+                  label: const Text('Draft week'),
                 ),
                 const SizedBox(height: 12),
                 FloatingActionButton.extended(

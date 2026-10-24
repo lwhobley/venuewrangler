@@ -49,6 +49,7 @@ Future<_Repo> _pump(
   WidgetTester tester, {
   String timezone = 'America/Chicago',
   List<Shift> shifts = const [],
+  bool manager = true,
 }) async {
   tester.view.physicalSize = const Size(900, 1600);
   tester.view.devicePixelRatio = 1;
@@ -66,7 +67,7 @@ Future<_Repo> _pump(
       overrides: [
         activeVenueProvider.overrideWith((ref) => venue),
         schedulesRepositoryProvider.overrideWithValue(repo),
-        canManageActiveVenueProvider.overrideWith((ref) async => true),
+        canManageActiveVenueProvider.overrideWith((ref) async => manager),
         currentUserIdProvider.overrideWithValue('boss'),
         scheduleRosterForVenueProvider
             .overrideWith((ref, venueId) async => const [_alice]),
@@ -162,5 +163,15 @@ void main() {
     expect(find.text('Assigned to'), findsNothing);
     expect(find.textContaining("isn't supported"), findsWidgets);
     expect(repo.created, isEmpty);
+  });
+
+  testWidgets('managers are offered Draft week', (tester) async {
+    await _pump(tester);
+    expect(find.text('Draft week'), findsOneWidget);
+  });
+
+  testWidgets('staff are not offered Draft week', (tester) async {
+    await _pump(tester, manager: false);
+    expect(find.text('Draft week'), findsNothing);
   });
 }
