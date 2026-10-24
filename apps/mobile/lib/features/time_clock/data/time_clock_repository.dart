@@ -21,6 +21,8 @@ abstract interface class TimeClockRepository {
     int limit = 20,
   });
 
+  /// Entries still open at [venueId] (managers' RLS), newest first; the shift handover uses it to
+  /// carry missed clock-outs over from earlier days.
   Future<List<TimeEntry>> getVenueEntries({
     required String venueId,
     int limit = 50,
