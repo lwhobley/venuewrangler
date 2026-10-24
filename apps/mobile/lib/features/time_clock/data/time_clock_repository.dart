@@ -21,6 +21,15 @@ abstract interface class TimeClockRepository {
     int limit = 20,
   });
 
+  /// Every person's entries at [venueId] that clocked in within [from, to), open or finished
+  /// (managers' RLS; the shift handover reviews them for exceptions).
+  Future<List<TimeEntry>> getVenueEntriesInRange({
+    required String venueId,
+    required DateTime from,
+    required DateTime to,
+    int limit = 200,
+  });
+
   Future<TimeEntry> clockIn({
     required String venueId,
     String? shiftId,
@@ -108,6 +117,57 @@ class SupabaseTimeClockRepository implements TimeClockRepository {
           .eq('venue_id', venueId)
           .eq('user_id', user.id)
           .order('clock_in_at', ascending: false)
+          .limit(limit);
+
+      return (rows as List<dynamic>)
+          .map((row) => TimeEntry.fromJson(row as Map<String, dynamic>))
+          .toList(growable: false);
+    } on PostgrestException catch (e) {
+      throw _mapPostgrestException(e);
+    } catch (_) {
+      throw const NetworkError();
+    }
+  }
+
+  @override
+  Future<List<TimeEntry>> getVenueEntries({
+    required String venueId,
+    int limit = 50,
+  }) async {
+    try {
+      final rows = await _client
+          .from('time_entries')
+          .select()
+          .eq('venue_id', venueId)
+          .eq('is_open', true)
+          .order('clock_in_at', ascending: false)
+          .limit(limit);
+
+      return (rows as List<dynamic>)
+          .map((row) => TimeEntry.fromJson(row as Map<String, dynamic>))
+          .toList(growable: false);
+    } on PostgrestException catch (e) {
+      throw _mapPostgrestException(e);
+    } catch (_) {
+      throw const NetworkError();
+    }
+  }
+
+  @override
+  Future<List<TimeEntry>> getVenueEntriesInRange({
+    required String venueId,
+    required DateTime from,
+    required DateTime to,
+    int limit = 200,
+  }) async {
+    try {
+      final rows = await _client
+          .from('time_entries')
+          .select()
+          .eq('venue_id', venueId)
+          .gte('clock_in_at', from.toUtc().toIso8601String())
+          .lt('clock_in_at', to.toUtc().toIso8601String())
+          .order('clock_in_at', ascending: true)
           .limit(limit);
 
       return (rows as List<dynamic>)

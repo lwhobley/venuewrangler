@@ -15,6 +15,13 @@ class _FakeChecklistsRepository implements ChecklistsRepository {
   final List<ChecklistTemplate> templates;
 
   @override
+  Future<Set<String>> fetchCompletedTemplateIdsSince(
+    String venueId,
+    DateTime since,
+  ) async =>
+      {};
+
+  @override
   Future<List<ChecklistTemplate>> fetchTemplatesForVenue(
     String venueId,
   ) async =>

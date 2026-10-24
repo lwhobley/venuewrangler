@@ -250,6 +250,29 @@ void main() {
     expect(find.text('No BEOs yet.'), findsOneWidget);
   });
 
+  testWidgets('the app bar opens the enquiry dialog; manual forms remain',
+      (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          activeVenueProvider.overrideWith((ref) => testVenue),
+          crmRepositoryProvider.overrideWithValue(_FakeCrmRepository()),
+        ],
+        child: const MaterialApp(home: CrmScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('New lead/BEO from enquiry'));
+    await tester.pumpAndSettle();
+    expect(find.text('Read with AI'), findsOneWidget);
+    expect(find.text('Fill in by hand'), findsOneWidget);
+
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(find.byIcon(Icons.person_add_alt_1_outlined), findsOneWidget);
+  });
+
   testWidgets('opens a formatted BEO with details and recorded charges',
       (tester) async {
     final now = DateTime.utc(2026, 10, 7);

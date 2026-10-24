@@ -176,3 +176,209 @@ class ShiftInsightsResult {
             .toList(growable: false),
       );
 }
+
+// --- Shift handover summary (`handover_summary`) -------------------------------------------
+//
+// Model output is untrusted: every field is optional, wrong types are dropped rather than
+// thrown on, and sizes are capped so one runaway response cannot flood the screen.
+
+String? _enquiryText(Object? value, {int max = 300}) {
+  if (value is! String) return null;
+  final text = value.trim();
+  if (text.isEmpty) return null;
+  return text.length > max ? text.substring(0, max).trimRight() : text;
+}
+
+List<String> _enquiryTextList(
+  Object? value, {
+  int maxItems = 20,
+  int maxLength = 200,
+}) {
+  if (value is! List) return const [];
+  final out = <String>[];
+  for (final entry in value) {
+    final text = _enquiryText(entry, max: maxLength);
+    if (text != null) out.add(text);
+    if (out.length >= maxItems) break;
+  }
+  return out;
+}
+
+num? _enquiryNumber(Object? value) {
+  if (value is num) return value.isFinite ? value : null;
+  if (value is String) {
+    final parsed = num.tryParse(value.replaceAll(RegExp(r'[,$\s]'), ''));
+    return parsed != null && parsed.isFinite ? parsed : null;
+  }
+  return null;
+}
+
+class HandoverSection {
+  const HandoverSection({required this.title, required this.items});
+
+  final String title;
+  final List<String> items;
+
+  static HandoverSection? tryParse(Object? json) {
+    if (json is! Map) return null;
+    final title = _enquiryText(json['title'], max: 80);
+    final items = _enquiryTextList(json['items'], maxLength: 300);
+    if (title == null || items.isEmpty) return null;
+    return HandoverSection(title: title, items: items);
+  }
+}
+
+class HandoverSummaryResult {
+  const HandoverSummaryResult({required this.summary, required this.sections});
+
+  final String summary;
+  final List<HandoverSection> sections;
+
+  factory HandoverSummaryResult.fromJson(Map<String, dynamic> json) {
+    final sections = <HandoverSection>[];
+    final raw = json['sections'];
+    if (raw is List) {
+      for (final entry in raw) {
+        final section = HandoverSection.tryParse(entry);
+        if (section != null) sections.add(section);
+        if (sections.length >= 12) break;
+      }
+    }
+    return HandoverSummaryResult(
+      summary: _enquiryText(json['summary'], max: 600) ?? '',
+      sections: sections,
+    );
+  }
+
+  bool get isEmpty => summary.isEmpty && sections.isEmpty;
+
+  /// The plain-text note the manager edits, copies or posts.
+  String toText() {
+    final buffer = StringBuffer();
+    if (summary.isNotEmpty) buffer.writeln(summary);
+    for (final section in sections) {
+      if (buffer.isNotEmpty) buffer.writeln();
+      buffer.writeln(section.title);
+      for (final item in section.items) {
+        buffer.writeln('- $item');
+      }
+    }
+    return buffer.toString().trimRight();
+  }
+}
+
+// --- Event enquiry (`event_enquiry_parse`) --------------------------------------------------
+
+/// What the model pulled out of a pasted client enquiry. Every field is nullable: nothing here
+/// is a fact until the manager confirms it in the preview form. Dates are venue wall dates
+/// (UTC-flagged midnight, like the rest of the app's wall times) and times are minutes since
+/// midnight on the venue's clock — never an instant, never with an offset.
+class EventEnquiryResult {
+  const EventEnquiryResult({
+    this.contactName,
+    this.contactEmail,
+    this.contactPhone,
+    this.company,
+    this.eventName,
+    this.eventType,
+    this.eventDate,
+    this.startMinutes,
+    this.endMinutes,
+    this.guestCount,
+    this.budgetUsd,
+    this.requestedItems = const [],
+    this.notes,
+    this.uncertain = const {},
+    this.missing = const [],
+  });
+
+  final String? contactName;
+  final String? contactEmail;
+  final String? contactPhone;
+  final String? company;
+  final String? eventName;
+  final String? eventType;
+  final DateTime? eventDate;
+  final int? startMinutes;
+  final int? endMinutes;
+  final int? guestCount;
+  final num? budgetUsd;
+  final List<String> requestedItems;
+  final String? notes;
+
+  /// Field keys (`contact_name`, `event_date`, ...) the model was unsure about, plus any value
+  /// this parser had to reject.
+  final Set<String> uncertain;
+
+  /// Things the manager still has to ask the client.
+  final List<String> missing;
+
+  static final _email = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$');
+
+  factory EventEnquiryResult.fromJson(Map<String, dynamic> json) {
+    final uncertain = <String>{
+      for (final key in _enquiryTextList(json['uncertain'], maxLength: 40))
+        key.toLowerCase(),
+    };
+
+    String? email = _enquiryText(json['contact_email'], max: 120);
+    if (email != null && !_email.hasMatch(email)) {
+      email = null;
+      uncertain.add('contact_email');
+    }
+
+    DateTime? date;
+    final dateText = _enquiryText(json['event_date'], max: 10);
+    if (dateText != null) {
+      final match = RegExp(r'^(\d{4})-(\d{2})-(\d{2})$').firstMatch(dateText);
+      if (match != null) {
+        final y = int.parse(match.group(1)!);
+        final m = int.parse(match.group(2)!);
+        final d = int.parse(match.group(3)!);
+        final candidate = DateTime.utc(y, m, d);
+        if (y >= 2000 &&
+            y <= 2100 &&
+            candidate.month == m &&
+            candidate.day == d) {
+          date = candidate;
+        }
+      }
+      if (date == null) uncertain.add('event_date');
+    }
+
+    int? minutes(Object? value, String key) {
+      final text = _enquiryText(value, max: 5);
+      if (text == null) return null;
+      final match = RegExp(r'^(\d{1,2}):(\d{2})$').firstMatch(text);
+      final h = int.tryParse(match?.group(1) ?? '');
+      final m = int.tryParse(match?.group(2) ?? '');
+      if (h == null || m == null || h > 23 || m > 59) {
+        uncertain.add(key);
+        return null;
+      }
+      return h * 60 + m;
+    }
+
+    final guests = _enquiryNumber(json['guest_count']);
+    final budget = _enquiryNumber(json['budget_usd']);
+
+    return EventEnquiryResult(
+      contactName: _enquiryText(json['contact_name'], max: 120),
+      contactEmail: email,
+      contactPhone: _enquiryText(json['contact_phone'], max: 40),
+      company: _enquiryText(json['company'], max: 120),
+      eventName: _enquiryText(json['event_name'], max: 120),
+      eventType: _enquiryText(json['event_type'], max: 60),
+      eventDate: date,
+      startMinutes: minutes(json['start_time'], 'start_time'),
+      endMinutes: minutes(json['end_time'], 'end_time'),
+      guestCount: guests?.round().clamp(1, 10000),
+      budgetUsd:
+          budget == null || budget < 0 ? null : budget.clamp(0, 10000000),
+      requestedItems: _enquiryTextList(json['requested_items']),
+      notes: _enquiryText(json['notes'], max: 1000),
+      uncertain: uncertain,
+      missing: _enquiryTextList(json['missing'], maxItems: 15),
+    );
+  }
+}

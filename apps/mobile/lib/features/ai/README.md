@@ -7,7 +7,7 @@ previewed/advisory for the user to accept, edit, or ignore.
 
 - `domain/ai_models.dart` — result types for the task types the Edge Function supports:
   `StaffImportResult`, `InventoryParseResult`, `SchedulingSuggestionResult`,
-  `WranglerAskResult`, `ShiftInsightsResult`.
+  `WranglerAskResult`, `ShiftInsightsResult`, `HandoverSummaryResult`, `EventEnquiryResult`.
 - `data/ai_repository.dart` — `AiRepository` interface + `SupabaseAiRepository`, which calls
   `client.functions.invoke('ai-assistant', ...)` and maps the Edge Function's JSON error
   codes (budget exceeded, rate limited, not a venue member, `ai_disabled_for_org`, etc.) to
@@ -39,6 +39,23 @@ previewed/advisory for the user to accept, edit, or ignore.
   venue date and roster names keyed `staff_1`… (see `schedules/domain/coverage_request.dart`);
   the prompt asks for those keys plus `staff_name`/`role_label` back.
 - `shift_insights` — `features/insights`.
+- `handover_summary` (manager-only) — "Handover" tile in shift mode (managers only), routed at
+  `/handover` (`features/handover`). The facts are gathered on the device by
+  `HandoverFacts.gather` (incidents with severity, out/low stock, unfinished tasks and
+  checklists, clock exceptions, tonight's events and reservations, open to-dos) for the venue's
+  business day via `VenueClock`; only a compact JSON of them is sent. It contains the typed
+  titles of incidents/tasks/checklists/items/events, counts and venue-local times. It never
+  contains ids, pay, guest names or contact/allergy details, and staff appear only as `staff_N`
+  keys that the app swaps for names after the draft comes back. Without AI (off, declined, or
+  failing) the same facts show as a list and the note editor starts from a plain-text version.
+  Copy and "Post to team chat (All Staff)" are manual and the post asks for confirmation.
+- `event_enquiry_parse` (manager-only) — CRM app bar "New lead/BEO from enquiry"
+  (`features/crm/presentation/enquiry_import_dialog.dart`). The pasted email/message is sent
+  as typed (capped at 6,000 characters) with today's venue date. Contact name, email and phone
+  are the point of the request, so they are sent by necessity; the consent dialog says a pasted
+  roster or client enquiry can include them. The result only prefills an editable form (unsure
+  fields highlighted, missing list shown); the lead (and optional BEO draft) is created on
+  confirm via `CrmRepository`. "Fill in by hand" opens the same form without AI.
 
 ## Behaviour to keep
 

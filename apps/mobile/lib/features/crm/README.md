@@ -72,6 +72,11 @@ Cancelling a BEO asks first (naming its date, guests and recorded charges) and o
 a cancelled BEO whose date hasn't passed shows Restore (`presentation/beo_cancellation.dart`).
 The New lead / New BEO / Add note forms (`presentation/crm_form_dialogs.dart`) save from
 inside the dialog and close only on success, so a blank field or failed save never loses input.
+The app bar's "New lead/BEO from enquiry" (`presentation/enquiry_import_dialog.dart`) takes a
+pasted client email/message, has AI (`event_enquiry_parse`, manager-only) extract it into an
+editable, highlighted preview form, and on confirm creates the lead, a note carrying the
+details with no column of their own (end time, items, budget, what to ask), and optionally a
+BEO draft linked to the lead. A retry after a partial failure never duplicates what was saved.
 `presentation/crm_lead_detail_screen.dart` — a lead's notes and activity trail, plus inline
 status change. Both rely entirely on RLS for authorization, same as every other feature in this
 app — no client-side role check duplicates what the database already enforces.

@@ -9,6 +9,7 @@ import '../domain/crm_beo.dart';
 import '../domain/crm_contract.dart';
 import 'beo_cancellation.dart';
 import 'crm_form_dialogs.dart';
+import 'enquiry_import_dialog.dart';
 import 'crm_lead_detail_screen.dart';
 import 'crm_beo_detail_screen.dart';
 
@@ -31,6 +32,13 @@ class CrmScreen extends ConsumerWidget {
       child: Scaffold(
         appBar: AppBar(
           title: const Text('CRM'),
+          actions: [
+            IconButton(
+              tooltip: 'New lead/BEO from enquiry',
+              icon: const Icon(Icons.auto_awesome),
+              onPressed: () => _showEnquiryDialog(context, ref, venue.id),
+            ),
+          ],
           bottom: const TabBar(
             tabs: [
               Tab(text: 'Leads'),
@@ -50,6 +58,24 @@ class CrmScreen extends ConsumerWidget {
         ),
       ),
     );
+  }
+}
+
+Future<void> _showEnquiryDialog(
+  BuildContext context,
+  WidgetRef ref,
+  String venueId,
+) async {
+  final clock = ref.read(venueClockProvider);
+  if (!ensureSupported(context, clock)) return;
+  final created = await showDialog<bool>(
+    context: context,
+    barrierDismissible: false,
+    builder: (_) => EnquiryImportDialog(venueId: venueId, clock: clock),
+  );
+  if (created == true) {
+    ref.invalidate(crmLeadsProvider(venueId));
+    ref.invalidate(crmBeosProvider(venueId));
   }
 }
 

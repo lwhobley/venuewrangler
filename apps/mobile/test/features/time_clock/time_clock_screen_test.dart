@@ -25,6 +25,15 @@ class _FakeTimeClockRepository implements TimeClockRepository {
   TimeEntry? openElsewhere;
   List<TimeEntry> entries;
 
+  @override
+  Future<List<TimeEntry>> getVenueEntriesInRange({
+    required String venueId,
+    required DateTime from,
+    required DateTime to,
+    int limit = 200,
+  }) async =>
+      entries;
+
   bool clockInCalled = false;
   bool clockOutCalled = false;
   bool startBreakCalled = false;
