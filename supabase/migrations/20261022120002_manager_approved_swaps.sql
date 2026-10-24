@@ -226,7 +226,7 @@ begin
     perform app_hidden.assert_no_shift_overlap(new.accepted_by, old.shift_id);
     update public.shifts set staff_id = new.accepted_by
       where id = old.shift_id and venue_id = old.venue_id
-        and staff_id = old.requested_by;
+        and staff_id = old.requested_by and status = 'scheduled';
     if not found then
       raise exception 'shift assignment changed; request a new swap'
         using errcode = '40001';
@@ -277,7 +277,15 @@ begin
     raise exception 'shift assignment changed; request a new swap' using errcode = '40001';
   end if;
 
-  perform set_config('app.allow_shift_overlap', case when p_allow_overlap then 'on' else '' end, true);
+  -- Only a manager can override the double-booking check; for staff it is always enforced.
+  perform set_config(
+    'app.allow_shift_overlap',
+    case when p_allow_overlap and app_hidden.has_venue_role(
+      v_swap.venue_id,
+      array['venue_manager', 'organization_owner', 'organization_admin']::public.app_role[]
+    ) then 'on' else '' end,
+    true
+  );
   perform app_hidden.assert_no_shift_overlap(v_uid, v_shift.id);
 
   perform set_config('app.shift_swap_transition', 'on', true);
@@ -339,6 +347,13 @@ begin
   if v_taker is null then
     raise exception 'no teammate has offered to take this shift yet' using errcode = '22023';
   end if;
+  if not exists (
+    select 1 from public.shifts
+     where id = v_swap.shift_id and staff_id is not distinct from v_swap.requested_by
+       and status = 'scheduled'
+  ) then
+    raise exception 'shift assignment changed; request a new swap' using errcode = '40001';
+  end if;
 
   perform set_config('app.allow_shift_overlap', case when p_allow_overlap then 'on' else '' end, true);
   perform set_config('app.shift_swap_transition', 'on', true);
@@ -352,10 +367,58 @@ begin
 end;
 $$;
 
+-- A claimer can withdraw before a manager approves; the swap goes back to open.
+create or replace function public.unclaim_shift_swap(p_swap_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_swap public.shift_swaps%rowtype;
+begin
+  if v_uid is null then
+    raise exception 'Authentication required' using errcode = '42501';
+  end if;
+  select * into v_swap from public.shift_swaps where id = p_swap_id for update;
+  if not found or v_swap.status <> 'claimed' or v_swap.accepted_by is distinct from v_uid then
+    raise exception 'you have not taken this swap' using errcode = '42501';
+  end if;
+  perform set_config('app.shift_swap_transition', 'on', true);
+  update public.shift_swaps
+    set status = 'pending', accepted_by = null, claimed_at = null
+    where id = p_swap_id;
+  perform set_config('app.shift_swap_transition', '', true);
+end;
+$$;
+
+-- A claimed swap whose claimer's account is deleted (accepted_by set null) would otherwise be
+-- stuck: nobody to approve and no longer open. Reopen it. Named zz_ so it runs after the
+-- enforce_shift_swap_update guard has accepted the change.
+create or replace function app_hidden.reopen_orphaned_claimed_swap()
+returns trigger language plpgsql security definer set search_path = '' as $$
+begin
+  if new.status = 'claimed' and new.accepted_by is null then
+    new.status := 'pending';
+    new.claimed_at := null;
+  end if;
+  return new;
+end;
+$$;
+
+revoke all on function app_hidden.reopen_orphaned_claimed_swap() from public, anon, authenticated;
+
+create trigger zz_shift_swaps_reopen_orphaned_claim
+  before update on public.shift_swaps
+  for each row execute function app_hidden.reopen_orphaned_claimed_swap();
+
 revoke all on function public.claim_shift_swap(uuid, boolean) from public, anon;
 grant execute on function public.claim_shift_swap(uuid, boolean) to authenticated;
 revoke all on function public.approve_shift_swap(uuid, boolean) from public, anon;
 grant execute on function public.approve_shift_swap(uuid, boolean) to authenticated;
+revoke all on function public.unclaim_shift_swap(uuid) from public, anon;
+grant execute on function public.unclaim_shift_swap(uuid) to authenticated;
 
 -- ---------------------------------------------------------------------------
 -- Tell the people involved

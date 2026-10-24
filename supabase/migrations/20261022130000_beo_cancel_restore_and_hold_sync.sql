@@ -24,6 +24,28 @@ alter table public.crm_beos
     or status_before_cancel in ('draft', 'sent', 'reviewed', 'confirmed', 'amended')
   );
 
+-- Backfill BEOs cancelled before this migration so Restore returns them to what they were, not
+-- to 'draft'. The activity log records "<old> -> cancelled" per lead, so this is only exact
+-- where the lead has a single BEO; the rest stay null and restore as drafts (safe: a draft
+-- holds nothing, and confirming it again re-runs the conflict check). Runs before the tracking
+-- trigger below exists, which would otherwise preserve the null.
+update public.crm_beos b
+   set cancelled_at = coalesce(b.cancelled_at, b.updated_at),
+       status_before_cancel = l.previous_status
+  from (
+    select distinct on (a.lead_id) a.lead_id, split_part(a.detail, ' -> ', 1) as previous_status
+      from public.crm_activity_log a
+     where a.kind = 'beo_status_changed' and a.detail like '% -> cancelled'
+     order by a.lead_id, a.created_at desc
+  ) l
+ where b.status = 'cancelled'
+   and b.lead_id = l.lead_id
+   and l.previous_status in ('draft', 'sent', 'reviewed', 'confirmed', 'amended')
+   and (select count(*) from public.crm_beos o where o.lead_id = b.lead_id) = 1;
+
+update public.crm_beos set cancelled_at = updated_at
+ where status = 'cancelled' and cancelled_at is null;
+
 -- Server-maintained: whatever a client writes to these two columns is overwritten here.
 create or replace function app_hidden.crm_beos_track_cancellation()
 returns trigger

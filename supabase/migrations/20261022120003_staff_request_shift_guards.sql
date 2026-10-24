@@ -22,7 +22,8 @@ begin
   if new.requested_shift_id is null then
     raise exception 'choose the shift for this request' using errcode = '22023';
   end if;
-  select * into v_shift from public.shifts where id = new.requested_shift_id;
+  select * into v_shift from public.shifts
+   where id = new.requested_shift_id and venue_id = new.venue_id;
   if not found or v_shift.status <> 'scheduled' then
     raise exception 'that shift is no longer on the schedule' using errcode = '22023';
   end if;

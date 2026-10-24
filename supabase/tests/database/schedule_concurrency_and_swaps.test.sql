@@ -6,7 +6,7 @@
 -- Victor (...009); org B owner (...006).
 
 begin;
-select plan(38);
+select plan(46);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-000000000004', 'devon@example.com'),
@@ -157,10 +157,21 @@ select is(
   (select status from public.shift_swaps where id = '50000000-0000-0000-0000-000000000001'),
   'pending', 'the refused take left the swap open'
 );
-select is(
-  public.claim_shift_swap('50000000-0000-0000-0000-000000000001', true),
-  'claimed', 'Jada can take it anyway with an explicit override'
+select throws_like(
+  $$ select public.claim_shift_swap('50000000-0000-0000-0000-000000000001', true) $$,
+  'shift_overlap:%',
+  'staff cannot override the double-booking check when taking a shift'
 );
+
+-- Seed the claimed state a double-booked claim would have reached (only a manager can force it).
+reset role;
+select set_config('app.shift_swap_transition', 'on', true);
+update public.shift_swaps
+   set status = 'claimed', accepted_by = '00000000-0000-0000-0000-000000000008', claimed_at = now()
+ where id = '50000000-0000-0000-0000-000000000001';
+select set_config('app.shift_swap_transition', '', true);
+set local role authenticated;
+set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-000000000008';
 select is(
   (select staff_id from public.shifts where id = '40000000-0000-0000-0000-000000000001'),
   '00000000-0000-0000-0000-000000000005'::uuid,
@@ -325,6 +336,79 @@ select ok(
      and kind = 'staff_request' and title = 'Request denied'
      and body = 'Time off Sat Oct 24 — Short-staffed') = 1,
   'the requester is told the outcome'
+);
+
+-- ---------------------------------------------------------------------------
+-- Review follow-ups: cancelled shifts, withdrawing a claim, orphaned claims, cross-venue shifts
+-- ---------------------------------------------------------------------------
+
+reset role;
+set local role authenticated;
+set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-000000000009';
+insert into public.shift_swaps (id, shift_id) values
+  ('50000000-0000-0000-0000-000000000005', '40000000-0000-0000-0000-000000000003');
+
+reset role;
+set local role authenticated;
+set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-000000000008';
+select is(
+  public.claim_shift_swap('50000000-0000-0000-0000-000000000005'),
+  'claimed', 'Jada takes Victor''s Friday shift (no clash)'
+);
+select lives_ok(
+  $$ select public.unclaim_shift_swap('50000000-0000-0000-0000-000000000005') $$,
+  'a claimer can withdraw before approval'
+);
+select results_eq(
+  $$ select status, accepted_by from public.shift_swaps where id = '50000000-0000-0000-0000-000000000005' $$,
+  $$ values ('pending'::text, null::uuid) $$,
+  '...and the swap is open again'
+);
+select throws_ok(
+  $$ select public.unclaim_shift_swap('50000000-0000-0000-0000-000000000005') $$,
+  '42501', null, 'you cannot withdraw a claim you do not hold'
+);
+select is(
+  public.claim_shift_swap('50000000-0000-0000-0000-000000000005'),
+  'claimed', 'Jada claims it again'
+);
+
+-- The claimer's account goes away: the swap reopens instead of getting stuck.
+reset role;
+select set_config('app.shift_swap_transition', 'on', true);
+update public.shift_swaps set accepted_by = null where id = '50000000-0000-0000-0000-000000000005';
+select set_config('app.shift_swap_transition', '', true);
+select is(
+  (select status from public.shift_swaps where id = '50000000-0000-0000-0000-000000000005'),
+  'pending', 'a claimed swap whose claimer vanished reopens'
+);
+
+-- A cancelled shift cannot be handed over by approval.
+set local role authenticated;
+set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-000000000008';
+select public.claim_shift_swap('50000000-0000-0000-0000-000000000005');
+reset role;
+update public.shifts set status = 'cancelled' where id = '40000000-0000-0000-0000-000000000003';
+set local role authenticated;
+set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-000000000004';
+select throws_ok(
+  $$ select public.approve_shift_swap('50000000-0000-0000-0000-000000000005') $$,
+  '40001', null, 'approval refuses a shift that was cancelled in the meantime'
+);
+
+-- A staff request cannot probe another venue's shifts.
+reset role;
+insert into public.shifts (id, venue_id, staff_id, role_label, start_time, end_time)
+values ('40000000-0000-0000-0000-0000000000b1', '20000000-0000-0000-0000-0000000000b1', null,
+        'Host', '2026-10-25 20:00Z', '2026-10-26 02:00Z');
+set local role authenticated;
+set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-000000000009';
+select throws_ok(
+  $$ insert into public.staff_requests (venue_id, kind, title, requested_shift_id)
+     values ('20000000-0000-0000-0000-0000000000a1', 'add_shift', 'Pick up elsewhere',
+             '40000000-0000-0000-0000-0000000000b1') $$,
+  'P0001', null,
+  'a request cannot name a shift from another venue'
 );
 
 select * from finish();
