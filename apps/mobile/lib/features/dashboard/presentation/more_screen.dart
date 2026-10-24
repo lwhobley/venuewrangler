@@ -49,6 +49,7 @@ const _sections = <(String, List<_Item>)>[
     'Account',
     [
       _Item(Icons.auto_awesome_outlined, 'Ask Wrangler', '/wrangler'),
+      _Item(Icons.query_stats_outlined, 'Ask about your data', '/ask-data'),
       _Item(Icons.credit_card_outlined, 'Billing', '/billing'),
       _Item(Icons.extension_outlined, 'Integrations', '/integrations'),
       _Item(Icons.settings_outlined, 'Settings', '/settings'),
@@ -80,6 +81,7 @@ class MoreScreen extends ConsumerWidget {
     final role = ref.watch(myVenueRoleProvider).valueOrNull;
     final canSeeBilling =
         role == 'organization_owner' || role == 'organization_admin';
+    final canAskData = canSeeBilling || role == 'venue_manager';
     return Scaffold(
       appBar: AppBar(title: const Text('More')),
       body: ListView(
@@ -96,7 +98,8 @@ class MoreScreen extends ConsumerWidget {
             _Group(
               children: [
                 for (final item in items)
-                  if (item.route != '/billing' || canSeeBilling)
+                  if ((item.route != '/billing' || canSeeBilling) &&
+                      (item.route != '/ask-data' || canAskData))
                     ListTile(
                       leading:
                           Icon(item.icon, color: theme.colorScheme.primary),

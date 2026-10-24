@@ -64,6 +64,20 @@ abstract interface class AiRepository {
     required String venueId,
     required String context,
   });
+
+  /// "Ask about your data" step 1: [input] is JSON with the question, today's venue date and the
+  /// metric catalogue (no data). The result is untrusted until validated.
+  Future<DataQuestionPlan> planDataQuestion({
+    required String venueId,
+    required String input,
+  });
+
+  /// "Ask about your data" step 2: [input] is JSON with the question and the aggregate results of
+  /// the validated calls.
+  Future<DataQuestionAnswer> answerDataQuestion({
+    required String venueId,
+    required String input,
+  });
 }
 
 class SupabaseAiRepository implements AiRepository {
@@ -150,6 +164,19 @@ class SupabaseAiRepository implements AiRepository {
   }
 
   @override
+  Future<DataQuestionPlan> planDataQuestion({
+    required String venueId,
+    required String input,
+  }) async {
+    return _invoke(
+      task: 'data_question_plan',
+      venueId: venueId,
+      input: input,
+      parse: DataQuestionPlan.fromJson,
+    );
+  }
+
+  @override
   Future<ScheduleDraftResult> draftSchedule({
     required String venueId,
     required String context,
@@ -185,6 +212,19 @@ class SupabaseAiRepository implements AiRepository {
       venueId: venueId,
       input: context,
       parse: InventoryReorderResult.fromJson,
+    );
+  }
+
+  @override
+  Future<DataQuestionAnswer> answerDataQuestion({
+    required String venueId,
+    required String input,
+  }) async {
+    return _invoke(
+      task: 'data_question_answer',
+      venueId: venueId,
+      input: input,
+      parse: DataQuestionAnswer.fromJson,
     );
   }
 
@@ -243,6 +283,9 @@ class SupabaseAiRepository implements AiRepository {
       'venue_not_found_or_not_a_member' => const PermissionDeniedError(
           "You don't have access to AI features for this venue.",
         ),
+      'manager_permission_required' => const PermissionDeniedError(
+          'Only managers of this venue can use this AI feature.',
+        ),
       'ai_disabled_for_org' => const AiUnavailableError(
           'AI features are turned off for this organization. An owner or admin '
           'can turn them on in Settings.',
@@ -270,9 +313,6 @@ class SupabaseAiRepository implements AiRepository {
       'ai_response_not_valid_json' =>
         const AiUnavailableError(
           'The AI assistant is temporarily unavailable. Please try again shortly.',
-        ),
-      'manager_permission_required' => const PermissionDeniedError(
-          'Only managers can use this AI feature.',
         ),
       'invalid_or_expired_session' =>
         const AuthError('Your session has expired. Please sign in again.'),

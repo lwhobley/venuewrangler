@@ -507,3 +507,45 @@ class InventoryReorderResult {
             .toList(growable: false),
       );
 }
+
+/// `data_question_plan`: which catalogue metrics (and parameters) the model picked to answer a
+/// manager's question. Everything here is untrusted model output; only
+/// `DataCatalogue.validatePlan` (data_catalogue.dart) turns it into calls that may run.
+class DataQuestionPlan {
+  const DataQuestionPlan({
+    this.rawCalls = const [],
+    this.unanswerableReason,
+  });
+
+  /// Entries exactly as the model returned them (maps with a metric and params, or junk).
+  final List<Object?> rawCalls;
+  final String? unanswerableReason;
+
+  factory DataQuestionPlan.fromJson(Map<String, dynamic> json) {
+    final calls = json['calls'];
+    final reason = json['unanswerable_reason'];
+    return DataQuestionPlan(
+      rawCalls: calls is List ? List<Object?>.of(calls) : const [],
+      unanswerableReason:
+          reason is String && reason.trim().isNotEmpty ? reason.trim() : null,
+    );
+  }
+}
+
+/// `data_question_answer`: the short answer written from the aggregate results.
+class DataQuestionAnswer {
+  const DataQuestionAnswer({required this.answer, this.caveats});
+
+  final String answer;
+  final String? caveats;
+
+  factory DataQuestionAnswer.fromJson(Map<String, dynamic> json) {
+    final caveats = json['caveats'];
+    return DataQuestionAnswer(
+      answer: json['answer'] as String,
+      caveats: caveats is String && caveats.trim().isNotEmpty
+          ? caveats.trim()
+          : null,
+    );
+  }
+}

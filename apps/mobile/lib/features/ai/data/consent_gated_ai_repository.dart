@@ -100,4 +100,22 @@ class ConsentGatedAiRepository implements AiRepository {
     await _gate();
     return _inner.suggestReorder(venueId: venueId, context: context);
   }
+
+  @override
+  Future<DataQuestionPlan> planDataQuestion({
+    required String venueId,
+    required String input,
+  }) async {
+    await _gate();
+    return _inner.planDataQuestion(venueId: venueId, input: input);
+  }
+
+  @override
+  Future<DataQuestionAnswer> answerDataQuestion({
+    required String venueId,
+    required String input,
+  }) async {
+    await _gate();
+    return _inner.answerDataQuestion(venueId: venueId, input: input);
+  }
 }

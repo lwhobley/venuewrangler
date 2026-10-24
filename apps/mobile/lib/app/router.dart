@@ -13,6 +13,7 @@ import '../features/checklists/presentation/checklist_list_screen.dart';
 import '../features/chat/presentation/chat_screen.dart';
 import '../features/crm/presentation/crm_screen.dart';
 import '../features/documents/presentation/documents_screen.dart';
+import '../features/ai/presentation/ask_data_screen.dart';
 import '../features/ai/presentation/wrangler_assistant_screen.dart';
 import '../features/dashboard/presentation/dashboard_screen.dart';
 import '../features/dashboard/presentation/more_screen.dart';
@@ -350,6 +351,10 @@ StatefulShellRoute _fullShell(GlobalKey<NavigatorState> rootKey) {
           GoRoute(
             path: '/wrangler',
             builder: (context, state) => const WranglerAssistantScreen(),
+          ),
+          GoRoute(
+            path: '/ask-data',
+            builder: (context, state) => const AskDataScreen(),
           ),
         ],
       ),
