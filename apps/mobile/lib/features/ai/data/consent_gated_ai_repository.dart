@@ -64,4 +64,22 @@ class ConsentGatedAiRepository implements AiRepository {
     await _gate();
     return _inner.generateShiftInsights(venueId: venueId, context: context);
   }
+
+  @override
+  Future<HandoverSummaryResult> summarizeHandover({
+    required String venueId,
+    required String facts,
+  }) async {
+    await _gate();
+    return _inner.summarizeHandover(venueId: venueId, facts: facts);
+  }
+
+  @override
+  Future<EventEnquiryResult> parseEventEnquiry({
+    required String venueId,
+    required String enquiryText,
+  }) async {
+    await _gate();
+    return _inner.parseEventEnquiry(venueId: venueId, enquiryText: enquiryText);
+  }
 }

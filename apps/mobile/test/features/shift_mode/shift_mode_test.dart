@@ -235,6 +235,39 @@ void main() {
       expect(tasks.done, ['t1']);
     });
 
+    for (final manager in [true, false]) {
+      testWidgets(
+          'the Handover action is ${manager ? 'shown to' : 'hidden from'} '
+          '${manager ? 'managers' : 'everyone else'}', (tester) async {
+        tester.view.physicalSize = const Size(800, 1800);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              activeVenueProvider.overrideWith((ref) => venue),
+              currentUserIdProvider.overrideWithValue('me'),
+              canManageActiveVenueProvider.overrideWith((ref) async => manager),
+              schedulesRepositoryProvider
+                  .overrideWithValue(_Schedules(const [])),
+              tasksRepositoryProvider.overrideWithValue(_Tasks(const [])),
+              activeTimeEntryProvider.overrideWith((ref, id) async => null),
+              unreadNotificationsCountProvider.overrideWithValue(0),
+              offlineQueueStoreProvider.overrideWithValue(_Store()),
+            ],
+            child: MaterialApp(
+              theme: AppTheme.light(),
+              home: const ShiftModeScreen(),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('Handover'), manager ? findsOneWidget : findsNothing);
+      });
+    }
+
     testWidgets('with no shift or tasks it shows calm empty states',
         (tester) async {
       tester.view.physicalSize = const Size(800, 1800);

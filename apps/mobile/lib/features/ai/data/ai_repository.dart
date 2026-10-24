@@ -38,6 +38,18 @@ abstract interface class AiRepository {
     required String venueId,
     required String context,
   });
+
+  /// Manager-only. [facts] is the compact JSON the handover screen gathered deterministically.
+  Future<HandoverSummaryResult> summarizeHandover({
+    required String venueId,
+    required String facts,
+  });
+
+  /// Manager-only. [enquiryText] is the pasted client email/message, prefixed with today's date.
+  Future<EventEnquiryResult> parseEventEnquiry({
+    required String venueId,
+    required String enquiryText,
+  });
 }
 
 class SupabaseAiRepository implements AiRepository {
@@ -107,6 +119,32 @@ class SupabaseAiRepository implements AiRepository {
       venueId: venueId,
       input: context,
       parse: ShiftInsightsResult.fromJson,
+    );
+  }
+
+  @override
+  Future<HandoverSummaryResult> summarizeHandover({
+    required String venueId,
+    required String facts,
+  }) async {
+    return _invoke(
+      task: 'handover_summary',
+      venueId: venueId,
+      input: facts,
+      parse: HandoverSummaryResult.fromJson,
+    );
+  }
+
+  @override
+  Future<EventEnquiryResult> parseEventEnquiry({
+    required String venueId,
+    required String enquiryText,
+  }) async {
+    return _invoke(
+      task: 'event_enquiry_parse',
+      venueId: venueId,
+      input: enquiryText,
+      parse: EventEnquiryResult.fromJson,
     );
   }
 
@@ -192,6 +230,9 @@ class SupabaseAiRepository implements AiRepository {
       'ai_response_not_valid_json' =>
         const AiUnavailableError(
           'The AI assistant is temporarily unavailable. Please try again shortly.',
+        ),
+      'manager_permission_required' => const PermissionDeniedError(
+          'Only managers can use this AI feature.',
         ),
       'invalid_or_expired_session' =>
         const AuthError('Your session has expired. Please sign in again.'),

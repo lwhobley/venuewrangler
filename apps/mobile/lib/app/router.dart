@@ -24,6 +24,7 @@ import '../features/floor_studio/presentation/floor_studio_screen.dart';
 import '../features/floor/presentation/floor_plan_screen.dart';
 import '../features/guests_reservations/presentation/reservations_screen.dart';
 import '../features/incidents/presentation/incident_list_screen.dart';
+import '../features/handover/presentation/handover_screen.dart';
 import '../features/insights/presentation/shift_insights_screen.dart';
 import '../features/integrations/presentation/integration_complete_screen.dart';
 import '../features/integrations/presentation/integrations_screen.dart';
@@ -341,6 +342,10 @@ StatefulShellRoute _fullShell(GlobalKey<NavigatorState> rootKey) {
           GoRoute(
             path: '/notifications',
             builder: (context, state) => const NotificationsScreen(),
+          ),
+          GoRoute(
+            path: '/handover',
+            builder: (context, state) => const HandoverScreen(),
           ),
           GoRoute(
             path: '/wrangler',

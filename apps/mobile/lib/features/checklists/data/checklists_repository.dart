@@ -11,6 +11,13 @@ abstract interface class ChecklistsRepository {
 
   Future<List<ChecklistTemplateItem>> fetchItemsForTemplate(String templateId);
 
+  /// Template ids that have at least one completion submitted at or after [since] at
+  /// [venueId] (the shift handover uses this to find checklists nobody submitted tonight).
+  Future<Set<String>> fetchCompletedTemplateIdsSince(
+    String venueId,
+    DateTime since,
+  );
+
   /// Idempotent: safe to call more than once with the same [completionId] (e.g. a retry from
   /// the offline queue after a connection dropped before the first attempt's response
   /// arrived). Deliberately NOT implemented as an upsert: `checklist_completions` only allows
@@ -54,6 +61,19 @@ class SupabaseChecklistsRepository implements ChecklistsRepository {
         .order('position');
 
     return rows.map(ChecklistTemplateItem.fromJson).toList(growable: false);
+  }
+
+  @override
+  Future<Set<String>> fetchCompletedTemplateIdsSince(
+    String venueId,
+    DateTime since,
+  ) async {
+    final rows = await _client
+        .from('checklist_completions')
+        .select('template_id')
+        .eq('venue_id', venueId)
+        .gte('created_at', since.toUtc().toIso8601String());
+    return {for (final row in rows) row['template_id'] as String};
   }
 
   @override
