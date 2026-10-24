@@ -174,82 +174,87 @@ class _ReportIncidentDialogState extends ConsumerState<_ReportIncidentDialog> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return AlertDialog(
-      title: const Text('Report an incident'),
-      content: SingleChildScrollView(
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextFormField(
-                controller: _titleController,
-                autofocus: true,
-                textInputAction: TextInputAction.next,
-                decoration: const InputDecoration(labelText: 'What happened?'),
-                validator: (value) => (value ?? '').trim().isEmpty
-                    ? 'Add a short summary of what happened.'
-                    : null,
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _descriptionController,
-                decoration:
-                    const InputDecoration(labelText: 'Details (optional)'),
-                maxLines: 3,
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<IncidentSeverity>(
-                initialValue: _severity,
-                decoration: const InputDecoration(labelText: 'Severity'),
-                items: [
-                  for (final value in IncidentSeverity.values)
-                    DropdownMenuItem(value: value, child: Text(value.name)),
-                ],
-                onChanged: _saving
-                    ? null
-                    : (value) => setState(() => _severity = value ?? _severity),
-              ),
-              // Photo evidence is captured, annotated and uploaded by file path, which a browser
-              // doesn't have (dart:io File/FileImage throw on web), so the option is native-only.
-              if (!kIsWeb) const SizedBox(height: 12),
-              if (!kIsWeb)
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: TextButton.icon(
-                    onPressed: _saving ? null : _pickPhoto,
-                    icon: const Icon(Icons.camera_alt_outlined),
-                    label: Text(
-                      _photoPath == null ? 'Attach photo' : 'Photo attached',
+    return PopScope(
+      canPop: !_saving,
+      child: AlertDialog(
+        title: const Text('Report an incident'),
+        content: SingleChildScrollView(
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  controller: _titleController,
+                  autofocus: true,
+                  textInputAction: TextInputAction.next,
+                  decoration:
+                      const InputDecoration(labelText: 'What happened?'),
+                  validator: (value) => (value ?? '').trim().isEmpty
+                      ? 'Add a short summary of what happened.'
+                      : null,
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _descriptionController,
+                  decoration:
+                      const InputDecoration(labelText: 'Details (optional)'),
+                  maxLines: 3,
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<IncidentSeverity>(
+                  initialValue: _severity,
+                  decoration: const InputDecoration(labelText: 'Severity'),
+                  items: [
+                    for (final value in IncidentSeverity.values)
+                      DropdownMenuItem(value: value, child: Text(value.name)),
+                  ],
+                  onChanged: _saving
+                      ? null
+                      : (value) =>
+                          setState(() => _severity = value ?? _severity),
+                ),
+                // Photo evidence is captured, annotated and uploaded by file path, which a browser
+                // doesn't have (dart:io File/FileImage throw on web), so the option is native-only.
+                if (!kIsWeb) const SizedBox(height: 12),
+                if (!kIsWeb)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: _saving ? null : _pickPhoto,
+                      icon: const Icon(Icons.camera_alt_outlined),
+                      label: Text(
+                        _photoPath == null ? 'Attach photo' : 'Photo attached',
+                      ),
                     ),
                   ),
-                ),
-              if (_error != null) ...[
-                const SizedBox(height: 12),
-                Text(
-                  _error!,
-                  style: TextStyle(color: theme.colorScheme.error),
-                ),
+                if (_error != null) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    _error!,
+                    style: TextStyle(color: theme.colorScheme.error),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
+        actions: [
+          TextButton(
+            onPressed: _saving ? null : () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: _saving ? null : _submit,
+            child: _saving
+                ? const SizedBox.square(
+                    dimension: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Text('Report'),
+          ),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: _saving ? null : () => Navigator.of(context).pop(false),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: _saving ? null : _submit,
-          child: _saving
-              ? const SizedBox.square(
-                  dimension: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Text('Report'),
-        ),
-      ],
     );
   }
 

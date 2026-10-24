@@ -126,85 +126,88 @@ class _InviteStaffDialogState extends ConsumerState<InviteStaffDialog> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return AlertDialog(
-      title: const Text('Invite staff'),
-      content: Form(
-        key: _formKey,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              TextFormField(
-                controller: _name,
-                autofocus: widget.prefillName == null,
-                textCapitalization: TextCapitalization.words,
-                decoration: const InputDecoration(labelText: 'Full name'),
-                validator: (value) {
-                  final name = value?.trim() ?? '';
-                  if (name.isEmpty) return 'Enter their name';
-                  if (name.length > 120) return 'Use 120 characters or fewer';
-                  return null;
-                },
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _email,
-                keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(labelText: 'Email'),
-                validator: (value) {
-                  final email = value?.trim() ?? '';
-                  return RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(email)
+    return PopScope(
+      canPop: !_saving,
+      child: AlertDialog(
+        title: const Text('Invite staff'),
+        content: Form(
+          key: _formKey,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                TextFormField(
+                  controller: _name,
+                  autofocus: widget.prefillName == null,
+                  textCapitalization: TextCapitalization.words,
+                  decoration: const InputDecoration(labelText: 'Full name'),
+                  validator: (value) {
+                    final name = value?.trim() ?? '';
+                    if (name.isEmpty) return 'Enter their name';
+                    if (name.length > 120) return 'Use 120 characters or fewer';
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _email,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: const InputDecoration(labelText: 'Email'),
+                  validator: (value) {
+                    final email = value?.trim() ?? '';
+                    return RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(email)
+                        ? null
+                        : 'Enter a valid email address';
+                  },
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<WorkforceRole>(
+                  initialValue: _role,
+                  decoration: const InputDecoration(labelText: 'Role'),
+                  items: [
+                    for (final value in _roles)
+                      DropdownMenuItem(value: value, child: Text(value.label)),
+                  ],
+                  onChanged: _saving
                       ? null
-                      : 'Enter a valid email address';
-                },
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<WorkforceRole>(
-                initialValue: _role,
-                decoration: const InputDecoration(labelText: 'Role'),
-                items: [
-                  for (final value in _roles)
-                    DropdownMenuItem(value: value, child: Text(value.label)),
-                ],
-                onChanged: _saving
-                    ? null
-                    : (value) => setState(() => _role = value ?? _role),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'We email them a link to join. They sign up with this '
-                'address and land straight in your venue.',
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-              ),
-              if (_error != null) ...[
+                      : (value) => setState(() => _role = value ?? _role),
+                ),
                 const SizedBox(height: 12),
                 Text(
-                  _error!,
-                  style: TextStyle(color: theme.colorScheme.error),
+                  'We email them a link to join. They sign up with this '
+                  'address and land straight in your venue.',
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                 ),
+                if (_error != null) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    _error!,
+                    style: TextStyle(color: theme.colorScheme.error),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
+        actions: [
+          TextButton(
+            onPressed: _saving ? null : () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: _saving ? null : _submit,
+            child: _saving
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Text('Send invite'),
+          ),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: _saving ? null : () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: _saving ? null : _submit,
-          child: _saving
-              ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Text('Send invite'),
-        ),
-      ],
     );
   }
 }

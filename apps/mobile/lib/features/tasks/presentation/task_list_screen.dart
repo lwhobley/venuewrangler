@@ -169,42 +169,45 @@ class _CreateTaskDialogState extends ConsumerState<_CreateTaskDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('New task'),
-      content: Form(
-        key: _formKey,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextFormField(
-              controller: _title,
-              autofocus: true,
-              decoration: const InputDecoration(labelText: 'Title'),
-              validator: (value) => (value ?? '').trim().isEmpty
-                  ? 'Give the task a title.'
-                  : null,
-              onFieldSubmitted: (_) => _saving ? null : _submit(),
-            ),
-            if (_error != null) ...[
-              const SizedBox(height: 12),
-              Text(
-                _error!,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
+    return PopScope(
+      canPop: !_saving,
+      child: AlertDialog(
+        title: const Text('New task'),
+        content: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextFormField(
+                controller: _title,
+                autofocus: true,
+                decoration: const InputDecoration(labelText: 'Title'),
+                validator: (value) => (value ?? '').trim().isEmpty
+                    ? 'Give the task a title.'
+                    : null,
+                onFieldSubmitted: (_) => _saving ? null : _submit(),
               ),
+              if (_error != null) ...[
+                const SizedBox(height: 12),
+                Text(
+                  _error!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
+        actions: [
+          TextButton(
+            onPressed: _saving ? null : () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: _saving ? null : _submit,
+            child: const Text('Create'),
+          ),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: _saving ? null : () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: _saving ? null : _submit,
-          child: const Text('Create'),
-        ),
-      ],
     );
   }
 }

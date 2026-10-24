@@ -388,7 +388,8 @@ class _ScheduleTimelineScreenState
     return showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      showDragHandle: true,
+      // Saving happens inside the sheet: a drag must not close it mid-write.
+      enableDrag: false,
       builder: (context) => Padding(
         padding: EdgeInsets.only(
           bottom: MediaQuery.of(context).viewInsets.bottom,
@@ -1207,90 +1208,94 @@ class _ShiftFormState extends State<_ShiftForm> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return SafeArea(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(widget.title, style: theme.textTheme.titleLarge),
-            const SizedBox(height: 16),
-            DropdownButtonFormField<String?>(
-              initialValue: _staffId,
-              decoration: const InputDecoration(labelText: 'Assigned to'),
-              items: [
-                for (final r in widget.rows)
-                  DropdownMenuItem(value: r.staffId, child: Text(r.name)),
-              ],
-              onChanged: (v) => setState(() => _staffId = v),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _role,
-              decoration: const InputDecoration(
-                labelText: 'Role (e.g. bartender)',
+    return PopScope(
+      canPop: !_saving,
+      child: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(widget.title, style: theme.textTheme.titleLarge),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String?>(
+                initialValue: _staffId,
+                decoration: const InputDecoration(labelText: 'Assigned to'),
+                items: [
+                  for (final r in widget.rows)
+                    DropdownMenuItem(value: r.staffId, child: Text(r.name)),
+                ],
+                onChanged: (v) => setState(() => _staffId = v),
               ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _section,
-              decoration: const InputDecoration(
-                labelText: 'Section (e.g. patio, bar)',
-              ),
-            ),
-            const SizedBox(height: 8),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Start'),
-              subtitle: Text(_fmt(_start)),
-              trailing: const Icon(Icons.edit_calendar_outlined),
-              onTap: () async {
-                final p = await _pick(_start);
-                if (p != null) {
-                  setState(() {
-                    final length = _end.difference(_start);
-                    _start = p;
-                    if (!_end.isAfter(_start)) _end = _start.add(length);
-                  });
-                }
-              },
-            ),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('End'),
-              subtitle: Text(_fmt(_end)),
-              trailing: const Icon(Icons.edit_calendar_outlined),
-              onTap: () async {
-                final p = await _pick(_end);
-                if (p != null) setState(() => _end = p);
-              },
-            ),
-            if (_error != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text(
-                  _error!,
-                  style: TextStyle(color: theme.colorScheme.error),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _role,
+                decoration: const InputDecoration(
+                  labelText: 'Role (e.g. bartender)',
                 ),
               ),
-            const SizedBox(height: 16),
-            FilledButton(
-              onPressed: _saving ? null : _submit,
-              child: Text(widget.confirmLabel),
-            ),
-            if (widget.allowDelete) ...[
+              const SizedBox(height: 12),
+              TextField(
+                controller: _section,
+                decoration: const InputDecoration(
+                  labelText: 'Section (e.g. patio, bar)',
+                ),
+              ),
               const SizedBox(height: 8),
-              TextButton.icon(
-                onPressed: _saving ? null : () => _submit(delete: true),
-                icon: Icon(Icons.delete_outline, color: context.ops.danger.fg),
-                label: Text(
-                  'Remove or cancel shift',
-                  style: TextStyle(color: context.ops.danger.fg),
-                ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Start'),
+                subtitle: Text(_fmt(_start)),
+                trailing: const Icon(Icons.edit_calendar_outlined),
+                onTap: () async {
+                  final p = await _pick(_start);
+                  if (p != null) {
+                    setState(() {
+                      final length = _end.difference(_start);
+                      _start = p;
+                      if (!_end.isAfter(_start)) _end = _start.add(length);
+                    });
+                  }
+                },
               ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('End'),
+                subtitle: Text(_fmt(_end)),
+                trailing: const Icon(Icons.edit_calendar_outlined),
+                onTap: () async {
+                  final p = await _pick(_end);
+                  if (p != null) setState(() => _end = p);
+                },
+              ),
+              if (_error != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    _error!,
+                    style: TextStyle(color: theme.colorScheme.error),
+                  ),
+                ),
+              const SizedBox(height: 16),
+              FilledButton(
+                onPressed: _saving ? null : _submit,
+                child: Text(widget.confirmLabel),
+              ),
+              if (widget.allowDelete) ...[
+                const SizedBox(height: 8),
+                TextButton.icon(
+                  onPressed: _saving ? null : () => _submit(delete: true),
+                  icon:
+                      Icon(Icons.delete_outline, color: context.ops.danger.fg),
+                  label: Text(
+                    'Remove or cancel shift',
+                    style: TextStyle(color: context.ops.danger.fg),
+                  ),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );

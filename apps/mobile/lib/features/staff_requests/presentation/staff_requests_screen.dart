@@ -387,56 +387,60 @@ class _ReviewDialogState extends ConsumerState<_ReviewDialog> {
     final shift = widget.shift;
     final approving = widget.status == StaffRequestStatus.approved;
     final danger = context.ops.danger.fg;
-    return AlertDialog(
-      title: Text('${widget.status.displayLabel} Request'),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '${widget.requesterName}: ${widget.request.kind.displayLabel}'
-              '${shift != null ? ', ${shiftSentenceLabel(clock, shift)}' : ''}',
-            ),
-            for (final clash in clashes) ...[
-              const SizedBox(height: 12),
+    return PopScope(
+      canPop: !_saving,
+      child: AlertDialog(
+        title: Text('${widget.status.displayLabel} Request'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
               Text(
-                '${widget.requesterName} already works ${shiftRoleLabel(clash)} '
-                '${shiftDayLabel(clock, clash)}, ${shiftTimeRangeLabel(clock, clash)}. '
-                'Approving would double-book them.',
-                style: TextStyle(color: danger),
+                '${widget.requesterName}: ${widget.request.kind.displayLabel}'
+                '${shift != null ? ', ${shiftSentenceLabel(clock, shift)}' : ''}',
               ),
-            ],
-            const SizedBox(height: 12),
-            TextField(
-              controller: _notes,
-              decoration: const InputDecoration(
-                labelText: 'Response notes (optional)',
+              for (final clash in clashes) ...[
+                const SizedBox(height: 12),
+                Text(
+                  '${widget.requesterName} already works ${shiftRoleLabel(clash)} '
+                  '${shiftDayLabel(clock, clash)}, ${shiftTimeRangeLabel(clock, clash)}. '
+                  'Approving would double-book them.',
+                  style: TextStyle(color: danger),
+                ),
+              ],
+              const SizedBox(height: 12),
+              TextField(
+                controller: _notes,
+                decoration: const InputDecoration(
+                  labelText: 'Response notes (optional)',
+                ),
+                maxLines: 2,
               ),
-              maxLines: 2,
-            ),
-            if (_error != null) ...[
-              const SizedBox(height: 8),
-              Text(_error!, style: TextStyle(color: danger)),
+              if (_error != null) ...[
+                const SizedBox(height: 8),
+                Text(_error!, style: TextStyle(color: danger)),
+              ],
             ],
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: _saving ? null : () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed:
-              _saving ? null : () => _submit(allowOverlap: clashes.isNotEmpty),
-          child: Text(
-            approving && clashes.isNotEmpty
-                ? 'Approve anyway'
-                : widget.status.displayLabel,
           ),
         ),
-      ],
+        actions: [
+          TextButton(
+            onPressed: _saving ? null : () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: _saving
+                ? null
+                : () => _submit(allowOverlap: clashes.isNotEmpty),
+            child: Text(
+              approving && clashes.isNotEmpty
+                  ? 'Approve anyway'
+                  : widget.status.displayLabel,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

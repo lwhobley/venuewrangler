@@ -68,7 +68,8 @@ class _TaskBoardScreenState extends ConsumerState<TaskBoardScreen> {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      showDragHandle: true,
+      // Saving happens inside the sheet: a drag must not close it mid-write.
+      enableDrag: false,
       builder: (context) => Padding(
         padding: EdgeInsets.only(
           bottom: MediaQuery.of(context).viewInsets.bottom,
@@ -653,59 +654,62 @@ class _NewTaskFormState extends State<_NewTaskForm> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return SafeArea(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text('New task', style: theme.textTheme.titleLarge),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _title,
-              autofocus: true,
-              decoration:
-                  InputDecoration(labelText: 'Title', errorText: _error),
-              onChanged: (_) {
-                if (_error != null) setState(() => _error = null);
-              },
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _description,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                labelText: 'Details (optional)',
+    return PopScope(
+      canPop: !_saving,
+      child: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('New task', style: theme.textTheme.titleLarge),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _title,
+                autofocus: true,
+                decoration:
+                    InputDecoration(labelText: 'Title', errorText: _error),
+                onChanged: (_) {
+                  if (_error != null) setState(() => _error = null);
+                },
               ),
-            ),
-            const SizedBox(height: 8),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Due'),
-              subtitle: Text(_due == null ? 'No due date' : _dueLabel(_due!)),
-              trailing: _due == null
-                  ? const Icon(Icons.edit_calendar_outlined)
-                  : IconButton(
-                      icon: const Icon(Icons.clear),
-                      tooltip: 'Clear due date',
-                      onPressed: () => setState(() => _due = null),
-                    ),
-              onTap: _pickDue,
-            ),
-            if (_saveError != null) ...[
+              const SizedBox(height: 12),
+              TextField(
+                controller: _description,
+                maxLines: 3,
+                decoration: const InputDecoration(
+                  labelText: 'Details (optional)',
+                ),
+              ),
               const SizedBox(height: 8),
-              Text(
-                _saveError!,
-                style: TextStyle(color: theme.colorScheme.error),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Due'),
+                subtitle: Text(_due == null ? 'No due date' : _dueLabel(_due!)),
+                trailing: _due == null
+                    ? const Icon(Icons.edit_calendar_outlined)
+                    : IconButton(
+                        icon: const Icon(Icons.clear),
+                        tooltip: 'Clear due date',
+                        onPressed: () => setState(() => _due = null),
+                      ),
+                onTap: _pickDue,
+              ),
+              if (_saveError != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  _saveError!,
+                  style: TextStyle(color: theme.colorScheme.error),
+                ),
+              ],
+              const SizedBox(height: 12),
+              FilledButton(
+                onPressed: _saving ? null : _submit,
+                child: const Text('Create'),
               ),
             ],
-            const SizedBox(height: 12),
-            FilledButton(
-              onPressed: _saving ? null : _submit,
-              child: const Text('Create'),
-            ),
-          ],
+          ),
         ),
       ),
     );

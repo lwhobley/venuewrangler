@@ -807,103 +807,106 @@ class _AddShiftDialogState extends ConsumerState<_AddShiftDialog> {
   @override
   Widget build(BuildContext context) {
     final clock = ref.watch(venueClockProvider);
-    return AlertDialog(
-      title: const Text('Add shift'),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            DropdownButtonFormField<String?>(
-              initialValue: _staffId,
-              isExpanded: true,
-              decoration: const InputDecoration(labelText: 'Assigned to'),
-              items: [
-                const DropdownMenuItem<String?>(
-                  value: null,
-                  child: Text('Open shift (unassigned)'),
-                ),
-                for (final member in widget.people)
-                  DropdownMenuItem<String?>(
-                    value: member.userId,
-                    child: Text(member.displayName ?? 'Team member'),
+    return PopScope(
+      canPop: !_saving,
+      child: AlertDialog(
+        title: const Text('Add shift'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              DropdownButtonFormField<String?>(
+                initialValue: _staffId,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'Assigned to'),
+                items: [
+                  const DropdownMenuItem<String?>(
+                    value: null,
+                    child: Text('Open shift (unassigned)'),
                   ),
-              ],
-              onChanged: (value) => setState(() => _staffId = value),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _role,
-              decoration:
-                  const InputDecoration(labelText: 'Role (e.g. bartender)'),
-            ),
-            const SizedBox(height: 12),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Start'),
-              subtitle: Text(VenueClock.formatWallDateTime(_start)),
-              trailing: const Icon(Icons.edit_calendar_outlined),
-              onTap: () async {
-                final picked = await pickVenueDateTime(
-                  context,
-                  initial: _start,
-                  nowWall: clock.now,
-                );
-                if (picked != null) {
-                  setState(() {
-                    final length = _end.difference(_start);
-                    _start = picked;
-                    if (!_end.isAfter(_start)) _end = _start.add(length);
-                    _error = null;
-                  });
-                }
-              },
-            ),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('End'),
-              subtitle: Text(VenueClock.formatWallDateTime(_end)),
-              trailing: const Icon(Icons.edit_calendar_outlined),
-              onTap: () async {
-                final picked = await pickVenueDateTime(
-                  context,
-                  initial: _end,
-                  nowWall: clock.now,
-                );
-                if (picked != null) {
-                  setState(() {
-                    _end = picked;
-                    _error = null;
-                  });
-                }
-              },
-            ),
-            if (_end.isBefore(clock.now))
-              Text(
-                'This shift is in the past. Check the date before adding it.',
-                style: TextStyle(color: context.ops.warning.fg),
+                  for (final member in widget.people)
+                    DropdownMenuItem<String?>(
+                      value: member.userId,
+                      child: Text(member.displayName ?? 'Team member'),
+                    ),
+                ],
+                onChanged: (value) => setState(() => _staffId = value),
               ),
-            if (_error != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  _error!,
-                  style: TextStyle(color: context.ops.danger.fg),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _role,
+                decoration:
+                    const InputDecoration(labelText: 'Role (e.g. bartender)'),
+              ),
+              const SizedBox(height: 12),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Start'),
+                subtitle: Text(VenueClock.formatWallDateTime(_start)),
+                trailing: const Icon(Icons.edit_calendar_outlined),
+                onTap: () async {
+                  final picked = await pickVenueDateTime(
+                    context,
+                    initial: _start,
+                    nowWall: clock.now,
+                  );
+                  if (picked != null) {
+                    setState(() {
+                      final length = _end.difference(_start);
+                      _start = picked;
+                      if (!_end.isAfter(_start)) _end = _start.add(length);
+                      _error = null;
+                    });
+                  }
+                },
+              ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('End'),
+                subtitle: Text(VenueClock.formatWallDateTime(_end)),
+                trailing: const Icon(Icons.edit_calendar_outlined),
+                onTap: () async {
+                  final picked = await pickVenueDateTime(
+                    context,
+                    initial: _end,
+                    nowWall: clock.now,
+                  );
+                  if (picked != null) {
+                    setState(() {
+                      _end = picked;
+                      _error = null;
+                    });
+                  }
+                },
+              ),
+              if (_end.isBefore(clock.now))
+                Text(
+                  'This shift is in the past. Check the date before adding it.',
+                  style: TextStyle(color: context.ops.warning.fg),
                 ),
-              ),
-          ],
+              if (_error != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    _error!,
+                    style: TextStyle(color: context.ops.danger.fg),
+                  ),
+                ),
+            ],
+          ),
         ),
+        actions: [
+          TextButton(
+            onPressed: _saving ? null : () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: _saving ? null : _save,
+            child: const Text('Add'),
+          ),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: _saving ? null : () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: _saving ? null : _save,
-          child: const Text('Add'),
-        ),
-      ],
     );
   }
 }

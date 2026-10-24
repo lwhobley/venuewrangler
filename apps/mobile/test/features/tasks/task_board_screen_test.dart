@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -35,6 +37,7 @@ class _Repo implements TasksRepository {
   final moves = <(String, TaskStatus)>[];
   String? createdTitle;
   Object? createError;
+  Completer<void>? holdCreate;
 
   @override
   Future<List<OperationalTask>> fetchTasksForVenue(String venueId) async =>
@@ -53,6 +56,7 @@ class _Repo implements TasksRepository {
     DateTime? dueAt,
     String? assignedTo,
   }) async {
+    await holdCreate?.future;
     if (createError != null) throw createError!;
     createdTitle = title;
   }
@@ -201,6 +205,37 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(repo.createdTitle, 'Polish glasses');
+    });
+
+    testWidgets('the new-task sheet cannot be dismissed while it saves',
+        (tester) async {
+      final repo = await pump(tester, const []);
+      final hold = repo.holdCreate = Completer<void>();
+
+      await tester.tap(find.text('New task'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).first, 'Polish glasses');
+      await tester.tap(find.widgetWithText(FilledButton, 'Create'));
+      await tester.pump();
+
+      await tester.tapAt(const Offset(2, 2));
+      await tester.pumpAndSettle();
+      expect(find.byType(TextField), findsWidgets);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.byType(TextField), findsWidgets);
+      await tester.fling(
+        find.byType(TextField).first,
+        const Offset(0, 600),
+        2000,
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(TextField), findsWidgets);
+
+      hold.complete();
+      await tester.pumpAndSettle();
+      expect(repo.createdTitle, 'Polish glasses');
+      expect(find.byType(TextField), findsNothing);
     });
 
     testWidgets('a failed create keeps the form open with what was typed',

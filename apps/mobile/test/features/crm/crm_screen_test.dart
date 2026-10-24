@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -23,6 +25,9 @@ class _FakeCrmRepository implements CrmRepository {
 
   /// Thrown by the next write that consults it (then cleared), to simulate a refused save.
   Object? failNextWrite;
+
+  /// When set, createLead waits on it, simulating a save that is still in flight.
+  Completer<void>? holdCreateLead;
   final statusUpdates = <({String beoId, String status})>[];
   final restored = <String>[];
   final createdLeads = <String>[];
@@ -53,6 +58,7 @@ class _FakeCrmRepository implements CrmRepository {
     String? source,
     int? estimatedValueCents,
   }) async {
+    await holdCreateLead?.future;
     _maybeFail();
     createdLeads.add(fullName);
     final now = DateTime.utc(2026, 10, 7);
@@ -633,6 +639,32 @@ void main() {
       expect(find.text('Caroline Whitmore'), findsOneWidget);
 
       await tester.tap(find.text('Create'));
+      await tester.pumpAndSettle();
+      expect(repo.createdLeads, ['Caroline Whitmore']);
+      expect(find.text('New lead'), findsNothing);
+    });
+
+    testWidgets('new lead: a barrier tap or back press mid-save does not close',
+        (tester) async {
+      final repo = await pump(tester);
+      final hold = repo.holdCreateLead = Completer<void>();
+      await tester.tap(find.byType(FloatingActionButton));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Full name'),
+        'Caroline Whitmore',
+      );
+      await tester.tap(find.text('Create'));
+      await tester.pump();
+
+      await tester.tapAt(const Offset(2, 2));
+      await tester.pumpAndSettle();
+      expect(find.text('New lead'), findsOneWidget);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.text('New lead'), findsOneWidget);
+
+      hold.complete();
       await tester.pumpAndSettle();
       expect(repo.createdLeads, ['Caroline Whitmore']);
       expect(find.text('New lead'), findsNothing);

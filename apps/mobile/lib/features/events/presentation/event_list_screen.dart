@@ -165,84 +165,88 @@ class _AddEventDialogState extends ConsumerState<AddEventDialog> {
   @override
   Widget build(BuildContext context) {
     final clock = widget.clock;
-    return AlertDialog(
-      title: const Text('Add event'),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: _name,
-              autofocus: true,
-              enabled: !_saving,
-              decoration: InputDecoration(
-                labelText: 'Event name',
-                errorText: _nameError,
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _notes,
-              enabled: !_saving,
-              decoration: const InputDecoration(
-                labelText: 'Notes for the team (optional)',
-              ),
-              maxLines: 3,
-            ),
-            const SizedBox(height: 12),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Start'),
-              subtitle: Text(VenueClock.formatWallDateTime(_start)),
-              trailing: const Icon(Icons.edit_calendar_outlined),
-              onTap: _saving
-                  ? null
-                  : () async {
-                      final picked = await pickVenueDateTime(
-                        context,
-                        initial: _start,
-                        nowWall: clock.now,
-                      );
-                      if (picked != null) setState(() => _start = picked);
-                    },
-            ),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('End'),
-              subtitle: Text(VenueClock.formatWallDateTime(_end)),
-              trailing: const Icon(Icons.edit_calendar_outlined),
-              onTap: _saving
-                  ? null
-                  : () async {
-                      final picked = await pickVenueDateTime(
-                        context,
-                        initial: _end,
-                        nowWall: clock.now,
-                      );
-                      if (picked != null) setState(() => _end = picked);
-                    },
-            ),
-            if (_error != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  _error!,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+    return PopScope(
+      canPop: !_saving,
+      child: AlertDialog(
+        title: const Text('Add event'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: _name,
+                autofocus: true,
+                enabled: !_saving,
+                decoration: InputDecoration(
+                  labelText: 'Event name',
+                  errorText: _nameError,
                 ),
               ),
-          ],
+              const SizedBox(height: 12),
+              TextField(
+                controller: _notes,
+                enabled: !_saving,
+                decoration: const InputDecoration(
+                  labelText: 'Notes for the team (optional)',
+                ),
+                maxLines: 3,
+              ),
+              const SizedBox(height: 12),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Start'),
+                subtitle: Text(VenueClock.formatWallDateTime(_start)),
+                trailing: const Icon(Icons.edit_calendar_outlined),
+                onTap: _saving
+                    ? null
+                    : () async {
+                        final picked = await pickVenueDateTime(
+                          context,
+                          initial: _start,
+                          nowWall: clock.now,
+                        );
+                        if (picked != null) setState(() => _start = picked);
+                      },
+              ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('End'),
+                subtitle: Text(VenueClock.formatWallDateTime(_end)),
+                trailing: const Icon(Icons.edit_calendar_outlined),
+                onTap: _saving
+                    ? null
+                    : () async {
+                        final picked = await pickVenueDateTime(
+                          context,
+                          initial: _end,
+                          nowWall: clock.now,
+                        );
+                        if (picked != null) setState(() => _end = picked);
+                      },
+              ),
+              if (_error != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    _error!,
+                    style:
+                        TextStyle(color: Theme.of(context).colorScheme.error),
+                  ),
+                ),
+            ],
+          ),
         ),
+        actions: [
+          TextButton(
+            onPressed: _saving ? null : () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: _saving ? null : _save,
+            child: Text(_saving ? 'Adding…' : 'Add'),
+          ),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: _saving ? null : () => Navigator.of(context).pop(false),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: _saving ? null : _save,
-          child: Text(_saving ? 'Adding…' : 'Add'),
-        ),
-      ],
     );
   }
 }

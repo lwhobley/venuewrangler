@@ -136,84 +136,89 @@ class _CorrectClockOutDialogState extends ConsumerState<CorrectClockOutDialog> {
   Widget build(BuildContext context) {
     final clock = ref.watch(venueClockProvider);
     final theme = Theme.of(context);
-    return AlertDialog(
-      title: Text(
-        widget.clockOutAt == null ? 'Close missed clock-out' : 'Fix clock-out',
-      ),
-      content: Form(
-        key: _form,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(widget.personName, style: theme.textTheme.titleMedium),
-              const SizedBox(height: 4),
-              Text(
-                'Clocked in ${clock.formatDateTime(widget.clockInAt)}',
-                style: theme.textTheme.bodyMedium,
-              ),
-              if (widget.clockOutAt != null)
+    return PopScope(
+      canPop: !_saving,
+      child: AlertDialog(
+        title: Text(
+          widget.clockOutAt == null
+              ? 'Close missed clock-out'
+              : 'Fix clock-out',
+        ),
+        content: Form(
+          key: _form,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(widget.personName, style: theme.textTheme.titleMedium),
+                const SizedBox(height: 4),
                 Text(
-                  'Recorded clock-out ${clock.formatDateTime(widget.clockOutAt!)}',
+                  'Clocked in ${clock.formatDateTime(widget.clockInAt)}',
                   style: theme.textTheme.bodyMedium,
                 ),
-              const SizedBox(height: 16),
-              OutlinedButton.icon(
-                key: const ValueKey('pick-clock-out'),
-                onPressed: _saving ? null : _pick,
-                icon: const Icon(Icons.schedule),
-                label: Text(
-                  _wall == null
-                      ? 'Choose clock-out time'
-                      : 'Clock-out ${VenueClock.formatWallDateTime(_wall!)}',
+                if (widget.clockOutAt != null)
+                  Text(
+                    'Recorded clock-out ${clock.formatDateTime(widget.clockOutAt!)}',
+                    style: theme.textTheme.bodyMedium,
+                  ),
+                const SizedBox(height: 16),
+                OutlinedButton.icon(
+                  key: const ValueKey('pick-clock-out'),
+                  onPressed: _saving ? null : _pick,
+                  icon: const Icon(Icons.schedule),
+                  label: Text(
+                    _wall == null
+                        ? 'Choose clock-out time'
+                        : 'Clock-out ${VenueClock.formatWallDateTime(_wall!)}',
+                  ),
                 ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Venue time (${clock.timezoneId})',
-                style: theme.textTheme.bodySmall,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                key: const ValueKey('correction-reason'),
-                controller: _reason,
-                enabled: !_saving,
-                maxLength: 500,
-                maxLines: 2,
-                decoration: const InputDecoration(
-                  labelText: 'Reason',
-                  hintText: 'e.g. Forgot to clock out; left at close',
-                ),
-                validator: (value) => (value ?? '').trim().length < 3
-                    ? 'Say why you are changing this punch'
-                    : null,
-              ),
-              Text(
-                'Your name, the original time and this reason are kept with the punch.',
-                style: theme.textTheme.bodySmall,
-              ),
-              if (_error != null) ...[
-                const SizedBox(height: 8),
+                const SizedBox(height: 4),
                 Text(
-                  _error!,
-                  style: TextStyle(color: theme.colorScheme.error),
+                  'Venue time (${clock.timezoneId})',
+                  style: theme.textTheme.bodySmall,
                 ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  key: const ValueKey('correction-reason'),
+                  controller: _reason,
+                  enabled: !_saving,
+                  maxLength: 500,
+                  maxLines: 2,
+                  decoration: const InputDecoration(
+                    labelText: 'Reason',
+                    hintText: 'e.g. Forgot to clock out; left at close',
+                  ),
+                  validator: (value) => (value ?? '').trim().length < 3
+                      ? 'Say why you are changing this punch'
+                      : null,
+                ),
+                Text(
+                  'Your name, the original time and this reason are kept with the punch.',
+                  style: theme.textTheme.bodySmall,
+                ),
+                if (_error != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    _error!,
+                    style: TextStyle(color: theme.colorScheme.error),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
+        actions: [
+          TextButton(
+            onPressed: _saving ? null : () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: _saving ? null : _save,
+            child: const Text('Save'),
+          ),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: _saving ? null : () => Navigator.of(context).pop(false),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: _saving ? null : _save,
-          child: const Text('Save'),
-        ),
-      ],
     );
   }
 }

@@ -162,66 +162,69 @@ class _UploadDocumentDialogState extends ConsumerState<_UploadDocumentDialog> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return AlertDialog(
-      title: const Text('Upload document'),
-      content: Form(
-        key: _formKey,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextFormField(
-              controller: _title,
-              autofocus: true,
-              decoration: const InputDecoration(labelText: 'Title'),
-              validator: (value) => (value ?? '').trim().isEmpty
-                  ? 'Give the document a title.'
-                  : null,
-            ),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              initialValue: _category,
-              decoration: const InputDecoration(labelText: 'Category'),
-              items: [
-                for (final value in VenueDocument.categories)
-                  DropdownMenuItem(
-                    value: value,
-                    child: Text(_categoryLabels[value] ?? value),
-                  ),
-              ],
-              onChanged: _saving
-                  ? null
-                  : (value) => setState(() => _category = value ?? _category),
-            ),
-            if (VenueDocument.managerOnlyCategories.contains(_category)) ...[
-              const SizedBox(height: 8),
-              Text(
-                'Only managers can see documents in this category.',
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(fontStyle: FontStyle.italic),
+    return PopScope(
+      canPop: !_saving,
+      child: AlertDialog(
+        title: const Text('Upload document'),
+        content: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextFormField(
+                controller: _title,
+                autofocus: true,
+                decoration: const InputDecoration(labelText: 'Title'),
+                validator: (value) => (value ?? '').trim().isEmpty
+                    ? 'Give the document a title.'
+                    : null,
               ),
-            ],
-            if (_error != null) ...[
               const SizedBox(height: 12),
-              Text(_error!, style: TextStyle(color: theme.colorScheme.error)),
+              DropdownButtonFormField<String>(
+                initialValue: _category,
+                decoration: const InputDecoration(labelText: 'Category'),
+                items: [
+                  for (final value in VenueDocument.categories)
+                    DropdownMenuItem(
+                      value: value,
+                      child: Text(_categoryLabels[value] ?? value),
+                    ),
+                ],
+                onChanged: _saving
+                    ? null
+                    : (value) => setState(() => _category = value ?? _category),
+              ),
+              if (VenueDocument.managerOnlyCategories.contains(_category)) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'Only managers can see documents in this category.',
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(fontStyle: FontStyle.italic),
+                ),
+              ],
+              if (_error != null) ...[
+                const SizedBox(height: 12),
+                Text(_error!, style: TextStyle(color: theme.colorScheme.error)),
+              ],
             ],
-          ],
+          ),
         ),
+        actions: [
+          TextButton(
+            onPressed: _saving ? null : () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: _saving ? null : _submit,
+            child: _saving
+                ? const SizedBox.square(
+                    dimension: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Text('Upload'),
+          ),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: _saving ? null : () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: _saving ? null : _submit,
-          child: _saving
-              ? const SizedBox.square(
-                  dimension: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Text('Upload'),
-        ),
-      ],
     );
   }
 }

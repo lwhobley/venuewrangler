@@ -438,135 +438,141 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
     await showDialog<void>(
       context: context,
       builder: (dialogCtx) => StatefulBuilder(
-        builder: (dialogCtx, update) => AlertDialog(
-          title: const Text('New Reservation'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: nameCtrl,
-                  decoration: const InputDecoration(labelText: 'Guest Name *'),
-                ),
-                TextField(
-                  controller: partyCtrl,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Party Size *'),
-                ),
-                TextField(
-                  controller: phoneCtrl,
-                  keyboardType: TextInputType.phone,
-                  decoration: const InputDecoration(labelText: 'Phone'),
-                ),
-                TextField(
-                  controller: emailCtrl,
-                  keyboardType: TextInputType.emailAddress,
-                  decoration: const InputDecoration(labelText: 'Email'),
-                ),
-                TextField(
-                  controller: requestsCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Special Requests',
+        builder: (dialogCtx, update) => PopScope(
+          canPop: !saving,
+          child: AlertDialog(
+            title: const Text('New Reservation'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: nameCtrl,
+                    decoration:
+                        const InputDecoration(labelText: 'Guest Name *'),
                   ),
-                ),
-                ListTile(
-                  title: const Text('Date and time'),
-                  subtitle: Text(
-                    VenueTimezone.formatWallDate(reservationTime),
+                  TextField(
+                    controller: partyCtrl,
+                    keyboardType: TextInputType.number,
+                    decoration:
+                        const InputDecoration(labelText: 'Party Size *'),
                   ),
-                  trailing: Text(
-                    VenueTimezone.formatWallTime(reservationTime),
+                  TextField(
+                    controller: phoneCtrl,
+                    keyboardType: TextInputType.phone,
+                    decoration: const InputDecoration(labelText: 'Phone'),
                   ),
-                  onTap: saving
-                      ? null
-                      : () async {
-                          final picked = await pickVenueDateTime(
-                            dialogCtx,
-                            initial: reservationTime,
-                            nowWall: clock.now,
-                          );
-                          if (picked == null || !dialogCtx.mounted) return;
-                          update(() => reservationTime = picked);
-                        },
-                ),
-                if (validationError != null)
-                  Text(
-                    validationError!,
-                    style: TextStyle(
-                      color: Theme.of(dialogCtx).colorScheme.error,
+                  TextField(
+                    controller: emailCtrl,
+                    keyboardType: TextInputType.emailAddress,
+                    decoration: const InputDecoration(labelText: 'Email'),
+                  ),
+                  TextField(
+                    controller: requestsCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Special Requests',
                     ),
                   ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: saving ? null : () => Navigator.of(dialogCtx).pop(),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: saving
-                  ? null
-                  : () async {
-                      final name = nameCtrl.text.trim();
-                      final party = int.tryParse(partyCtrl.text.trim());
-                      final reservationUtc = clock.instant(reservationTime);
-                      if (name.isEmpty ||
-                          party == null ||
-                          party < 1 ||
-                          reservationUtc.isBefore(DateTime.now().toUtc())) {
-                        update(() {
-                          validationError =
-                              'Enter a guest, a valid party size, and a future time.';
-                        });
-                        return;
-                      }
-                      update(() {
-                        saving = true;
-                        validationError = null;
-                      });
-                      try {
-                        await ref
-                            .read(guestsReservationsRepositoryProvider)
-                            .createReservation(
-                              venueId: venueId,
-                              guestName: name,
-                              partySize: party,
-                              guestPhone: phoneCtrl.text.trim().isEmpty
-                                  ? null
-                                  : phoneCtrl.text.trim(),
-                              guestEmail: emailCtrl.text.trim().isEmpty
-                                  ? null
-                                  : emailCtrl.text.trim(),
-                              specialRequests: requestsCtrl.text.trim().isEmpty
-                                  ? null
-                                  : requestsCtrl.text.trim(),
-                              reservationTime: reservationUtc,
+                  ListTile(
+                    title: const Text('Date and time'),
+                    subtitle: Text(
+                      VenueTimezone.formatWallDate(reservationTime),
+                    ),
+                    trailing: Text(
+                      VenueTimezone.formatWallTime(reservationTime),
+                    ),
+                    onTap: saving
+                        ? null
+                        : () async {
+                            final picked = await pickVenueDateTime(
+                              dialogCtx,
+                              initial: reservationTime,
+                              nowWall: clock.now,
                             );
-                        if (dialogCtx.mounted) {
-                          Navigator.of(dialogCtx).pop();
-                          ref.invalidate(reservationsListProvider);
-                        }
-                      } catch (error) {
-                        if (dialogCtx.mounted) {
+                            if (picked == null || !dialogCtx.mounted) return;
+                            update(() => reservationTime = picked);
+                          },
+                  ),
+                  if (validationError != null)
+                    Text(
+                      validationError!,
+                      style: TextStyle(
+                        color: Theme.of(dialogCtx).colorScheme.error,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: saving ? null : () => Navigator.of(dialogCtx).pop(),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: saving
+                    ? null
+                    : () async {
+                        final name = nameCtrl.text.trim();
+                        final party = int.tryParse(partyCtrl.text.trim());
+                        final reservationUtc = clock.instant(reservationTime);
+                        if (name.isEmpty ||
+                            party == null ||
+                            party < 1 ||
+                            reservationUtc.isBefore(DateTime.now().toUtc())) {
                           update(() {
-                            validationError = _reservationWriteErrorMessage(
-                              error,
-                              fallback:
-                                  'Could not create reservation. Please try again.',
-                              clock: clock,
-                            );
+                            validationError =
+                                'Enter a guest, a valid party size, and a future time.';
                           });
+                          return;
                         }
-                      } finally {
-                        if (dialogCtx.mounted) {
-                          update(() => saving = false);
+                        update(() {
+                          saving = true;
+                          validationError = null;
+                        });
+                        try {
+                          await ref
+                              .read(guestsReservationsRepositoryProvider)
+                              .createReservation(
+                                venueId: venueId,
+                                guestName: name,
+                                partySize: party,
+                                guestPhone: phoneCtrl.text.trim().isEmpty
+                                    ? null
+                                    : phoneCtrl.text.trim(),
+                                guestEmail: emailCtrl.text.trim().isEmpty
+                                    ? null
+                                    : emailCtrl.text.trim(),
+                                specialRequests:
+                                    requestsCtrl.text.trim().isEmpty
+                                        ? null
+                                        : requestsCtrl.text.trim(),
+                                reservationTime: reservationUtc,
+                              );
+                          if (dialogCtx.mounted) {
+                            Navigator.of(dialogCtx).pop();
+                            ref.invalidate(reservationsListProvider);
+                          }
+                        } catch (error) {
+                          if (dialogCtx.mounted) {
+                            update(() {
+                              validationError = _reservationWriteErrorMessage(
+                                error,
+                                fallback:
+                                    'Could not create reservation. Please try again.',
+                                clock: clock,
+                              );
+                            });
+                          }
+                        } finally {
+                          if (dialogCtx.mounted) {
+                            update(() => saving = false);
+                          }
                         }
-                      }
-                    },
-              child: Text(saving ? 'Creating…' : 'Create'),
-            ),
-          ],
+                      },
+                child: Text(saving ? 'Creating…' : 'Create'),
+              ),
+            ],
+          ),
         ),
       ),
     );

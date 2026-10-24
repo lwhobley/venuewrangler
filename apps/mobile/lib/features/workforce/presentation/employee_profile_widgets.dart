@@ -231,6 +231,8 @@ class EmployeeHrCard extends ConsumerWidget {
                   context: context,
                   isScrollControlled: true,
                   useSafeArea: true,
+                  // Saving happens inside the sheet: a drag must not close it mid-write.
+                  enableDrag: false,
                   builder: (_) => _HrEditor(
                     profileKey: profileKey,
                     name: name,
@@ -403,85 +405,89 @@ class _HrEditorState extends ConsumerState<_HrEditor> {
   }
 
   @override
-  Widget build(BuildContext context) => Padding(
-        padding:
-            EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
-        child: SizedBox(
-          height: MediaQuery.sizeOf(context).height * .85 -
-              MediaQuery.viewInsetsOf(context).bottom,
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 8, 12, 12),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        widget.name,
-                        style: Theme.of(context).textTheme.titleLarge,
-                      ),
-                    ),
-                    IconButton(
-                      onPressed: _saving ? null : () => Navigator.pop(context),
-                      tooltip: 'Close',
-                      icon: const Icon(Icons.close),
-                    ),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: Form(
-                  key: _form,
-                  child: ListView(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    keyboardDismissBehavior:
-                        ScrollViewKeyboardDismissBehavior.onDrag,
+  Widget build(BuildContext context) => PopScope(
+        canPop: !_saving,
+        child: Padding(
+          padding:
+              EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+          child: SizedBox(
+            height: MediaQuery.sizeOf(context).height * .85 -
+                MediaQuery.viewInsetsOf(context).bottom,
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 12, 12),
+                  child: Row(
                     children: [
-                      Text(
-                        'Personal information',
-                        style: Theme.of(context).textTheme.titleMedium,
+                      Expanded(
+                        child: Text(
+                          widget.name,
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
                       ),
-                      const SizedBox(height: 12),
-                      for (final e in personalHrFields.entries)
-                        _field(e.key, e.value),
-                      if (widget.manageEmployment) ...[
-                        const SizedBox(height: 8),
-                        Text(
-                          'Employment information',
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                        const SizedBox(height: 12),
-                        for (final e in employmentHrFields.entries)
-                          _field(e.key, e.value),
-                      ],
-                      if (_error != null)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: Text(
-                            _error!,
-                            style: TextStyle(
-                              color: Theme.of(context).colorScheme.error,
-                            ),
-                          ),
-                        ),
+                      IconButton(
+                        onPressed:
+                            _saving ? null : () => Navigator.pop(context),
+                        tooltip: 'Close',
+                        icon: const Icon(Icons.close),
+                      ),
                     ],
                   ),
                 ),
-              ),
-              SafeArea(
-                top: false,
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: SizedBox(
-                    width: double.infinity,
-                    child: FilledButton(
-                      onPressed: _saving ? null : _save,
-                      child: Text(_saving ? 'Saving…' : 'Save details'),
+                Expanded(
+                  child: Form(
+                    key: _form,
+                    child: ListView(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      keyboardDismissBehavior:
+                          ScrollViewKeyboardDismissBehavior.onDrag,
+                      children: [
+                        Text(
+                          'Personal information',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: 12),
+                        for (final e in personalHrFields.entries)
+                          _field(e.key, e.value),
+                        if (widget.manageEmployment) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            'Employment information',
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                          const SizedBox(height: 12),
+                          for (final e in employmentHrFields.entries)
+                            _field(e.key, e.value),
+                        ],
+                        if (_error != null)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: Text(
+                              _error!,
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.error,
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                   ),
                 ),
-              ),
-            ],
+                SafeArea(
+                  top: false,
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: FilledButton(
+                        onPressed: _saving ? null : _save,
+                        child: Text(_saving ? 'Saving…' : 'Save details'),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       );

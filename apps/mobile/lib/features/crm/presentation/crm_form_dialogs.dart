@@ -94,51 +94,56 @@ class _NewLeadDialogState extends ConsumerState<NewLeadDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('New lead'),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: _name,
-              autofocus: true,
-              enabled: !_saving,
-              decoration: InputDecoration(
-                labelText: 'Full name',
-                errorText: _nameError,
+    return PopScope(
+      canPop: !_saving,
+      child: AlertDialog(
+        title: const Text('New lead'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: _name,
+                autofocus: true,
+                enabled: !_saving,
+                decoration: InputDecoration(
+                  labelText: 'Full name',
+                  errorText: _nameError,
+                ),
               ),
-            ),
-            TextField(
-              controller: _email,
-              enabled: !_saving,
-              decoration: const InputDecoration(labelText: 'Email (optional)'),
-            ),
-            TextField(
-              controller: _phone,
-              enabled: !_saving,
-              decoration: const InputDecoration(labelText: 'Phone (optional)'),
-            ),
-            TextField(
-              controller: _company,
-              enabled: !_saving,
-              decoration:
-                  const InputDecoration(labelText: 'Company (optional)'),
-            ),
-            _errorLine(context, _error),
-          ],
+              TextField(
+                controller: _email,
+                enabled: !_saving,
+                decoration:
+                    const InputDecoration(labelText: 'Email (optional)'),
+              ),
+              TextField(
+                controller: _phone,
+                enabled: !_saving,
+                decoration:
+                    const InputDecoration(labelText: 'Phone (optional)'),
+              ),
+              TextField(
+                controller: _company,
+                enabled: !_saving,
+                decoration:
+                    const InputDecoration(labelText: 'Company (optional)'),
+              ),
+              _errorLine(context, _error),
+            ],
+          ),
         ),
+        actions: [
+          TextButton(
+            onPressed: _saving ? null : () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: _saving ? null : _save,
+            child: Text(_saving ? 'Creating…' : 'Create'),
+          ),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: _saving ? null : () => Navigator.of(context).pop(false),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: _saving ? null : _save,
-          child: Text(_saving ? 'Creating…' : 'Create'),
-        ),
-      ],
     );
   }
 }
@@ -207,68 +212,71 @@ class _NewBeoDialogState extends ConsumerState<NewBeoDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('New BEO'),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: _name,
-              autofocus: true,
-              enabled: !_saving,
-              decoration: InputDecoration(
-                labelText: 'Event name',
-                errorText: _nameError,
+    return PopScope(
+      canPop: !_saving,
+      child: AlertDialog(
+        title: const Text('New BEO'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: _name,
+                autofocus: true,
+                enabled: !_saving,
+                decoration: InputDecoration(
+                  labelText: 'Event name',
+                  errorText: _nameError,
+                ),
               ),
-            ),
-            TextField(
-              controller: _guests,
-              enabled: !_saving,
-              keyboardType: TextInputType.number,
-              decoration: InputDecoration(
-                labelText: 'Guest count (optional)',
-                errorText: _guestsError,
+              TextField(
+                controller: _guests,
+                enabled: !_saving,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: 'Guest count (optional)',
+                  errorText: _guestsError,
+                ),
               ),
-            ),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: Text(
-                _eventDate == null
-                    ? 'Event date and start time (optional)'
-                    : VenueClock.formatWallDateTime(_eventDate!),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(
+                  _eventDate == null
+                      ? 'Event date and start time (optional)'
+                      : VenueClock.formatWallDateTime(_eventDate!),
+                ),
+                trailing: const Icon(Icons.calendar_today_outlined),
+                onTap: _saving
+                    ? null
+                    : () async {
+                        final nowWall = widget.clock.now;
+                        final picked = await pickVenueDateTime(
+                          context,
+                          initial: _eventDate ?? defaultBeoStartWall(nowWall),
+                          nowWall: nowWall,
+                          daysBack: 0,
+                          daysForward: 730,
+                        );
+                        if (picked != null && mounted) {
+                          setState(() => _eventDate = picked);
+                        }
+                      },
               ),
-              trailing: const Icon(Icons.calendar_today_outlined),
-              onTap: _saving
-                  ? null
-                  : () async {
-                      final nowWall = widget.clock.now;
-                      final picked = await pickVenueDateTime(
-                        context,
-                        initial: _eventDate ?? defaultBeoStartWall(nowWall),
-                        nowWall: nowWall,
-                        daysBack: 0,
-                        daysForward: 730,
-                      );
-                      if (picked != null && mounted) {
-                        setState(() => _eventDate = picked);
-                      }
-                    },
-            ),
-            _errorLine(context, _error),
-          ],
+              _errorLine(context, _error),
+            ],
+          ),
         ),
+        actions: [
+          TextButton(
+            onPressed: _saving ? null : () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: _saving ? null : _save,
+            child: Text(_saving ? 'Creating…' : 'Create'),
+          ),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: _saving ? null : () => Navigator.of(context).pop(false),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: _saving ? null : _save,
-          child: Text(_saving ? 'Creating…' : 'Create'),
-        ),
-      ],
     );
   }
 }
@@ -323,34 +331,37 @@ class _AddLeadNoteDialogState extends ConsumerState<AddLeadNoteDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Add note'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TextField(
-            controller: _text,
-            autofocus: true,
-            enabled: !_saving,
-            maxLines: 4,
-            decoration: InputDecoration(
-              labelText: 'Note',
-              errorText: _textError,
+    return PopScope(
+      canPop: !_saving,
+      child: AlertDialog(
+        title: const Text('Add note'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _text,
+              autofocus: true,
+              enabled: !_saving,
+              maxLines: 4,
+              decoration: InputDecoration(
+                labelText: 'Note',
+                errorText: _textError,
+              ),
             ),
+            _errorLine(context, _error),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: _saving ? null : () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
           ),
-          _errorLine(context, _error),
+          FilledButton(
+            onPressed: _saving ? null : _save,
+            child: Text(_saving ? 'Adding…' : 'Add'),
+          ),
         ],
       ),
-      actions: [
-        TextButton(
-          onPressed: _saving ? null : () => Navigator.of(context).pop(false),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: _saving ? null : _save,
-          child: Text(_saving ? 'Adding…' : 'Add'),
-        ),
-      ],
     );
   }
 }
