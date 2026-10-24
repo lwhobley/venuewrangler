@@ -82,4 +82,22 @@ class ConsentGatedAiRepository implements AiRepository {
     await _gate();
     return _inner.parseEventEnquiry(venueId: venueId, enquiryText: enquiryText);
   }
+
+  @override
+  Future<ScheduleDraftResult> draftSchedule({
+    required String venueId,
+    required String context,
+  }) async {
+    await _gate();
+    return _inner.draftSchedule(venueId: venueId, context: context);
+  }
+
+  @override
+  Future<InventoryReorderResult> suggestReorder({
+    required String venueId,
+    required String context,
+  }) async {
+    await _gate();
+    return _inner.suggestReorder(venueId: venueId, context: context);
+  }
 }

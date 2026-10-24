@@ -50,6 +50,20 @@ abstract interface class AiRepository {
     required String venueId,
     required String enquiryText,
   });
+
+  /// Manager-only: drafts a week of shifts from [context] (see
+  /// schedules/domain/schedule_draft.dart). Always previewed, never applied.
+  Future<ScheduleDraftResult> draftSchedule({
+    required String venueId,
+    required String context,
+  });
+
+  /// Manager-only: drafts a reorder list from [context] (see
+  /// inventory/domain/reorder_planner.dart). Always previewed, never applied.
+  Future<InventoryReorderResult> suggestReorder({
+    required String venueId,
+    required String context,
+  });
 }
 
 class SupabaseAiRepository implements AiRepository {
@@ -136,6 +150,19 @@ class SupabaseAiRepository implements AiRepository {
   }
 
   @override
+  Future<ScheduleDraftResult> draftSchedule({
+    required String venueId,
+    required String context,
+  }) async {
+    return _invoke(
+      task: 'schedule_draft',
+      venueId: venueId,
+      input: context,
+      parse: ScheduleDraftResult.fromJson,
+    );
+  }
+
+  @override
   Future<EventEnquiryResult> parseEventEnquiry({
     required String venueId,
     required String enquiryText,
@@ -145,6 +172,19 @@ class SupabaseAiRepository implements AiRepository {
       venueId: venueId,
       input: enquiryText,
       parse: EventEnquiryResult.fromJson,
+    );
+  }
+
+  @override
+  Future<InventoryReorderResult> suggestReorder({
+    required String venueId,
+    required String context,
+  }) async {
+    return _invoke(
+      task: 'inventory_reorder',
+      venueId: venueId,
+      input: context,
+      parse: InventoryReorderResult.fromJson,
     );
   }
 

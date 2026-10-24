@@ -26,6 +26,13 @@ class _FakeTimeClockRepository implements TimeClockRepository {
   List<TimeEntry> entries;
 
   @override
+  Future<List<TimeEntry>> getVenueEntries({
+    required String venueId,
+    int limit = 50,
+  }) async =>
+      entries.where((e) => e.isOpen).toList();
+
+  @override
   Future<List<TimeEntry>> getVenueEntriesInRange({
     required String venueId,
     required DateTime from,

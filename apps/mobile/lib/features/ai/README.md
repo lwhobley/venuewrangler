@@ -8,6 +8,8 @@ previewed/advisory for the user to accept, edit, or ignore.
 - `domain/ai_models.dart` — result types for the task types the Edge Function supports:
   `StaffImportResult`, `InventoryParseResult`, `SchedulingSuggestionResult`,
   `WranglerAskResult`, `ShiftInsightsResult`, `HandoverSummaryResult`, `EventEnquiryResult`.
+  `WranglerAskResult`, `ShiftInsightsResult`, `ScheduleDraftResult`, `InventoryReorderResult`
+  (the last two parse leniently: odd rows skipped, text capped, quantities clamped).
 - `data/ai_repository.dart` — `AiRepository` interface + `SupabaseAiRepository`, which calls
   `client.functions.invoke('ai-assistant', ...)` and maps the Edge Function's JSON error
   codes (budget exceeded, rate limited, not a venue member, `ai_disabled_for_org`, etc.) to
@@ -56,6 +58,16 @@ previewed/advisory for the user to accept, edit, or ignore.
   roster or client enquiry can include them. The result only prefills an editable form (unsure
   fields highlighted, missing list shown); the lead (and optional BEO draft) is created on
   confirm via `CrmRepository`. "Fill in by hand" opens the same form without AI.
+- `schedule_draft` — "Draft week" on the schedule list (`features/schedules`,
+  `schedule_draft_screen.dart`). Manager-only. Dart gathers roster keys (`staff_1`…, short names,
+  usual roles, hours so far), the week's existing shifts, approved time off and the manager's
+  rules (`schedules/domain/schedule_draft.dart`); the answer is a review list with warnings
+  computed in Dart, and shifts are created only on "Add selected".
+- `inventory_reorder` — "Suggest reorder" on the inventory hub (`features/inventory`,
+  `inventory_reorder_screen.dart`). Manager-only. Dart gathers items keyed `item_1`… with on-hand,
+  par, unit cost, supplier and 14/16-day use (`inventory/domain/reorder_planner.dart`); costs and
+  totals are computed in Dart; the screen opens on a deterministic below-par list. No orders are
+  created (there is no purchase-order table); the list can be copied as text.
 
 ## Behaviour to keep
 

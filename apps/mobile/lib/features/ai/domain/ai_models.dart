@@ -382,3 +382,133 @@ class EventEnquiryResult {
     );
   }
 }
+
+// Draft-week and reorder results. Unlike the older parsers above these tolerate missing or
+// extra fields and odd types: every row that is not an object is skipped, text is trimmed and
+// length-capped, and numbers are clamped, because the callers show them for review and then
+// write them (see schedules/domain/schedule_draft.dart and
+// inventory/domain/reorder_planner.dart).
+
+String? _draftText(Object? value, {int max = 200}) {
+  if (value == null) return null;
+  final text = value.toString().replaceAll(RegExp(r'\s+'), ' ').trim();
+  if (text.isEmpty) return null;
+  return text.length > max ? text.substring(0, max) : text;
+}
+
+Iterable<Map<String, dynamic>> _draftRows(Object? value) sync* {
+  if (value is! List) return;
+  for (final row in value) {
+    if (row is Map) yield Map<String, dynamic>.from(row);
+  }
+}
+
+/// One proposed shift from `schedule_draft`. [staffId] is a roster key (`staff_3`) or empty for
+/// an open shift; callers resolve it against the roster and drop keys that do not match.
+class ScheduleDraftShift {
+  const ScheduleDraftShift({
+    required this.staffId,
+    this.roleLabel,
+    this.startTime,
+    this.endTime,
+    this.reason = '',
+  });
+
+  final String staffId;
+  final String? roleLabel;
+  final String? startTime;
+  final String? endTime;
+  final String reason;
+
+  factory ScheduleDraftShift.fromJson(Map<String, dynamic> json) =>
+      ScheduleDraftShift(
+        staffId: _draftText(json['staff_id'], max: 40) ?? '',
+        roleLabel: _draftText(json['role_label'], max: 60),
+        startTime: _draftText(json['start_time'], max: 40),
+        endTime: _draftText(json['end_time'], max: 40),
+        reason: _draftText(json['reason'], max: 240) ?? '',
+      );
+}
+
+class ScheduleDraftResult {
+  const ScheduleDraftResult(this.shifts);
+
+  /// Rows beyond this many are ignored: a week never needs more, and a runaway answer must not
+  /// flood the review list.
+  static const maxShifts = 120;
+
+  final List<ScheduleDraftShift> shifts;
+
+  factory ScheduleDraftResult.fromJson(Map<String, dynamic> json) =>
+      ScheduleDraftResult(
+        _draftRows(json['shifts'])
+            .map(ScheduleDraftShift.fromJson)
+            .take(maxShifts)
+            .toList(growable: false),
+      );
+}
+
+/// One draft order line from `inventory_reorder`. [suggestedQuantity] is null when the model's
+/// number was missing, negative or not finite; it is clamped to [maxQuantity].
+class ReorderSuggestion {
+  const ReorderSuggestion({
+    required this.itemKey,
+    this.suggestedQuantity,
+    this.reason = '',
+  });
+
+  static const maxQuantity = 100000;
+
+  final String itemKey;
+  final num? suggestedQuantity;
+  final String reason;
+
+  factory ReorderSuggestion.fromJson(Map<String, dynamic> json) {
+    final raw = json['suggested_quantity'];
+    final number =
+        raw is num ? raw : num.tryParse(raw?.toString().trim() ?? '');
+    final valid = number != null && number.isFinite && number >= 0;
+    return ReorderSuggestion(
+      itemKey: _draftText(json['item_key'], max: 40) ?? '',
+      suggestedQuantity: valid ? number.clamp(0, maxQuantity) : null,
+      reason: _draftText(json['reason'], max: 240) ?? '',
+    );
+  }
+}
+
+class ReorderVarianceFlag {
+  const ReorderVarianceFlag({required this.itemKey, required this.note});
+
+  final String itemKey;
+  final String note;
+
+  factory ReorderVarianceFlag.fromJson(Map<String, dynamic> json) =>
+      ReorderVarianceFlag(
+        itemKey: _draftText(json['item_key'], max: 40) ?? '',
+        note: _draftText(json['note'], max: 240) ?? '',
+      );
+}
+
+class InventoryReorderResult {
+  const InventoryReorderResult({
+    required this.orders,
+    this.varianceFlags = const [],
+  });
+
+  static const maxRows = 300;
+
+  final List<ReorderSuggestion> orders;
+  final List<ReorderVarianceFlag> varianceFlags;
+
+  factory InventoryReorderResult.fromJson(Map<String, dynamic> json) =>
+      InventoryReorderResult(
+        orders: _draftRows(json['orders'])
+            .map(ReorderSuggestion.fromJson)
+            .take(maxRows)
+            .toList(growable: false),
+        varianceFlags: _draftRows(json['variance_flags'])
+            .map(ReorderVarianceFlag.fromJson)
+            .take(maxRows)
+            .toList(growable: false),
+      );
+}

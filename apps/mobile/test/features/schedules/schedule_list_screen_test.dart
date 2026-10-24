@@ -515,4 +515,14 @@ void main() {
       DateTime.utc(2026, 10, 25, 9, 30),
     );
   });
+
+  testWidgets('managers are offered Draft week', (tester) async {
+    await _pump(tester);
+    expect(find.text('Draft week'), findsOneWidget);
+  });
+
+  testWidgets('staff are not offered Draft week', (tester) async {
+    await _pump(tester, manager: false);
+    expect(find.text('Draft week'), findsNothing);
+  });
 }
