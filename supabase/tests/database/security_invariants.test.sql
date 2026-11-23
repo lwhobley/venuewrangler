@@ -80,8 +80,10 @@ select ok(
 select ok(
   not has_table_privilege('authenticated', 'public.retained_wage_profiles', 'select')
   and not has_table_privilege('authenticated', 'app_hidden.platform_settings', 'select')
-  and not has_table_privilege('authenticated', 'app_hidden.rate_limit_counters', 'select'),
-  'legal-hold, settings and rate-limit tables are not client-readable'
+  and not has_table_privilege('authenticated', 'app_hidden.rate_limit_counters', 'select')
+  and not has_table_privilege('authenticated', 'app_hidden.privilege_gate', 'select')
+  and not has_table_privilege('authenticated', 'app_hidden.privilege_gate', 'insert'),
+  'legal-hold, settings, rate-limit and privilege-gate tables are not client-readable'
 );
 
 select ok(

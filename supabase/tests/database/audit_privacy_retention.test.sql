@@ -82,14 +82,19 @@ select ok(
           and not (metadata -> 'after' ? 'clock_out_lat')
    from public.audit_log where action = 'time_entry.correct' and target_id = 'c5000000-0000-0000-0000-000000000003'),
   'correction audit records carry no GPS coordinates');
-select is(current_setting('app.time_entry_correction', true), 'off',
-  'the correction bypass flag is reset right after the update');
+select ok(
+  not exists (
+    select 1 from app_hidden.privilege_gate
+    where backend_pid = pg_backend_pid() and flag = 'time_entry_correction'
+  ),
+  'the correction privilege gate is closed right after the update'
+);
 
--- GPS retention purge guard: only GPS columns may change, and only while the purge flag is set.
+-- GPS retention purge guard: only GPS columns may change, and only while the purge gate is open.
 select throws_ok(
   $$ update public.time_entries set clock_in_lat = null where id = 'c5000000-0000-0000-0000-000000000003' $$,
   '42501', null, 'GPS columns are immutable without the retention flag');
-select set_config('app.gps_purge', 'on', true);
+select app_hidden.open_privilege_gate('gps_purge');
 select lives_ok(
   $$ update public.time_entries set clock_in_lat = null, clock_in_lng = null, clock_in_accuracy_m = null
        where id = 'c5000000-0000-0000-0000-000000000003' $$,
@@ -97,7 +102,7 @@ select lives_ok(
 select throws_ok(
   $$ update public.time_entries set clock_out_at = now() where id = 'c5000000-0000-0000-0000-000000000003' $$,
   '42501', null, 'the retention flag does not let anything but GPS change');
-select set_config('app.gps_purge', 'off', true);
+select app_hidden.close_privilege_gate('gps_purge');
 
 -- ---------------------------------------------------------------------------
 -- B. Guest erasure (P-03)
@@ -116,9 +121,9 @@ insert into public.crm_leads (id, venue_id, full_name, email, phone, company) va
   ('c8000000-0000-0000-0000-000000000002', 'c3000000-0000-0000-0000-0000000000a1', 'Unrelated Lead', 'lead@example.com', null, null);
 insert into public.crm_notes (lead_id, text) values ('c8000000-0000-0000-0000-000000000001', 'Gina prefers the patio');
 
-insert into public.pos_checks (id, venue_id, organization_id, provider, external_check_id, opened_at, subtotal_cents, total_cents, guest_name, raw_payload) values
-  ('c9000000-0000-0000-0000-000000000001', 'c3000000-0000-0000-0000-0000000000a1', 'c2000000-0000-0000-0000-00000000000a', 'toast', 'chk-1', now() - interval '1 hour', 1000, 1100, 'Gina Guest', '{"guest":"Gina Guest"}'),
-  ('c9000000-0000-0000-0000-000000000002', 'c3000000-0000-0000-0000-0000000000a1', 'c2000000-0000-0000-0000-00000000000a', 'toast', 'chk-2', now() - interval '1 hour', 1000, 1100, 'Other Guest', '{"guest":"Other Guest"}');
+insert into public.pos_checks (id, venue_id, organization_id, provider, external_check_id, opened_at, subtotal_cents, total_cents, guest_name, guest_id, raw_payload) values
+  ('c9000000-0000-0000-0000-000000000001', 'c3000000-0000-0000-0000-0000000000a1', 'c2000000-0000-0000-0000-00000000000a', 'toast', 'chk-1', now() - interval '1 hour', 1000, 1100, 'Gina Guest', 'c6000000-0000-0000-0000-000000000001', '{"guest":"Gina Guest"}'),
+  ('c9000000-0000-0000-0000-000000000002', 'c3000000-0000-0000-0000-0000000000a1', 'c2000000-0000-0000-0000-00000000000a', 'toast', 'chk-2', now() - interval '1 hour', 1000, 1100, 'Gina Guest', null, '{"guest":"name collision"}');
 
 set local role authenticated;
 set local "request.jwt.claim.sub" to 'c1000000-0000-0000-0000-000000000002';
@@ -150,11 +155,13 @@ select is((select email from public.crm_leads where id = 'c8000000-0000-0000-000
 select is((select count(*)::int from public.crm_notes where lead_id = 'c8000000-0000-0000-0000-000000000001'), 0,
   'free-text notes on the erased lead are deleted');
 select results_eq(
-  $$ select guest_name, raw_payload is null from public.pos_checks where id = 'c9000000-0000-0000-0000-000000000001' $$,
-  $$ values (null::text, true) $$,
-  'POS checks naming the guest lose the name and raw payload (even though the check is closed)');
-select is((select raw_payload is not null from public.pos_checks where id = 'c9000000-0000-0000-0000-000000000002'), true,
-  'other POS checks keep their payload');
+  $$ select guest_name, guest_id, raw_payload is null from public.pos_checks where id = 'c9000000-0000-0000-0000-000000000001' $$,
+  $$ values (null::text, null::uuid, true) $$,
+  'POS checks linked by guest_id lose the name, link and raw payload');
+select results_eq(
+  $$ select guest_name, raw_payload is not null from public.pos_checks where id = 'c9000000-0000-0000-0000-000000000002' $$,
+  $$ values ('Gina Guest'::text, true) $$,
+  'a same-display-name POS check without guest_id is not scrubbed');
 select ok((select count(*) = 1 from public.audit_log where action = 'guest.erase'
             and target_id = 'c6000000-0000-0000-0000-000000000001'
             and not (metadata::text like '%Gina%')),

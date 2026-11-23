@@ -3,7 +3,7 @@
 -- members (...005 and ...008) to exercise accept/offered-to logic.
 
 begin;
-select plan(18);
+select plan(19);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-000000000002', 'org-a-owner@example.com'),
@@ -215,6 +215,24 @@ select throws_ok(
        accepted_by='00000000-0000-0000-0000-000000000008'
      where id='50000000-0000-0000-0000-000000000004' $$,
   '40001', null, 'stale swap cannot reassign a shift that changed owners'
+);
+
+-- M7: managers may change status/accepted_by but not attribution / targeting columns.
+-- Both seeded shifts are owned by ...008 after earlier accepts/reassignments.
+reset role;
+set local role authenticated;
+set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-000000000008';
+insert into public.shift_swaps (id, shift_id) values
+  ('50000000-0000-0000-0000-000000000005', '40000000-0000-0000-0000-000000000001');
+reset role;
+set local role authenticated;
+set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-000000000004';
+select throws_ok(
+  $$ update public.shift_swaps
+        set requested_by = '00000000-0000-0000-0000-000000000005'
+      where id = '50000000-0000-0000-0000-000000000005' $$,
+  '42501', null,
+  'a venue_manager cannot rewrite requested_by on a swap'
 );
 
 select * from finish();

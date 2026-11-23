@@ -233,9 +233,9 @@ select isnt(
 );
 
 -- Seed the signed state the way record_contract_signature would (the guard refuses direct writes).
-do $$ begin perform set_config('app.contract_signing', 'on', true); end $$;
+do $$ begin perform app_hidden.open_privilege_gate('contract_signing'); end $$;
 update public.crm_contracts set status = 'fully_signed' where id = '80000000-0000-0000-0000-000000000001';
-do $$ begin perform set_config('app.contract_signing', 'off', true); end $$;
+do $$ begin perform app_hidden.close_privilege_gate('contract_signing'); end $$;
 
 select throws_ok(
   $$ update public.crm_contracts set event_name = 'Changed Name' where id = '80000000-0000-0000-0000-000000000001' $$,

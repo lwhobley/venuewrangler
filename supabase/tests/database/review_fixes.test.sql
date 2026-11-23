@@ -379,12 +379,12 @@ select is(
 -- ---------------------------------------------------------------------------
 reset role;
 -- Seed a signed contract the way record_contract_signature would (the guard refuses direct writes).
-do $$ begin perform set_config('app.contract_signing', 'on', true); end $$;
+do $$ begin perform app_hidden.open_privilege_gate('contract_signing'); end $$;
 insert into public.crm_contracts (id, organization_id, venue_id, contract_number, client_signature_name)
   values ('d1000000-0000-0000-0000-0000000000c1', '10000000-0000-0000-0000-00000000000a',
           '20000000-0000-0000-0000-0000000000a1', 'CT-REVIEW-1', 'Pat Client');
 update public.crm_contracts set status = 'fully_signed' where id = 'd1000000-0000-0000-0000-0000000000c1';
-do $$ begin perform set_config('app.contract_signing', 'off', true); end $$;
+do $$ begin perform app_hidden.close_privilege_gate('contract_signing'); end $$;
 
 select throws_ok(
   $$ update public.crm_contracts set payment_schedule = '[{"amount":1}]'::jsonb
@@ -559,9 +559,9 @@ select is(
 -- ---------------------------------------------------------------------------
 -- F18. Clock-out that appends a break closes it, not reopens it
 -- ---------------------------------------------------------------------------
--- correct_time_entry set app.time_entry_correction for this transaction (F4); clear it so the
+-- correct_time_entry opened the privilege gate for this transaction (F4); clear it so the
 -- ordinary clock-out path is what gets exercised here.
-select set_config('app.time_entry_correction', 'off', true);
+select app_hidden.close_privilege_gate('time_entry_correction');
 set local role authenticated;
 set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-0000000000a9';
 insert into public.time_entries (id, venue_id, clock_in_lat, clock_in_lng, clock_in_accuracy_m) values
