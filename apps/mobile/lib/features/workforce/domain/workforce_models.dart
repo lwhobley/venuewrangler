@@ -15,23 +15,23 @@ enum WorkforceRole {
 
   /// Returns null for unexpected / legacy DB values instead of throwing.
   static WorkforceRole? tryFromDb(String value) => switch (value) {
-        'venue_manager' => WorkforceRole.venueManager,
-        'supervisor' => WorkforceRole.supervisor,
-        'staff' => WorkforceRole.staff,
-        _ => null,
-      };
+    'venue_manager' => WorkforceRole.venueManager,
+    'supervisor' => WorkforceRole.supervisor,
+    'staff' => WorkforceRole.staff,
+    _ => null,
+  };
 
   String toDb() => switch (this) {
-        WorkforceRole.venueManager => 'venue_manager',
-        WorkforceRole.supervisor => 'supervisor',
-        WorkforceRole.staff => 'staff',
-      };
+    WorkforceRole.venueManager => 'venue_manager',
+    WorkforceRole.supervisor => 'supervisor',
+    WorkforceRole.staff => 'staff',
+  };
 
   String get label => switch (this) {
-        WorkforceRole.venueManager => 'Venue manager',
-        WorkforceRole.supervisor => 'Supervisor',
-        WorkforceRole.staff => 'Staff',
-      };
+    WorkforceRole.venueManager => 'Venue manager',
+    WorkforceRole.supervisor => 'Supervisor',
+    WorkforceRole.staff => 'Staff',
+  };
 }
 
 /// One row of a venue's roster: a membership joined with the member's profile. There is no
@@ -64,12 +64,12 @@ enum InviteStatus {
   expired;
 
   static InviteStatus fromDb(String value) => switch (value) {
-        'pending' => InviteStatus.pending,
-        'accepted' => InviteStatus.accepted,
-        'revoked' => InviteStatus.revoked,
-        'expired' => InviteStatus.expired,
-        _ => throw ArgumentError('Unknown invite status: $value'),
-      };
+    'pending' => InviteStatus.pending,
+    'accepted' => InviteStatus.accepted,
+    'revoked' => InviteStatus.revoked,
+    'expired' => InviteStatus.expired,
+    _ => throw ArgumentError('Unknown invite status: $value'),
+  };
 }
 
 class Invite {
@@ -106,8 +106,7 @@ class Invite {
     final InviteStatus status;
     if (json['status'] == 'pending' &&
         json['expires_at'] != null &&
-        DateTime.parse(json['expires_at'] as String)
-            .isBefore(DateTime.now())) {
+        DateTime.parse(json['expires_at'] as String).isBefore(DateTime.now())) {
       status = InviteStatus.expired;
     } else {
       try {
