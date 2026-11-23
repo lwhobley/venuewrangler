@@ -319,4 +319,21 @@ void main() {
     );
     expect(await none.prove('x'), isNull);
   });
+  test('a transport failure surfaces as NetworkError, not an unhandled exception', () async {
+    final client = _client(
+      (body) async => throw Exception('SocketException: network unreachable'),
+      _Proofs(null),
+    );
+    await expectLater(_punch(client), throwsA(isA<NetworkError>()));
+  });
+
+  test('a malformed punch response surfaces as NetworkError', () async {
+    final client = _client(
+      (body) async => body['action'] == 'challenge'
+          ? {'nonce': 'n-1', 'mode': 'observe'}
+          : {'entry': {'id': 42}},
+      _Proofs(null),
+    );
+    await expectLater(_punch(client), throwsA(isA<NetworkError>()));
+  });
 }

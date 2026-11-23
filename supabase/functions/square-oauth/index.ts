@@ -40,11 +40,17 @@ function redirectResponse(url: string): Response {
 
 // Best-effort provider-side revoke of the stored Square access token. Never throws and never
 // blocks disconnect: returns false on any failure and the caller reports it as `revoked: false`.
+//
+// Without `revoke_only_access_token`, Square's /oauth2/revoke ends the WHOLE merchant-to-app
+// authorization, which is what a user-initiated disconnect wants. Replacing a grant on reconnect,
+// or cleaning up an abandoned consent, must pass `onlyAccessToken = true`: the merchant's
+// newly issued (or still-live) grant shares that authorization and would be killed with it.
 async function postSquareRevoke(
   accessToken: string,
   apiBase: string,
   clientId: string,
   clientSecret: string,
+  onlyAccessToken = false,
 ): Promise<boolean> {
   try {
     const response = await fetch(`${apiBase}/oauth2/revoke`, {
@@ -53,7 +59,11 @@ async function postSquareRevoke(
         "Content-Type": "application/json",
         Authorization: `Client ${clientSecret}`,
       },
-      body: JSON.stringify({ client_id: clientId, access_token: accessToken }),
+      body: JSON.stringify({
+        client_id: clientId,
+        access_token: accessToken,
+        ...(onlyAccessToken ? { revoke_only_access_token: true } : {}),
+      }),
       signal: AbortSignal.timeout(OAUTH_FETCH_TIMEOUT_MS),
     });
     if (!response.ok) {
@@ -74,6 +84,7 @@ async function revokeSquareAccessToken(
   apiBase: string,
   clientId: string,
   clientSecret: string,
+  onlyAccessToken = false,
 ): Promise<boolean> {
   try {
     const { data: connection, error } = await serviceClient
@@ -88,7 +99,7 @@ async function revokeSquareAccessToken(
       venueId,
       provider: "square",
     });
-    return await postSquareRevoke(accessToken, apiBase, clientId, clientSecret);
+    return await postSquareRevoke(accessToken, apiBase, clientId, clientSecret, onlyAccessToken);
   } catch (error) {
     console.error("Square token revoke threw", error);
     return false;
@@ -245,7 +256,8 @@ async function handleRequest(req: Request): Promise<Response> {
       provider: "square",
       state: statePayload,
       encryptionKey,
-      revokeTokens: ({ accessToken }) => postSquareRevoke(accessToken, apiBase, clientId, clientSecret),
+      revokeTokens: ({ accessToken }) =>
+        postSquareRevoke(accessToken, apiBase, clientId, clientSecret, true),
       tokens: {
         accessToken: tokenData.access_token,
         refreshToken: tokenData.refresh_token ?? null,
@@ -274,6 +286,7 @@ async function handleRequest(req: Request): Promise<Response> {
           apiBase,
           clientId,
           clientSecret,
+          true,
         ),
     });
   }

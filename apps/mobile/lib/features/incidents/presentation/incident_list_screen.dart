@@ -291,7 +291,7 @@ class IncidentListScreen extends ConsumerWidget {
     final extension =
         photoPath.contains('.') ? photoPath.split('.').last : 'jpg';
     // Path: {org}/{venue}/{incident_id}/{attachmentId}.ext — Storage RLS joins the
-    // incident id (see 20261123150000_incident_evidence_rls_alignment.sql).
+    // incident id (see 20261123150001_incident_evidence_rls_alignment.sql).
     final objectPath =
         '${venue.organizationId}/${venue.id}/$incidentId/$attachmentId.$extension';
 

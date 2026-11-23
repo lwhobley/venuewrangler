@@ -36,12 +36,12 @@ class _RecoveryStorage extends SecureSessionStorage {
 
 void main() {
   test('password policy mirrors the project rules', () {
-    expect(passwordPolicyProblem('Ab1!'), isNotNull); // too short
-    expect(passwordPolicyProblem('abcdefg1!'), 'Add an uppercase letter');
-    expect(passwordPolicyProblem('ABCDEFG1!'), 'Add a lowercase letter');
-    expect(passwordPolicyProblem('Abcdefgh!'), 'Add a number');
-    expect(passwordPolicyProblem('Abcdefg12'), 'Add a symbol');
-    expect(passwordPolicyProblem('Abcdefg1!'), isNull);
+    expect(passwordPolicyProblem('Abcdefg1!'), 'Use at least 12 characters');
+    expect(passwordPolicyProblem('abcdefghij1!'), 'Add an uppercase letter');
+    expect(passwordPolicyProblem('ABCDEFGHIJ1!'), 'Add a lowercase letter');
+    expect(passwordPolicyProblem('Abcdefghijk!'), 'Add a number');
+    expect(passwordPolicyProblem('Abcdefghij12'), 'Add a symbol');
+    expect(passwordPolicyProblem('Abcdefghij1!'), isNull);
   });
 
   test('reset emails send the user back into the app', () {
@@ -97,7 +97,7 @@ void main() {
 
     await tester.enterText(
       find.widgetWithText(TextFormField, 'New password'),
-      'weakpass',
+      'weakpassword',
     );
     await tester.tap(find.text('Save password'));
     await tester.pump();
@@ -106,11 +106,11 @@ void main() {
 
     await tester.enterText(
       find.widgetWithText(TextFormField, 'New password'),
-      'Stronger1!',
+      'Stronger123!',
     );
     await tester.enterText(
       find.widgetWithText(TextFormField, 'Confirm new password'),
-      'Different1!',
+      'Different12!',
     );
     await tester.tap(find.text('Save password'));
     await tester.pump();
@@ -118,12 +118,12 @@ void main() {
 
     await tester.enterText(
       find.widgetWithText(TextFormField, 'Confirm new password'),
-      'Stronger1!',
+      'Stronger123!',
     );
     await tester.tap(find.text('Save password'));
     await tester.pumpAndSettle();
 
-    expect(auth.newPassword, 'Stronger1!');
+    expect(auth.newPassword, 'Stronger123!');
     expect(storage.cleared, isTrue);
     expect(container.read(passwordRecoveryPendingProvider), isFalse);
   });

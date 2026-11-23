@@ -4,7 +4,7 @@
 -- accepts one explicitly (accept_invite).
 
 begin;
-select plan(25);
+select plan(28);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-000000000004', 'venue-a1-manager@example.com');
@@ -20,12 +20,18 @@ insert into public.memberships (user_id, organization_id, venue_id, role) values
 
 -- Seeded as table owner. The expired row sets expires_at on insert because
 -- enforce_invite_revoke_only forbids changing it on update, by design.
+-- invited_by is derived from auth.uid() on insert; seed as the inviter.
+set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-000000000004';
 insert into public.invites (id, venue_id, email, role, invited_by) values
   ('30000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-0000000000a1', 'new-hire@example.com', 'staff', '00000000-0000-0000-0000-000000000004'),
   ('30000000-0000-0000-0000-000000000002', '20000000-0000-0000-0000-0000000000a1', 'revoked-hire@example.com', 'staff', '00000000-0000-0000-0000-000000000004');
+set local "request.jwt.claim.sub" to '';
 
+-- invited_by is derived from auth.uid() on insert; seed as the inviter.
+set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-000000000004';
 insert into public.invites (id, venue_id, email, role, invited_by, expires_at) values
   ('30000000-0000-0000-0000-000000000003', '20000000-0000-0000-0000-0000000000a1', 'expired-hire@example.com', 'staff', '00000000-0000-0000-0000-000000000004', now() - interval '1 day');
+set local "request.jwt.claim.sub" to '';
 
 update public.invites set status = 'revoked' where id = '30000000-0000-0000-0000-000000000002';
 
@@ -129,8 +135,11 @@ reset role;
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-000000000014', 'new-hire@example.com');   -- same address, unverified
 
+-- invited_by is derived from auth.uid() on insert; seed as the inviter.
+set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-000000000004';
 insert into public.invites (id, venue_id, email, role, invited_by) values
   ('30000000-0000-0000-0000-000000000004', '20000000-0000-0000-0000-0000000000a1', 'new-hire@example.com', 'supervisor', '00000000-0000-0000-0000-000000000004');
+set local "request.jwt.claim.sub" to '';
 
 set local role authenticated;
 set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-000000000014';
@@ -181,15 +190,25 @@ select throws_ok(
 -- ---------------------------------------------------------------------------
 reset role;
 insert into auth.users (id, email, email_confirmed_at) values
-  ('00000000-0000-0000-0000-000000000015', 'promo@example.com', now());
+  ('00000000-0000-0000-0000-000000000015', 'promo@example.com', now()),
+  ('00000000-0000-0000-0000-000000000016', 'org-admin@example.com', now()),
+  ('00000000-0000-0000-0000-000000000017', 'peer-manager@example.com', now());
+-- Only org owners/admins may grant venue_manager (can_manage_member_role).
+insert into public.memberships (user_id, organization_id, venue_id, role) values
+  ('00000000-0000-0000-0000-000000000016', '10000000-0000-0000-0000-00000000000a', null, 'organization_admin'),
+  ('00000000-0000-0000-0000-000000000017', '10000000-0000-0000-0000-00000000000a',
+   '20000000-0000-0000-0000-0000000000a1', 'venue_manager');
 insert into public.memberships (user_id, organization_id, venue_id, role) values
   ('00000000-0000-0000-0000-000000000015', '10000000-0000-0000-0000-00000000000a',
    '20000000-0000-0000-0000-0000000000a1', 'staff');
+-- invited_by is derived from auth.uid() on insert; seed as the inviter.
+set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-000000000016';
 insert into public.invites (id, venue_id, email, role, invited_by) values
   ('30000000-0000-0000-0000-000000000005', '20000000-0000-0000-0000-0000000000a1',
-   'promo@example.com', 'venue_manager', '00000000-0000-0000-0000-000000000004'),
+   'promo@example.com', 'venue_manager', '00000000-0000-0000-0000-000000000016'),
   ('30000000-0000-0000-0000-000000000006', '20000000-0000-0000-0000-0000000000a1',
    'forge-accept@example.com', 'staff', '00000000-0000-0000-0000-000000000004');
+set local "request.jwt.claim.sub" to '';
 
 set local role authenticated;
 set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-000000000015';
@@ -228,6 +247,41 @@ select is(
   (select status from public.invites where id = '30000000-0000-0000-0000-000000000006'),
   'revoked',
   'revoke_invite marks the invite revoked'
+);
+
+-- ---------------------------------------------------------------------------
+-- Invite role gate: a venue_manager cannot grant venue_manager, nor use a re-invite to
+-- change a peer manager's role.
+-- ---------------------------------------------------------------------------
+set local role authenticated;
+set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-000000000004';
+select throws_ok(
+  $$ select public.prepare_staff_invite(
+       '20000000-0000-0000-0000-0000000000a1', 'want-manager@example.com', 'venue_manager') $$,
+  '42501', null,
+  'a venue_manager cannot invite someone as venue_manager'
+);
+reset role;
+-- invited_by is derived from auth.uid() on insert; seed as the inviter.
+set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-000000000004';
+insert into public.invites (id, venue_id, email, role, invited_by) values
+  ('30000000-0000-0000-0000-000000000007', '20000000-0000-0000-0000-0000000000a1',
+   'peer-manager@example.com', 'staff', '00000000-0000-0000-0000-000000000004');
+set local "request.jwt.claim.sub" to '';
+set local role authenticated;
+set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-000000000017';
+select throws_ok(
+  $$ select public.accept_invite('30000000-0000-0000-0000-000000000007') $$,
+  '42501', 'invite_inviter_not_authorized',
+  'a manager''s re-invite cannot demote a peer manager'
+);
+reset role;
+select is(
+  (select role::text from public.memberships
+    where user_id = '00000000-0000-0000-0000-000000000017'
+      and venue_id = '20000000-0000-0000-0000-0000000000a1'),
+  'venue_manager',
+  'peer manager keeps their role'
 );
 
 select * from finish();

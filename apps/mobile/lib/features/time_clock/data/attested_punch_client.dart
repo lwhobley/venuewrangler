@@ -155,6 +155,15 @@ class AttestedPunchClient {
       return TimeEntry.fromJson(Map<String, dynamic>.from(entry));
     } on FunctionException catch (error) {
       throw _map(error, serverMode: serverMode);
+    } on AttestedPunchUnavailable {
+      rethrow;
+    } on AppError {
+      rethrow;
+    } catch (_) {
+      // Transport failures (offline, timeout, socket) and malformed responses must surface as
+      // an AppError the screen can show; letting them escape left the spinner stopping with no
+      // message. Do not fall back to a direct write here: the punch may already have landed.
+      throw const NetworkError();
     }
   }
 
