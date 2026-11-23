@@ -20,18 +20,12 @@ void main() {
     });
 
     test('returns null for unknown roles instead of throwing', () {
-      expect(
-        Invite.tryFromJson({...base, 'role': 'legacy_bartender'}),
-        isNull,
-      );
+      expect(Invite.tryFromJson({...base, 'role': 'legacy_bartender'}), isNull);
       expect(WorkforceRole.tryFromDb('legacy_bartender'), isNull);
     });
 
     test('returns null for unknown status', () {
-      expect(
-        Invite.tryFromJson({...base, 'status': 'mystery'}),
-        isNull,
-      );
+      expect(Invite.tryFromJson({...base, 'status': 'mystery'}), isNull);
     });
   });
 }

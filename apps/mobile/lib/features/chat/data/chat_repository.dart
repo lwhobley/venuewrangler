@@ -1,5 +1,7 @@
 import 'dart:async';
+
 import 'package:supabase_flutter/supabase_flutter.dart';
+
 import '../../../core/errors/app_error.dart';
 import '../domain/chat_contact.dart';
 import '../domain/chat_message.dart';
@@ -93,8 +95,7 @@ class SupabaseChatRepository implements ChatRepository {
         .order('created_at', ascending: false)
         .limit(limit);
 
-    return (response as List<dynamic>)
-        .reversed
+    return (response as List<dynamic>).reversed
         .map((row) => ChatMessage.fromJson(row as Map<String, dynamic>))
         .toList();
   }
@@ -107,9 +108,7 @@ class SupabaseChatRepository implements ChatRepository {
   }) async {
     final userId = _client.auth.currentUser?.id;
     if (userId == null) {
-      throw const AuthError(
-        'Your session has expired. Please sign in again.',
-      );
+      throw const AuthError('Your session has expired. Please sign in again.');
     }
     final conv = await _client
         .from('conversations')
@@ -149,16 +148,13 @@ class SupabaseChatRepository implements ChatRepository {
         .eq('id', conversationId)
         .single();
 
-    await _client.from('conversation_reads').upsert(
-      {
-        'conversation_id': conversationId,
-        'venue_id': conv['venue_id'],
-        'organization_id': conv['organization_id'],
-        'user_id': userId,
-        'read_at': DateTime.now().toUtc().toIso8601String(),
-      },
-      onConflict: 'conversation_id,user_id',
-    );
+    await _client.from('conversation_reads').upsert({
+      'conversation_id': conversationId,
+      'venue_id': conv['venue_id'],
+      'organization_id': conv['organization_id'],
+      'user_id': userId,
+      'read_at': DateTime.now().toUtc().toIso8601String(),
+    }, onConflict: 'conversation_id,user_id');
   }
 
   @override
@@ -168,10 +164,7 @@ class SupabaseChatRepository implements ChatRepository {
   }) async {
     final result = await _client.rpc(
       'create_or_get_dm',
-      params: {
-        'p_venue_id': venueId,
-        'p_target_user_id': targetUserId,
-      },
+      params: {'p_venue_id': venueId, 'p_target_user_id': targetUserId},
     );
     return result as String;
   }
