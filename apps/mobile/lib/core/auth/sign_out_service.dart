@@ -56,8 +56,8 @@ final signOutCleanupGateProvider =
 
 /// Everything that must happen when a session ends, whoever ended it: push-token revocation
 /// (queued for the next sign-in when offline or unauthenticated), the signed-out user's offline
-/// queue entries, picker temp files, and the secure-storage wipe (which also removes the
-/// user-keyed floor-plan drafts).
+/// queue entries (and any legacy null-owner rows), picker temp files, and the secure-storage
+/// wipe (which drops that user's floor-plan drafts while retaining other accounts').
 ///
 /// Each step is isolated: a failure in one never prevents the others. Idempotent per session via
 /// [SignOutCleanupGate]. [userId] is the account that is signing out; when the session is
@@ -97,13 +97,11 @@ Future<void> _cleanup(ProviderContainer container, String? userId) async {
     debugPrint('Sign-out: push token revocation skipped: $error');
   }
   try {
-    // Without a known owner nothing is pruned: pruning "the null user" would delete unowned
-    // legacy entries that belong to nobody in particular.
-    if (userId != null) {
-      await container
-          .read(offlineQueueControllerProvider.notifier)
-          .clearAll(forUserId: userId);
-    }
+    // clearAll also drops legacy null-owner rows. When the owner is unknown, still call it
+    // so those orphans are pruned without touching other users' stamped entries.
+    await container
+        .read(offlineQueueControllerProvider.notifier)
+        .clearAll(forUserId: userId);
   } catch (error) {
     // Queue clear must never block sign-out.
     debugPrint('Sign-out: offline queue clear failed: $error');
@@ -114,21 +112,22 @@ Future<void> _cleanup(ProviderContainer container, String? userId) async {
     debugPrint('Sign-out: picker temp files not cleared: $error');
   }
   try {
-    await storage.clearAll();
+    await storage.clearAll(signingOutUserId: userId);
   } catch (error) {
     // Secure-storage clear must never block sign-out.
     debugPrint('Sign-out: secure storage clear failed: $error');
   }
 }
 
-/// Single sign-out path every screen must use: clears the per-user offline queue
-/// and secure session values *before* signing out, so a shared tablet can never
-/// replay user A's queued writes as user B.
+/// Single sign-out path every screen must use: ends the auth session first, then clears the
+/// per-user offline queue and secure session values. Signing out before the wipe means a
+/// failed `signOut()` leaves local data intact so the person can keep working offline and
+/// retry. Flush already filters by the current user, so a brief window after a successful
+/// remote sign-out (before local prune finishes) cannot replay another account's writes.
 ///
 /// Takes a [ProviderContainer] rather than a widget ref, so a caller that awaits something
 /// first (and may be unmounted when it resumes) can capture the container before the await.
-/// Each cleanup step is isolated: a failure in one never prevents the others, and the final
-/// `signOut()` always runs.
+/// Each cleanup step is isolated: a failure in one never prevents the others.
 Future<void> signOutAndClearScopedData(ProviderContainer container) async {
   String? userId;
   try {
@@ -136,14 +135,13 @@ Future<void> signOutAndClearScopedData(ProviderContainer container) async {
   } catch (_) {
     // No auth wiring (some tests): the cleanup then has no owner to prune.
   }
-  await runSignOutCleanup(container, userId: userId);
   try {
     await container.read(authRepositoryProvider).signOut();
   } catch (_) {
-    // The session survived, so its eventual sign-out still needs its own cleanup.
-    container.read(signOutCleanupGateProvider).reset();
+    // Session still alive — do not wipe the queue or secure storage.
     rethrow;
   }
+  await runSignOutCleanup(container, userId: userId);
 }
 
 /// Side-effect only, watched once at the app root (app/app.dart): runs [runSignOutCleanup] when

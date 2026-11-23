@@ -517,10 +517,19 @@ StatefulShellRoute _fullShell(GlobalKey<NavigatorState> rootKey) {
 /// so that file never has to import this one back: this router already depends on every
 /// feature screen, including the notifications one.
 class PendingNotificationRoute {
-  const PendingNotificationRoute({required this.route, this.venueId});
+  const PendingNotificationRoute({
+    required this.route,
+    this.venueId,
+    this.userId,
+  });
 
   final String route;
   final String? venueId;
+
+  /// Account that was signed in when the notification was tapped. Delivery and retention
+  /// require this to match [currentUserIdProvider] so a deep link cannot jump the next
+  /// person on a shared device into the previous notification's screen.
+  final String? userId;
 }
 
 final pendingNotificationRouteProvider =
@@ -528,6 +537,10 @@ final pendingNotificationRouteProvider =
 
 final notificationTapRoutingProvider = Provider<void>((ref) {
   ref.watch(routerProvider);
+
+  void clearPending() {
+    ref.read(pendingNotificationRouteProvider.notifier).state = null;
+  }
 
   /// Delivers the pending notification when its venue is active. [fromTap] is true only for a
   /// freshly tapped notification: a different venue then sends the person to the switcher once.
@@ -541,6 +554,11 @@ final notificationTapRoutingProvider = Provider<void>((ref) {
     if (role.isLoading && !role.hasValue) return;
     final pending = ref.read(pendingNotificationRouteProvider);
     if (pending == null) return;
+    final userId = ref.read(currentUserIdProvider);
+    if (pending.userId == null || pending.userId != userId) {
+      clearPending();
+      return;
+    }
     final venue = ref.read(activeVenueProvider);
     if (pending.venueId != null && venue?.id != pending.venueId) {
       final router = ref.read(routerProvider);
@@ -550,7 +568,7 @@ final notificationTapRoutingProvider = Provider<void>((ref) {
       }
       return;
     }
-    ref.read(pendingNotificationRouteProvider.notifier).state = null;
+    clearPending();
     ref.read(routerProvider).go(pending.route);
   }
 
@@ -563,7 +581,7 @@ final notificationTapRoutingProvider = Provider<void>((ref) {
         next != null &&
         pending.venueId != null &&
         next.id != pending.venueId) {
-      ref.read(pendingNotificationRouteProvider.notifier).state = null;
+      clearPending();
       final router = ref.read(routerProvider);
       if (router.routeInformationProvider.value.uri.path == '/select-venue') {
         router.go('/');
@@ -574,8 +592,12 @@ final notificationTapRoutingProvider = Provider<void>((ref) {
   });
   ref.listen(myVenueRoleProvider, (_, __) => deliverPending());
   ref.listen(isSignedInProvider, (_, signedIn) {
-    if (!signedIn) {
-      ref.read(pendingNotificationRouteProvider.notifier).state = null;
+    if (!signedIn) clearPending();
+  });
+  ref.listen<String?>(currentUserIdProvider, (previous, next) {
+    final pending = ref.read(pendingNotificationRouteProvider);
+    if (pending != null && pending.userId != next) {
+      clearPending();
     }
   });
   // ignore: unawaited_futures
@@ -583,16 +605,17 @@ final notificationTapRoutingProvider = Provider<void>((ref) {
     final kind = data['kind'] as String? ?? '';
     final route = routeForNotificationKind(kind);
     if (route == null) return;
+    // Ignore taps while signed out: stashing them would hand the next account a deep link.
+    if (!ref.read(isSignedInProvider)) return;
+    final userId = ref.read(currentUserIdProvider);
+    if (userId == null) return;
     final notification = PendingNotificationRoute(
       route: route,
       venueId: data['venue_id'] as String?,
+      userId: userId,
     );
-    if (!ref.read(isSignedInProvider) ||
-        ref.read(activeVenueProvider) == null) {
-      ref.read(pendingNotificationRouteProvider.notifier).state = notification;
-      return;
-    }
     ref.read(pendingNotificationRouteProvider.notifier).state = notification;
+    if (ref.read(activeVenueProvider) == null) return;
     deliverPending(fromTap: true);
   });
 });
