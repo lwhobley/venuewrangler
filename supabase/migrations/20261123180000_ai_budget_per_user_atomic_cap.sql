@@ -31,6 +31,7 @@ create or replace function public.ai_user_spend_this_month(
 returns numeric
 language sql
 stable
+security definer
 set search_path = ''
 as $$
   select
