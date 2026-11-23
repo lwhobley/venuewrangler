@@ -116,9 +116,8 @@ class SupabaseCrmRepository implements CrmRepository {
       query = query.or(crmLeadSearchFilter(search.trim()));
     }
 
-    final response = await query
-        .order('created_at', ascending: false)
-        .limit(limit);
+    final response =
+        await query.order('created_at', ascending: false).limit(limit);
     return (response as List<dynamic>)
         .map((row) => CrmLead.fromJson(row as Map<String, dynamic>))
         .toList();
@@ -430,27 +429,26 @@ class SupabaseCrmRepository implements CrmRepository {
 
     return switch (code) {
       'forbidden' => const PermissionDeniedError(
-        'Only a venue manager can send this template.',
-      ),
+          'Only a venue manager can send this template.',
+        ),
       'template_not_found' => const NotFoundError(
-        'That email template could not be found.',
-      ),
+          'That email template could not be found.',
+        ),
       'missing_or_invalid_to_address' => const UnknownError(
-        'Enter a valid recipient email address.',
-      ),
+          'Enter a valid recipient email address.',
+        ),
       'email_not_configured' => const UnknownError(
-        'Email sending is not configured yet. Please try again later.',
-      ),
+          'Email sending is not configured yet. Please try again later.',
+        ),
       'email_send_failed' => const UnknownError(
-        'The email could not be sent. Please try again.',
-      ),
+          'The email could not be sent. Please try again.',
+        ),
       'invalid_or_expired_session' => const AuthError(
-        'Your session has expired. Please sign in again.',
-      ),
-      _ =>
-        error.status >= 500
-            ? const UnknownError('Email is temporarily unavailable.')
-            : const UnknownError('Something went wrong. Please try again.'),
+          'Your session has expired. Please sign in again.',
+        ),
+      _ => error.status >= 500
+          ? const UnknownError('Email is temporarily unavailable.')
+          : const UnknownError('Something went wrong. Please try again.'),
     };
   }
 }
