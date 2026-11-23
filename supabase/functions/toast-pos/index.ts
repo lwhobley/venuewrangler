@@ -115,7 +115,7 @@ async function handleRequest(req: Request): Promise<Response> {
     let rawBody: string;
     try {
       rawBody = await req.text();
-      if (rawBody.length > MAX_WEBHOOK_BYTES) {
+      if (new TextEncoder().encode(rawBody).length > MAX_WEBHOOK_BYTES) {
         return jsonResponse({ error: "payload_too_large" }, 413);
       }
       payload = JSON.parse(rawBody);
@@ -248,33 +248,56 @@ async function handleRequest(req: Request): Promise<Response> {
       return jsonResponse({ error: "missing_closed_at" }, 400);
     }
 
-    // Idempotent upsert of the check into pos_checks
-    const { error: upsertError } = await serviceClient.from("pos_checks").upsert(
-      {
-        venue_id: venueId,
-        provider: "toast",
-        external_check_id: externalCheckId,
-        table_label: tableLabel,
-        server_name: serverName,
-        guest_name: guestName,
-        guest_count: guestCount,
-        opened_at: openedAt,
-        closed_at: closedAt,
-        subtotal_cents: subtotal,
-        tax_cents: tax,
-        tip_cents: tip,
-        total_cents: total,
-        status,
-        menu_items: menuItems,
-        raw_payload: payload,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "venue_id,provider,external_check_id" }
-    );
+    const checkRow = {
+      venue_id: venueId,
+      provider: "toast",
+      external_check_id: externalCheckId,
+      table_label: tableLabel,
+      server_name: serverName,
+      guest_name: guestName,
+      guest_count: guestCount,
+      opened_at: openedAt,
+      closed_at: closedAt,
+      subtotal_cents: subtotal,
+      tax_cents: tax,
+      tip_cents: tip,
+      total_cents: total,
+      status,
+      menu_items: menuItems,
+      raw_payload: payload,
+      updated_at: new Date().toISOString(),
+    };
 
-    if (upsertError) {
-      console.error("toast-pos: pos_checks upsert failed", upsertError);
-      return jsonResponse({ error: "failed_to_upsert_check" }, 500);
+    if (existingCheck) {
+      // Atomic conditional update: only update if the row is still in an editable state
+      // (open, or closed when applying a void-after-close), preventing a concurrent stale
+      // webhook from overwriting a finalized check.
+      const allowedPriorStatus = isVoidAfterClose ? "closed" : "open";
+      const { data: updatedRows, error: updateError } = await serviceClient
+        .from("pos_checks")
+        .update(checkRow)
+        .eq("venue_id", venueId)
+        .eq("provider", "toast")
+        .eq("external_check_id", externalCheckId)
+        .eq("status", allowedPriorStatus)
+        .select("external_check_id");
+      if (updateError) {
+        console.error("toast-pos: pos_checks update failed", updateError);
+        return jsonResponse({ error: "failed_to_upsert_check" }, 500);
+      }
+      if (!updatedRows || updatedRows.length === 0) {
+        return jsonResponse({ ok: true, external_check_id: externalCheckId, ignored: "check_already_closed" });
+      }
+    } else {
+      const { error: insertError } = await serviceClient.from("pos_checks").insert(checkRow);
+      if (insertError) {
+        if (insertError.code === "23505") {
+          // Concurrent insert won the race; let the gateway retry against the persisted row.
+          return jsonResponse({ error: "concurrent_check_update" }, 409);
+        }
+        console.error("toast-pos: pos_checks insert failed", insertError);
+        return jsonResponse({ error: "failed_to_upsert_check" }, 500);
+      }
     }
 
     return jsonResponse({ ok: true, external_check_id: externalCheckId });

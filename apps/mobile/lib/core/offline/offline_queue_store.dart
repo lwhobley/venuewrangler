@@ -106,7 +106,8 @@ class SecureStorageOfflineQueueStore implements OfflineQueueStore {
   }
 
   /// Decodes the encrypted blob. A corrupt blob is never fatal: the raw text is kept under a
-  /// `<key>.corrupt.<timestamp>` key (best effort) for diagnosis, and the queue starts empty.
+  /// single `<key>.corrupt.latest` key (best effort) for diagnosis, the corrupt primary key is
+  /// cleared so subsequent reads do not repeat recovery, and the queue starts empty.
   Future<List<PendingMutation>> _decodeStored(String raw) async {
     try {
       return _decode(raw);
@@ -123,9 +124,10 @@ class SecureStorageOfflineQueueStore implements OfflineQueueStore {
     debugPrint('Offline queue blob is unreadable; starting empty: $error');
     try {
       await _storage.write(
-        key: '$key.corrupt.${DateTime.now().toUtc().millisecondsSinceEpoch}',
+        key: '$key.corrupt.latest',
         value: raw,
       );
+      await _storage.write(key: key, value: '[]');
     } catch (backupError) {
       debugPrint(
         'Offline queue corrupt blob could not be backed up: $backupError',

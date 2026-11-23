@@ -86,7 +86,15 @@ async function handle(req: Request): Promise<Response> {
 
   let body: Record<string, unknown>;
   try {
-    body = await req.json();
+    const rawBody = await req.text();
+    if (new TextEncoder().encode(rawBody).length > 16 * 1024) {
+      return json({ error: "payload_too_large" }, 413);
+    }
+    const parsed: unknown = JSON.parse(rawBody);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return json({ error: "invalid_json_body" }, 400);
+    }
+    body = parsed as Record<string, unknown>;
   } catch {
     return json({ error: "invalid_json_body" }, 400);
   }

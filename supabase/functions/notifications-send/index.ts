@@ -27,6 +27,12 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
+  if (req.method !== "POST") {
+    return new Response(JSON.stringify({ error: "method_not_allowed" }), {
+      status: 405,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
 
   try {
     const authHeader = req.headers.get("Authorization");
@@ -47,10 +53,29 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const payload: NotificationRequest = await req.json();
+    let payload: NotificationRequest;
+    try {
+      payload = await req.json();
+    } catch {
+      return new Response(JSON.stringify({ error: "invalid_json_body" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+      return new Response(JSON.stringify({ error: "invalid_json_body" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
     const { venue_id, target_user_ids, audience = "user", kind, title, body, data = {} } = payload;
 
-    if (!venue_id || !kind || !title || !body) {
+    if (
+      typeof venue_id !== "string" || !venue_id ||
+      typeof kind !== "string" || !kind.trim() ||
+      typeof title !== "string" || !title.trim() ||
+      typeof body !== "string" || !body.trim()
+    ) {
       return new Response(JSON.stringify({ error: "Missing required fields: venue_id, kind, title, body" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -162,10 +187,12 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    const uniqueTargetUserIds = target_user_ids ? [...new Set(target_user_ids)] : undefined;
+
     // 1. Write in-app notification event(s) first (independent of push delivery success)
     if (audience === "user") {
       // De-duplicated so a repeated id does not create a second notification row.
-      const rows = [...new Set(target_user_ids!)].map((uid) => ({
+      const rows = uniqueTargetUserIds!.map((uid) => ({
         venue_id,
         target_user_id: uid,
         audience: "user" as const,
@@ -193,7 +220,7 @@ Deno.serve(async (req: Request) => {
       venueId: venue_id,
       organizationId: venue!.organization_id,
       audience,
-      targetUserIds: target_user_ids,
+      targetUserIds: uniqueTargetUserIds,
       kind,
       title,
       body,

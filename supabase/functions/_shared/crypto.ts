@@ -142,7 +142,7 @@ export async function signOAuthState(
     issued_at: Date.now(),
     nonce: crypto.randomUUID(),
   };
-  const payloadB64 = btoa(JSON.stringify(fullPayload));
+  const payloadB64 = bytesToBase64(new TextEncoder().encode(JSON.stringify(fullPayload)));
   const key = await importHmacKey(base64Key);
   const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payloadB64));
   return `${payloadB64}.${bytesToBase64(new Uint8Array(signature))}`;
@@ -155,7 +155,9 @@ export async function verifyOAuthState(
   base64Key: string,
   expectedAud: OAuthProvider,
 ): Promise<OAuthStatePayload | null> {
-  const [payloadB64, signatureB64] = token.split(".");
+  const parts = token.split(".");
+  if (parts.length !== 2) return null;
+  const [payloadB64, signatureB64] = parts;
   if (!payloadB64 || !signatureB64) return null;
 
   const key = await importHmacKey(base64Key);
@@ -168,7 +170,7 @@ export async function verifyOAuthState(
     );
     if (!valid) return null;
 
-    const payload = JSON.parse(atob(payloadB64)) as OAuthStatePayload;
+    const payload = JSON.parse(new TextDecoder().decode(base64ToBytes(payloadB64))) as OAuthStatePayload;
     if (!payload || typeof payload.issued_at !== "number" ||
       payload.issued_at > Date.now() ||
       Date.now() - payload.issued_at > STATE_TTL_MS ||
@@ -218,7 +220,7 @@ export async function signAttestationChallenge(
     nonce_b64: bytesToBase64(nonceBytes),
     issued_at: Date.now(),
   };
-  const payloadB64 = btoa(JSON.stringify(payload));
+  const payloadB64 = bytesToBase64(new TextEncoder().encode(JSON.stringify(payload)));
   const key = await importHmacKey(base64Key);
   const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payloadB64));
   return { token: `${payloadB64}.${bytesToBase64(new Uint8Array(signature))}`, nonceBytes };
@@ -230,7 +232,9 @@ export async function verifyAttestationChallenge(
   deviceId: string,
   base64Key: string,
 ): Promise<Uint8Array<ArrayBuffer> | null> {
-  const [payloadB64, signatureB64] = token.split(".");
+  const parts = token.split(".");
+  if (parts.length !== 2) return null;
+  const [payloadB64, signatureB64] = parts;
   if (!payloadB64 || !signatureB64) return null;
 
   const key = await importHmacKey(base64Key);
@@ -243,7 +247,7 @@ export async function verifyAttestationChallenge(
     );
     if (!valid) return null;
 
-    const payload = JSON.parse(atob(payloadB64)) as AttestationChallengePayload;
+    const payload = JSON.parse(new TextDecoder().decode(base64ToBytes(payloadB64))) as AttestationChallengePayload;
     if (!payload || typeof payload.issued_at !== "number" ||
       payload.issued_at > Date.now() ||
       Date.now() - payload.issued_at > ATTESTATION_CHALLENGE_TTL_MS ||

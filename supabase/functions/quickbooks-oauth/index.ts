@@ -21,6 +21,7 @@ import {
   withQuery,
 } from "../_shared/oauth-connections.ts";
 import { initObservability, captureException, flushObservability } from "../_shared/observability.ts";
+import { enforceRateLimit } from "../_shared/rate-limit.ts";
 
 initObservability();
 
@@ -130,7 +131,7 @@ Deno.serve(async (req) => {
     // The browser is waiting on /callback, so send it to the error page rather than JSON.
     const oauthErrorUrl = Deno.env.get("PAYROLL_OAUTH_ERROR_URL");
     if (oauthErrorUrl && new URL(req.url).pathname.endsWith("/callback")) {
-      return redirectResponse(`${oauthErrorUrl}?provider=quickbooks&reason=internal_error`);
+      return redirectResponse(withQuery(oauthErrorUrl, { provider: "quickbooks", reason: "internal_error" }));
     }
     return jsonResponse({ error: "internal_error" }, 500);
   }
@@ -151,7 +152,7 @@ async function handleRequest(req: Request): Promise<Response> {
     console.error("quickbooks-oauth is not fully configured");
     if (url.pathname.endsWith("/callback")) {
       const errorUrl = Deno.env.get("PAYROLL_OAUTH_ERROR_URL") ?? "venuewrangler://integrations/error";
-      return redirectResponse(`${errorUrl}?provider=quickbooks&reason=not_configured`);
+      return redirectResponse(withQuery(errorUrl, { provider: "quickbooks", reason: "not_configured" }));
     }
     return jsonResponse({ error: "billing_not_configured" }, 500);
   }
@@ -168,6 +169,15 @@ async function handleRequest(req: Request): Promise<Response> {
 
     const auth = await requireVenueManager(req.headers.get("Authorization"), payload.venue_id);
     if ("error" in auth) return auth.error;
+
+    const limited = await enforceRateLimit(
+      createServiceClient(),
+      `oauth-connect:quickbooks:user:${auth.userId}`,
+      30,
+      3600,
+      { failOpen: true },
+    );
+    if (limited) return limited;
 
     const state = await signOAuthState(
       { venue_id: payload.venue_id, user_id: auth.userId, aud: "quickbooks" },
@@ -192,17 +202,17 @@ async function handleRequest(req: Request): Promise<Response> {
       Deno.env.get("PAYROLL_OAUTH_SUCCESS_URL") ?? "venuewrangler://integrations/connected";
 
     if (!code || !state) {
-      return redirectResponse(`${errorUrl}?provider=quickbooks&reason=missing_code_or_state`);
+      return redirectResponse(withQuery(errorUrl, { provider: "quickbooks", reason: "missing_code_or_state" }));
     }
 
     const statePayload = await verifyOAuthState(state, stateSigningKey, "quickbooks");
     if (!statePayload) {
-      return redirectResponse(`${errorUrl}?provider=quickbooks&reason=invalid_state`);
+      return redirectResponse(withQuery(errorUrl, { provider: "quickbooks", reason: "invalid_state" }));
     }
 
     const serviceClient = createServiceClient();
     if (!await isCurrentVenueManager(serviceClient, statePayload.user_id, statePayload.venue_id)) {
-      return redirectResponse(`${errorUrl}?provider=quickbooks&reason=authorization_revoked`);
+      return redirectResponse(withQuery(errorUrl, { provider: "quickbooks", reason: "authorization_revoked" }));
     }
 
     const tokenResponse = await fetch(TOKEN_URL, {
@@ -221,16 +231,16 @@ async function handleRequest(req: Request): Promise<Response> {
 
     if (!tokenResponse.ok) {
       console.error("QuickBooks token exchange failed", await tokenResponse.text());
-      return redirectResponse(`${errorUrl}?provider=quickbooks&reason=token_exchange_failed`);
+      return redirectResponse(withQuery(errorUrl, { provider: "quickbooks", reason: "token_exchange_failed" }));
     }
 
     const tokenData = await tokenResponse.json();
     if (!tokenData?.access_token) {
       console.error("QuickBooks token exchange returned no access_token");
-      return redirectResponse(`${errorUrl}?provider=quickbooks&reason=token_exchange_failed`);
+      return redirectResponse(withQuery(errorUrl, { provider: "quickbooks", reason: "token_exchange_failed" }));
     }
     if (!await isCurrentVenueManager(serviceClient, statePayload.user_id, statePayload.venue_id)) {
-      return redirectResponse(`${errorUrl}?provider=quickbooks&reason=authorization_revoked`);
+      return redirectResponse(withQuery(errorUrl, { provider: "quickbooks", reason: "authorization_revoked" }));
     }
 
     // Park the encrypted tokens; the connection is activated only by POST /complete.
@@ -250,7 +260,7 @@ async function handleRequest(req: Request): Promise<Response> {
       },
     });
     if (!stored.ok) {
-      return redirectResponse(`${errorUrl}?provider=quickbooks&reason=${stored.reason}`);
+      return redirectResponse(withQuery(errorUrl, { provider: "quickbooks", reason: stored.reason }));
     }
 
     return redirectResponse(withQuery(successUrl, { provider: "quickbooks", nonce: stored.nonce }));
@@ -287,6 +297,14 @@ async function handleRequest(req: Request): Promise<Response> {
     if ("error" in auth) return auth.error;
 
     const serviceClient = createServiceClient();
+    const limited = await enforceRateLimit(
+      serviceClient,
+      `oauth-disconnect:quickbooks:user:${auth.userId}`,
+      30,
+      3600,
+      { failOpen: true },
+    );
+    if (limited) return limited;
     // Revoke before clearing our copy; a failed revoke still lets the disconnect proceed.
     const revoked = await revokeQuickBooksRefreshToken(
       serviceClient,

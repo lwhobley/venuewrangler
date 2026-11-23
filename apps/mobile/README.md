@@ -16,12 +16,9 @@ explicit `-t lib/main_*.dart`, same as iOS/Android (see Flavors below). Web-spec
 - `bootstrap.dart` and the push/attestation services guard every `dart:io` `Platform.isX` check
   with `!kIsWeb` first — those getters throw on web, not return `false`, so an unguarded check
   blocks the whole app at startup. Follow this pattern for any new `Platform.isX` use.
-- The offline mutation queue (`core/offline/offline_queue_store.dart`) is file-based via
-  `path_provider`, which has no web implementation. On web this currently fails silently
-  (caught by the Sentry error zone, doesn't block rendering) rather than actually queuing — the
-  app works online but offline-queued writes don't yet persist across a web reload. Needs a
-  web storage backend (IndexedDB via a conditional import, or `shared_preferences`) before
-  offline support is real on web.
+- The offline mutation queue (`core/offline/offline_queue_store.dart`) is backed by
+  `SecureStorageOfflineQueueStore` (`flutter_secure_storage`) on both native and web, with
+  one-time migration from legacy plaintext files on native.
 - Web icons under `web/icons/` and `web/favicon.png` are reused from the existing iOS/Android
   app icon (not dedicated maskable-safe-zone artwork) — adequate for now, worth regenerating
   properly (e.g. via `flutter_launcher_icons`) before a real web launch.

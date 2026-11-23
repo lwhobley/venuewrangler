@@ -532,8 +532,6 @@ final pendingNotificationRouteProvider =
     StateProvider<PendingNotificationRoute?>((ref) => null);
 
 final notificationTapRoutingProvider = Provider<void>((ref) {
-  ref.watch(routerProvider);
-
   void clearPending() {
     ref.read(pendingNotificationRouteProvider.notifier).state = null;
   }

@@ -24,10 +24,11 @@ String? signUpEmailRedirect() => kIsWeb ? '${Uri.base.origin}/app/' : null;
 String passwordResetRedirect() =>
     kIsWeb ? '${Uri.base.origin}/app/' : kPasswordResetRedirect;
 
-/// The project's password policy (Supabase Auth: lower, upper, digit and symbol, 8+ chars),
-/// checked client-side so the user sees what's wrong before a round trip.
+/// The project's password policy (Supabase Auth: 12+ chars with lower, upper, digit and symbol,
+/// matching `supabase/config.toml`'s minimum_password_length = 12), checked client-side so the
+/// user sees what's wrong before a round trip.
 String? passwordPolicyProblem(String password) {
-  if (password.length < 8) return 'Use at least 8 characters';
+  if (password.length < 12) return 'Use at least 12 characters';
   if (!RegExp('[a-z]').hasMatch(password)) return 'Add a lowercase letter';
   if (!RegExp('[A-Z]').hasMatch(password)) return 'Add an uppercase letter';
   if (!RegExp('[0-9]').hasMatch(password)) return 'Add a number';

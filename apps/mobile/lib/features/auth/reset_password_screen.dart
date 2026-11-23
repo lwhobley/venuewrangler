@@ -98,7 +98,7 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
                     ),
                     const SizedBox(height: 16),
                     Text(
-                      'Use at least 8 characters with an uppercase letter, a '
+                      'Use at least 12 characters with an uppercase letter, a '
                       'lowercase letter, a number and a symbol.',
                       textAlign: TextAlign.center,
                       style: theme.textTheme.bodyMedium?.copyWith(

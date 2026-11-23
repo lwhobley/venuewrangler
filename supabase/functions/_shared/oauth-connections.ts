@@ -26,6 +26,7 @@ import {
   type OAuthStatePayload,
 } from "./crypto.ts";
 import { getCallerVenueRoles, isManager, isUuid } from "./venue-auth.ts";
+import { enforceRateLimit } from "./rate-limit.ts";
 
 /** Timeout for every outbound provider call made during connect/disconnect/complete. */
 export const OAUTH_FETCH_TIMEOUT_MS = 10_000;
@@ -186,6 +187,15 @@ export async function handleCompleteRequest(args: {
     return oauthJson({ error: "invalid_or_expired_session" }, 401);
   }
   const userId = userData.user.id;
+
+  const limited = await enforceRateLimit(
+    serviceClient,
+    `oauth-complete:${provider}:user:${userId}`,
+    30,
+    3600,
+    { failOpen: true },
+  );
+  if (limited) return limited;
 
   let payload: { nonce?: unknown };
   try {

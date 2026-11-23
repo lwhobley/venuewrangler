@@ -31,6 +31,18 @@ class _VenueWranglerAppState extends ConsumerState<VenueWranglerApp> {
 
   @override
   Widget build(BuildContext context) {
+    // Side-effect only: watch before the intro gate so cold-start deep links, password
+    // recovery, server sign-out cleanup, and notification taps are never missed while the
+    // intro video plays.
+    ref.watch(offlineQueueConnectivityProvider);
+    ref.watch(appAttestTriggerProvider);
+    ref.watch(pushRegistrationTriggerProvider);
+    ref.watch(notificationTapRoutingProvider);
+    ref.watch(passwordRecoveryTriggerProvider);
+    ref.watch(recoveryMfaProbeProvider);
+    ref.watch(serverSignOutCleanupProvider);
+    ref.watch(pendingWorkspaceCreationTriggerProvider);
+
     if (!_introDone) {
       return MaterialApp(
         debugShowCheckedModeBanner: false,
@@ -40,32 +52,6 @@ class _VenueWranglerAppState extends ConsumerState<VenueWranglerApp> {
         ),
       );
     }
-
-    // Side-effect only: activates the offline-mutation-queue flush-on-reconnect listener for
-    // the whole app's lifetime. See core/offline/offline_queue_connectivity.dart.
-    ref.watch(offlineQueueConnectivityProvider);
-    // Side-effect only: fires an App Attest attestation attempt on sign-in. See
-    // core/security/app_attest_providers.dart.
-    ref.watch(appAttestTriggerProvider);
-    // Side-effect only: registers a push token for the active venue. See
-    // features/notifications/application/notifications_providers.dart.
-    ref.watch(pushRegistrationTriggerProvider);
-    // Side-effect only: routes a tapped push notification (or one tapped while already in the
-    // notifications list) to its destination screen. See app/router.dart.
-    ref.watch(notificationTapRoutingProvider);
-    // Side-effect only: notices a password-reset sign-in so the router can hold the user on
-    // /reset-password. See core/auth/auth_providers.dart.
-    ref.watch(passwordRecoveryTriggerProvider);
-    // Side-effect only: during password recovery, force TOTP when listFactors finds a verified
-    // authenticator even if JWT AAL claims omitted nextLevel=aal2. See auth_providers.dart.
-    ref.watch(recoveryMfaProbeProvider);
-    // Side-effect only: runs the sign-out cleanup (push-token revocation, queue pruning, secure
-    // storage wipe) when the server ends the session, which no sign-out button ever sees. See
-    // core/auth/sign_out_service.dart.
-    ref.watch(serverSignOutCleanupProvider);
-    // Side-effect only: finishes "Launch Workspace" sign-ups once a session exists. See
-    // features/organizations/application/workspace_provisioning.dart.
-    ref.watch(pendingWorkspaceCreationTriggerProvider);
 
     final router = ref.watch(routerProvider);
 

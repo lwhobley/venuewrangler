@@ -1,6 +1,9 @@
 // Storage object bytes must be removed through the Storage API. Postgres deletes from
 // storage.objects only affect metadata and can leave inaccessible object data behind.
 import { createServiceClient } from "../_shared/supabase-clients.ts";
+import { captureException, flushObservability, initObservability } from "../_shared/observability.ts";
+
+initObservability();
 
 function respond(body: Record<string, unknown>, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -71,17 +74,24 @@ Deno.serve(async (request) => {
       completed++;
     } catch (error) {
       const status = job.attempts >= 10 ? "dead" : "failed";
+      const message = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
       const { error: updateError } = await admin
         .from("storage_deletion_jobs")
-        .update({ status, last_error: "Storage API deletion failed", updated_at: new Date().toISOString() })
+        .update({
+          status,
+          last_error: message.slice(0, 500),
+          updated_at: new Date().toISOString(),
+        })
         .eq("id", job.id)
         .eq("status", "processing")
         .eq("attempts", job.attempts);
       if (updateError) console.error("storage deletion failure could not be persisted", updateError.code);
-      console.error("storage object removal failed", error instanceof Error ? error.name : "unknown");
+      console.error("storage object removal failed", message);
+      captureException(error, { function: "storage-deletion-worker", job_id: job.id });
       failed++;
     }
   }
 
+  if (failed > 0) await flushObservability();
   return respond({ processed: (jobs ?? []).length, completed, failed });
 });

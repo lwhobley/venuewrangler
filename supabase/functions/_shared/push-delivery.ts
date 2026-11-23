@@ -72,6 +72,9 @@ export async function deliverPush(adminClient: SupabaseClient, req: PushRequest)
       allowedUsers.add(membership.user_id);
     }
   }
+  if (allowedUsers.size === 0) {
+    return { targeted_tokens: 0, delivered_count: 0, dead_tokens_disabled: 0, reason: "No eligible recipients found" };
+  }
   tokensQuery = tokensQuery.in("user_id", [...allowedUsers]);
 
   const { data: tokens, error: tokensError } = await tokensQuery;
@@ -93,15 +96,23 @@ export async function deliverPush(adminClient: SupabaseClient, req: PushRequest)
   }
 
   // The Flutter client registers raw APNs device tokens on iOS, so iOS delivery requires all
-  // four APNS_* secrets — without them iOS tokens fall through to FCM, which can't deliver
-  // to a raw APNs token.
+  // four APNS_* secrets — never fall through to FCM with a raw APNs token, which would fail
+  // and could disable valid tokens on 404.
   const apnsConfig = loadApnsConfigFromEnv();
+  let warnedMissingApns = false;
 
   const deadTokens: string[] = [];
   let deliveredCount = 0;
 
-  for (const { token, platform } of tokens as { token: string; platform: string }[]) {
-    if (platform === "ios" && apnsConfig) {
+  async function deliverOne({ token, platform }: { token: string; platform: string }) {
+    if (platform === "ios") {
+      if (!apnsConfig) {
+        if (!warnedMissingApns) {
+          warnedMissingApns = true;
+          console.warn("APNs is not configured; skipping iOS push delivery");
+        }
+        return;
+      }
       try {
         const message = { deviceToken: token, ...privatePushAlert };
         let result = await sendApnsPush(apnsConfig, message);
@@ -123,11 +134,11 @@ export async function deliverPush(adminClient: SupabaseClient, req: PushRequest)
       } catch (err) {
         console.warn("Failed sending APNs push to token:", err);
       }
-      continue;
+      return;
     }
 
-    if (platform === "android" || platform === "web" || (platform === "ios" && !apnsConfig)) {
-      if (!fcmToken || !fcmProjectId) continue;
+    if (platform === "android" || platform === "web") {
+      if (!fcmToken || !fcmProjectId) return;
       try {
         const res = await fetch(`https://fcm.googleapis.com/v1/projects/${fcmProjectId}/messages:send`, {
           method: "POST",
@@ -152,6 +163,12 @@ export async function deliverPush(adminClient: SupabaseClient, req: PushRequest)
         console.warn("Failed sending FCM push to token:", err);
       }
     }
+  }
+
+  const tokenList = tokens as { token: string; platform: string }[];
+  const BATCH_SIZE = 10;
+  for (let i = 0; i < tokenList.length; i += BATCH_SIZE) {
+    await Promise.allSettled(tokenList.slice(i, i + BATCH_SIZE).map(deliverOne));
   }
 
   // A direct update, not rpc("disable_push_tokens"): that function lives in app_hidden, which

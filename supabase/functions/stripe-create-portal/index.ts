@@ -111,8 +111,17 @@ async function handleRequest(req: Request): Promise<Response> {
   const stripe = createStripeClient();
   // The Stripe account is shared with unrelated projects, so its DEFAULT portal configuration
   // could expose their prices. Pin a dedicated configuration (restricted to this app's price,
-  // with cancel/payment-method only) via STRIPE_PORTAL_CONFIGURATION_ID when set (audit B-06).
-  const portalConfiguration = Deno.env.get("STRIPE_PORTAL_CONFIGURATION_ID");
+  // with cancel/payment-method only) via STRIPE_PORTAL_CONFIGURATION_ID (audit B-06).
+  // In production (live key or ENVIRONMENT/APP_ENV=production), fail closed if unset.
+  const portalConfiguration = (Deno.env.get("STRIPE_PORTAL_CONFIGURATION_ID") ?? "").trim();
+  const appEnv = (Deno.env.get("ENVIRONMENT") ?? Deno.env.get("APP_ENV") ?? "").toLowerCase();
+  const stripeKey = Deno.env.get("STRIPE_SECRET_KEY") ?? "";
+  const requirePortalConfig =
+    appEnv === "production" || appEnv === "prod" || stripeKey.startsWith("sk_live_");
+  if (requirePortalConfig && !portalConfiguration) {
+    console.error("STRIPE_PORTAL_CONFIGURATION_ID is required in production");
+    return jsonResponse({ error: "billing_not_configured" }, 500);
+  }
   const session = await stripe.billingPortal.sessions.create({
     customer: subscription.stripe_customer_id,
     return_url: returnUrl,
