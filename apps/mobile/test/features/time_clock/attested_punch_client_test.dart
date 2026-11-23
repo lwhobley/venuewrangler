@@ -106,11 +106,14 @@ void main() {
           evidence: {'key_id': 'k1', 'assertion': 'QQ=='},
         ),
       );
-      final client = _client((body) async {
-        bodies.add(body);
-        if (body['action'] == 'challenge') return {'nonce': 'N' * 43};
-        return {'status': 'verified', 'entry': _entryJson()};
-      }, proofs);
+      final client = _client(
+        (body) async {
+          bodies.add(body);
+          if (body['action'] == 'challenge') return {'nonce': 'N' * 43};
+          return {'status': 'verified', 'entry': _entryJson()};
+        },
+        proofs,
+      );
 
       final result = await _punch(client);
 
@@ -129,11 +132,14 @@ void main() {
     'sends the punch without evidence when the device cannot prove it',
     () async {
       Map<String, Object?>? punchBody;
-      final client = _client((body) async {
-        if (body['action'] == 'challenge') return {'nonce': 'N' * 43};
-        punchBody = body;
-        return {'status': 'unverified', 'entry': _entryJson(attested: false)};
-      }, _Proofs(null));
+      final client = _client(
+        (body) async {
+          if (body['action'] == 'challenge') return {'nonce': 'N' * 43};
+          punchBody = body;
+          return {'status': 'unverified', 'entry': _entryJson(attested: false)};
+        },
+        _Proofs(null),
+      );
 
       final result = await _punch(client);
 
@@ -153,10 +159,13 @@ void main() {
       'already_clocked_in': 'already clocked in',
     };
     for (final entry in cases.entries) {
-      final client = _client((body) async {
-        if (body['action'] == 'challenge') return {'nonce': 'N' * 43};
-        throw FunctionException(status: 403, details: {'error': entry.key});
-      }, _Proofs(null));
+      final client = _client(
+        (body) async {
+          if (body['action'] == 'challenge') return {'nonce': 'N' * 43};
+          throw FunctionException(status: 403, details: {'error': entry.key});
+        },
+        _Proofs(null),
+      );
       await expectLater(
         _punch(client),
         throwsA(
@@ -194,12 +203,15 @@ void main() {
   });
 
   test('enforce mode marks unavailable punches as fail-closed', () async {
-    final client = _client((body) async {
-      if (body['action'] == 'challenge') {
-        return {'nonce': 'N' * 43, 'mode': 'enforce'};
-      }
-      throw FunctionException(status: 503);
-    }, _Proofs(null));
+    final client = _client(
+      (body) async {
+        if (body['action'] == 'challenge') {
+          return {'nonce': 'N' * 43, 'mode': 'enforce'};
+        }
+        throw FunctionException(status: 503);
+      },
+      _Proofs(null),
+    );
     await expectLater(
       _punch(client),
       throwsA(
@@ -262,10 +274,13 @@ void main() {
   });
 
   test('a policy refusal is never treated as unavailable', () async {
-    final client = _client((body) async {
-      if (body['action'] == 'challenge') return {'nonce': 'N' * 43};
-      throw FunctionException(status: 403, details: {'error': 'forbidden'});
-    }, _Proofs(null));
+    final client = _client(
+      (body) async {
+        if (body['action'] == 'challenge') return {'nonce': 'N' * 43};
+        throw FunctionException(status: 403, details: {'error': 'forbidden'});
+      },
+      _Proofs(null),
+    );
     await expectLater(_punch(client), throwsA(isA<PermissionDeniedError>()));
   });
 
