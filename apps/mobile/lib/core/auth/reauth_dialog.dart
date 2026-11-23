@@ -35,6 +35,7 @@ Future<bool> confirmPasswordReauth(
   // Prefer a live factor list over session user.factors — that list can be empty/stale
   // while the account still has a verified authenticator (H6).
   final totpFactorId = await _resolveVerifiedTotpFactorId(user, mfa);
+  if (!context.mounted) return false;
 
   final reauth = ref.read(reauthInProgressProvider.notifier);
   reauth.state = true;
