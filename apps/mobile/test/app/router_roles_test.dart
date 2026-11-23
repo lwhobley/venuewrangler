@@ -79,7 +79,8 @@ void main() {
       },
     );
 
-    test('while the role is still loading the structure does not flip to the '
+    test(
+        'while the role is still loading the structure does not flip to the '
         'employee shell', () async {
       final gate = Completer<String?>();
       final container = containerFor(() => gate.future);
@@ -162,13 +163,13 @@ void main() {
         container.read(routerProvider).routeInformationProvider.value.uri.path;
 
     PendingInvite invite() => const PendingInvite(
-      inviteId: 'i1',
-      organizationId: 'org-9',
-      organizationName: 'Harbor Group',
-      venueId: 'venue-9',
-      venueName: 'The Pier',
-      role: 'staff',
-    );
+          inviteId: 'i1',
+          organizationId: 'org-9',
+          organizationName: 'Harbor Group',
+          venueId: 'venue-9',
+          venueName: 'The Pier',
+          role: 'staff',
+        );
 
     testWidgets('holds the user on /mfa-challenge until the code is accepted', (
       tester,

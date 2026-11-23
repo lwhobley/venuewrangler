@@ -14,7 +14,7 @@ final authCallbackErrorProvider = StateProvider<String?>((ref) => null);
 String? authCallbackProblem(Uri uri) {
   final fragment =
       Uri.tryParse('https://callback/?${uri.fragment}')?.queryParameters ??
-      const <String, String>{};
+          const <String, String>{};
   return uri.queryParameters.containsKey('error') ||
           fragment.containsKey('error')
       ? expiredAuthLinkMessage

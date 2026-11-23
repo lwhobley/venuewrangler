@@ -19,20 +19,20 @@ import 'fake_mfa_repository.dart';
 class _OAuthAuthRepository implements AuthRepository {
   @override
   Session? get currentSession => Session(
-    accessToken: 'token',
-    tokenType: 'bearer',
-    user: User(
-      id: 'u1',
-      appMetadata: const {
-        'provider': 'google',
-        'providers': ['google'],
-      },
-      userMetadata: const {},
-      aud: 'authenticated',
-      createdAt: '2026-01-01T00:00:00Z',
-      email: 'owner@example.com',
-    ),
-  );
+        accessToken: 'token',
+        tokenType: 'bearer',
+        user: User(
+          id: 'u1',
+          appMetadata: const {
+            'provider': 'google',
+            'providers': ['google'],
+          },
+          userMetadata: const {},
+          aud: 'authenticated',
+          createdAt: '2026-01-01T00:00:00Z',
+          email: 'owner@example.com',
+        ),
+      );
 
   @override
   dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError();
@@ -41,20 +41,20 @@ class _OAuthAuthRepository implements AuthRepository {
 class _PasswordAuthRepository implements AuthRepository {
   @override
   Session? get currentSession => Session(
-    accessToken: 'token',
-    tokenType: 'bearer',
-    user: User(
-      id: 'u1',
-      appMetadata: const {
-        'provider': 'email',
-        'providers': ['email'],
-      },
-      userMetadata: const {},
-      aud: 'authenticated',
-      createdAt: '2026-01-01T00:00:00Z',
-      email: 'owner@example.com',
-    ),
-  );
+        accessToken: 'token',
+        tokenType: 'bearer',
+        user: User(
+          id: 'u1',
+          appMetadata: const {
+            'provider': 'email',
+            'providers': ['email'],
+          },
+          userMetadata: const {},
+          aud: 'authenticated',
+          createdAt: '2026-01-01T00:00:00Z',
+          email: 'owner@example.com',
+        ),
+      );
 
   @override
   Future<void> signInWithPassword({
