@@ -21,43 +21,49 @@ ProviderContainer _container(FakeMfaRepository mfa) {
 }
 
 void main() {
-  test('probeRecoveryMfaHold sets hold when listFactors finds a verified factor',
-      () async {
-    final mfa = FakeMfaRepository(
-      factors: [const MfaFactor(id: 'f1', verified: true)],
-      aal1: true,
-    );
-    final container = _container(mfa);
-    container.read(passwordRecoveryPendingProvider.notifier).state = true;
+  test(
+    'probeRecoveryMfaHold sets hold when listFactors finds a verified factor',
+    () async {
+      final mfa = FakeMfaRepository(
+        factors: [const MfaFactor(id: 'f1', verified: true)],
+        aal1: true,
+      );
+      final container = _container(mfa);
+      container.read(passwordRecoveryPendingProvider.notifier).state = true;
 
-    await probeRecoveryMfaHold(container);
-    expect(container.read(recoveryMfaHoldProvider), isTrue);
-    expect(container.read(mfaChallengeRequiredProvider), isTrue);
-  });
+      await probeRecoveryMfaHold(container);
+      expect(container.read(recoveryMfaHoldProvider), isTrue);
+      expect(container.read(mfaChallengeRequiredProvider), isTrue);
+    },
+  );
 
-  test('probeRecoveryMfaHold clears hold when JWT already requires a challenge',
-      () async {
-    final mfa = FakeMfaRepository(
-      factors: [const MfaFactor(id: 'f1', verified: true)],
-      required: true,
-      aal1: true,
-    );
-    final container = _container(mfa);
-    container.read(passwordRecoveryPendingProvider.notifier).state = true;
-    container.read(recoveryMfaHoldProvider.notifier).state = true;
+  test(
+    'probeRecoveryMfaHold clears hold when JWT already requires a challenge',
+    () async {
+      final mfa = FakeMfaRepository(
+        factors: [const MfaFactor(id: 'f1', verified: true)],
+        required: true,
+        aal1: true,
+      );
+      final container = _container(mfa);
+      container.read(passwordRecoveryPendingProvider.notifier).state = true;
+      container.read(recoveryMfaHoldProvider.notifier).state = true;
 
-    await probeRecoveryMfaHold(container);
-    expect(container.read(recoveryMfaHoldProvider), isFalse);
-    // challengeRequired from JWT path still holds the router.
-    expect(container.read(mfaChallengeRequiredProvider), isTrue);
-  });
+      await probeRecoveryMfaHold(container);
+      expect(container.read(recoveryMfaHoldProvider), isFalse);
+      // challengeRequired from JWT path still holds the router.
+      expect(container.read(mfaChallengeRequiredProvider), isTrue);
+    },
+  );
 
-  test('mfaChallengeRequiredProvider drops recovery hold once AAL2 is restored',
-      () {
-    final mfa = FakeMfaRepository(aal1: false);
-    final container = _container(mfa);
-    container.read(recoveryMfaHoldProvider.notifier).state = true;
+  test(
+    'mfaChallengeRequiredProvider drops recovery hold once AAL2 is restored',
+    () {
+      final mfa = FakeMfaRepository(aal1: false);
+      final container = _container(mfa);
+      container.read(recoveryMfaHoldProvider.notifier).state = true;
 
-    expect(container.read(mfaChallengeRequiredProvider), isFalse);
-  });
+      expect(container.read(mfaChallengeRequiredProvider), isFalse);
+    },
+  );
 }

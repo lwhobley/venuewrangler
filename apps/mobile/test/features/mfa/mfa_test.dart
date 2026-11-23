@@ -19,20 +19,20 @@ import 'fake_mfa_repository.dart';
 class _OAuthAuthRepository implements AuthRepository {
   @override
   Session? get currentSession => Session(
-        accessToken: 'token',
-        tokenType: 'bearer',
-        user: User(
-          id: 'u1',
-          appMetadata: const {
-            'provider': 'google',
-            'providers': ['google'],
-          },
-          userMetadata: const {},
-          aud: 'authenticated',
-          createdAt: '2026-01-01T00:00:00Z',
-          email: 'owner@example.com',
-        ),
-      );
+    accessToken: 'token',
+    tokenType: 'bearer',
+    user: User(
+      id: 'u1',
+      appMetadata: const {
+        'provider': 'google',
+        'providers': ['google'],
+      },
+      userMetadata: const {},
+      aud: 'authenticated',
+      createdAt: '2026-01-01T00:00:00Z',
+      email: 'owner@example.com',
+    ),
+  );
 
   @override
   dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError();
@@ -41,20 +41,20 @@ class _OAuthAuthRepository implements AuthRepository {
 class _PasswordAuthRepository implements AuthRepository {
   @override
   Session? get currentSession => Session(
-        accessToken: 'token',
-        tokenType: 'bearer',
-        user: User(
-          id: 'u1',
-          appMetadata: const {
-            'provider': 'email',
-            'providers': ['email'],
-          },
-          userMetadata: const {},
-          aud: 'authenticated',
-          createdAt: '2026-01-01T00:00:00Z',
-          email: 'owner@example.com',
-        ),
-      );
+    accessToken: 'token',
+    tokenType: 'bearer',
+    user: User(
+      id: 'u1',
+      appMetadata: const {
+        'provider': 'email',
+        'providers': ['email'],
+      },
+      userMetadata: const {},
+      aud: 'authenticated',
+      createdAt: '2026-01-01T00:00:00Z',
+      email: 'owner@example.com',
+    ),
+  );
 
   @override
   Future<void> signInWithPassword({
@@ -114,22 +114,24 @@ Future<SupabaseClient> _clientWithSession({
 
 void main() {
   group('SupabaseMfaRepository.challengeRequired', () {
-    test('is true only for an AAL1 session whose account has a verified factor',
-        () async {
-      final needsChallenge = SupabaseMfaRepository(
-        await _clientWithSession(aal: 'aal1', verifiedFactor: true),
-      );
-      final alreadyVerified = SupabaseMfaRepository(
-        await _clientWithSession(aal: 'aal2', verifiedFactor: true),
-      );
-      final noFactor = SupabaseMfaRepository(
-        await _clientWithSession(aal: 'aal1', verifiedFactor: false),
-      );
+    test(
+      'is true only for an AAL1 session whose account has a verified factor',
+      () async {
+        final needsChallenge = SupabaseMfaRepository(
+          await _clientWithSession(aal: 'aal1', verifiedFactor: true),
+        );
+        final alreadyVerified = SupabaseMfaRepository(
+          await _clientWithSession(aal: 'aal2', verifiedFactor: true),
+        );
+        final noFactor = SupabaseMfaRepository(
+          await _clientWithSession(aal: 'aal1', verifiedFactor: false),
+        );
 
-      expect(needsChallenge.challengeRequired, isTrue);
-      expect(alreadyVerified.challengeRequired, isFalse);
-      expect(noFactor.challengeRequired, isFalse);
-    });
+        expect(needsChallenge.challengeRequired, isTrue);
+        expect(alreadyVerified.challengeRequired, isFalse);
+        expect(noFactor.challengeRequired, isFalse);
+      },
+    );
 
     test('is false when signed out', () {
       final client = SupabaseClient('https://mfa.test', 'public-test-key');
@@ -166,8 +168,9 @@ void main() {
       return repository;
     }
 
-    testWidgets('a valid code answers the challenge for the verified factor',
-        (tester) async {
+    testWidgets('a valid code answers the challenge for the verified factor', (
+      tester,
+    ) async {
       final repository = await pump(tester);
 
       await tester.enterText(find.byType(TextField), '123456');
@@ -177,8 +180,9 @@ void main() {
       expect(repository.challenges, [('f1', '123456')]);
     });
 
-    testWidgets('a short code is rejected without calling the server',
-        (tester) async {
+    testWidgets('a short code is rejected without calling the server', (
+      tester,
+    ) async {
       final repository = await pump(tester);
 
       await tester.enterText(find.byType(TextField), '123');
@@ -205,8 +209,9 @@ void main() {
   });
 
   group('enrollment', () {
-    testWidgets('shows the setup key and activates with the first code',
-        (tester) async {
+    testWidgets('shows the setup key and activates with the first code', (
+      tester,
+    ) async {
       final repository = FakeMfaRepository();
       await tester.pumpWidget(
         ProviderScope(
@@ -238,8 +243,9 @@ void main() {
       expect(find.text('JBSWY3DPEHPK3PXP'), findsNothing);
     });
 
-    testWidgets('a wrong first code keeps the screen open with an error',
-        (tester) async {
+    testWidgets('a wrong first code keeps the screen open with an error', (
+      tester,
+    ) async {
       final repository = FakeMfaRepository()
         ..verifyError = const AuthException('Invalid TOTP code');
       await tester.pumpWidget(
@@ -261,43 +267,50 @@ void main() {
 
   group('MfaSettingsScreen', () {
     testWidgets(
-        'lists verified authenticators and removes one after password step-up',
-        (tester) async {
-      final repository = FakeMfaRepository(
-        factors: [
-          MfaFactor(id: 'f1', verified: true, createdAt: DateTime(2026, 9, 1)),
-          const MfaFactor(id: 'pending', verified: false),
-        ],
-      );
-      // OAuth-only session skips the password prompt so this test stays focused on
-      // unenroll wiring; password step-up itself is covered in reauth_dialog_test.
-      final auth = _OAuthAuthRepository();
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            mfaRepositoryProvider.overrideWithValue(repository),
-            authRepositoryProvider.overrideWithValue(auth),
-            currentUserIdProvider.overrideWithValue('u1'),
+      'lists verified authenticators and removes one after password step-up',
+      (tester) async {
+        final repository = FakeMfaRepository(
+          factors: [
+            MfaFactor(
+              id: 'f1',
+              verified: true,
+              createdAt: DateTime(2026, 9, 1),
+            ),
+            const MfaFactor(id: 'pending', verified: false),
           ],
-          child: const MaterialApp(home: MfaSettingsScreen()),
-        ),
-      );
-      await tester.pumpAndSettle();
+        );
+        // OAuth-only session skips the password prompt so this test stays focused on
+        // unenroll wiring; password step-up itself is covered in reauth_dialog_test.
+        final auth = _OAuthAuthRepository();
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              mfaRepositoryProvider.overrideWithValue(repository),
+              authRepositoryProvider.overrideWithValue(auth),
+              currentUserIdProvider.overrideWithValue('u1'),
+            ],
+            child: const MaterialApp(home: MfaSettingsScreen()),
+          ),
+        );
+        await tester.pumpAndSettle();
 
-      // Only the verified one is listed (the unverified leftover is hidden).
-      expect(find.text('Authenticator app'), findsOneWidget);
-      expect(find.text('Added 2026-09-01'), findsOneWidget);
+        // Only the verified one is listed (the unverified leftover is hidden).
+        expect(find.text('Authenticator app'), findsOneWidget);
+        expect(find.text('Added 2026-09-01'), findsOneWidget);
 
-      await tester.tap(find.byTooltip('Remove authenticator'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(FilledButton, 'Remove'));
-      await tester.pumpAndSettle();
+        await tester.tap(find.byTooltip('Remove authenticator'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.widgetWithText(FilledButton, 'Remove'));
+        await tester.pumpAndSettle();
 
-      expect(repository.unenrolled, ['f1']);
-      expect(find.text('Set up authenticator app'), findsOneWidget);
-    });
+        expect(repository.unenrolled, ['f1']);
+        expect(find.text('Set up authenticator app'), findsOneWidget);
+      },
+    );
 
-    testWidgets('password accounts must reauth before unenroll', (tester) async {
+    testWidgets('password accounts must reauth before unenroll', (
+      tester,
+    ) async {
       final repository = FakeMfaRepository(
         factors: [
           MfaFactor(id: 'f1', verified: true, createdAt: DateTime(2026, 9, 1)),
@@ -346,8 +359,9 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            mfaRepositoryProvider
-                .overrideWithValue(FakeMfaRepository(factors: factors)),
+            mfaRepositoryProvider.overrideWithValue(
+              FakeMfaRepository(factors: factors),
+            ),
             currentUserIdProvider.overrideWithValue('u1'),
             myVenueRoleProvider.overrideWith((ref) async => role),
           ],
@@ -357,8 +371,9 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('nudges an owner without a factor, and can be dismissed',
-        (tester) async {
+    testWidgets('nudges an owner without a factor, and can be dismissed', (
+      tester,
+    ) async {
       await pump(tester, role: 'organization_owner', factors: const []);
       expect(find.text('Protect your account'), findsOneWidget);
 
@@ -368,8 +383,9 @@ void main() {
       expect(find.text('Protect your account'), findsNothing);
     });
 
-    testWidgets('stays hidden for staff and for owners who enrolled',
-        (tester) async {
+    testWidgets('stays hidden for staff and for owners who enrolled', (
+      tester,
+    ) async {
       await pump(tester, role: 'staff', factors: const []);
       expect(find.text('Protect your account'), findsNothing);
 

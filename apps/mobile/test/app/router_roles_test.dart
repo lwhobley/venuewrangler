@@ -67,18 +67,19 @@ void main() {
           .isNotEmpty;
     }
 
-    test('unknown, missing and platform_admin roles get the employee shell',
-        () async {
-      expect(await managerShellFor('supervisor'), isTrue);
-      expect(await managerShellFor('venue_manager'), isTrue);
-      expect(await managerShellFor('organization_owner'), isTrue);
-      expect(await managerShellFor('staff'), isFalse);
-      expect(await managerShellFor(null), isFalse);
-      expect(await managerShellFor('platform_admin'), isFalse);
-    });
-
     test(
-        'while the role is still loading the structure does not flip to the '
+      'unknown, missing and platform_admin roles get the employee shell',
+      () async {
+        expect(await managerShellFor('supervisor'), isTrue);
+        expect(await managerShellFor('venue_manager'), isTrue);
+        expect(await managerShellFor('organization_owner'), isTrue);
+        expect(await managerShellFor('staff'), isFalse);
+        expect(await managerShellFor(null), isFalse);
+        expect(await managerShellFor('platform_admin'), isFalse);
+      },
+    );
+
+    test('while the role is still loading the structure does not flip to the '
         'employee shell', () async {
       final gate = Completer<String?>();
       final container = containerFor(() => gate.future);
@@ -116,15 +117,18 @@ void main() {
         overrides: [
           isSignedInProvider.overrideWithValue(true),
           currentUserIdProvider.overrideWithValue('user-1'),
-          mfaChallengeRequiredProvider
-              .overrideWith((ref) => ref.watch(mfaRequired)),
+          mfaChallengeRequiredProvider.overrideWith(
+            (ref) => ref.watch(mfaRequired),
+          ),
           mfaRepositoryProvider.overrideWithValue(FakeMfaRepository()),
           myOrganizationsProvider.overrideWith((ref) async => organizations),
-          venuesForOrganizationProvider
-              .overrideWith((ref, organizationId) async => [venue]),
+          venuesForOrganizationProvider.overrideWith(
+            (ref, organizationId) async => [venue],
+          ),
           pendingInvitesProvider.overrideWith((ref) async => invites),
-          myVenueRoleProvider
-              .overrideWith((ref) => (role ?? () async => 'venue_manager')()),
+          myVenueRoleProvider.overrideWith(
+            (ref) => (role ?? () async => 'venue_manager')(),
+          ),
           activeVenueProvider.overrideWith((ref) => activeVenue),
         ],
       );
@@ -158,20 +162,18 @@ void main() {
         container.read(routerProvider).routeInformationProvider.value.uri.path;
 
     PendingInvite invite() => const PendingInvite(
-          inviteId: 'i1',
-          organizationId: 'org-9',
-          organizationName: 'Harbor Group',
-          venueId: 'venue-9',
-          venueName: 'The Pier',
-          role: 'staff',
-        );
+      inviteId: 'i1',
+      organizationId: 'org-9',
+      organizationName: 'Harbor Group',
+      venueId: 'venue-9',
+      venueName: 'The Pier',
+      role: 'staff',
+    );
 
-    testWidgets('holds the user on /mfa-challenge until the code is accepted',
-        (tester) async {
-      final container = containerFor(
-        activeVenue: venue,
-        organizations: [org],
-      );
+    testWidgets('holds the user on /mfa-challenge until the code is accepted', (
+      tester,
+    ) async {
+      final container = containerFor(activeVenue: venue, organizations: [org]);
       container.read(mfaRequired.notifier).state = true;
       await pumpApp(tester, container);
       expect(location(container), '/mfa-challenge');
@@ -189,13 +191,10 @@ void main() {
       expect(location(container), '/');
     });
 
-    testWidgets(
-        'suspends MFA redirect while step-up reauth is in progress',
-        (tester) async {
-      final container = containerFor(
-        activeVenue: venue,
-        organizations: [org],
-      );
+    testWidgets('suspends MFA redirect while step-up reauth is in progress', (
+      tester,
+    ) async {
+      final container = containerFor(activeVenue: venue, organizations: [org]);
       await pumpApp(tester, container);
       expect(location(container), '/');
 
@@ -220,8 +219,9 @@ void main() {
       expect(location(container), '/mfa-challenge');
     });
 
-    testWidgets('an invited user with no workspace is shown the invites',
-        (tester) async {
+    testWidgets('an invited user with no workspace is shown the invites', (
+      tester,
+    ) async {
       final container = containerFor(invites: [invite()]);
       await pumpApp(tester, container);
 
@@ -229,21 +229,24 @@ void main() {
       expect(find.text('The Pier'), findsOneWidget);
     });
 
-    testWidgets('invites are not forced on someone who already has a workspace',
-        (tester) async {
-      final container = containerFor(
-        organizations: [org],
-        invites: [invite()],
-      );
-      await pumpApp(tester, container);
+    testWidgets(
+      'invites are not forced on someone who already has a workspace',
+      (tester) async {
+        final container = containerFor(
+          organizations: [org],
+          invites: [invite()],
+        );
+        await pumpApp(tester, container);
 
-      expect(location(container), '/select-venue');
-      // The switcher offers them instead.
-      expect(find.textContaining('1 pending invitation'), findsOneWidget);
-    });
+        expect(location(container), '/select-venue');
+        // The switcher offers them instead.
+        expect(find.textContaining('1 pending invitation'), findsOneWidget);
+      },
+    );
 
-    testWidgets('Decide later returns to the switcher without looping back',
-        (tester) async {
+    testWidgets('Decide later returns to the switcher without looping back', (
+      tester,
+    ) async {
       final container = containerFor(invites: [invite()]);
       await pumpApp(tester, container);
       expect(location(container), '/invites');
@@ -256,16 +259,18 @@ void main() {
       expect(location(container), '/select-venue');
     });
 
-    testWidgets('with no invites the switcher is not interrupted',
-        (tester) async {
+    testWidgets('with no invites the switcher is not interrupted', (
+      tester,
+    ) async {
       final container = containerFor();
       await pumpApp(tester, container);
 
       expect(location(container), '/select-venue');
     });
 
-    testWidgets('waits on /loading until the role resolves, then goes home',
-        (tester) async {
+    testWidgets('waits on /loading until the role resolves, then goes home', (
+      tester,
+    ) async {
       final gate = Completer<String?>();
       final container = containerFor(
         role: () => gate.future,
@@ -283,8 +288,9 @@ void main() {
       expect(location(container), '/');
     });
 
-    testWidgets('supervisors cannot open the team screen, managers can',
-        (tester) async {
+    testWidgets('supervisors cannot open the team screen, managers can', (
+      tester,
+    ) async {
       final supervisor = containerFor(
         role: () async => 'supervisor',
         activeVenue: venue,
@@ -299,10 +305,7 @@ void main() {
     });
 
     testWidgets('managers reach the team screen', (tester) async {
-      final manager = containerFor(
-        activeVenue: venue,
-        organizations: [org],
-      );
+      final manager = containerFor(activeVenue: venue, organizations: [org]);
       await pumpApp(tester, manager);
       manager.read(routerProvider).go('/team');
       for (var i = 0; i < 6; i++) {
