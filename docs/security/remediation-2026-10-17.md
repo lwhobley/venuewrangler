@@ -78,12 +78,17 @@ update app_hidden.platform_settings set ai_monthly_org_budget_usd = 10;
    number linked to the Play Console app at build time:
    `--dart-define=PLAY_INTEGRITY_PROJECT_NUMBER=<number>`; `PLAY_INTEGRITY_SERVICE_ACCOUNT_JSON`
    and `APP_ATTEST_TEAM_ID` / `APP_ATTEST_BUNDLE_ID` must be set as function secrets.
+   Local/dev builds leave `TIME_CLOCK_REQUIRE_ATTESTED` unset/false so a missing edge function
+   can still fall back to a direct write while you iterate.
 3. On a real iPhone and a real Android phone, clock in and check the response and the row:
    `select clock_in_attested, punch_source from time_entries order by created_at desc limit 5;`.
    The iOS Swift and Android Kotlin bridges compile (Android debug build verified) but have not
    been run on a device.
-4. When most punches show `verified`, switch the function to `enforce`, then flip
-   `require_attested_punches`.
+4. When most punches show `verified`, switch the function to `TIME_CLOCK_ATTESTATION_MODE=enforce`,
+   flip `require_attested_punches`, and ship production app builds with
+   `--dart-define=TIME_CLOCK_REQUIRE_ATTESTED=true` (see `apps/mobile/env/production.json.example`).
+   With those three on, an edge 404/5xx fails closed in the client instead of writing an
+   unattested punch; the database also rejects direct self-service inserts/updates.
 
 ## Monitoring
 

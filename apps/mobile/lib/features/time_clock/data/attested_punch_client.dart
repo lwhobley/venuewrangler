@@ -24,19 +24,23 @@ abstract interface class PunchProofProvider {
   Future<PunchProof?> prove(String payloadJson);
 }
 
-/// The server could not be used for an attested punch and the caller may fall back to the
-/// direct database path (older backend without the function, or it is temporarily down). Never
-/// thrown for a policy refusal: those are real answers and must reach the user.
+/// The server could not be used for an attested punch. When [failClosed] is true the caller
+/// must not fall back to a direct `time_entries` write (attestation is required / enforce mode).
+/// Never thrown for a policy refusal: those are real answers and must reach the user.
 class AttestedPunchUnavailable implements Exception {
-  const AttestedPunchUnavailable();
+  const AttestedPunchUnavailable({this.failClosed = false});
+
+  /// True when the edge function is in `enforce` mode, or the app was built with
+  /// `TIME_CLOCK_REQUIRE_ATTESTED=true`, so a direct-write fallback is forbidden.
+  final bool failClosed;
 }
 
 /// Records punches through `supabase/functions/time-clock-punch`, which verifies the device proof
 /// and then records the punch with every database check (membership, geofence, accuracy, replay).
 ///
-///   1. `challenge` -> single-use server nonce.
-///   2. Build the payload (kind, venue, fix, nonce, timestamp) as one JSON string. The device
-///      proof covers SHA-256 of exactly these bytes, and the server hashes the same string.
+///   1. `challenge` -> single-use server nonce (and current attestation `mode`).
+///   2. Build the payload (kind, venue, fix, nonce, timestamp[, shift_id]) as one JSON string.
+///      The device proof covers SHA-256 of exactly these bytes, and the server hashes the same string.
 ///   3. `punch` with the payload and proof.
 /// Calls the `time-clock-punch` function with [body] and returns the response data. Throws
 /// [FunctionException] for a non-2xx answer.
@@ -49,25 +53,33 @@ class AttestedPunchClient {
     required PunchFunctionInvoker invoke,
     required PunchProofProvider proof,
     DateTime Function()? now,
+    bool requireAttested = false,
   })  : _invoke = invoke,
         _proof = proof,
-        _now = now ?? DateTime.now;
+        _now = now ?? DateTime.now,
+        _requireAttested = requireAttested;
 
   /// Production wiring: the signed-in user's Supabase client.
   factory AttestedPunchClient.forClient(
     SupabaseClient client, {
     required PunchProofProvider proof,
+    bool requireAttested = false,
   }) =>
       AttestedPunchClient(
         invoke: (body) async =>
             (await client.functions.invoke('time-clock-punch', body: body))
                 .data,
         proof: proof,
+        requireAttested: requireAttested,
       );
 
   final PunchFunctionInvoker _invoke;
   final PunchProofProvider _proof;
   final DateTime Function() _now;
+
+  /// When true, never signal that a direct-write fallback is safe (even if the challenge
+  /// never returns a mode). Pair with production builds / `TIME_CLOCK_REQUIRE_ATTESTED`.
+  final bool _requireAttested;
 
   /// Hex SHA-256 of [payloadJson], used by the Android requestHash.
   static String payloadHashHex(String payloadJson) =>
@@ -83,6 +95,7 @@ class AttestedPunchClient {
     required bool mocked,
     required String nonce,
     required int timestampMs,
+    String? shiftId,
   }) =>
       jsonEncode({
         'v': 1,
@@ -94,6 +107,7 @@ class AttestedPunchClient {
         'mocked': mocked,
         'nonce': nonce,
         'ts': timestampMs,
+        if (shiftId != null) 'shift_id': shiftId,
       });
 
   Future<TimeEntry> punch({
@@ -103,11 +117,17 @@ class AttestedPunchClient {
     required double lng,
     required double accuracyM,
     required bool mocked,
+    String? shiftId,
   }) async {
+    var serverMode = '';
     try {
       final challenge = await _invoke({'action': 'challenge'});
-      final nonce = (challenge as Map?)?['nonce'] as String?;
-      if (nonce == null) throw const AttestedPunchUnavailable();
+      final challengeMap = challenge as Map?;
+      final nonce = challengeMap?['nonce'] as String?;
+      serverMode = (challengeMap?['mode'] as String?) ?? '';
+      if (nonce == null) {
+        throw AttestedPunchUnavailable(failClosed: _failClosed(serverMode));
+      }
 
       final payloadJson = buildPayload(
         kind: kind,
@@ -118,6 +138,7 @@ class AttestedPunchClient {
         mocked: mocked,
         nonce: nonce,
         timestampMs: _now().millisecondsSinceEpoch,
+        shiftId: shiftId,
       );
       final proof = await _proof.prove(payloadJson);
 
@@ -128,14 +149,19 @@ class AttestedPunchClient {
         if (proof != null) 'evidence': proof.evidence,
       });
       final entry = (response as Map?)?['entry'];
-      if (entry is! Map) throw const AttestedPunchUnavailable();
+      if (entry is! Map) {
+        throw AttestedPunchUnavailable(failClosed: _failClosed(serverMode));
+      }
       return TimeEntry.fromJson(Map<String, dynamic>.from(entry));
     } on FunctionException catch (error) {
-      throw _map(error);
+      throw _map(error, serverMode: serverMode);
     }
   }
 
-  Object _map(FunctionException error) {
+  bool _failClosed(String serverMode) =>
+      _requireAttested || serverMode == 'enforce';
+
+  Object _map(FunctionException error, {required String serverMode}) {
     final details = error.details;
     final code = details is Map ? details['error'] as String? : null;
     switch (code) {
@@ -173,10 +199,10 @@ class AttestedPunchClient {
       case 'rate_limited':
         return const UnknownError('Too many attempts. Please wait a moment.');
     }
-    // 404 = function not deployed yet; 5xx = temporarily unavailable. The direct path remains
-    // valid until the backend requires attested punches.
+    // 404 = function not deployed yet; 5xx = temporarily unavailable.
+    // Fail closed when attestation is required so an outage cannot reopen the direct path.
     if (error.status == 404 || error.status >= 500) {
-      return const AttestedPunchUnavailable();
+      return AttestedPunchUnavailable(failClosed: _failClosed(serverMode));
     }
     return UnknownError(
       'Could not record the punch (${error.status}). Please try again.',

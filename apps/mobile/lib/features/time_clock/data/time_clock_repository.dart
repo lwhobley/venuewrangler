@@ -54,9 +54,10 @@ abstract interface class TimeClockRepository {
 }
 
 class SupabaseTimeClockRepository implements TimeClockRepository {
-  /// With an [attestedPunches] client, punches go through the verified path first and fall back
-  /// to the direct database insert only when the server function is unavailable (an older
-  /// backend, or it is down). A policy refusal from the server is never retried directly.
+  /// With an [attestedPunches] client, punches go through the verified path first. A direct
+  /// `time_entries` write is used only when the edge function is unavailable *and* attestation
+  /// is not required (`observe` / local-dev). When the server is in `enforce` mode or the app
+  /// was built with `TIME_CLOCK_REQUIRE_ATTESTED=true`, [AttestedPunchUnavailable] fails closed.
   const SupabaseTimeClockRepository(
     this._client, {
     AttestedPunchClient? attestedPunches,
@@ -64,6 +65,9 @@ class SupabaseTimeClockRepository implements TimeClockRepository {
 
   final SupabaseClient _client;
   final AttestedPunchClient? _attested;
+
+  static const _attestationUnavailableMessage =
+      'Time clock verification is temporarily unavailable. Please try again shortly, or ask a manager to record your punch.';
 
   @override
   Future<TimeEntry?> getActiveEntry({required String venueId}) async {
@@ -159,7 +163,7 @@ class SupabaseTimeClockRepository implements TimeClockRepository {
     bool mocked = false,
   }) async {
     final attested = _attested;
-    if (attested != null && shiftId == null) {
+    if (attested != null) {
       try {
         return await attested.punch(
           kind: 'in',
@@ -168,9 +172,13 @@ class SupabaseTimeClockRepository implements TimeClockRepository {
           lng: lng,
           accuracyM: accuracyM,
           mocked: mocked,
+          shiftId: shiftId,
         );
-      } on AttestedPunchUnavailable {
-        // fall through to the direct path
+      } on AttestedPunchUnavailable catch (e) {
+        if (e.failClosed) {
+          throw const NetworkError(_attestationUnavailableMessage);
+        }
+        // observe / local-dev: fall through to the direct path
       }
     }
     try {
@@ -218,8 +226,11 @@ class SupabaseTimeClockRepository implements TimeClockRepository {
             mocked: mocked,
           );
         }
-      } on AttestedPunchUnavailable {
-        // fall through to the direct path
+      } on AttestedPunchUnavailable catch (e) {
+        if (e.failClosed) {
+          throw const NetworkError(_attestationUnavailableMessage);
+        }
+        // observe / local-dev: fall through to the direct path
       }
     }
     try {
@@ -252,23 +263,14 @@ class SupabaseTimeClockRepository implements TimeClockRepository {
     required String type,
   }) async {
     try {
-      final updatedBreaks = List<Map<String, dynamic>>.from(
-        entry.breaks.map((b) => b.toJson()),
+      final row = await _client.rpc(
+        'start_time_entry_break',
+        params: {
+          'p_entry_id': entry.id,
+          'p_type': type,
+        },
       );
-      updatedBreaks.add({
-        'type': type,
-        'start_at': DateTime.now().toUtc().toIso8601String(),
-        'end_at': null,
-      });
-
-      final row = await _client
-          .from('time_entries')
-          .update({'breaks': updatedBreaks})
-          .eq('id', entry.id)
-          .select()
-          .single();
-
-      return TimeEntry.fromJson(row);
+      return TimeEntry.fromJson(Map<String, dynamic>.from(row as Map));
     } on PostgrestException catch (e) {
       throw _mapPostgrestException(e);
     } catch (_) {
@@ -281,26 +283,11 @@ class SupabaseTimeClockRepository implements TimeClockRepository {
     required TimeEntry entry,
   }) async {
     try {
-      final now = DateTime.now().toUtc().toIso8601String();
-      final updatedBreaks = entry.breaks.map((b) {
-        if (b.isOpen) {
-          return {
-            'type': b.type,
-            'start_at': b.startAt.toUtc().toIso8601String(),
-            'end_at': now,
-          };
-        }
-        return b.toJson();
-      }).toList(growable: false);
-
-      final row = await _client
-          .from('time_entries')
-          .update({'breaks': updatedBreaks})
-          .eq('id', entry.id)
-          .select()
-          .single();
-
-      return TimeEntry.fromJson(row);
+      final row = await _client.rpc(
+        'end_time_entry_break',
+        params: {'p_entry_id': entry.id},
+      );
+      return TimeEntry.fromJson(Map<String, dynamic>.from(row as Map));
     } on PostgrestException catch (e) {
       throw _mapPostgrestException(e);
     } catch (_) {
@@ -325,6 +312,15 @@ class SupabaseTimeClockRepository implements TimeClockRepository {
     if (e.code == '23505') {
       return const UnknownError('You are already clocked in.');
     }
+    if (e.code == 'P0002') {
+      if (e.message.contains('no open break')) {
+        return const UnknownError('You are not on a break.');
+      }
+      return UnknownError(e.message);
+    }
+    if (e.code == '22023' && e.message.contains('break type')) {
+      return const UnknownError('Choose a paid or unpaid break.');
+    }
     if (e.code == '42501') {
       if (e.message.contains('geofence')) {
         return const PermissionDeniedError(
@@ -334,6 +330,18 @@ class SupabaseTimeClockRepository implements TimeClockRepository {
       if (e.message.contains('satellite-grade')) {
         return const PermissionDeniedError(
           'This location reading was flagged as an identical replay of an earlier fix. Please re-acquire GPS and try again.',
+        );
+      }
+      if (e.message.contains('two breaks') ||
+          e.message.contains('already') ||
+          e.message.contains('open at once')) {
+        return const PermissionDeniedError(
+          'You already have an open break. End it before starting another.',
+        );
+      }
+      if (e.message.contains('attested_punch_required')) {
+        return const PermissionDeniedError(
+          'This device could not be verified. Update the app and try again, or ask a manager to record your punch.',
         );
       }
       return PermissionDeniedError(e.message);

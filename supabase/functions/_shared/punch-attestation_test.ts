@@ -69,6 +69,12 @@ Deno.test("parsePunchPayload accepts a well-formed payload", () => {
   assertEquals(parsed.accuracy_m, 12);
 });
 
+Deno.test("parsePunchPayload accepts an optional shift_id on clock-in", () => {
+  const shiftId = "d4000000-0000-0000-0000-0000000000b1";
+  const parsed = parsePunchPayload(payload({ shift_id: shiftId }), NOW);
+  assertEquals(parsed.shift_id, shiftId);
+});
+
 Deno.test("parsePunchPayload rejects malformed or out-of-range payloads", () => {
   for (
     const bad of [
@@ -82,6 +88,8 @@ Deno.test("parsePunchPayload rejects malformed or out-of-range payloads", () => 
       payload({ nonce: "short" }),
       payload({ ts: NOW - 10 * 60 * 1000 }),
       payload({ ts: NOW + 10 * 60 * 1000 }),
+      payload({ shift_id: "not-a-uuid" }),
+      payload({ kind: "out", shift_id: "d4000000-0000-0000-0000-0000000000b1" }),
       "[]",
       "not json",
       "",

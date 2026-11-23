@@ -1,5 +1,6 @@
 {
   "SUPABASE_URL": "https://replace-me-dev.supabase.co",
   "SUPABASE_ANON_KEY": "replace-with-the-dev-project-anon-key",
-  "SENTRY_DSN": ""
+  "SENTRY_DSN": "",
+  "TIME_CLOCK_REQUIRE_ATTESTED": "false"
 }

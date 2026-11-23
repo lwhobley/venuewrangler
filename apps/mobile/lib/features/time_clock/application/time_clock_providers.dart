@@ -31,6 +31,15 @@ final punchProofProviderProvider = Provider<PunchProofProvider>((ref) {
   );
 });
 
+/// When true, the app never falls back to direct `time_entries` writes if the attested
+/// punch edge function is unavailable. Set via `--dart-define=TIME_CLOCK_REQUIRE_ATTESTED=true`
+/// for production once `TIME_CLOCK_ATTESTATION_MODE=enforce` and
+/// `platform_settings.require_attested_punches` are on. Local/dev leave this unset (false).
+const bool kTimeClockRequireAttested = bool.fromEnvironment(
+  'TIME_CLOCK_REQUIRE_ATTESTED',
+  defaultValue: false,
+);
+
 final timeClockRepositoryProvider = Provider<TimeClockRepository>((ref) {
   final client = ref.watch(supabaseClientProvider);
   return SupabaseTimeClockRepository(
@@ -38,6 +47,7 @@ final timeClockRepositoryProvider = Provider<TimeClockRepository>((ref) {
     attestedPunches: AttestedPunchClient.forClient(
       client,
       proof: ref.watch(punchProofProviderProvider),
+      requireAttested: kTimeClockRequireAttested,
     ),
   );
 });
