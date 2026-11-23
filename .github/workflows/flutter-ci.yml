@@ -29,9 +29,17 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      # flutter-action's flutter-version-file only understands FVM JSON or a pubspec
+      # with environment.flutter — a plain version text file is ignored and latest
+      # stable is installed. Read the pin ourselves so CI matches Codemagic.
+      - name: Read Flutter version pin
+        id: flutter-version
+        working-directory: .
+        run: echo "version=$(tr -d '[:space:]' < flutter-version.txt)" >> "$GITHUB_OUTPUT"
+
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
-          flutter-version-file: flutter-version.txt
+          flutter-version: ${{ steps.flutter-version.outputs.version }}
           channel: stable
 
       - name: Install dependencies
