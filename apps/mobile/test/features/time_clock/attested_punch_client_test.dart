@@ -170,28 +170,25 @@ void main() {
     }
   });
 
-  test(
-    'an unavailable function is reported so the caller can fall back in observe',
-    () async {
-      for (final status in [404, 500, 503]) {
-        final client = _client(
-          (body) async => throw FunctionException(status: status),
-          _Proofs(null),
-        );
-        await expectLater(
-          _punch(client),
-          throwsA(
-            isA<AttestedPunchUnavailable>().having(
-              (e) => e.failClosed,
-              'failClosed',
-              isFalse,
-            ),
+  test('an unavailable function is reported so the caller can fall back in observe', () async {
+    for (final status in [404, 500, 503]) {
+      final client = _client(
+        (body) async => throw FunctionException(status: status),
+        _Proofs(null),
+      );
+      await expectLater(
+        _punch(client),
+        throwsA(
+          isA<AttestedPunchUnavailable>().having(
+            (e) => e.failClosed,
+            'failClosed',
+            isFalse,
           ),
-          reason: '$status',
-        );
-      }
-    },
-  );
+        ),
+        reason: '$status',
+      );
+    }
+  });
 
   test('enforce mode marks unavailable punches as fail-closed', () async {
     final client = _client((body) async {

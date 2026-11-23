@@ -77,12 +77,14 @@ select throws_ok(
 );
 
 -- Another staff member cannot start a break on this entry.
+-- SECURITY INVOKER + RLS: the row is invisible, so the RPC raises P0002 (not found)
+-- before the ownership check that would raise 42501.
 set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-000000000008';
 select throws_ok(
   $$ select public.start_time_entry_break('80000000-0000-0000-0000-000000000010', 'paid') $$,
-  '42501',
+  'P0002',
   null,
-  'staff cannot start a break on someone else''s entry'
+  'staff cannot start a break on someone else''s entry (RLS hides it as not found)'
 );
 
 -- Attested clock-in with optional shift_id (staff 8 has no open entry).
