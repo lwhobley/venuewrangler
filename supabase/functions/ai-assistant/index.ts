@@ -212,6 +212,8 @@ async function handleRequest(
   const estimatedCost =
     estimatedInputTokens * pricing.input + maxOutputTokens * pricing.output;
 
+  // Display / client messaging only. Enforcement uses
+  // app_hidden.platform_settings.ai_monthly_org_budget_usd inside reserve_ai_budget.
   const monthlyBudget = parseFloat(
     Deno.env.get("AI_MONTHLY_ORG_BUDGET_USD") ?? "10",
   );
@@ -283,6 +285,9 @@ async function handleRequest(
 
   if (reservationError) {
     const msg = (reservationError as { message?: string }).message ?? "";
+    if (msg.includes("subscription_required")) {
+      return jsonResponse({ error: "subscription_required" }, 402);
+    }
     if (msg.includes("monthly_budget_exceeded")) {
       const { data: currentSpend } = await serviceClient.rpc(
         "ai_org_spend_this_month",

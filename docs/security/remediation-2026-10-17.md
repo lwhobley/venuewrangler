@@ -65,6 +65,10 @@ update app_hidden.platform_settings set gps_retention_days = 365;
 -- (2) TIME_CLOCK_ATTESTATION_MODE=enforce is set for the function, and (3) you have confirmed
 -- on real devices that attested punches come back with status "verified".
 update app_hidden.platform_settings set require_attested_punches = true;
+
+-- Org AI monthly budget (USD). Enforced inside reserve_ai_budget; Edge env
+-- AI_MONTHLY_ORG_BUDGET_USD is display-only.
+update app_hidden.platform_settings set ai_monthly_org_budget_usd = 10;
 ```
 
 ### Rolling out attested punches

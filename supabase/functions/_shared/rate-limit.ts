@@ -74,9 +74,9 @@ export async function enforceRateLimit(
 export type EntitlementResult = "entitled" | "not_entitled" | "unavailable";
 
 /**
- * Raw entitlement check. A missing org_is_entitled function (migration not yet applied)
- * fails OPEN ("entitled", logged once); any other RPC error is "unavailable" (caller should
- * fail closed with 503).
+ * Raw entitlement check. Missing org_is_entitled (migration lag / schema-cache miss) and any
+ * other RPC error both return "unavailable" so callers fail closed with 503 (M6). Paid side
+ * effects must not skip the paywall when the helper is absent.
  */
 export async function checkEntitlement(
   serviceClient: SupabaseClient,
@@ -87,10 +87,10 @@ export async function checkEntitlement(
   });
   if (error) {
     if (isMissingFunctionError(error)) {
-      warnOnce("org_is_entitled is not deployed; failing open", error);
-      return "entitled";
+      warnOnce("org_is_entitled is not deployed; failing closed", error);
+    } else {
+      console.error("rate-limit: org_is_entitled failed", error);
     }
-    console.error("rate-limit: org_is_entitled failed", error);
     return "unavailable";
   }
   return data === true ? "entitled" : "not_entitled";
