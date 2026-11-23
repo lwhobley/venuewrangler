@@ -17,8 +17,8 @@ class _FakeChatRepository implements ChatRepository {
     List<ChatMessage>? initialMessages,
     this.contacts = const [],
     this.dmPeers = const {},
-  }) : conversations = initialConversations ?? [],
-       messages = initialMessages ?? [];
+  })  : conversations = initialConversations ?? [],
+        messages = initialMessages ?? [];
 
   final List<Conversation> conversations;
   final List<ChatMessage> messages;
@@ -35,7 +35,8 @@ class _FakeChatRepository implements ChatRepository {
   @override
   Future<List<Conversation>> getConversations({
     required String venueId,
-  }) async => conversations;
+  }) async =>
+      conversations;
 
   @override
   Future<List<ChatMessage>> getMessages({
@@ -92,7 +93,8 @@ class _FakeChatRepository implements ChatRepository {
   @override
   Future<Map<String, String>> fetchDmPeers({
     required List<String> conversationIds,
-  }) async => dmPeers;
+  }) async =>
+      dmPeers;
 }
 
 void main() {

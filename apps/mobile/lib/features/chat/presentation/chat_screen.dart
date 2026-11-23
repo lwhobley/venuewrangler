@@ -71,9 +71,8 @@ class _ConversationListView extends ConsumerWidget {
                 final conv = conversations[index];
                 return ListTile(
                   leading: CircleAvatar(
-                    backgroundColor: Theme.of(context)
-                        .colorScheme
-                        .primaryContainer,
+                    backgroundColor:
+                        Theme.of(context).colorScheme.primaryContainer,
                     child: Icon(
                       conv.type == 'all_staff' ? Icons.groups : Icons.person,
                       color: Theme.of(context).colorScheme.onPrimaryContainer,
@@ -210,11 +209,11 @@ class _ChatThreadViewState extends ConsumerState<_ChatThreadView> {
         .read(chatRepositoryProvider)
         .watchMessages(widget.conversationId)
         .listen((_) {
-          ref.invalidate(conversationMessagesProvider(widget.conversationId));
-          ref.invalidate(conversationsListProvider);
-          // Keep read receipts current while this thread is open.
-          unawaited(_markRead());
-        });
+      ref.invalidate(conversationMessagesProvider(widget.conversationId));
+      ref.invalidate(conversationsListProvider);
+      // Keep read receipts current while this thread is open.
+      unawaited(_markRead());
+    });
   }
 
   Future<void> _markRead() async {
@@ -326,9 +325,8 @@ class _ChatThreadViewState extends ConsumerState<_ChatThreadView> {
       ref.invalidate(conversationsListProvider);
     } catch (e) {
       if (mounted) {
-        final message = e is AuthError
-            ? e.message
-            : 'Message not sent. Please try again.';
+        final message =
+            e is AuthError ? e.message : 'Message not sent. Please try again.';
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(message)));
       }
@@ -385,7 +383,9 @@ class _MessageBubble extends ConsumerWidget {
                     const SizedBox(width: 4),
                     Text(
                       'Photo Attachment',
-                      style: Theme.of(context).textTheme.bodySmall
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
                           ?.copyWith(color: context.ops.info.fg),
                     ),
                   ],

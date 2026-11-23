@@ -95,7 +95,8 @@ class SupabaseChatRepository implements ChatRepository {
         .order('created_at', ascending: false)
         .limit(limit);
 
-    return (response as List<dynamic>).reversed
+    return (response as List<dynamic>)
+        .reversed
         .map((row) => ChatMessage.fromJson(row as Map<String, dynamic>))
         .toList();
   }

@@ -13,15 +13,16 @@ Future<void> showInventoryAction(
   InventorySnapshot snapshot,
   InventoryStock stock,
   String action,
-) => showDialog<void>(
-  context: context,
-  builder: (_) => _ActionSheet(
-    scope: scope,
-    snapshot: snapshot,
-    stock: stock,
-    action: action,
-  ),
-);
+) =>
+    showDialog<void>(
+      context: context,
+      builder: (_) => _ActionSheet(
+        scope: scope,
+        snapshot: snapshot,
+        stock: stock,
+        action: action,
+      ),
+    );
 
 class _ActionSheet extends ConsumerStatefulWidget {
   const _ActionSheet({
@@ -120,9 +121,8 @@ class _ActionState extends ConsumerState<_ActionSheet> {
                         ),
                     ],
                     validator: (v) => v == null ? 'Choose a destination' : null,
-                    onChanged: busy
-                        ? null
-                        : (v) => setState(() => destination = v),
+                    onChanged:
+                        busy ? null : (v) => setState(() => destination = v),
                   ),
                   if (destinations.isEmpty)
                     const Text(
@@ -219,9 +219,7 @@ class _ActionState extends ConsumerState<_ActionSheet> {
     });
     try {
       assertInventoryScope(ref, widget.scope, userId);
-      await ref
-          .read(inventoryRepositoryProvider)
-          .applyAction(
+      await ref.read(inventoryRepositoryProvider).applyAction(
             widget.stock.id,
             widget.action,
             quantity.text.trim(),

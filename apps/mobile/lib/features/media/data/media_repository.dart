@@ -65,9 +65,7 @@ class SupabaseMediaRepository implements MediaRepository {
     // immutable), and an upsert needs UPDATE, so a retry would fail with 403. A duplicate on a
     // retry means an earlier attempt already stored this object, which is success here.
     try {
-      await _client.storage
-          .from('incident-evidence')
-          .uploadBinary(
+      await _client.storage.from('incident-evidence').uploadBinary(
             objectPath,
             bytes,
             fileOptions: FileOptions(
