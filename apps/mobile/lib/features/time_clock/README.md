@@ -5,7 +5,8 @@ Phase 4: implemented (port of legacy `packages/api/src/modules/time-clock/`).
 Provides geofenced time attendance, break tracking, and anti-replay GPS fix verification for staff and managers:
 
 - `domain/time_entry.dart` — Hand-written domain models for `TimeEntry` and `TimeBreak` (paid/unpaid intervals, elapsed calculation, active break detection).
-- `data/time_clock_repository.dart` — `TimeClockRepository` interface and `SupabaseTimeClockRepository` implementation supporting `getActiveEntry`, `getMyEntries`, `getVenueEntries` (Clock Board), `clockIn`, `clockOut`, `startBreak`, and `endBreak`.
+- `data/time_clock_repository.dart` — `TimeClockRepository` interface and `SupabaseTimeClockRepository` implementation supporting `getActiveEntry`, `getMyEntries`, `getVenueEntries` (Clock Board), `clockIn`, `clockOut`, `startBreak`, and `endBreak`. Clock-in/out prefer the attested edge path (including optional `shiftId`); breaks call `start_time_entry_break` / `end_time_entry_break` RPCs rather than client read-modify-write of the `breaks` JSON.
+- `data/attested_punch_client.dart` — challenges `time-clock-punch`, proves the payload, and records the punch. On edge 404/5xx, signals `AttestedPunchUnavailable`; when the server mode is `enforce` or the app is built with `TIME_CLOCK_REQUIRE_ATTESTED=true`, that signal is fail-closed (no direct `time_entries` fallback).
 - `application/time_clock_providers.dart` — `timeClockRepositoryProvider`, `activeTimeEntryProvider(venueId)`, `myTimeEntriesProvider(venueId)`, and `venueClockBoardProvider(venueId)` Riverpod providers.
 - `presentation/time_clock_screen.dart` — Full time clock UI (clock in/out and breaks are mobile-only: on web the buttons are replaced by a "requires the mobile app" notice because a browser GPS fix can be spoofed; history and the Clock Board stay readable) with live clock timer, punch status banner, break management (paid/unpaid), punch history, and venue-wide active Clock Board.
 

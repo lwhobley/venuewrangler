@@ -177,7 +177,7 @@ void main() {
     }
   });
 
-  test('an unavailable function is reported so the caller can fall back',
+  test('an unavailable function is reported so the caller can fall back in observe',
       () async {
     for (final status in [404, 500, 503]) {
       final client = _client(
@@ -186,10 +186,78 @@ void main() {
       );
       await expectLater(
         _punch(client),
-        throwsA(isA<AttestedPunchUnavailable>()),
+        throwsA(
+          isA<AttestedPunchUnavailable>()
+              .having((e) => e.failClosed, 'failClosed', isFalse),
+        ),
         reason: '$status',
       );
     }
+  });
+
+  test('enforce mode marks unavailable punches as fail-closed', () async {
+    final client = _client(
+      (body) async {
+        if (body['action'] == 'challenge') {
+          return {'nonce': 'N' * 43, 'mode': 'enforce'};
+        }
+        throw FunctionException(status: 503);
+      },
+      _Proofs(null),
+    );
+    await expectLater(
+      _punch(client),
+      throwsA(
+        isA<AttestedPunchUnavailable>()
+            .having((e) => e.failClosed, 'failClosed', isTrue),
+      ),
+    );
+  });
+
+  test('requireAttested marks unavailable punches as fail-closed', () async {
+    final client = AttestedPunchClient(
+      invoke: (body) async => throw FunctionException(status: 503),
+      proof: _Proofs(null),
+      now: () => DateTime.utc(2026, 10, 17, 12),
+      requireAttested: true,
+    );
+    await expectLater(
+      _punch(client),
+      throwsA(
+        isA<AttestedPunchUnavailable>()
+            .having((e) => e.failClosed, 'failClosed', isTrue),
+      ),
+    );
+  });
+
+  test('shift_id is included in the hashed payload when provided', () async {
+    String? payloadJson;
+    final client = _client(
+      (body) async {
+        if (body['action'] == 'challenge') {
+          return {'nonce': 'N' * 43, 'mode': 'observe'};
+        }
+        payloadJson = body['payload_json'] as String?;
+        return {'status': 'verified', 'entry': _entryJson()};
+      },
+      _Proofs(
+        const PunchProof(
+          platform: 'ios',
+          evidence: {'key_id': 'k1', 'assertion': 'QQ=='},
+        ),
+      ),
+    );
+    await client.punch(
+      kind: 'in',
+      venueId: _venueId,
+      lat: 29.7604,
+      lng: -95.3698,
+      accuracyM: 12,
+      mocked: false,
+      shiftId: 'd4000000-0000-0000-0000-0000000000b1',
+    );
+    final decoded = jsonDecode(payloadJson!) as Map<String, dynamic>;
+    expect(decoded['shift_id'], 'd4000000-0000-0000-0000-0000000000b1');
   });
 
   test('a policy refusal is never treated as unavailable', () async {

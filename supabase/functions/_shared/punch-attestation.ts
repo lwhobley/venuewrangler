@@ -28,6 +28,8 @@ export interface PunchPayload {
   mocked: boolean;
   nonce: string;
   ts: number;
+  /** Optional shift association for clock-in; omitted from the hashed payload when absent. */
+  shift_id?: string;
 }
 
 export class PunchPayloadError extends Error {}
@@ -46,7 +48,7 @@ export function parsePunchPayload(payloadJson: unknown, now = Date.now()): Punch
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
     throw new PunchPayloadError("payload_json_invalid");
   }
-  const { v, kind, venue_id, lat, lng, accuracy_m, mocked, nonce, ts } = raw;
+  const { v, kind, venue_id, lat, lng, accuracy_m, mocked, nonce, ts, shift_id } = raw;
   if (v !== 1) throw new PunchPayloadError("payload_version_unsupported");
   if (kind !== "in" && kind !== "out") throw new PunchPayloadError("payload_kind_invalid");
   if (typeof venue_id !== "string" || !UUID_PATTERN.test(venue_id)) {
@@ -66,7 +68,24 @@ export function parsePunchPayload(payloadJson: unknown, now = Date.now()): Punch
   if (typeof ts !== "number" || !Number.isFinite(ts) || Math.abs(now - ts) > MAX_CLOCK_SKEW_MS) {
     throw new PunchPayloadError("payload_timestamp_out_of_range");
   }
-  return { v: 1, kind, venue_id, lat, lng, accuracy_m, mocked, nonce, ts };
+  if (shift_id !== undefined && shift_id !== null) {
+    if (typeof shift_id !== "string" || !UUID_PATTERN.test(shift_id)) {
+      throw new PunchPayloadError("payload_shift_invalid");
+    }
+    if (kind !== "in") throw new PunchPayloadError("payload_shift_only_on_clock_in");
+  }
+  return {
+    v: 1,
+    kind,
+    venue_id,
+    lat,
+    lng,
+    accuracy_m,
+    mocked,
+    nonce,
+    ts,
+    ...(typeof shift_id === "string" ? { shift_id } : {}),
+  };
 }
 
 export async function sha256Bytes(bytes: Uint8Array): Promise<Uint8Array<ArrayBuffer>> {

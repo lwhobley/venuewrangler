@@ -1,5 +1,6 @@
 {
   "SUPABASE_URL": "https://replace-me-prod.supabase.co",
   "SUPABASE_ANON_KEY": "replace-with-the-production-project-anon-key",
-  "SENTRY_DSN": "replace-with-production-sentry-dsn"
+  "SENTRY_DSN": "replace-with-production-sentry-dsn",
+  "TIME_CLOCK_REQUIRE_ATTESTED": "true"
 }

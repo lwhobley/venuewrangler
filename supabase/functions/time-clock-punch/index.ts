@@ -9,7 +9,7 @@
 //     -> { status: "verified" | "unverified", entry }
 //
 // `payload_json` is the exact string the app hashed: {"v":1,"kind","venue_id","lat","lng",
-// "accuracy_m","mocked","nonce","ts"}. `evidence` is
+// "accuracy_m","mocked","nonce","ts"[, "shift_id"]}. `evidence` is
 //   iOS      { key_id, assertion }          App Attest assertion with clientDataHash = SHA-256(payload_json)
 //   Android  { integrity_token }            Play Integrity token with requestHash = hex SHA-256(payload_json)
 // The server consumes the nonce (replay), checks the timestamp, verifies the evidence, then calls
@@ -18,11 +18,13 @@
 //
 // TIME_CLOCK_ATTESTATION_MODE:
 //   off      do not verify; punches are recorded unattested
-//   observe  (default) verify; a failed or missing proof still records the punch as UNATTESTED so
-//            managers can review it. Nobody is locked out while client builds roll out.
-//   enforce  a failed or missing proof is refused (403). Pair with
-//            platform_settings.require_attested_punches = true so the direct database path is
-//            closed as well.
+//   observe  (default for local/dev) verify; a failed or missing proof still records the punch as
+//            UNATTESTED so managers can review it. Nobody is locked out while client builds roll out.
+//            Challenge responses include mode so the app may keep a direct-write fallback.
+//   enforce  (production target) a failed or missing proof is refused (403). Pair with
+//            platform_settings.require_attested_punches = true and app dart-define
+//            TIME_CLOCK_REQUIRE_ATTESTED=true so the direct database path and client fallback are
+//            closed as well. Challenge responses include mode so the app fails closed on outages.
 import { corsHeaders, handleCorsPreflight } from "../_shared/cors.ts";
 import { createServiceClient, createUserClient } from "../_shared/supabase-clients.ts";
 import { enforceRateLimit } from "../_shared/rate-limit.ts";
@@ -170,6 +172,7 @@ async function handle(req: Request): Promise<Response> {
     p_accuracy_m: payload.accuracy_m,
     p_mocked: payload.mocked,
     p_attested: attested,
+    ...(payload.shift_id ? { p_shift_id: payload.shift_id } : {}),
   });
   if (punchError) return punchErrorResponse(punchError);
 
