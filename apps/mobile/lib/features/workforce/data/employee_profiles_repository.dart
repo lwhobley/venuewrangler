@@ -1,6 +1,8 @@
 import 'dart:typed_data';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../../../core/errors/unapplied_update.dart';
 import '../../media/application/image_sanitizer.dart';
 import '../domain/employee_hr_profile.dart';
 
@@ -59,15 +61,33 @@ class SupabaseEmployeeProfilesRepository implements EmployeeProfilesRepository {
   Future<void> saveHr(StaffProfileKey key, Map<String, dynamic> fields) async {
     // Only known HR columns reach the DB; RLS and the employment guard are authoritative.
     final allowed = {...personalHrFields.keys, ...employmentHrFields.keys};
-    await client.from('employee_hr_profiles').upsert(
-      {
-        for (final e in fields.entries)
-          if (allowed.contains(e.key)) e.key: e.value,
-        'venue_id': key.venueId,
-        'user_id': key.userId,
-      },
-      onConflict: 'venue_id,user_id',
-    );
+    final row = await client
+        .from('employee_hr_profiles')
+        .upsert(
+          {
+            for (final e in fields.entries)
+              if (allowed.contains(e.key)) e.key: e.value,
+            'venue_id': key.venueId,
+            'user_id': key.userId,
+          },
+          onConflict: 'venue_id,user_id',
+        )
+        .select('user_id')
+        .maybeSingle();
+    if (row == null) {
+      await throwForUnappliedUpdate(
+        rowExists: () async {
+          final existing = await client
+              .from('employee_hr_profiles')
+              .select('user_id')
+              .eq('venue_id', key.venueId)
+              .eq('user_id', key.userId)
+              .maybeSingle();
+          return existing != null;
+        },
+        denialMessage: 'HR profile save was not applied',
+      );
+    }
   }
 
   @override
