@@ -66,7 +66,7 @@ class _LeadsTab extends ConsumerWidget {
         child: const Icon(Icons.person_add_alt_1_outlined),
       ),
       body: RefreshIndicator(
-        onRefresh: () async => ref.invalidate(crmLeadsProvider(venueId)),
+        onRefresh: () async => ref.refresh(crmLeadsProvider(venueId).future),
         child: leadsAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (_, __) => Center(
@@ -208,7 +208,7 @@ class _BeosTab extends ConsumerWidget {
         child: const Icon(Icons.event_note_outlined),
       ),
       body: RefreshIndicator(
-        onRefresh: () async => ref.invalidate(crmBeosProvider(venueId)),
+        onRefresh: () async => ref.refresh(crmBeosProvider(venueId).future),
         child: beosAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (_, __) => const Center(child: Text('Could not load BEOs.')),
@@ -522,7 +522,7 @@ class _ContractsTab extends ConsumerWidget {
     final contractsAsync = ref.watch(crmContractsProvider(venueId));
 
     return RefreshIndicator(
-      onRefresh: () async => ref.invalidate(crmContractsProvider(venueId)),
+      onRefresh: () async => ref.refresh(crmContractsProvider(venueId).future),
       child: contractsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (_, __) =>
@@ -748,10 +748,10 @@ class _ForecastTab extends ConsumerWidget {
     final staleAsync = ref.watch(crmStaleLeadsProvider(venueId));
 
     return RefreshIndicator(
-      onRefresh: () async {
-        ref.invalidate(crmForecastProvider(venueId));
-        ref.invalidate(crmStaleLeadsProvider(venueId));
-      },
+      onRefresh: () => Future.wait([
+        ref.refresh(crmForecastProvider(venueId).future),
+        ref.refresh(crmStaleLeadsProvider(venueId).future),
+      ]),
       child: ListView(
         padding: const EdgeInsets.all(12),
         children: [

@@ -238,6 +238,10 @@ void main() {
       expect(isEmployeeRole('supervisor'), isFalse);
       expect(isEmployeeRole('venue_manager'), isFalse);
       expect(isEmployeeRole('organization_owner'), isFalse);
+      // Fail-closed: unknown / null roles share usesEmployeeShell semantics.
+      expect(isEmployeeRole(null), isTrue);
+      expect(isEmployeeRole('platform_admin'), isTrue);
+      expect(isEmployeeRole('staff'), usesEmployeeShell('staff'));
     });
   });
 }

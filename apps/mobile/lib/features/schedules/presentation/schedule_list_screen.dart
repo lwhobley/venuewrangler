@@ -50,10 +50,10 @@ class ScheduleListScreen extends ConsumerWidget {
           const UnsupportedTimezoneBanner(),
           Expanded(
             child: RefreshIndicator(
-              onRefresh: () async {
-                ref.invalidate(shiftsForVenueProvider(venue.id));
-                ref.invalidate(shiftSwapsForVenueProvider(venue.id));
-              },
+              onRefresh: () => Future.wait([
+                ref.refresh(shiftsForVenueProvider(venue.id).future),
+                ref.refresh(shiftSwapsForVenueProvider(venue.id).future),
+              ]),
               child: shiftsAsync.when(
                 loading: () => const Center(child: CircularProgressIndicator()),
                 error: (_, __) => Center(

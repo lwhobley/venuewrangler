@@ -48,6 +48,9 @@ import '../features/team/domain/team_member.dart';
 import '../features/team/presentation/team_screen.dart';
 import '../features/time_clock/presentation/time_clock_screen.dart';
 import '../features/venues/application/venues_providers.dart';
+// Re-export role helpers so existing `import '.../router.dart'` call sites keep working.
+export '../features/venues/application/venues_providers.dart'
+    show managerShellRoles, usesEmployeeShell, isEmployeeRole;
 import '../features/venues/domain/venue.dart';
 import '../features/workforce/presentation/workforce_roster_screen.dart';
 
@@ -74,19 +77,6 @@ final routerRefreshNotifierProvider = Provider<RouterRefreshNotifier>((ref) {
   ref.onDispose(notifier.dispose);
   return notifier;
 });
-
-/// Roles that get the full manager shell. Anything else (staff, no membership on the active
-/// venue, or a role this app does not know such as `platform_admin`) gets the employee shell,
-/// so an unexpected role never lands on manager screens. The database still enforces access.
-const managerShellRoles = {
-  'supervisor',
-  'venue_manager',
-  'organization_admin',
-  'organization_owner',
-};
-
-/// True when [role] (already resolved) belongs in the employee shell.
-bool usesEmployeeShell(String? role) => !managerShellRoles.contains(role);
 
 final isEmployeeRoleProvider = Provider<bool>((ref) {
   final isSignedIn = ref.watch(isSignedInProvider);

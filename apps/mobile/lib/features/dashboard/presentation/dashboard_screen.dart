@@ -119,12 +119,12 @@ class DashboardScreen extends ConsumerWidget {
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: () async {
-          ref.invalidate(tasksForVenueProvider(venueId));
-          ref.invalidate(shiftsForVenueProvider(venueId));
-          ref.invalidate(eventsForVenueProvider(venueId));
-          ref.invalidate(inventoryForVenueProvider(venueId));
-        },
+        onRefresh: () => Future.wait([
+          ref.refresh(tasksForVenueProvider(venueId).future),
+          ref.refresh(shiftsForVenueProvider(venueId).future),
+          ref.refresh(eventsForVenueProvider(venueId).future),
+          ref.refresh(inventoryForVenueProvider(venueId).future),
+        ]),
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
           children: [

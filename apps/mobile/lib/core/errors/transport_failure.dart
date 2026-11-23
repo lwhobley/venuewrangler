@@ -26,3 +26,12 @@ bool isTransportFailure(Object error) {
   }
   return false;
 }
+
+/// True when PostgREST/Postgres reports the RPC is absent (migration lag or an older
+/// backend). Callers may treat this as "feature unavailable" rather than a hard failure.
+bool isMissingRpc(Object error) {
+  if (error is! PostgrestException) return false;
+  final code = error.code ?? '';
+  // PGRST202: not in schema cache. 42883: undefined_function.
+  return code == 'PGRST202' || code == '42883';
+}

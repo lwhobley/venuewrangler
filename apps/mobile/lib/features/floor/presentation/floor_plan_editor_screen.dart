@@ -156,13 +156,16 @@ class _FloorPlanEditorScreenState extends ConsumerState<FloorPlanEditorScreen> {
   // ---- coordinates ---------------------------------------------------------
 
   /// Pointer position (global) → plan coordinates, through pan/zoom.
-  Offset _scene(Offset global) {
-    final box = _viewerKey.currentContext!.findRenderObject()! as RenderBox;
+  /// Null when the viewer is not laid out yet (rapid navigation / dispose races).
+  Offset? _scene(Offset global) {
+    final box = _viewerKey.currentContext?.findRenderObject();
+    if (box is! RenderBox || !box.hasSize) return null;
     return _tc.toScene(box.globalToLocal(global));
   }
 
-  Offset _viewportCentre() {
-    final box = _viewerKey.currentContext!.findRenderObject()! as RenderBox;
+  Offset? _viewportCentre() {
+    final box = _viewerKey.currentContext?.findRenderObject();
+    if (box is! RenderBox || !box.hasSize) return null;
     return _tc.toScene(box.size.center(Offset.zero));
   }
 
@@ -201,6 +204,7 @@ class _FloorPlanEditorScreenState extends ConsumerState<FloorPlanEditorScreen> {
     );
     if (result == null) return;
     final c = _viewportCentre();
+    if (c == null) return;
     editor.addTable(
       label: result.label,
       shape: result.shape,
@@ -510,13 +514,17 @@ class _FloorPlanEditorScreenState extends ConsumerState<FloorPlanEditorScreen> {
                         onTouch: (down) =>
                             setState(() => _touchingTable = down),
                         onMoveStart: (t, global) {
+                          final scene = _scene(global);
+                          if (scene == null) return;
                           editor.beginChange();
                           editor.select(t.id);
-                          _grab = _scene(global) -
+                          _grab = scene -
                               Offset(t.x + t.width / 2, t.y + t.height / 2);
                         },
                         onMove: (t, global) {
-                          final c = _scene(global) - _grab;
+                          final scene = _scene(global);
+                          if (scene == null) return;
+                          final c = scene - _grab;
                           editor.moveTo(
                             t.id,
                             c.dx - t.width / 2,
@@ -525,9 +533,11 @@ class _FloorPlanEditorScreenState extends ConsumerState<FloorPlanEditorScreen> {
                         },
                         onResizeStart: editor.beginChange,
                         onResize: (t, global) {
+                          final scene = _scene(global);
+                          if (scene == null) return;
                           final c =
                               Offset(t.x + t.width / 2, t.y + t.height / 2);
-                          final v = _scene(global) - c;
+                          final v = scene - c;
                           final a = -t.rotation * math.pi / 180;
                           final lx = v.dx * math.cos(a) - v.dy * math.sin(a);
                           final ly = v.dx * math.sin(a) + v.dy * math.cos(a);
@@ -535,9 +545,11 @@ class _FloorPlanEditorScreenState extends ConsumerState<FloorPlanEditorScreen> {
                         },
                         onRotateStart: editor.beginChange,
                         onRotate: (t, global) {
+                          final scene = _scene(global);
+                          if (scene == null) return;
                           final c =
                               Offset(t.x + t.width / 2, t.y + t.height / 2);
-                          final v = _scene(global) - c;
+                          final v = scene - c;
                           editor.rotateTo(
                             t.id,
                             math.atan2(v.dy, v.dx) * 180 / math.pi + 90,

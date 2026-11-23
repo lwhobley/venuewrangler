@@ -42,7 +42,8 @@ class DocumentsScreen extends ConsumerWidget {
           title: const Text('Documents'),
         ),
         body: RefreshIndicator(
-          onRefresh: () async => ref.invalidate(documentsProvider(venue.id)),
+          onRefresh: () async =>
+              ref.refresh(documentsProvider(venue.id).future),
           child: documentsAsync.when(
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (error, _) => Center(

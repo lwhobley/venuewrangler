@@ -39,16 +39,15 @@ class ShiftInsightsScreen extends ConsumerWidget {
         title: const Text('Shift Insights'),
       ),
       body: RefreshIndicator(
-        onRefresh: () async {
+        onRefresh: () {
           if (shiftId != null) {
-            ref.invalidate(
+            return ref.refresh(
               shiftInsightsForShiftProvider(
                 (venueId: venue.id, shiftId: shiftId!),
-              ),
+              ).future,
             );
-          } else {
-            ref.invalidate(shiftInsightsForVenueProvider(venue.id));
           }
+          return ref.refresh(shiftInsightsForVenueProvider(venue.id).future);
         },
         child: insightsAsync.when(
           loading: () => const Center(

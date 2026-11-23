@@ -30,8 +30,9 @@ class IntegrationsScreen extends ConsumerWidget {
         title: const Text('Integrations'),
       ),
       body: RefreshIndicator(
-        onRefresh: () async =>
-            ref.invalidate(payrollConnectionsForVenueProvider(venue.id)),
+        onRefresh: () async => ref.refresh(
+          payrollConnectionsForVenueProvider(venue.id).future,
+        ),
         child: connectionsAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (_, __) =>
