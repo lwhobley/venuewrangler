@@ -2,7 +2,7 @@
 -- subscription_state): the single-statement, order-safe write the stripe-webhook function uses.
 
 begin;
-select plan(12);
+select plan(14);
 
 insert into public.organizations (id, name) values
   ('10000000-0000-0000-0000-00000000000a', 'Org A');
@@ -19,6 +19,21 @@ select is(
   (select status from public.subscriptions where stripe_customer_id = 'cus_1'),
   'incomplete',
   'status comes from the argument, not an assumed active'
+);
+
+-- An org that already has a customer must not be rebound onto a different customer id (H2).
+select is(
+  public.apply_stripe_subscription_state(
+    '10000000-0000-0000-0000-00000000000a', 'cus_attacker', 'sub_x', 'price_x', 'active',
+    null, false, 'evt_105', 105),
+  false,
+  'refuses to rebind stripe_customer_id on an existing org row'
+);
+select is(
+  (select stripe_customer_id from public.subscriptions
+    where organization_id = '10000000-0000-0000-0000-00000000000a'),
+  'cus_1',
+  'original stripe_customer_id survives a rebind attempt'
 );
 
 -- A newer subscription event applies.
