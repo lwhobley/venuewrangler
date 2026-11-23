@@ -233,9 +233,13 @@ select isnt(
 );
 
 -- Seed the signed state the way record_contract_signature would (the guard refuses direct writes).
+-- Privilege-gate helpers are not executable by authenticated; open them as the table owner.
+reset role;
 do $$ begin perform app_hidden.open_privilege_gate('contract_signing'); end $$;
 update public.crm_contracts set status = 'fully_signed' where id = '80000000-0000-0000-0000-000000000001';
 do $$ begin perform app_hidden.close_privilege_gate('contract_signing'); end $$;
+set local role authenticated;
+set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-000000000004';
 
 select throws_ok(
   $$ update public.crm_contracts set event_name = 'Changed Name' where id = '80000000-0000-0000-0000-000000000001' $$,
