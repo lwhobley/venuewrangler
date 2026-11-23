@@ -69,7 +69,7 @@ final recoveryMfaHoldProvider = StateProvider<bool>((ref) => false);
 /// when Supabase reports a password-recovery sign-in, and clears it on sign-out.
 final passwordRecoveryTriggerProvider = Provider<void>((ref) {
   ref.listen<AsyncValue<AuthState>>(authStateChangesProvider, (_, next) {
-    unawaited(applyPasswordRecoveryAuthChange(ref, next));
+    unawaited(applyPasswordRecoveryAuthChange(ref.read, next));
   }, fireImmediately: true);
 });
 
@@ -81,7 +81,7 @@ final recoveryMfaProbeProvider = Provider<void>((ref) {
       ref.read(recoveryMfaHoldProvider.notifier).state = false;
       return;
     }
-    unawaited(probeRecoveryMfaHold(ref));
+    unawaited(probeRecoveryMfaHold(ref.read));
   }, fireImmediately: true);
   ref.listen<AsyncValue<AuthState>>(authStateChangesProvider, (_, __) {
     final mfa = ref.read(mfaRepositoryProvider);
@@ -94,41 +94,42 @@ final recoveryMfaProbeProvider = Provider<void>((ref) {
 /// Applies a password-recovery / sign-out latch update, awaiting the durable storage write
 /// so a crash after this future completes still restores the hold on next launch.
 Future<void> applyPasswordRecoveryAuthChange(
-  Ref ref,
+  T Function<T>(ProviderListenable<T> provider) read,
   AsyncValue<AuthState> next,
 ) async {
   if (next.error is AuthException) {
-    ref.read(authCallbackErrorProvider.notifier).state = expiredAuthLinkMessage;
+    read(authCallbackErrorProvider.notifier).state = expiredAuthLinkMessage;
   }
   final event = next.valueOrNull?.event;
-  final pending = ref.read(passwordRecoveryPendingProvider.notifier);
-  final storage = ref.read(passwordRecoveryStorageProvider);
+  final pending = read(passwordRecoveryPendingProvider.notifier);
+  final storage = read(passwordRecoveryStorageProvider);
   if (event == AuthChangeEvent.passwordRecovery) {
     pending.state = true;
     await storage.write(passwordRecoveryStorageKey, 'true');
   }
   if (event == AuthChangeEvent.signedOut) {
     pending.state = false;
-    ref.read(recoveryMfaHoldProvider.notifier).state = false;
+    read(recoveryMfaHoldProvider.notifier).state = false;
     await storage.delete(passwordRecoveryStorageKey);
   }
 }
 
 /// Lists factors during recovery and sets [recoveryMfaHoldProvider] when a verified
 /// authenticator exists while the session is still AAL1.
-Future<void> probeRecoveryMfaHold(Ref ref) async {
-  final mfa = ref.read(mfaRepositoryProvider);
-  if (!ref.read(passwordRecoveryPendingProvider)) return;
+Future<void> probeRecoveryMfaHold(
+  T Function<T>(ProviderListenable<T> provider) read,
+) async {
+  final mfa = read(mfaRepositoryProvider);
+  if (!read(passwordRecoveryPendingProvider)) return;
   if (mfa.challengeRequired || !mfa.isAal1) {
-    ref.read(recoveryMfaHoldProvider.notifier).state = false;
+    read(recoveryMfaHoldProvider.notifier).state = false;
     return;
   }
   try {
     final factors = await mfa.listFactors();
-    if (!ref.read(passwordRecoveryPendingProvider)) return;
+    if (!read(passwordRecoveryPendingProvider)) return;
     final hasVerified = factors.any((f) => f.verified);
-    ref.read(recoveryMfaHoldProvider.notifier).state =
-        hasVerified && mfa.isAal1;
+    read(recoveryMfaHoldProvider.notifier).state = hasVerified && mfa.isAal1;
   } catch (_) {
     // Leave hold unchanged on network failure; JWT / user.factors path may still apply.
   }

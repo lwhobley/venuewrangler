@@ -31,7 +31,7 @@ void main() {
       final container = _container(mfa);
       container.read(passwordRecoveryPendingProvider.notifier).state = true;
 
-      await probeRecoveryMfaHold(container);
+      await probeRecoveryMfaHold(container.read);
       expect(container.read(recoveryMfaHoldProvider), isTrue);
       expect(container.read(mfaChallengeRequiredProvider), isTrue);
     },
@@ -49,7 +49,7 @@ void main() {
       container.read(passwordRecoveryPendingProvider.notifier).state = true;
       container.read(recoveryMfaHoldProvider.notifier).state = true;
 
-      await probeRecoveryMfaHold(container);
+      await probeRecoveryMfaHold(container.read);
       expect(container.read(recoveryMfaHoldProvider), isFalse);
       // challengeRequired from JWT path still holds the router.
       expect(container.read(mfaChallengeRequiredProvider), isTrue);

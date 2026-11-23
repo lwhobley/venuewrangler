@@ -199,19 +199,14 @@ void main() {
       await pumpApp(tester, container);
       expect(location(container), '/');
 
-      container.read(routerProvider).go('/settings');
-      for (var i = 0; i < 4; i++) {
-        await tester.pump(const Duration(milliseconds: 100));
-      }
-      expect(location(container), '/settings');
-
+      // Stay on home (no heavy screen mount): reauth suspend must block the bounce
+      // to /mfa-challenge that would otherwise happen as soon as MFA is required.
       container.read(reauthInProgressProvider.notifier).state = true;
       container.read(mfaRequired.notifier).state = true;
       for (var i = 0; i < 6; i++) {
         await tester.pump(const Duration(milliseconds: 100));
       }
-      // Stay on settings — reauth dialog is restoring AAL2.
-      expect(location(container), '/settings');
+      expect(location(container), '/');
 
       container.read(reauthInProgressProvider.notifier).state = false;
       for (var i = 0; i < 6; i++) {
