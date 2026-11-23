@@ -95,25 +95,53 @@ Deno.serve(async (req) => {
   }
 
   // This Stripe account is shared with unrelated projects, and the billing portal could move a
-  // customer onto one of their prices. When STRIPE_ALLOWED_PRICE_IDS (comma list) is set, a
-  // subscription whose price is not in it is ignored (logged, 200) instead of granting
-  // entitlement. Unset keeps the previous behaviour (audit B-06).
+  // customer onto one of their prices. STRIPE_ALLOWED_PRICE_IDS (comma list) gates which
+  // prices can grant entitlement. In production (live Stripe key or ENVIRONMENT/APP_ENV=production)
+  // an empty allowlist is a misconfiguration: subscription events return 500 until it is set (M19).
   const allowedPriceIds = (Deno.env.get("STRIPE_ALLOWED_PRICE_IDS") ?? "")
     .split(",")
     .map((id) => id.trim())
     .filter((id) => id.length > 0);
+  const appEnv = (Deno.env.get("ENVIRONMENT") ?? Deno.env.get("APP_ENV") ?? "").toLowerCase();
+  const stripeKey = Deno.env.get("STRIPE_SECRET_KEY") ?? "";
+  const requirePriceAllowlist =
+    appEnv === "production" || appEnv === "prod" || stripeKey.startsWith("sk_live_");
+  // Only block subscription-affecting events when the allowlist is missing in production.
+  // Unrelated event types on this shared Stripe account still ack with 200.
+  function priceAllowlistMisconfigured(): boolean {
+    return requirePriceAllowlist && allowedPriceIds.length === 0;
+  }
   function isAllowedPrice(subscription: Stripe.Subscription | null): boolean {
-    if (allowedPriceIds.length === 0 || !subscription) return true;
+    if (allowedPriceIds.length === 0) {
+      // Non-prod may omit the allowlist for local testing; production subscription handlers
+      // refuse earlier via priceAllowlistMisconfigured().
+      return true;
+    }
+    if (!subscription) return true;
     const priceId = subscription.items.data[0]?.price?.id;
     return typeof priceId === "string" && allowedPriceIds.includes(priceId);
+  }
+  async function refuseMissingPriceAllowlist(): Promise<Response> {
+    console.error(
+      "STRIPE_ALLOWED_PRICE_IDS is required in production; refusing webhook until configured",
+      { eventId: event.id, eventType: event.type },
+    );
+    captureException(new Error("STRIPE_ALLOWED_PRICE_IDS_required"), {
+      function: "stripe-webhook",
+      event_type: event.type,
+    });
+    await flushObservability();
+    return new Response(JSON.stringify({ error: "price_allowlist_required" }), { status: 500 });
   }
 
   try {
     switch (event.type) {
       case "checkout.session.completed": {
+        if (priceAllowlistMisconfigured()) return await refuseMissingPriceAllowlist();
+
         const session = event.data.object as Stripe.Checkout.Session;
 
-        const organizationId = session.metadata?.organization_id;
+        const metadataOrganizationId = session.metadata?.organization_id;
         const customerId =
           typeof session.customer === "string" ? session.customer : session.customer?.id;
         const subscriptionId =
@@ -121,8 +149,35 @@ Deno.serve(async (req) => {
             ? session.subscription
             : session.subscription?.id;
 
-        if (!organizationId) break; // The platform Stripe account is shared with other projects.
+        // Shared Stripe account: only apply checkout for customers this app already bound in
+        // stripe-create-checkout. Never trust metadata.organization_id as the tenant key (H2).
         if (!customerId) throw new Error("subscription checkout missing customer");
+
+        const { data: existingSub, error: existingSubError } = await serviceClient
+          .from("subscriptions")
+          .select("organization_id")
+          .eq("stripe_customer_id", customerId)
+          .maybeSingle();
+        if (existingSubError) throw existingSubError;
+        if (!existingSub?.organization_id) {
+          // Customer belongs to another product on this account, or checkout ran without a
+          // pre-persisted subscriptions row — do not create entitlement from metadata.
+          break;
+        }
+
+        if (
+          typeof metadataOrganizationId === "string" &&
+          metadataOrganizationId.length > 0 &&
+          metadataOrganizationId !== existingSub.organization_id
+        ) {
+          console.warn("ignoring checkout: metadata.organization_id mismatches bound customer", {
+            eventId: event.id,
+            customerId,
+            metadataOrganizationId,
+            boundOrganizationId: existingSub.organization_id,
+          });
+          break;
+        }
 
         // A completed checkout does not mean the subscription is active (the first payment can
         // still be incomplete or require action), so take the real status from Stripe instead
@@ -137,13 +192,23 @@ Deno.serve(async (req) => {
           });
           break;
         }
-        await applyState(organizationId, customerId, subscription);
+        // Update by stripe_customer_id only — same path as subscription lifecycle events.
+        const applied = await applyState(null, customerId, subscription);
+        if (!applied) {
+          console.warn("checkout event not applied", {
+            eventId: event.id,
+            customerId,
+            organizationId: existingSub.organization_id,
+          });
+        }
         break;
       }
 
       case "customer.subscription.created":
       case "customer.subscription.updated":
       case "customer.subscription.deleted": {
+        if (priceAllowlistMisconfigured()) return await refuseMissingPriceAllowlist();
+
         const eventSubscription = event.data.object as Stripe.Subscription;
         const customerId =
           typeof eventSubscription.customer === "string"
