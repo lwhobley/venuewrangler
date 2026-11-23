@@ -149,13 +149,16 @@ class SupabaseChatRepository implements ChatRepository {
         .eq('id', conversationId)
         .single();
 
-    await _client.from('conversation_reads').upsert({
-      'conversation_id': conversationId,
-      'venue_id': conv['venue_id'],
-      'organization_id': conv['organization_id'],
-      'user_id': userId,
-      'read_at': DateTime.now().toUtc().toIso8601String(),
-    }, onConflict: 'conversation_id,user_id');
+    await _client.from('conversation_reads').upsert(
+      {
+        'conversation_id': conversationId,
+        'venue_id': conv['venue_id'],
+        'organization_id': conv['organization_id'],
+        'user_id': userId,
+        'read_at': DateTime.now().toUtc().toIso8601String(),
+      },
+      onConflict: 'conversation_id,user_id',
+    );
   }
 
   @override

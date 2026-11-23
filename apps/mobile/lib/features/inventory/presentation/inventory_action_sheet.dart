@@ -75,13 +75,15 @@ class _ActionState extends ConsumerState<_ActionSheet> {
         )
         .toList();
     return AlertDialog(
-      title: Text(switch (widget.action) {
-        'RECEIVE' => 'Receive stock',
-        'TRANSFER' => 'Transfer stock',
-        'WASTE' => 'Record waste',
-        'COUNT' => 'Count location',
-        _ => 'Adjust stock',
-      }),
+      title: Text(
+        switch (widget.action) {
+          'RECEIVE' => 'Receive stock',
+          'TRANSFER' => 'Transfer stock',
+          'WASTE' => 'Record waste',
+          'COUNT' => 'Count location',
+          _ => 'Adjust stock',
+        },
+      ),
       content: SizedBox(
         width: 480,
         child: SingleChildScrollView(
