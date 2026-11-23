@@ -50,7 +50,11 @@ class SupabaseWorkforceRepository implements WorkforceRepository {
 
     // Skip unknown role/status rows instead of failing the entire list (M17).
     return rows
-        .map((row) => Invite.tryFromJson(Map<String, dynamic>.from(row as Map)))
+        .map(
+          (row) => Invite.tryFromJson(
+            Map<String, dynamic>.from(row as Map),
+          ),
+        )
         .whereType<Invite>()
         .toList(growable: false);
   }

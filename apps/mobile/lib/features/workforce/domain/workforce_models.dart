@@ -106,7 +106,8 @@ class Invite {
     final InviteStatus status;
     if (json['status'] == 'pending' &&
         json['expires_at'] != null &&
-        DateTime.parse(json['expires_at'] as String).isBefore(DateTime.now())) {
+        DateTime.parse(json['expires_at'] as String)
+            .isBefore(DateTime.now())) {
       status = InviteStatus.expired;
     } else {
       try {

@@ -78,9 +78,13 @@ class SupabaseOrganizationsRepository implements OrganizationsRepository {
   }
 }
 
-/// Returns the first RPC row, or a typed [UnknownError] when the payload is empty / malformed
-/// (avoids `StateError` / cast crashes from bare `.first` on `[]`).
-Map<String, dynamic> _requireRpcRow(dynamic response, {required String action}) {
+/// Returns the first RPC row, or a typed [UnknownError] when the payload is
+/// empty / malformed (avoids `StateError` / cast crashes from bare `.first`
+/// on `[]`).
+Map<String, dynamic> _requireRpcRow(
+  dynamic response, {
+  required String action,
+}) {
   if (response is! List || response.isEmpty) {
     throw UnknownError('Could not $action. Please try again.');
   }
