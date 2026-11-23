@@ -4,7 +4,7 @@
 --   * start_time_entry_break / end_time_entry_break append or close breaks
 --     server-side so the client does not read-modify-write the breaks JSON.
 --
--- Must run after 20261123150000_privilege_gate_invite_guest_swap.sql. The earlier
+-- Must run after 20261123150002_privilege_gate_invite_guest_swap.sql. The earlier
 -- draft of this change (20261024…) created a 9-arg overload that co-existed with
 -- the privilege_gate 8-arg function and made call sites ambiguous (42725).
 

@@ -216,19 +216,24 @@ Deno.serve(async (req) => {
             : eventSubscription.customer.id;
 
         const subscription = await currentSubscription(eventSubscription.id, eventSubscription);
-        if (!isAllowedPrice(subscription)) {
-          console.warn("ignoring subscription event for a price not in STRIPE_ALLOWED_PRICE_IDS", {
+        // A price outside the allowlist can never grant entitlement, but it must still be able
+        // to take it away: if an entitled subscription is moved onto another price, or deleted,
+        // skipping the event would leave the org `active` forever. Apply it as `canceled`;
+        // apply_stripe_subscription_state only lets a canceled status touch the row that
+        // already tracks this same subscription, so unrelated subscriptions stay no-ops.
+        const allowedPrice = isAllowedPrice(subscription);
+        if (!allowedPrice) {
+          console.warn("subscription not on an allowed price; applying as canceled", {
             eventType: event.type,
             eventId: event.id,
             priceId: subscription.items.data[0]?.price?.id,
           });
-          break;
         }
         const applied = await applyState(
           null,
           customerId,
           subscription,
-          event.type === "customer.subscription.deleted" ? "canceled" : undefined,
+          event.type === "customer.subscription.deleted" || !allowedPrice ? "canceled" : undefined,
         );
         if (!applied) {
           // Either a customer from another product on this shared Stripe account, or an event

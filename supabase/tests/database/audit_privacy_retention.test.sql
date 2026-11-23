@@ -3,7 +3,7 @@
 -- Fixture: org A venue A1 {manager M ...01, staff T ...02, owner O ...03}; org B owner X ...04.
 
 begin;
-select plan(77);
+select plan(78);
 
 insert into auth.users (id, email) values
   ('c1000000-0000-0000-0000-000000000001', 'm@example.com'),
@@ -123,7 +123,8 @@ insert into public.crm_notes (lead_id, text) values ('c8000000-0000-0000-0000-00
 
 insert into public.pos_checks (id, venue_id, organization_id, provider, external_check_id, opened_at, subtotal_cents, total_cents, guest_name, guest_id, raw_payload) values
   ('c9000000-0000-0000-0000-000000000001', 'c3000000-0000-0000-0000-0000000000a1', 'c2000000-0000-0000-0000-00000000000a', 'toast', 'chk-1', now() - interval '1 hour', 1000, 1100, 'Gina Guest', 'c6000000-0000-0000-0000-000000000001', '{"guest":"Gina Guest"}'),
-  ('c9000000-0000-0000-0000-000000000002', 'c3000000-0000-0000-0000-0000000000a1', 'c2000000-0000-0000-0000-00000000000a', 'toast', 'chk-2', now() - interval '1 hour', 1000, 1100, 'Gina Guest', null, '{"guest":"name collision"}');
+  ('c9000000-0000-0000-0000-000000000002', 'c3000000-0000-0000-0000-0000000000a1', 'c2000000-0000-0000-0000-00000000000a', 'toast', 'chk-2', now() - interval '1 hour', 1000, 1100, 'Gina Guest', null, '{"guest":"unlinked"}'),
+  ('c9000000-0000-0000-0000-000000000004', 'c3000000-0000-0000-0000-0000000000a1', 'c2000000-0000-0000-0000-00000000000a', 'toast', 'chk-4', now() - interval '1 hour', 1000, 1100, 'Gina Guest', 'c6000000-0000-0000-0000-000000000002', '{"guest":"linked to another guest"}');
 
 set local role authenticated;
 set local "request.jwt.claim.sub" to 'c1000000-0000-0000-0000-000000000002';
@@ -159,9 +160,13 @@ select results_eq(
   $$ values (null::text, null::uuid, true) $$,
   'POS checks linked by guest_id lose the name, link and raw payload');
 select results_eq(
-  $$ select guest_name, raw_payload is not null from public.pos_checks where id = 'c9000000-0000-0000-0000-000000000002' $$,
-  $$ values ('Gina Guest'::text, true) $$,
-  'a same-display-name POS check without guest_id is not scrubbed');
+  $$ select guest_name, raw_payload is null from public.pos_checks where id = 'c9000000-0000-0000-0000-000000000002' $$,
+  $$ values (null::text, true) $$,
+  'an unlinked POS check with the guest''s name is scrubbed (POS sync does not set guest_id)');
+select results_eq(
+  $$ select guest_name, guest_id, raw_payload is not null from public.pos_checks where id = 'c9000000-0000-0000-0000-000000000004' $$,
+  $$ values ('Gina Guest'::text, 'c6000000-0000-0000-0000-000000000002'::uuid, true) $$,
+  'a same-name POS check linked to a different guest is not scrubbed');
 select ok((select count(*) = 1 from public.audit_log where action = 'guest.erase'
             and target_id = 'c6000000-0000-0000-0000-000000000001'
             and not (metadata::text like '%Gina%')),
@@ -188,7 +193,7 @@ select lives_ok($$ select * from app_hidden.run_retention_cleanup() $$, 'the ret
 
 select is((select raw_payload is null from public.pos_checks where id = 'c9000000-0000-0000-0000-000000000003'), true,
   'raw POS payloads older than 90 days are purged (closed checks included)');
-select is((select raw_payload is not null from public.pos_checks where id = 'c9000000-0000-0000-0000-000000000002'), true,
+select is((select raw_payload is not null from public.pos_checks where id = 'c9000000-0000-0000-0000-000000000004'), true,
   'recent raw POS payloads are kept');
 select is((select total_cents from public.pos_checks where id = 'c9000000-0000-0000-0000-000000000003'), 1100,
   'the purge changed nothing but the payload');

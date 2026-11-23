@@ -27,6 +27,9 @@ jobs:
   backup:
     runs-on: ubuntu-latest
     timeout-minutes: 120
+    # The R2 and Supabase Storage credentials live in this environment (same as the database
+    # backup); without it every secret/var below resolves empty and the job fails.
+    environment: production-backups
     env:
       SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PRODUCTION_PROJECT_REF }}
       SUPABASE_STORAGE_REGION: ${{ vars.SUPABASE_STORAGE_S3_REGION }}

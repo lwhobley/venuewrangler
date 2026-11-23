@@ -15,7 +15,7 @@ retry when the object already exists) and record its path in `public.incident_at
 via a plain insert with duplicate-key-is-success handling, same pattern as
 `features/checklists`. Object paths are
 `{organization_id}/{venue_id}/{incident_id}/{attachmentId}.ext` so Storage RLS can join the
-incident (see `20261123150000_incident_evidence_rls_alignment.sql`). If the local file
+incident (see `20261123150001_incident_evidence_rls_alignment.sql`). If the local file
 referenced by a queued retry no longer exists on-device, that's a terminal failure
 (`LocalFileMissingException`), surfaced as a conflict rather than retried forever.
 
