@@ -290,8 +290,10 @@ class IncidentListScreen extends ConsumerWidget {
     final attachmentId = _uuid.v4();
     final extension =
         photoPath.contains('.') ? photoPath.split('.').last : 'jpg';
+    // Path: {org}/{venue}/{incident_id}/{attachmentId}.ext — Storage RLS joins the
+    // incident id (see 20261123150000_incident_evidence_rls_alignment.sql).
     final objectPath =
-        '${venue.organizationId}/${venue.id}/$attachmentId.$extension';
+        '${venue.organizationId}/${venue.id}/$incidentId/$attachmentId.$extension';
 
     try {
       await ref.read(mediaRepositoryProvider).uploadIncidentEvidence(
@@ -351,7 +353,7 @@ class IncidentListScreen extends ConsumerWidget {
     final extension =
         photoPath.contains('.') ? photoPath.split('.').last : 'jpg';
     final resolvedObjectPath = objectPath ??
-        '${venue.organizationId}/${venue.id}/$resolvedAttachmentId.$extension';
+        '${venue.organizationId}/${venue.id}/$incidentId/$resolvedAttachmentId.$extension';
 
     final mutation = buildIncidentEvidenceUploadMutation(
       attachmentId: resolvedAttachmentId,

@@ -10,10 +10,12 @@ widget tests never depend on the plugin directly; override `imagePickerServicePr
 a fake in tests instead of mocking a platform channel.
 
 `data/media_repository.dart` — `MediaRepository.uploadIncidentEvidence` does two idempotent
-steps: upload the file to the `incident-evidence` Storage bucket (`upsert: true`, safe to
-retry) and record its path in `public.incident_attachments`
-(`supabase/migrations/20261002050000_incident_attachments.sql`) via a plain insert with
-duplicate-key-is-success handling, same pattern as `features/checklists`. If the local file
+steps: upload the file to the `incident-evidence` Storage bucket (`upsert: false`, safe to
+retry when the object already exists) and record its path in `public.incident_attachments`
+via a plain insert with duplicate-key-is-success handling, same pattern as
+`features/checklists`. Object paths are
+`{organization_id}/{venue_id}/{incident_id}/{attachmentId}.ext` so Storage RLS can join the
+incident (see `20261123150000_incident_evidence_rls_alignment.sql`). If the local file
 referenced by a queued retry no longer exists on-device, that's a terminal failure
 (`LocalFileMissingException`), surfaced as a conflict rather than retried forever.
 

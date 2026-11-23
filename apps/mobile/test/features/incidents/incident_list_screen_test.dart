@@ -250,7 +250,10 @@ void main() {
 
     expect(fakeIncidents.lastReportedTitle, 'Broken glass');
     expect(fakeMedia.lastIncidentId, isNotNull);
-    expect(fakeMedia.lastObjectPath, contains('org-1/venue-1/'));
+    expect(
+      fakeMedia.lastObjectPath,
+      matches(RegExp(r'^org-1/venue-1/[^/]+/[^/]+\.')),
+    );
   });
 
   testWidgets('a failure loading evidence is reported, not shown as none',

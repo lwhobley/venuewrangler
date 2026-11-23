@@ -24,7 +24,7 @@ class _FakeMediaRepository implements MediaRepository {
 Map<String, dynamic> _payload() => {
       'attachmentId': 'attachment-1',
       'incidentId': 'incident-1',
-      'objectPath': 'org-1/venue-1/attachment-1.jpg',
+      'objectPath': 'org-1/venue-1/incident-1/attachment-1.jpg',
       'localFilePath': '/tmp/photo.jpg',
     };
 
