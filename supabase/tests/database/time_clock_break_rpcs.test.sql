@@ -1,5 +1,5 @@
 -- pgTAP tests for start/end break RPCs and attested punch shift_id
--- (20261024120000_time_clock_break_rpcs_and_shift.sql).
+-- (20261123160000_time_clock_break_rpcs_and_shift.sql).
 
 begin;
 select plan(10);
@@ -102,20 +102,24 @@ insert into public.shifts (
 set local role service_role;
 select lives_ok(
   $$ select public.record_attested_punch(
-       '00000000-0000-0000-0000-000000000008',
-       '20000000-0000-0000-0000-0000000000a1',
+       '00000000-0000-0000-0000-000000000008'::uuid,
+       '20000000-0000-0000-0000-0000000000a1'::uuid,
        'in', 29.7604, -95.3698, 12.0, false, true,
-       '90000000-0000-0000-0000-0000000000b1'
+       '90000000-0000-0000-0000-0000000000b1'::uuid
      ) $$,
   'attested clock-in accepts an optional shift_id'
 );
 reset role;
 
-select ok(
-  (select shift_id = '90000000-0000-0000-0000-0000000000b1'
-     and clock_in_attested and punch_source = 'attested'
-   from public.time_entries
-   where user_id = '00000000-0000-0000-0000-000000000008' and is_open),
+select results_eq(
+  $$ select shift_id, clock_in_attested, punch_source
+     from public.time_entries
+     where user_id = '00000000-0000-0000-0000-000000000008' and is_open $$,
+  $$ values (
+       '90000000-0000-0000-0000-0000000000b1'::uuid,
+       true,
+       'attested'::text
+     ) $$,
   'attested punch stores the shift association'
 );
 
