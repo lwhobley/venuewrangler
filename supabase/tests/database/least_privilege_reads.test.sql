@@ -30,7 +30,7 @@ insert into public.incidents (id, venue_id, title, severity)
   values ('f4000000-0000-0000-0000-000000000001', 'f3000000-0000-0000-0000-0000000000a1', 'R reports', 'low');
 insert into public.incident_attachments (id, incident_id, storage_path)
   values ('f5000000-0000-0000-0000-000000000001', 'f4000000-0000-0000-0000-000000000001',
-          'f2000000-0000-0000-0000-00000000000a/f3000000-0000-0000-0000-0000000000a1/r-photo.jpg');
+          'f2000000-0000-0000-0000-00000000000a/f3000000-0000-0000-0000-0000000000a1/f4000000-0000-0000-0000-000000000001/r-photo.jpg');
 set local "request.jwt.claim.sub" to 'f1000000-0000-0000-0000-000000000004';
 insert into public.incidents (id, venue_id, title, severity)
   values ('f4000000-0000-0000-0000-000000000002', 'f3000000-0000-0000-0000-0000000000a1', 'T reports', 'low');
@@ -39,7 +39,7 @@ insert into public.incidents (id, venue_id, title, severity)
 set local "request.jwt.claim.sub" to 'f1000000-0000-0000-0000-000000000002';
 insert into public.incident_attachments (id, incident_id, storage_path)
   values ('f5000000-0000-0000-0000-000000000002', 'f4000000-0000-0000-0000-000000000001',
-          'f2000000-0000-0000-0000-00000000000a/f3000000-0000-0000-0000-0000000000a1/s-photo.jpg');
+          'f2000000-0000-0000-0000-00000000000a/f3000000-0000-0000-0000-0000000000a1/f4000000-0000-0000-0000-000000000001/s-photo.jpg');
 
 -- Reporters see only their own.
 set local "request.jwt.claim.sub" to 'f1000000-0000-0000-0000-000000000003';

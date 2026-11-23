@@ -231,7 +231,7 @@ insert into public.incidents (id, venue_id, title, severity, reported_by) values
   ('cb000000-0000-0000-0000-000000000001', 'c3000000-0000-0000-0000-0000000000c1', 'Slip', 'low', 'c1000000-0000-0000-0000-000000000003');
 insert into public.incident_attachments (id, incident_id, storage_path, uploaded_by) values
   ('cc000000-0000-0000-0000-000000000001', 'cb000000-0000-0000-0000-000000000001',
-   'c2000000-0000-0000-0000-00000000000c/c3000000-0000-0000-0000-0000000000c1/photo-1.jpg',
+   'c2000000-0000-0000-0000-00000000000c/c3000000-0000-0000-0000-0000000000c1/cb000000-0000-0000-0000-000000000001/photo-1.jpg',
    'c1000000-0000-0000-0000-000000000003');
 
 delete from public.incident_attachments where id = 'cc000000-0000-0000-0000-000000000001';
@@ -241,7 +241,7 @@ select is((select count(*)::int from public.storage_deletion_jobs
 
 insert into public.incident_attachments (id, incident_id, storage_path, uploaded_by) values
   ('cc000000-0000-0000-0000-000000000002', 'cb000000-0000-0000-0000-000000000001',
-   'c2000000-0000-0000-0000-00000000000c/c3000000-0000-0000-0000-0000000000c1/photo-2.jpg',
+   'c2000000-0000-0000-0000-00000000000c/c3000000-0000-0000-0000-0000000000c1/cb000000-0000-0000-0000-000000000001/photo-2.jpg',
    'c1000000-0000-0000-0000-000000000003');
 select lives_ok($$ delete from public.organizations where id = 'c2000000-0000-0000-0000-00000000000c' $$,
   'deleting an organization with evidence attached succeeds');

@@ -1,12 +1,13 @@
--- pgTAP authorization tests for incident_attachments (supabase/migrations/20261002050000).
--- Reuses the same org/venue/membership roster shape as the other test files.
+-- pgTAP authorization tests for incident_attachments (H1 alignment with can_read_incident).
+-- Path convention: {org}/{venue}/{incident_id}/{filename}.
 
 begin;
-select plan(10);
+select plan(12);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-000000000004', 'venue-a1-manager@example.com'),
   ('00000000-0000-0000-0000-000000000005', 'venue-a1-staff@example.com'),
+  ('00000000-0000-0000-0000-000000000007', 'venue-a1-other-staff@example.com'),
   ('00000000-0000-0000-0000-000000000006', 'org-b-owner@example.com');
 
 insert into public.organizations (id, name) values
@@ -20,8 +21,13 @@ insert into public.venues (id, organization_id, name) values
 insert into public.memberships (user_id, organization_id, venue_id, role) values
   ('00000000-0000-0000-0000-000000000004', '10000000-0000-0000-0000-00000000000a', '20000000-0000-0000-0000-0000000000a1', 'venue_manager'),
   ('00000000-0000-0000-0000-000000000005', '10000000-0000-0000-0000-00000000000a', '20000000-0000-0000-0000-0000000000a1', 'staff'),
+  ('00000000-0000-0000-0000-000000000007', '10000000-0000-0000-0000-00000000000a', '20000000-0000-0000-0000-0000000000a1', 'staff'),
   ('00000000-0000-0000-0000-000000000006', '10000000-0000-0000-0000-00000000000b', null, 'organization_owner');
 
+-- Staff 005 reports the incident (reported_by set by prepare trigger).
+reset role;
+set local role authenticated;
+set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-000000000005';
 insert into public.incidents (id, venue_id, title) values
   ('50000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-0000000000a1', 'Spilled fryer oil');
 
@@ -29,18 +35,14 @@ insert into public.incidents (id, venue_id, title) values
 -- insert
 -- ---------------------------------------------------------------------------
 
-reset role;
-set local role authenticated;
-set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-000000000005';
-
 select lives_ok(
   $$ insert into public.incident_attachments (id, incident_id, storage_path)
      values (
        '60000000-0000-0000-0000-000000000001',
        '50000000-0000-0000-0000-000000000001',
-       '10000000-0000-0000-0000-00000000000a/20000000-0000-0000-0000-0000000000a1/photo1.jpg'
+       '10000000-0000-0000-0000-00000000000a/20000000-0000-0000-0000-0000000000a1/50000000-0000-0000-0000-000000000001/photo1.jpg'
      ) $$,
-  'a venue member can attach evidence to an incident in their venue'
+  'the reporter can attach evidence to their own incident'
 );
 
 select is(
@@ -57,10 +59,40 @@ select is(
 
 select throws_ok(
   $$ insert into public.incident_attachments (incident_id, storage_path)
-     values ('50000000-0000-0000-0000-000000000001', '99999999-0000-0000-0000-00000000ffff/attack/photo.jpg') $$,
+     values (
+       '50000000-0000-0000-0000-000000000001',
+       '99999999-0000-0000-0000-00000000ffff/attack/photo.jpg'
+     ) $$,
   null,
   null,
-  'a storage_path that does not match the incident''s own organization_id/venue_id prefix is rejected'
+  'a storage_path that does not match org/venue/incident prefix is rejected'
+);
+
+select throws_ok(
+  $$ insert into public.incident_attachments (incident_id, storage_path)
+     values (
+       '50000000-0000-0000-0000-000000000001',
+       '10000000-0000-0000-0000-00000000000a/20000000-0000-0000-0000-0000000000a1/legacy-no-incident.jpg'
+     ) $$,
+  null,
+  null,
+  'legacy 3-segment paths are rejected on new attachment inserts'
+);
+
+-- Peer staff cannot attach to an incident they cannot read (H1).
+reset role;
+set local role authenticated;
+set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-000000000007';
+
+select throws_ok(
+  $$ insert into public.incident_attachments (incident_id, storage_path)
+     values (
+       '50000000-0000-0000-0000-000000000001',
+       '10000000-0000-0000-0000-00000000000a/20000000-0000-0000-0000-0000000000a1/50000000-0000-0000-0000-000000000001/rogue.jpg'
+     ) $$,
+  '42501',
+  null,
+  'another staff member cannot attach evidence to an incident they cannot read'
 );
 
 reset role;
@@ -69,7 +101,10 @@ set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-000000000006';
 
 select throws_ok(
   $$ insert into public.incident_attachments (incident_id, storage_path)
-     values ('50000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-00000000000a/20000000-0000-0000-0000-0000000000a1/rogue.jpg') $$,
+     values (
+       '50000000-0000-0000-0000-000000000001',
+       '10000000-0000-0000-0000-00000000000a/20000000-0000-0000-0000-0000000000a1/50000000-0000-0000-0000-000000000001/rogue.jpg'
+     ) $$,
   '42501',
   null,
   'a user outside the venue cannot attach evidence to its incident'
@@ -92,7 +127,7 @@ set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-000000000005';
 select is(
   (select count(*)::int from public.incident_attachments),
   1,
-  'a venue member can see the attachment'
+  'the reporter can see the attachment on their incident'
 );
 
 select lives_ok(
