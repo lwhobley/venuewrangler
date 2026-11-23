@@ -73,7 +73,7 @@ set local "request.jwt.claim.sub" to 'e1000000-0000-0000-0000-000000000001';
 select lives_ok(
   $$ select public.correct_time_entry(
        'e5000000-0000-0000-0000-000000000001',
-       (select clock_in_at + interval '45 minutes' from public.time_entries
+       (select clock_in_at + interval '30 seconds' from public.time_entries
          where id = 'e5000000-0000-0000-0000-000000000001'),
        null, 'gate regression') $$,
   'correct_time_entry still corrects via the privilege gate'
