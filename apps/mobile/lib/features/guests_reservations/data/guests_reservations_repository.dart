@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../../../core/errors/unapplied_update.dart';
 import '../domain/guest.dart';
 import '../domain/reservation.dart';
 
@@ -224,7 +226,18 @@ class SupabaseGuestsReservationsRepository
       updates['cancelled_at'] = DateTime.now().toUtc().toIso8601String();
     }
 
-    await _client.from('reservations').update(updates).eq('id', reservationId);
+    final row = await _client
+        .from('reservations')
+        .update(updates)
+        .eq('id', reservationId)
+        .select('id')
+        .maybeSingle();
+    if (row == null) {
+      await throwForUnappliedUpdate(
+        rowExists: () => rowExistsById(_client, 'reservations', reservationId),
+        denialMessage: 'Reservation status update was not applied',
+      );
+    }
   }
 
   @override
@@ -232,8 +245,17 @@ class SupabaseGuestsReservationsRepository
     required String reservationId,
     String? userId,
   }) async {
-    await _client
+    final row = await _client
         .from('reservations')
-        .update({'assigned_to': userId}).eq('id', reservationId);
+        .update({'assigned_to': userId})
+        .eq('id', reservationId)
+        .select('id')
+        .maybeSingle();
+    if (row == null) {
+      await throwForUnappliedUpdate(
+        rowExists: () => rowExistsById(_client, 'reservations', reservationId),
+        denialMessage: 'Reservation assignment was not applied',
+      );
+    }
   }
 }

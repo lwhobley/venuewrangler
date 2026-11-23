@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/errors/app_error.dart';
+import '../../../core/errors/unapplied_update.dart';
 import '../domain/crm_beo.dart';
 import '../domain/crm_beo_charge.dart';
 import '../domain/crm_contract.dart';
@@ -154,7 +155,18 @@ class SupabaseCrmRepository implements CrmRepository {
     required String leadId,
     required String status,
   }) async {
-    await _client.from('crm_leads').update({'status': status}).eq('id', leadId);
+    final row = await _client
+        .from('crm_leads')
+        .update({'status': status})
+        .eq('id', leadId)
+        .select('id')
+        .maybeSingle();
+    if (row == null) {
+      await throwForUnappliedUpdate(
+        rowExists: () => rowExistsById(_client, 'crm_leads', leadId),
+        denialMessage: 'Lead status update was not applied',
+      );
+    }
   }
 
   @override
@@ -237,7 +249,18 @@ class SupabaseCrmRepository implements CrmRepository {
     required String beoId,
     required String status,
   }) async {
-    await _client.from('crm_beos').update({'status': status}).eq('id', beoId);
+    final row = await _client
+        .from('crm_beos')
+        .update({'status': status})
+        .eq('id', beoId)
+        .select('id')
+        .maybeSingle();
+    if (row == null) {
+      await throwForUnappliedUpdate(
+        rowExists: () => rowExistsById(_client, 'crm_beos', beoId),
+        denialMessage: 'BEO status update was not applied',
+      );
+    }
   }
 
   @override
@@ -308,9 +331,18 @@ class SupabaseCrmRepository implements CrmRepository {
     required String contractId,
     required String status,
   }) async {
-    await _client
+    final row = await _client
         .from('crm_contracts')
-        .update({'status': status}).eq('id', contractId);
+        .update({'status': status})
+        .eq('id', contractId)
+        .select('id')
+        .maybeSingle();
+    if (row == null) {
+      await throwForUnappliedUpdate(
+        rowExists: () => rowExistsById(_client, 'crm_contracts', contractId),
+        denialMessage: 'Contract status update was not applied',
+      );
+    }
   }
 
   @override
