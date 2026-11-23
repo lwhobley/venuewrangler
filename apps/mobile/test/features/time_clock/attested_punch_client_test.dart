@@ -330,12 +330,13 @@ void main() {
   });
 
   test('a malformed punch response surfaces as NetworkError', () async {
+    const malformed = {
+      'entry': {'id': 42},
+    };
     final client = _client(
       (body) async => body['action'] == 'challenge'
           ? {'nonce': 'n-1', 'mode': 'observe'}
-          : {
-              'entry': {'id': 42}
-            },
+          : malformed,
       _Proofs(null),
     );
     await expectLater(_punch(client), throwsA(isA<NetworkError>()));
