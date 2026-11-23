@@ -16,6 +16,56 @@ import 'package:venuewrangler_mobile/features/venues/application/venues_provider
 
 import 'fake_mfa_repository.dart';
 
+class _OAuthAuthRepository implements AuthRepository {
+  @override
+  Session? get currentSession => Session(
+        accessToken: 'token',
+        tokenType: 'bearer',
+        user: User(
+          id: 'u1',
+          appMetadata: const {
+            'provider': 'google',
+            'providers': ['google'],
+          },
+          userMetadata: const {},
+          aud: 'authenticated',
+          createdAt: '2026-01-01T00:00:00Z',
+          email: 'owner@example.com',
+        ),
+      );
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError();
+}
+
+class _PasswordAuthRepository implements AuthRepository {
+  @override
+  Session? get currentSession => Session(
+        accessToken: 'token',
+        tokenType: 'bearer',
+        user: User(
+          id: 'u1',
+          appMetadata: const {
+            'provider': 'email',
+            'providers': ['email'],
+          },
+          userMetadata: const {},
+          aud: 'authenticated',
+          createdAt: '2026-01-01T00:00:00Z',
+          email: 'owner@example.com',
+        ),
+      );
+
+  @override
+  Future<void> signInWithPassword({
+    required String email,
+    required String password,
+  }) async {}
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError();
+}
+
 String _jwt(Map<String, Object?> claims) {
   String part(Object value) =>
       base64Url.encode(utf8.encode(jsonEncode(value))).replaceAll('=', '');
@@ -210,7 +260,8 @@ void main() {
   });
 
   group('MfaSettingsScreen', () {
-    testWidgets('lists verified authenticators and removes one after confirm',
+    testWidgets(
+        'lists verified authenticators and removes one after password step-up',
         (tester) async {
       final repository = FakeMfaRepository(
         factors: [
@@ -218,10 +269,14 @@ void main() {
           const MfaFactor(id: 'pending', verified: false),
         ],
       );
+      // OAuth-only session skips the password prompt so this test stays focused on
+      // unenroll wiring; password step-up itself is covered in reauth_dialog_test.
+      final auth = _OAuthAuthRepository();
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
             mfaRepositoryProvider.overrideWithValue(repository),
+            authRepositoryProvider.overrideWithValue(auth),
             currentUserIdProvider.overrideWithValue('u1'),
           ],
           child: const MaterialApp(home: MfaSettingsScreen()),
@@ -240,6 +295,43 @@ void main() {
 
       expect(repository.unenrolled, ['f1']);
       expect(find.text('Set up authenticator app'), findsOneWidget);
+    });
+
+    testWidgets('password accounts must reauth before unenroll', (tester) async {
+      final repository = FakeMfaRepository(
+        factors: [
+          MfaFactor(id: 'f1', verified: true, createdAt: DateTime(2026, 9, 1)),
+        ],
+      );
+      final auth = _PasswordAuthRepository();
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            mfaRepositoryProvider.overrideWithValue(repository),
+            authRepositoryProvider.overrideWithValue(auth),
+            currentUserIdProvider.overrideWithValue('u1'),
+          ],
+          child: const MaterialApp(home: MfaSettingsScreen()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Remove authenticator'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Remove'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Confirm your password'), findsOneWidget);
+      expect(find.text('Authenticator code'), findsOneWidget);
+      expect(repository.unenrolled, isEmpty);
+
+      await tester.enterText(find.byType(TextField).first, 'Correct-Horse-1');
+      await tester.enterText(find.byType(TextField).last, '123456');
+      await tester.tap(find.text('Confirm'));
+      await tester.pumpAndSettle();
+
+      expect(repository.unenrolled, ['f1']);
+      expect(repository.challenges, [('f1', '123456')]);
     });
   });
 

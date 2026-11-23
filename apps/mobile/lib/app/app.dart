@@ -56,6 +56,9 @@ class _VenueWranglerAppState extends ConsumerState<VenueWranglerApp> {
     // Side-effect only: notices a password-reset sign-in so the router can hold the user on
     // /reset-password. See core/auth/auth_providers.dart.
     ref.watch(passwordRecoveryTriggerProvider);
+    // Side-effect only: during password recovery, force TOTP when listFactors finds a verified
+    // authenticator even if JWT AAL claims omitted nextLevel=aal2. See auth_providers.dart.
+    ref.watch(recoveryMfaProbeProvider);
     // Side-effect only: runs the sign-out cleanup (push-token revocation, queue pruning, secure
     // storage wipe) when the server ends the session, which no sign-out button ever sees. See
     // core/auth/sign_out_service.dart.

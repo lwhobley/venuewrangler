@@ -69,6 +69,7 @@ final routerRefreshNotifierProvider = Provider<RouterRefreshNotifier>((ref) {
   ref.listen(passwordRecoveryPendingProvider, (_, __) => notifier.notify());
   ref.listen(myVenueRoleProvider, (_, __) => notifier.notify());
   ref.listen(mfaChallengeRequiredProvider, (_, __) => notifier.notify());
+  ref.listen(reauthInProgressProvider, (_, __) => notifier.notify());
   ref.listen(invitesPromptDueProvider, (_, __) => notifier.notify());
   ref.onDispose(notifier.dispose);
   return notifier;
@@ -131,11 +132,16 @@ final routerProvider = Provider<GoRouter>((ref) {
       final goingToInvites = state.matchedLocation == '/invites';
 
       // A verified authenticator exists but this session only passed the password: nothing
-      // else (not even a password-reset) until the code is entered.
-      if (isSignedIn && ref.read(mfaChallengeRequiredProvider)) {
+      // else (not even a password-reset) until the code is entered. Suspended while a
+      // step-up reauth dialog is restoring AAL2 after signInWithPassword (H6).
+      if (isSignedIn &&
+          ref.read(mfaChallengeRequiredProvider) &&
+          !ref.read(reauthInProgressProvider)) {
         return goingToMfaChallenge ? null : '/mfa-challenge';
       }
-      if (goingToMfaChallenge) return '/';
+      if (goingToMfaChallenge && !ref.read(reauthInProgressProvider)) {
+        return '/';
+      }
 
       // Opened a reset link: nothing else until a new password is set.
       if (isSignedIn && recoveringPassword) {

@@ -189,6 +189,37 @@ void main() {
       expect(location(container), '/');
     });
 
+    testWidgets(
+        'suspends MFA redirect while step-up reauth is in progress',
+        (tester) async {
+      final container = containerFor(
+        activeVenue: venue,
+        organizations: [org],
+      );
+      await pumpApp(tester, container);
+      expect(location(container), '/');
+
+      container.read(routerProvider).go('/settings');
+      for (var i = 0; i < 4; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(location(container), '/settings');
+
+      container.read(reauthInProgressProvider.notifier).state = true;
+      container.read(mfaRequired.notifier).state = true;
+      for (var i = 0; i < 6; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      // Stay on settings — reauth dialog is restoring AAL2.
+      expect(location(container), '/settings');
+
+      container.read(reauthInProgressProvider.notifier).state = false;
+      for (var i = 0; i < 6; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(location(container), '/mfa-challenge');
+    });
+
     testWidgets('an invited user with no workspace is shown the invites',
         (tester) async {
       final container = containerFor(invites: [invite()]);
