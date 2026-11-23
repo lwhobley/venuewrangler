@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -13,7 +14,7 @@ final authCallbackErrorProvider = StateProvider<String?>((ref) => null);
 String? authCallbackProblem(Uri uri) {
   final fragment =
       Uri.tryParse('https://callback/?${uri.fragment}')?.queryParameters ??
-          const <String, String>{};
+      const <String, String>{};
   return uri.queryParameters.containsKey('error') ||
           fragment.containsKey('error')
       ? expiredAuthLinkMessage
@@ -67,38 +68,27 @@ final recoveryMfaHoldProvider = StateProvider<bool>((ref) => false);
 /// Side-effect only, watched once at the app root: flips [passwordRecoveryPendingProvider]
 /// when Supabase reports a password-recovery sign-in, and clears it on sign-out.
 final passwordRecoveryTriggerProvider = Provider<void>((ref) {
-  ref.listen<AsyncValue<AuthState>>(
-    authStateChangesProvider,
-    (_, next) {
-      unawaited(applyPasswordRecoveryAuthChange(ref, next));
-    },
-    fireImmediately: true,
-  );
+  ref.listen<AsyncValue<AuthState>>(authStateChangesProvider, (_, next) {
+    unawaited(applyPasswordRecoveryAuthChange(ref, next));
+  }, fireImmediately: true);
 });
 
 /// Side-effect only: during password recovery, probe [listFactors] so TOTP is forced even
 /// when JWT AAL claims omit `nextLevel=aal2` (M11). Watched once at the app root.
 final recoveryMfaProbeProvider = Provider<void>((ref) {
-  ref.listen<bool>(
-    passwordRecoveryPendingProvider,
-    (_, pending) {
-      if (!pending) {
-        ref.read(recoveryMfaHoldProvider.notifier).state = false;
-        return;
-      }
-      unawaited(probeRecoveryMfaHold(ref));
-    },
-    fireImmediately: true,
-  );
-  ref.listen<AsyncValue<AuthState>>(
-    authStateChangesProvider,
-    (_, __) {
-      final mfa = ref.read(mfaRepositoryProvider);
-      if (!mfa.isAal1 || !ref.read(passwordRecoveryPendingProvider)) {
-        ref.read(recoveryMfaHoldProvider.notifier).state = false;
-      }
-    },
-  );
+  ref.listen<bool>(passwordRecoveryPendingProvider, (_, pending) {
+    if (!pending) {
+      ref.read(recoveryMfaHoldProvider.notifier).state = false;
+      return;
+    }
+    unawaited(probeRecoveryMfaHold(ref));
+  }, fireImmediately: true);
+  ref.listen<AsyncValue<AuthState>>(authStateChangesProvider, (_, __) {
+    final mfa = ref.read(mfaRepositoryProvider);
+    if (!mfa.isAal1 || !ref.read(passwordRecoveryPendingProvider)) {
+      ref.read(recoveryMfaHoldProvider.notifier).state = false;
+    }
+  });
 });
 
 /// Applies a password-recovery / sign-out latch update, awaiting the durable storage write
@@ -108,8 +98,7 @@ Future<void> applyPasswordRecoveryAuthChange(
   AsyncValue<AuthState> next,
 ) async {
   if (next.error is AuthException) {
-    ref.read(authCallbackErrorProvider.notifier).state =
-        expiredAuthLinkMessage;
+    ref.read(authCallbackErrorProvider.notifier).state = expiredAuthLinkMessage;
   }
   final event = next.valueOrNull?.event;
   final pending = ref.read(passwordRecoveryPendingProvider.notifier);
