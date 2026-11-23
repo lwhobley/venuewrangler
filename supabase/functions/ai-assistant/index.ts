@@ -231,44 +231,11 @@ async function handleRequest(
     Math.min(requestedTimeoutMs, reservationTtlSeconds * 1000 - RESERVATION_TTL_MARGIN_MS),
   );
 
-  // Per-user monthly cap (audit AI-04): one staff member cannot exhaust the org's budget.
-  // Counts this user's committed spend in this org for the current UTC month
-  // (ai_usage_events.user_id exists, see 20261002171532_ai_usage.sql).
+  // Display / client messaging only. Enforcement uses
+  // app_hidden.platform_settings.ai_monthly_user_budget_usd inside reserve_ai_budget.
   const monthlyUserBudget = parseFloat(Deno.env.get("AI_MONTHLY_USER_BUDGET_USD") ?? "3");
-  if (Number.isFinite(monthlyUserBudget) && monthlyUserBudget > 0) {
-    const now = new Date();
-    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
-    let userSpend = 0;
-    const pageSize = 1000;
-    for (let page = 0; page < 20; page++) {
-      const { data: rows, error: spendError } = await serviceClient
-        .from("ai_usage_events")
-        .select("cost_usd")
-        .eq("organization_id", organizationId)
-        .eq("user_id", userId)
-        .gte("created_at", monthStart)
-        .order("created_at", { ascending: true })
-        .range(page * pageSize, page * pageSize + pageSize - 1);
-      if (spendError) {
-        console.error(`[${correlationId}]`, "user spend lookup failed", spendError);
-        return jsonResponse({ error: "budget_reservation_failed" }, 500);
-      }
-      for (const row of rows ?? []) userSpend += Number(row.cost_usd) || 0;
-      if (!rows || rows.length < pageSize) break;
-    }
-    if (userSpend + estimatedCost > monthlyUserBudget) {
-      return jsonResponse(
-        {
-          error: "monthly_user_budget_exceeded",
-          monthly_user_budget_usd: monthlyUserBudget,
-          current_user_spend_usd: userSpend,
-        },
-        402,
-      );
-    }
-  }
-  // Atomic check-and-reserve: one RPC holds a per-org advisory lock, verifies budget
-  // + rate limit (including in-flight reservations), and inserts the reservation.
+  // Atomic check-and-reserve: one RPC holds a per-org advisory lock, verifies org + per-user
+  // monthly budgets and rate limit (including in-flight reservations), and inserts the reservation.
   // Never check-then-insert in two round trips — concurrent requests would overspend.
   const { data: reservationId, error: reservationError } = await serviceClient.rpc(
     "reserve_ai_budget",
@@ -287,6 +254,20 @@ async function handleRequest(
     const msg = (reservationError as { message?: string }).message ?? "";
     if (msg.includes("subscription_required")) {
       return jsonResponse({ error: "subscription_required" }, 402);
+    }
+    if (msg.includes("monthly_user_budget_exceeded")) {
+      const { data: currentUserSpend } = await serviceClient.rpc(
+        "ai_user_spend_this_month",
+        { p_org_id: organizationId, p_user_id: userId },
+      );
+      return jsonResponse(
+        {
+          error: "monthly_user_budget_exceeded",
+          monthly_user_budget_usd: monthlyUserBudget,
+          current_user_spend_usd: currentUserSpend ?? 0,
+        },
+        402,
+      );
     }
     if (msg.includes("monthly_budget_exceeded")) {
       const { data: currentSpend } = await serviceClient.rpc(
@@ -395,11 +376,14 @@ async function handleRequest(
     return jsonResponse({ error: "ai_response_not_valid_json" }, 502);
   }
 
+  const billedCompletion = groqResult.completionTokens > 0
+    ? groqResult.completionTokens
+    : Math.min(maxOutputTokens, estimateInputTokens(groqResult.content));
   const actualCost =
-    groqResult.promptTokens * pricing.input +
-    groqResult.completionTokens * pricing.output;
+    billedPrompt * pricing.input +
+    billedCompletion * pricing.output;
 
-  if (!await commitUsage(groqResult.promptTokens, groqResult.completionTokens)) {
+  if (!await commitUsage(billedPrompt, billedCompletion)) {
     return jsonResponse({ error: "ai_usage_accounting_failed", correlation_id: correlationId }, 503);
   }
 
@@ -407,8 +391,8 @@ async function handleRequest(
     task,
     result: parsedResult,
     usage: {
-      input_tokens: groqResult.promptTokens,
-      output_tokens: groqResult.completionTokens,
+      input_tokens: billedPrompt,
+      output_tokens: billedCompletion,
     },
     cost_usd: actualCost,
   });
