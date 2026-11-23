@@ -1,9 +1,12 @@
 import 'dart:async';
+
 import '../../../core/auth/auth_providers.dart';
 import '../../../core/errors/app_error.dart';
 import '../../venues/application/venue_clock.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../../core/theme/app_radii.dart';
 import '../application/chat_providers.dart';
 import '../domain/chat_contact.dart';
@@ -68,8 +71,9 @@ class _ConversationListView extends ConsumerWidget {
                 final conv = conversations[index];
                 return ListTile(
                   leading: CircleAvatar(
-                    backgroundColor:
-                        Theme.of(context).colorScheme.primaryContainer,
+                    backgroundColor: Theme.of(context)
+                        .colorScheme
+                        .primaryContainer,
                     child: Icon(
                       conv.type == 'all_staff' ? Icons.groups : Icons.person,
                       color: Theme.of(context).colorScheme.onPrimaryContainer,
@@ -116,10 +120,9 @@ Future<void> _startDirectMessage(BuildContext context, WidgetRef ref) async {
   );
   if (contact == null) return;
   try {
-    final id = await container.read(chatRepositoryProvider).createOrGetDm(
-          venueId: venue.id,
-          targetUserId: contact.userId,
-        );
+    final id = await container
+        .read(chatRepositoryProvider)
+        .createOrGetDm(venueId: venue.id, targetUserId: contact.userId);
     container.invalidate(conversationsListProvider);
     container.read(activeConversationIdProvider.notifier).state = id;
   } catch (_) {
@@ -207,18 +210,18 @@ class _ChatThreadViewState extends ConsumerState<_ChatThreadView> {
         .read(chatRepositoryProvider)
         .watchMessages(widget.conversationId)
         .listen((_) {
-      ref.invalidate(conversationMessagesProvider(widget.conversationId));
-      ref.invalidate(conversationsListProvider);
-      // Keep read receipts current while this thread is open.
-      unawaited(_markRead());
-    });
+          ref.invalidate(conversationMessagesProvider(widget.conversationId));
+          ref.invalidate(conversationsListProvider);
+          // Keep read receipts current while this thread is open.
+          unawaited(_markRead());
+        });
   }
 
   Future<void> _markRead() async {
     try {
-      await ref.read(chatRepositoryProvider).markConversationRead(
-            conversationId: widget.conversationId,
-          );
+      await ref
+          .read(chatRepositoryProvider)
+          .markConversationRead(conversationId: widget.conversationId);
       if (!mounted) return;
       ref.invalidate(conversationsListProvider);
     } catch (_) {
@@ -235,8 +238,9 @@ class _ChatThreadViewState extends ConsumerState<_ChatThreadView> {
 
   @override
   Widget build(BuildContext context) {
-    final messagesAsync =
-        ref.watch(conversationMessagesProvider(widget.conversationId));
+    final messagesAsync = ref.watch(
+      conversationMessagesProvider(widget.conversationId),
+    );
 
     return Scaffold(
       appBar: AppBar(
@@ -285,8 +289,10 @@ class _ChatThreadViewState extends ConsumerState<_ChatThreadView> {
                       decoration: const InputDecoration(
                         hintText: 'Type a message...',
                         border: InputBorder.none,
-                        contentPadding:
-                            EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
                       ),
                       onSubmitted: (_) => _sendMessage(),
                     ),
@@ -311,10 +317,9 @@ class _ChatThreadViewState extends ConsumerState<_ChatThreadView> {
     if (text.isEmpty) return;
     setState(() => _sending = true);
     try {
-      await ref.read(chatRepositoryProvider).sendMessage(
-            conversationId: widget.conversationId,
-            text: text,
-          );
+      await ref
+          .read(chatRepositoryProvider)
+          .sendMessage(conversationId: widget.conversationId, text: text);
       if (!mounted) return;
       _textCtrl.clear();
       ref.invalidate(conversationMessagesProvider(widget.conversationId));
@@ -324,9 +329,8 @@ class _ChatThreadViewState extends ConsumerState<_ChatThreadView> {
         final message = e is AuthError
             ? e.message
             : 'Message not sent. Please try again.';
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(message)),
-        );
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(message)));
       }
     } finally {
       if (mounted) setState(() => _sending = false);
@@ -370,10 +374,7 @@ class _MessageBubble extends ConsumerWidget {
               style: Theme.of(context).textTheme.labelSmall,
             ),
             if (message.text != null && message.text!.isNotEmpty)
-              Text(
-                message.text!,
-                style: Theme.of(context).textTheme.bodyLarge,
-              ),
+              Text(message.text!, style: Theme.of(context).textTheme.bodyLarge),
             if (message.hasAttachment)
               Padding(
                 padding: const EdgeInsets.only(top: 4.0),
@@ -384,9 +385,7 @@ class _MessageBubble extends ConsumerWidget {
                     const SizedBox(width: 4),
                     Text(
                       'Photo Attachment',
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodySmall
+                      style: Theme.of(context).textTheme.bodySmall
                           ?.copyWith(color: context.ops.info.fg),
                     ),
                   ],
