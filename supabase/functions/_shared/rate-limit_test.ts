@@ -60,7 +60,7 @@ Deno.test("isMissingFunctionError recognises Postgres and PostgREST codes", () =
   if (isMissingFunctionError(null)) throw new Error("null");
 });
 
-Deno.test("entitlement: entitled, not entitled, missing function (fail open), other error", async () => {
+Deno.test("entitlement: entitled, not entitled, missing function (fail closed), other error", async () => {
   const org = "11111111-1111-1111-1111-111111111111";
   const entitled = fakeClient(() => ({ data: true, error: null }));
   if (await requireEntitlement(entitled.client, org) !== null) throw new Error("entitled blocked");
@@ -72,8 +72,11 @@ Deno.test("entitlement: entitled, not entitled, missing function (fail open), ot
   if ((await deniedResponse!.json()).error !== "subscription_required") throw new Error("body");
 
   const missing = fakeClient(() => ({ data: null, error: { code: "42883", message: "nope" } }));
-  if (await checkEntitlement(missing.client, org) !== "entitled") {
-    throw new Error("missing org_is_entitled should fail open");
+  if (await checkEntitlement(missing.client, org) !== "unavailable") {
+    throw new Error("missing org_is_entitled should fail closed");
+  }
+  if (status(await requireEntitlement(missing.client, org)) !== 503) {
+    throw new Error("missing org_is_entitled should answer 503");
   }
 
   const broken = fakeClient(() => ({ data: null, error: { code: "XX000", message: "db down" } }));
