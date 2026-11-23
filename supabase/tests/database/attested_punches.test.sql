@@ -105,7 +105,13 @@ select throws_ok(
        'in', 29.7604, -95.3698, 80.0, false, true) $$,
   '42501', null, 'the accuracy limit still applies to attested punches');
 reset role;
-select is(current_setting('app.attested_punch', true), 'off', 'the attested flag is reset after each call');
+select ok(
+  not exists (
+    select 1 from app_hidden.privilege_gate
+    where backend_pid = pg_backend_pid() and flag = 'attested_punch'
+  ),
+  'the attested privilege gate is closed after each call'
+);
 
 -- ---------------------------------------------------------------------------
 -- Enforcement flag: self-recorded punches must be attested.

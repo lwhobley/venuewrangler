@@ -4,7 +4,7 @@
 -- accepts one explicitly (accept_invite).
 
 begin;
-select plan(19);
+select plan(25);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-000000000004', 'venue-a1-manager@example.com');
@@ -174,6 +174,60 @@ select throws_ok(
   $$ select public.accept_invite('30000000-0000-0000-0000-000000000001') $$,
   '42501', null,
   'an unauthenticated caller cannot accept an invite'
+);
+
+-- ---------------------------------------------------------------------------
+-- M1: membership conflict updates role; M2: pending→accepted only via RPC.
+-- ---------------------------------------------------------------------------
+reset role;
+insert into auth.users (id, email, email_confirmed_at) values
+  ('00000000-0000-0000-0000-000000000015', 'promo@example.com', now());
+insert into public.memberships (user_id, organization_id, venue_id, role) values
+  ('00000000-0000-0000-0000-000000000015', '10000000-0000-0000-0000-00000000000a',
+   '20000000-0000-0000-0000-0000000000a1', 'staff');
+insert into public.invites (id, venue_id, email, role, invited_by) values
+  ('30000000-0000-0000-0000-000000000005', '20000000-0000-0000-0000-0000000000a1',
+   'promo@example.com', 'venue_manager', '00000000-0000-0000-0000-000000000004'),
+  ('30000000-0000-0000-0000-000000000006', '20000000-0000-0000-0000-0000000000a1',
+   'forge-accept@example.com', 'staff', '00000000-0000-0000-0000-000000000004');
+
+set local role authenticated;
+set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-000000000015';
+select lives_ok(
+  $$ select public.accept_invite('30000000-0000-0000-0000-000000000005') $$,
+  'accepting a promotion invite upgrades the existing membership role'
+);
+reset role;
+select is(
+  (select role::text from public.memberships
+    where user_id = '00000000-0000-0000-0000-000000000015'
+      and venue_id = '20000000-0000-0000-0000-0000000000a1'),
+  'venue_manager',
+  'membership role matches the invite after conflict upsert'
+);
+select is(
+  (select status from public.invites where id = '30000000-0000-0000-0000-000000000005'),
+  'accepted',
+  'invite is accepted only after membership matches'
+);
+
+set local role authenticated;
+set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-000000000004';
+select throws_ok(
+  $$ update public.invites set status = 'accepted'
+      where id = '30000000-0000-0000-0000-000000000006' $$,
+  '42501', null,
+  'managers cannot mark an invite accepted without accept_invite'
+);
+select lives_ok(
+  $$ select public.revoke_invite('30000000-0000-0000-0000-000000000006') $$,
+  'revoke_invite revokes a pending invite'
+);
+reset role;
+select is(
+  (select status from public.invites where id = '30000000-0000-0000-0000-000000000006'),
+  'revoked',
+  'revoke_invite marks the invite revoked'
 );
 
 select * from finish();

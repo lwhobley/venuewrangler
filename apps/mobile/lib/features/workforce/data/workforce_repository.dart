@@ -1,6 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../../../core/errors/unapplied_update.dart';
 import '../domain/workforce_models.dart';
 
 /// As with the other Phase 2/3 repositories, RLS is the actual authority (see
@@ -72,17 +71,9 @@ class SupabaseWorkforceRepository implements WorkforceRepository {
 
   @override
   Future<void> revokeInvite(String inviteId) async {
-    final row = await _client
-        .from('invites')
-        .update({'status': 'revoked'})
-        .eq('id', inviteId)
-        .select('id')
-        .maybeSingle();
-    if (row == null) {
-      await throwForUnappliedUpdate(
-        rowExists: () => rowExistsById(_client, 'invites', inviteId),
-        denialMessage: 'Invite revoke was not applied',
-      );
-    }
+    // Revocation is restricted to public.revoke_invite so clients cannot mark
+    // invites accepted without creating a membership (see accept_invite).
+    // The RPC raises on not-found / forbidden / not-pending (no silent RLS no-op).
+    await _client.rpc('revoke_invite', params: {'p_invite_id': inviteId});
   }
 }
