@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../core/errors/app_error.dart';
 import '../application/image_sanitizer.dart';
 
 /// Thrown by [MediaRepository.uploadIncidentEvidence] when the local file referenced by a
@@ -52,12 +53,18 @@ class SupabaseMediaRepository implements MediaRepository {
       throw LocalFileMissingException(localFilePath);
     }
 
+    // Sanitized again at upload time: a photo queued by an older build may still carry GPS.
+    final bytes = sanitizeImageBytes(await file.readAsBytes());
+    // Same 10MB client cap as documents — fail fast before a large Storage round-trip.
+    const maxBytes = 10 * 1024 * 1024;
+    if (bytes.length > maxBytes) {
+      throw const UnknownError('That file is too large (max 10MB).');
+    }
+
     // upsert: false on purpose. The incident-evidence bucket has no UPDATE policy (evidence is
     // immutable), and an upsert needs UPDATE, so a retry would fail with 403. A duplicate on a
     // retry means an earlier attempt already stored this object, which is success here.
     try {
-      // Sanitized again at upload time: a photo queued by an older build may still carry GPS.
-      final bytes = sanitizeImageBytes(await file.readAsBytes());
       await _client.storage.from('incident-evidence').uploadBinary(
             objectPath,
             bytes,

@@ -27,6 +27,7 @@ class _FakeChatRepository implements ChatRepository {
   String? dmStartedWith;
   bool sendMessageCalled = false;
   String? lastSentText;
+  final List<String> markedReadConversationIds = [];
 
   @override
   Stream<void> watchMessages(String conversationId) => const Stream.empty();
@@ -72,7 +73,9 @@ class _FakeChatRepository implements ChatRepository {
   }
 
   @override
-  Future<void> markConversationRead({required String conversationId}) async {}
+  Future<void> markConversationRead({required String conversationId}) async {
+    markedReadConversationIds.add(conversationId);
+  }
 
   @override
   Future<String> createOrGetDm({
@@ -176,6 +179,7 @@ void main() {
 
     expect(find.text('Conversation'), findsOneWidget);
     expect(find.text('Shift meeting at 4 PM'), findsOneWidget);
+    expect(fakeRepo.markedReadConversationIds, contains('conv-1'));
 
     // Enter and send message
     await tester.enterText(find.byType(TextField), 'I will be there!');

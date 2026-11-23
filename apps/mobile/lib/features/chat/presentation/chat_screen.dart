@@ -1,5 +1,6 @@
 import 'dart:async';
 import '../../../core/auth/auth_providers.dart';
+import '../../../core/errors/app_error.dart';
 import '../../venues/application/venue_clock.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -201,13 +202,28 @@ class _ChatThreadViewState extends ConsumerState<_ChatThreadView> {
   @override
   void initState() {
     super.initState();
+    unawaited(_markRead());
     _messageChanges = ref
         .read(chatRepositoryProvider)
         .watchMessages(widget.conversationId)
         .listen((_) {
       ref.invalidate(conversationMessagesProvider(widget.conversationId));
       ref.invalidate(conversationsListProvider);
+      // Keep read receipts current while this thread is open.
+      unawaited(_markRead());
     });
+  }
+
+  Future<void> _markRead() async {
+    try {
+      await ref.read(chatRepositoryProvider).markConversationRead(
+            conversationId: widget.conversationId,
+          );
+      if (!mounted) return;
+      ref.invalidate(conversationsListProvider);
+    } catch (_) {
+      // Read receipts are best-effort; don't block the thread UI.
+    }
   }
 
   @override
@@ -303,10 +319,13 @@ class _ChatThreadViewState extends ConsumerState<_ChatThreadView> {
       _textCtrl.clear();
       ref.invalidate(conversationMessagesProvider(widget.conversationId));
       ref.invalidate(conversationsListProvider);
-    } catch (_) {
+    } catch (e) {
       if (mounted) {
+        final message = e is AuthError
+            ? e.message
+            : 'Message not sent. Please try again.';
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Message not sent. Please try again.')),
+          SnackBar(content: Text(message)),
         );
       }
     } finally {

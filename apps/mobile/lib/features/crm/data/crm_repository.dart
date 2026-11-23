@@ -303,7 +303,18 @@ class SupabaseCrmRepository implements CrmRepository {
   }) async {
     final response = await _client
         .rpc('convert_beo_to_contract', params: {'p_beo_id': beoId});
-    final row = (response as List<dynamic>).first as Map<String, dynamic>;
+    if (response is! List || response.isEmpty) {
+      throw const UnknownError(
+        'Could not convert this BEO to a contract. Please try again.',
+      );
+    }
+    final first = response.first;
+    if (first is! Map) {
+      throw const UnknownError(
+        'Could not convert this BEO to a contract. Please try again.',
+      );
+    }
+    final row = Map<String, dynamic>.from(first);
     return (
       contractId: row['contract_id'] as String,
       alreadyExisted: row['already_existed'] as bool

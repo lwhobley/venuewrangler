@@ -5,11 +5,20 @@ enum WorkforceRole {
   supervisor,
   staff;
 
-  static WorkforceRole fromDb(String value) => switch (value) {
+  static WorkforceRole fromDb(String value) {
+    final role = tryFromDb(value);
+    if (role == null) {
+      throw ArgumentError('Unknown workforce role: $value');
+    }
+    return role;
+  }
+
+  /// Returns null for unexpected / legacy DB values instead of throwing.
+  static WorkforceRole? tryFromDb(String value) => switch (value) {
         'venue_manager' => WorkforceRole.venueManager,
         'supervisor' => WorkforceRole.supervisor,
         'staff' => WorkforceRole.staff,
-        _ => throw ArgumentError('Unknown workforce role: $value'),
+        _ => null,
       };
 
   String toDb() => switch (this) {
@@ -80,17 +89,40 @@ class Invite {
   final InviteStatus status;
   final DateTime createdAt;
 
-  factory Invite.fromJson(Map<String, dynamic> json) => Invite(
-        id: json['id'] as String,
-        venueId: json['venue_id'] as String,
-        email: json['email'] as String,
-        role: WorkforceRole.fromDb(json['role'] as String),
-        status: json['status'] == 'pending' &&
-                json['expires_at'] != null &&
-                DateTime.parse(json['expires_at'] as String)
-                    .isBefore(DateTime.now())
-            ? InviteStatus.expired
-            : InviteStatus.fromDb(json['status'] as String),
-        createdAt: DateTime.parse(json['created_at'] as String),
-      );
+  factory Invite.fromJson(Map<String, dynamic> json) {
+    final invite = tryFromJson(json);
+    if (invite == null) {
+      throw ArgumentError('Could not parse invite: ${json['id']}');
+    }
+    return invite;
+  }
+
+  /// Parses an invite row, or returns null when role/status are unknown so one
+  /// legacy row cannot fail the whole invites list.
+  static Invite? tryFromJson(Map<String, dynamic> json) {
+    final role = WorkforceRole.tryFromDb(json['role'] as String);
+    if (role == null) return null;
+
+    final InviteStatus status;
+    if (json['status'] == 'pending' &&
+        json['expires_at'] != null &&
+        DateTime.parse(json['expires_at'] as String).isBefore(DateTime.now())) {
+      status = InviteStatus.expired;
+    } else {
+      try {
+        status = InviteStatus.fromDb(json['status'] as String);
+      } on ArgumentError {
+        return null;
+      }
+    }
+
+    return Invite(
+      id: json['id'] as String,
+      venueId: json['venue_id'] as String,
+      email: json['email'] as String,
+      role: role,
+      status: status,
+      createdAt: DateTime.parse(json['created_at'] as String),
+    );
+  }
 }
