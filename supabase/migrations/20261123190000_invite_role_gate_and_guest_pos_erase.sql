@@ -63,18 +63,29 @@ $$;
 revoke all on function app_hidden.user_can_manage_member_role(uuid, uuid, uuid, public.app_role)
   from public, anon, authenticated;
 
--- Direct inserts (the client path) obey the same rule as prepare_staff_invite.
+-- Direct inserts (the client path) obey the same rule as prepare_staff_invite. Roles that can
+-- never be invited are left to the invites_role_check constraint (it reports 23514, which
+-- clients and tests rely on); the policy still requires venue-manager access for them, so
+-- they cannot slip past either check.
 drop policy if exists invites_insert_managers on public.invites;
 create policy invites_insert_managers on public.invites
   for insert to authenticated
   with check (
-    role in ('staff', 'supervisor', 'venue_manager')
-    and app_hidden.can_manage_member_role(
-      (select v.organization_id from public.venues v where v.id = venue_id),
+    app_hidden.has_venue_role(
       venue_id,
-      role
+      array['venue_manager', 'organization_owner', 'organization_admin']::public.app_role[]
     )
-    and (role <> 'venue_manager' or app_hidden.mfa_satisfied())
+    and (
+      role not in ('staff', 'supervisor', 'venue_manager')
+      or (
+        app_hidden.can_manage_member_role(
+          (select v.organization_id from public.venues v where v.id = venue_id),
+          venue_id,
+          role
+        )
+        and (role <> 'venue_manager' or app_hidden.mfa_satisfied())
+      )
+    )
   );
 
 create or replace function public.prepare_staff_invite(
