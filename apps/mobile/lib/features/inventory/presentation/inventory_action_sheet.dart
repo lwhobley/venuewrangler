@@ -216,9 +216,9 @@ class _ActionState extends ConsumerState<_ActionSheet> {
       operationKey,
       () => const Uuid().v4(),
     );
-    if (_pendingOperationIds.length > 100) {
-      _pendingOperationIds.remove(_pendingOperationIds.keys.first);
-    }
+    // Do not size-evict pending keys: every entry here is still in-flight for retry
+    // idempotency (completed keys are removed on success below). Dropping the oldest
+    // would mint a new UUID on retry and bypass server-side p_operation_id dedupe.
     setState(() {
       busy = true;
       error = null;

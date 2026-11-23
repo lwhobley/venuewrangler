@@ -138,12 +138,13 @@ class SupabaseAiRepository implements AiRepository {
         );
       }
       final result = data['result'];
-      if (result is! Map<String, dynamic>) {
+      // JSON/Edge payloads may be Map<dynamic, dynamic>; coerce before parse.
+      if (result is! Map) {
         throw const UnknownError(
           'The AI assistant returned an unexpected response.',
         );
       }
-      return parse(result);
+      return parse(Map<String, dynamic>.from(result));
     } on FunctionException catch (error) {
       throw _mapFunctionException(error);
     } on AppError {

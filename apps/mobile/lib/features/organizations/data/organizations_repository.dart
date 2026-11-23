@@ -1,5 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../core/errors/app_error.dart';
 import '../../venues/domain/venue.dart';
 import '../domain/organization.dart';
 
@@ -51,7 +52,10 @@ class SupabaseOrganizationsRepository implements OrganizationsRepository {
         'p_timezone': timezone,
       },
     );
-    final row = (response as List<dynamic>).first as Map<String, dynamic>;
+    final row = _requireRpcRow(
+      response,
+      action: 'create a workspace',
+    );
     // create_workspace does not return the zone it stored, so carry the requested one through
     // (normalized the same way the RPC does: trimmed, blank means UTC). Otherwise the venue
     // would silently report UTC.
@@ -72,4 +76,17 @@ class SupabaseOrganizationsRepository implements OrganizationsRepository {
       }),
     );
   }
+}
+
+/// Returns the first RPC row, or a typed [UnknownError] when the payload is empty / malformed
+/// (avoids `StateError` / cast crashes from bare `.first` on `[]`).
+Map<String, dynamic> _requireRpcRow(dynamic response, {required String action}) {
+  if (response is! List || response.isEmpty) {
+    throw UnknownError('Could not $action. Please try again.');
+  }
+  final first = response.first;
+  if (first is! Map) {
+    throw UnknownError('Could not $action. Please try again.');
+  }
+  return Map<String, dynamic>.from(first);
 }

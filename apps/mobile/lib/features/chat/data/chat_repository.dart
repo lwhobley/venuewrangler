@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../../core/errors/app_error.dart';
 import '../domain/chat_contact.dart';
 import '../domain/chat_message.dart';
 import '../domain/conversation.dart';
@@ -105,6 +106,11 @@ class SupabaseChatRepository implements ChatRepository {
     String? attachmentPath,
   }) async {
     final userId = _client.auth.currentUser?.id;
+    if (userId == null) {
+      throw const AuthError(
+        'Your session has expired. Please sign in again.',
+      );
+    }
     final conv = await _client
         .from('conversations')
         .select('venue_id, organization_id')
