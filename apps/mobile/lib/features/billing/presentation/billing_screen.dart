@@ -26,9 +26,8 @@ class BillingScreen extends ConsumerWidget {
         title: const Text('Billing'),
       ),
       body: RefreshIndicator(
-        onRefresh: () async {
-          ref.invalidate(subscriptionForOrgProvider(organizationId));
-        },
+        onRefresh: () =>
+            ref.refresh(subscriptionForOrgProvider(organizationId).future),
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [

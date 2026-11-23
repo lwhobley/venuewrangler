@@ -34,7 +34,7 @@ class EventListScreen extends ConsumerWidget {
           Expanded(
             child: RefreshIndicator(
               onRefresh: () async =>
-                  ref.invalidate(eventsForVenueProvider(venue.id)),
+                  ref.refresh(eventsForVenueProvider(venue.id).future),
               child: eventsAsync.when(
                 loading: () => const Center(child: CircularProgressIndicator()),
                 error: (_, __) => Center(

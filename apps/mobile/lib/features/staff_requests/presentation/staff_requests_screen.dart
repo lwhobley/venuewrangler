@@ -33,9 +33,8 @@ class StaffRequestsScreen extends ConsumerWidget {
         title: const Text('Staff Requests'),
       ),
       body: RefreshIndicator(
-        onRefresh: () async {
-          ref.invalidate(staffRequestsForVenueProvider(venue.id));
-        },
+        onRefresh: () =>
+            ref.refresh(staffRequestsForVenueProvider(venue.id).future),
         child: requestsAsync.when(
           loading: () => const Center(
             child: CircularProgressIndicator(),

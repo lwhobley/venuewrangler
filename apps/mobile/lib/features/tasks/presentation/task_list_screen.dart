@@ -68,7 +68,7 @@ class TaskListScreen extends ConsumerWidget {
           Expanded(
             child: RefreshIndicator(
               onRefresh: () async =>
-                  ref.invalidate(tasksForVenueProvider(venue.id)),
+                  ref.refresh(tasksForVenueProvider(venue.id).future),
               child: tasksAsync.when(
                 loading: () => const Center(child: CircularProgressIndicator()),
                 error: (error, _) => _ErrorState(

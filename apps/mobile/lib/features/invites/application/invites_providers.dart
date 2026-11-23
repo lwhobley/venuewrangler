@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/auth/auth_providers.dart';
+import '../../../core/errors/transport_failure.dart';
 import '../../../core/network/supabase_providers.dart';
 import '../../organizations/application/organizations_providers.dart';
 import '../../venues/application/venues_providers.dart';
@@ -11,16 +12,18 @@ final invitesRepositoryProvider = Provider<InvitesRepository>((ref) {
   return SupabaseInvitesRepository(ref.watch(supabaseClientProvider));
 });
 
-/// Invites waiting for the signed-in user. Empty when signed out, and on any failure (an
-/// older backend without the RPC, offline): invites are an extra, never a blocker.
+/// Invites waiting for the signed-in user. Empty when signed out, or when the backend
+/// does not expose the RPC yet (older deploy). Other failures surface as [AsyncError] so
+/// the invites screen can show a retry instead of a false "No pending invitations."
 final pendingInvitesProvider = FutureProvider<List<PendingInvite>>((ref) async {
   // Per signed-in user, like the other cached lists.
   final userId = ref.watch(currentUserIdProvider);
   if (userId == null) return const [];
   try {
     return await ref.watch(invitesRepositoryProvider).fetchPending();
-  } catch (_) {
-    return const [];
+  } catch (error) {
+    if (isMissingRpc(error)) return const [];
+    rethrow;
   }
 });
 

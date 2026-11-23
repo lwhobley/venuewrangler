@@ -80,6 +80,19 @@ final canManageActiveVenueProvider =
   return _managerRoles.contains(await ref.watch(myVenueRoleProvider.future));
 });
 
-/// Staff get the simplified employee app (their own day, clock, schedule, floor, chat and
-/// profile); supervisors and managers get the full app.
-bool isEmployeeRole(String? role) => role == 'staff';
+/// Roles that get the full manager shell. Anything else (staff, no membership on the active
+/// venue, or a role this app does not know such as `platform_admin`) gets the employee shell,
+/// so an unexpected role never lands on manager screens. The database still enforces access.
+const managerShellRoles = {
+  'supervisor',
+  'venue_manager',
+  'organization_admin',
+  'organization_owner',
+};
+
+/// True when [role] (already resolved) belongs in the employee shell.
+/// Fail-closed: unknown / null roles use the employee shell (same as [usesEmployeeShell]).
+bool usesEmployeeShell(String? role) => !managerShellRoles.contains(role);
+
+/// Alias of [usesEmployeeShell] — kept so call sites / tests share one definition.
+bool isEmployeeRole(String? role) => usesEmployeeShell(role);

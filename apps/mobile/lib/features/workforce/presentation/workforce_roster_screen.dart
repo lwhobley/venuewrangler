@@ -52,15 +52,14 @@ class WorkforceRosterScreen extends ConsumerWidget {
           ],
         ),
         body: RefreshIndicator(
-          onRefresh: () async {
-            ref.invalidate(
-              canManage
-                  ? rosterForVenueProvider(venue.id)
-                  : scheduleRosterForVenueProvider(venue.id),
-            );
+          onRefresh: () {
             if (canManage) {
-              ref.invalidate(invitesForVenueProvider(venue.id));
+              return Future.wait([
+                ref.refresh(rosterForVenueProvider(venue.id).future),
+                ref.refresh(invitesForVenueProvider(venue.id).future),
+              ]);
             }
+            return ref.refresh(scheduleRosterForVenueProvider(venue.id).future);
           },
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),

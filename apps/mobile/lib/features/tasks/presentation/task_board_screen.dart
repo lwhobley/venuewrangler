@@ -251,7 +251,7 @@ class _TaskBoardScreenState extends ConsumerState<TaskBoardScreen> {
                   Expanded(
                     child: RefreshIndicator(
                       onRefresh: () async =>
-                          ref.invalidate(tasksForVenueProvider(venue.id)),
+                          ref.refresh(tasksForVenueProvider(venue.id).future),
                       child: lanes[_lane]!.isEmpty
                           ? ListView(
                               children: const [

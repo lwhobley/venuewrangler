@@ -58,7 +58,7 @@ class IncidentListScreen extends ConsumerWidget {
         ),
         body: RefreshIndicator(
           onRefresh: () async =>
-              ref.invalidate(incidentsForVenueProvider(venue.id)),
+              ref.refresh(incidentsForVenueProvider(venue.id).future),
           child: incidentsAsync.when(
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (error, _) => Center(
