@@ -68,27 +68,38 @@ final recoveryMfaHoldProvider = StateProvider<bool>((ref) => false);
 /// Side-effect only, watched once at the app root: flips [passwordRecoveryPendingProvider]
 /// when Supabase reports a password-recovery sign-in, and clears it on sign-out.
 final passwordRecoveryTriggerProvider = Provider<void>((ref) {
-  ref.listen<AsyncValue<AuthState>>(authStateChangesProvider, (_, next) {
-    unawaited(applyPasswordRecoveryAuthChange(ref.read, next));
-  }, fireImmediately: true);
+  ref.listen<AsyncValue<AuthState>>(
+    authStateChangesProvider,
+    (_, next) {
+      unawaited(applyPasswordRecoveryAuthChange(ref.read, next));
+    },
+    fireImmediately: true,
+  );
 });
 
 /// Side-effect only: during password recovery, probe [listFactors] so TOTP is forced even
 /// when JWT AAL claims omit `nextLevel=aal2` (M11). Watched once at the app root.
 final recoveryMfaProbeProvider = Provider<void>((ref) {
-  ref.listen<bool>(passwordRecoveryPendingProvider, (_, pending) {
-    if (!pending) {
-      ref.read(recoveryMfaHoldProvider.notifier).state = false;
-      return;
-    }
-    unawaited(probeRecoveryMfaHold(ref.read));
-  }, fireImmediately: true);
-  ref.listen<AsyncValue<AuthState>>(authStateChangesProvider, (_, __) {
-    final mfa = ref.read(mfaRepositoryProvider);
-    if (!mfa.isAal1 || !ref.read(passwordRecoveryPendingProvider)) {
-      ref.read(recoveryMfaHoldProvider.notifier).state = false;
-    }
-  });
+  ref.listen<bool>(
+    passwordRecoveryPendingProvider,
+    (_, pending) {
+      if (!pending) {
+        ref.read(recoveryMfaHoldProvider.notifier).state = false;
+        return;
+      }
+      unawaited(probeRecoveryMfaHold(ref.read));
+    },
+    fireImmediately: true,
+  );
+  ref.listen<AsyncValue<AuthState>>(
+    authStateChangesProvider,
+    (_, __) {
+      final mfa = ref.read(mfaRepositoryProvider);
+      if (!mfa.isAal1 || !ref.read(passwordRecoveryPendingProvider)) {
+        ref.read(recoveryMfaHoldProvider.notifier).state = false;
+      }
+    },
+  );
 });
 
 /// Applies a password-recovery / sign-out latch update, awaiting the durable storage write
