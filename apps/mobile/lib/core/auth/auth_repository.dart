@@ -155,6 +155,9 @@ abstract interface class MfaRepository {
   /// network call.
   bool get challengeRequired;
 
+  /// True when the current session's JWT is at AAL1 (identity verified with a single factor).
+  bool get isAal1;
+
   /// Verified and unverified TOTP factors, refreshed from the server.
   Future<List<MfaFactor>> listFactors();
 
@@ -187,8 +190,29 @@ class SupabaseMfaRepository implements MfaRepository {
   bool get challengeRequired {
     if (_client.auth.currentSession == null) return false;
     final aal = _mfa.getAuthenticatorAssuranceLevel();
-    return aal.currentLevel == AuthenticatorAssuranceLevels.aal1 &&
-        aal.nextLevel == AuthenticatorAssuranceLevels.aal2;
+    if (aal.currentLevel == AuthenticatorAssuranceLevels.aal1 &&
+        aal.nextLevel == AuthenticatorAssuranceLevels.aal2) {
+      return true;
+    }
+    // Fail closed for recovery (and any) AAL1 session whose JWT omitted nextLevel=aal2
+    // but whose user object still lists a verified TOTP factor — otherwise password
+    // recovery becomes an MFA bypass (M11).
+    if (aal.currentLevel == AuthenticatorAssuranceLevels.aal1) {
+      final factors = _client.auth.currentSession?.user.factors ?? const [];
+      return factors.any(
+        (f) =>
+            f.factorType == FactorType.totp &&
+            f.status == FactorStatus.verified,
+      );
+    }
+    return false;
+  }
+
+  @override
+  bool get isAal1 {
+    if (_client.auth.currentSession == null) return false;
+    return _mfa.getAuthenticatorAssuranceLevel().currentLevel ==
+        AuthenticatorAssuranceLevels.aal1;
   }
 
   @override

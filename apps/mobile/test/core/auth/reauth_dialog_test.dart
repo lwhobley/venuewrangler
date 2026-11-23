@@ -191,4 +191,93 @@ void main() {
     expect(result, isTrue);
     expect(mfa.challenges, [('f1', '123456')]);
   });
+
+  testWidgets(
+      'stale empty user.factors still requires TOTP when listFactors has one',
+      (tester) async {
+    final auth = _FakeAuthRepository(_session());
+    final mfa = FakeMfaRepository(
+      factors: [const MfaFactor(id: 'f-listed', verified: true)],
+    );
+    await pumpTrigger(tester, auth: auth, mfa: mfa);
+
+    await tester.tap(find.text('go'));
+    await tester.pumpAndSettle();
+    expect(find.text('Authenticator code'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField).first, 'Correct-Horse-1');
+    await tester.enterText(find.byType(TextField).last, '654321');
+    await tester.tap(find.text('Confirm'));
+    await tester.pumpAndSettle();
+
+    expect(result, isTrue);
+    expect(mfa.challenges, [('f-listed', '654321')]);
+  });
+
+  testWidgets('aborts when MFA was required but AAL2 was not restored',
+      (tester) async {
+    final auth = _FakeAuthRepository(
+      _session(
+        factors: [
+          Factor(
+            id: 'f1',
+            friendlyName: 'Authenticator',
+            factorType: FactorType.totp,
+            status: FactorStatus.verified,
+            createdAt: DateTime(2026),
+            updatedAt: DateTime(2026),
+          ),
+        ],
+      ),
+    );
+    // challenge() succeeds in the fake, but challengeRequired stays true → AAL2 not restored.
+    final mfa = FakeMfaRepository(required: true);
+    await pumpTrigger(tester, auth: auth, mfa: mfa);
+
+    await tester.tap(find.text('go'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).first, 'Correct-Horse-1');
+    await tester.enterText(find.byType(TextField).last, '123456');
+    await tester.tap(find.text('Confirm'));
+    await tester.pumpAndSettle();
+
+    expect(result, isFalse);
+  });
+
+  testWidgets('sets reauthInProgress while the dialog is open', (tester) async {
+    final auth = _FakeAuthRepository(_session());
+    late ProviderContainer container;
+    result = null;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(auth),
+          mfaRepositoryProvider.overrideWithValue(FakeMfaRepository()),
+        ],
+        child: Builder(
+          builder: (context) {
+            container = ProviderScope.containerOf(context);
+            return MaterialApp(
+              home: Consumer(
+                builder: (context, ref, _) => TextButton(
+                  onPressed: () async =>
+                      result = await confirmPasswordReauth(context, ref),
+                  child: const Text('go'),
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('go'));
+    await tester.pumpAndSettle();
+    expect(container.read(reauthInProgressProvider), isTrue);
+
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(container.read(reauthInProgressProvider), isFalse);
+    expect(result, isFalse);
+  });
 }

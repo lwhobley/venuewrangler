@@ -5,17 +5,20 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'auth_providers.dart';
 import 'auth_repository.dart';
 
-/// Step-up for destructive or credential-changing actions (delete account, change password):
-/// asks the signed-in person to re-enter their current password before the action runs.
+/// Step-up for destructive or credential-changing actions (delete account, change password,
+/// MFA unenroll): asks the signed-in person to re-enter their current password before the
+/// action runs.
 ///
 /// Returns `true` when the action may proceed: the password was confirmed, or the account has
 /// no password to confirm (OAuth-only sign-in, or no email on file), in which case the dialog
-/// is skipped. Returns `false` if the person cancels.
+/// is skipped. Returns `false` if the person cancels, or if MFA was required and AAL2 was not
+/// restored after the dialog.
 ///
 /// Confirming signs in again with the same email, which issues a fresh session at AAL1. When
 /// the account has a verified authenticator the dialog therefore also asks for a code and
-/// answers the challenge so the session returns to AAL2 (otherwise the router would send the
-/// person to the MFA challenge screen mid-action).
+/// answers the challenge so the session returns to AAL2. While the dialog is open,
+/// [reauthInProgressProvider] suspends the router's `/mfa-challenge` redirect so the step-up
+/// UI is not torn away mid-flow.
 Future<bool> confirmPasswordReauth(
   BuildContext context,
   WidgetRef ref, {
@@ -27,20 +30,37 @@ Future<bool> confirmPasswordReauth(
   if (user == null || email == null || email.isEmpty || !_hasPassword(user)) {
     return true;
   }
-  final totpFactorId = _verifiedTotpFactorId(user);
-  final confirmed = await showDialog<bool>(
-    context: context,
-    barrierDismissible: false,
-    builder: (_) => ReauthDialog(
-      email: email,
-      title: title,
-      reason: reason,
-      totpFactorId: totpFactorId,
-      authRepository: ref.read(authRepositoryProvider),
-      mfaRepository: ref.read(mfaRepositoryProvider),
-    ),
-  );
-  return confirmed ?? false;
+
+  final mfa = ref.read(mfaRepositoryProvider);
+  // Prefer a live factor list over session user.factors — that list can be empty/stale
+  // while the account still has a verified authenticator (H6).
+  final totpFactorId = await _resolveVerifiedTotpFactorId(user, mfa);
+
+  final reauth = ref.read(reauthInProgressProvider.notifier);
+  reauth.state = true;
+  try {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => ReauthDialog(
+        email: email,
+        title: title,
+        reason: reason,
+        totpFactorId: totpFactorId,
+        authRepository: ref.read(authRepositoryProvider),
+        mfaRepository: mfa,
+      ),
+    );
+    if (confirmed != true) return false;
+    // Abort if MFA was required but the session is still AAL1 — never let callers proceed
+    // believing step-up finished.
+    if (totpFactorId != null && mfa.challengeRequired) {
+      return false;
+    }
+    return true;
+  } finally {
+    reauth.state = false;
+  }
 }
 
 /// `app_metadata.providers` lists how the account can sign in; accounts created through an
@@ -55,12 +75,30 @@ bool _hasPassword(User user) {
   return provider == null || provider == 'email';
 }
 
-String? _verifiedTotpFactorId(User user) {
+String? _verifiedTotpFactorIdFromUser(User user) {
   for (final factor in user.factors ?? const <Factor>[]) {
     if (factor.factorType == FactorType.totp &&
         factor.status == FactorStatus.verified) {
       return factor.id;
     }
+  }
+  return null;
+}
+
+Future<String?> _resolveVerifiedTotpFactorId(
+  User user,
+  MfaRepository mfa,
+) async {
+  final fromUser = _verifiedTotpFactorIdFromUser(user);
+  if (fromUser != null) return fromUser;
+  try {
+    final factors = await mfa.listFactors();
+    for (final factor in factors) {
+      if (factor.verified) return factor.id;
+    }
+  } catch (_) {
+    // If listing fails, fall through — password-only step-up when we cannot prove MFA.
+    // Callers that need AAL2 still fail server-side.
   }
   return null;
 }

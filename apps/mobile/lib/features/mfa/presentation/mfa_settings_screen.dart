@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/auth/auth_providers.dart';
 import '../../../core/auth/auth_repository.dart';
+import '../../../core/auth/reauth_dialog.dart';
 import '../../../core/widgets/state_views.dart';
 import '../application/mfa_providers.dart';
 import '../domain/mfa_error.dart';
@@ -111,6 +112,15 @@ class MfaSettingsScreen extends ConsumerWidget {
       ),
     );
     if (confirmed != true || !context.mounted) return;
+
+    final reauthenticated = await confirmPasswordReauth(
+      context,
+      ref,
+      title: 'Confirm your password',
+      reason: 'Enter your current password to remove this authenticator.',
+    );
+    if (!reauthenticated || !context.mounted) return;
+
     final messenger = ScaffoldMessenger.of(context);
     final repository = ref.read(mfaRepositoryProvider);
     try {

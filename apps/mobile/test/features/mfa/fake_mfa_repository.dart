@@ -2,10 +2,15 @@ import 'package:venuewrangler_mobile/core/auth/auth_repository.dart';
 
 /// In-memory [MfaRepository] for widget and router tests.
 class FakeMfaRepository implements MfaRepository {
-  FakeMfaRepository({List<MfaFactor>? factors}) : factors = factors ?? [];
+  FakeMfaRepository({
+    List<MfaFactor>? factors,
+    this.required = false,
+    this.aal1 = true,
+  }) : factors = factors ?? [];
 
   List<MfaFactor> factors;
-  bool required = false;
+  bool required;
+  bool aal1;
   Object? challengeError;
   Object? verifyError;
   final challenges = <(String, String)>[];
@@ -14,6 +19,9 @@ class FakeMfaRepository implements MfaRepository {
 
   @override
   bool get challengeRequired => required;
+
+  @override
+  bool get isAal1 => aal1;
 
   @override
   Future<List<MfaFactor>> listFactors() async => factors;

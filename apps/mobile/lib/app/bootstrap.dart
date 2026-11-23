@@ -54,10 +54,10 @@ Future<void> bootstrap(AppFlavor flavor) async {
     publishableKey: env.supabaseAnonKey,
     authOptions: FlutterAuthClientOptions(localStorage: SecureLocalStorage()),
   );
-  final recoveryPending =
-      Supabase.instance.client.auth.currentSession != null &&
-          await const SecureSessionStorage().read(passwordRecoveryStorageKey) ==
-              'true';
+  final recoveryPending = await resolvePasswordRecoveryPending(
+    session: Supabase.instance.client.auth.currentSession,
+    storage: const SecureSessionStorage(),
+  );
 
   // Android push notifications only — iOS uses native APNs directly (see
   // ios/Runner/PushNotificationsPlugin.swift) and has no google-services equivalent file here,
