@@ -9,23 +9,23 @@ import 'package:venuewrangler_mobile/features/time_clock/data/attested_punch_cli
 const _venueId = 'd3000000-0000-0000-0000-0000000000a1';
 
 Map<String, Object?> _entryJson({bool attested = true}) => {
-  'id': 'e0000000-0000-0000-0000-000000000001',
-  'organization_id': 'd2000000-0000-0000-0000-00000000000a',
-  'venue_id': _venueId,
-  'user_id': 'd1000000-0000-0000-0000-000000000002',
-  'clock_in_at': '2026-10-17T12:00:00Z',
-  'clock_in_lat': 29.7604,
-  'clock_in_lng': -95.3698,
-  'clock_in_accuracy_m': 12.0,
-  'clock_in_mocked': false,
-  'is_open': true,
-  'breaks': <Object?>[],
-  'clock_in_attested': attested,
-  'clock_out_attested': false,
-  'punch_source': attested ? 'attested' : 'direct',
-  'created_at': '2026-10-17T12:00:00Z',
-  'updated_at': '2026-10-17T12:00:00Z',
-};
+      'id': 'e0000000-0000-0000-0000-000000000001',
+      'organization_id': 'd2000000-0000-0000-0000-00000000000a',
+      'venue_id': _venueId,
+      'user_id': 'd1000000-0000-0000-0000-000000000002',
+      'clock_in_at': '2026-10-17T12:00:00Z',
+      'clock_in_lat': 29.7604,
+      'clock_in_lng': -95.3698,
+      'clock_in_accuracy_m': 12.0,
+      'clock_in_mocked': false,
+      'is_open': true,
+      'breaks': <Object?>[],
+      'clock_in_attested': attested,
+      'clock_out_attested': false,
+      'punch_source': attested ? 'attested' : 'direct',
+      'created_at': '2026-10-17T12:00:00Z',
+      'updated_at': '2026-10-17T12:00:00Z',
+    };
 
 class _Proofs implements PunchProofProvider {
   _Proofs(this.proof);
@@ -43,11 +43,12 @@ class _Proofs implements PunchProofProvider {
 AttestedPunchClient _client(
   Future<Object?> Function(Map<String, Object?> body) invoke,
   PunchProofProvider proofs,
-) => AttestedPunchClient(
-  invoke: invoke,
-  proof: proofs,
-  now: () => DateTime.utc(2026, 10, 17, 12),
-);
+) =>
+    AttestedPunchClient(
+      invoke: invoke,
+      proof: proofs,
+      now: () => DateTime.utc(2026, 10, 17, 12),
+    );
 
 Future<TimeEntryResult> _punch(AttestedPunchClient client) async {
   final entry = await client.punch(
@@ -170,7 +171,9 @@ void main() {
     }
   });
 
-  test('an unavailable function is reported so the caller can fall back in observe', () async {
+  test(
+      'an unavailable function is reported so the caller can fall back in observe',
+      () async {
     for (final status in [404, 500, 503]) {
       final client = _client(
         (body) async => throw FunctionException(status: status),
