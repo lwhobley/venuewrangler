@@ -17,8 +17,8 @@ class _FakeChatRepository implements ChatRepository {
     List<ChatMessage>? initialMessages,
     this.contacts = const [],
     this.dmPeers = const {},
-  })  : conversations = initialConversations ?? [],
-        messages = initialMessages ?? [];
+  }) : conversations = initialConversations ?? [],
+       messages = initialMessages ?? [];
 
   final List<Conversation> conversations;
   final List<ChatMessage> messages;
@@ -35,8 +35,7 @@ class _FakeChatRepository implements ChatRepository {
   @override
   Future<List<Conversation>> getConversations({
     required String venueId,
-  }) async =>
-      conversations;
+  }) async => conversations;
 
   @override
   Future<List<ChatMessage>> getMessages({
@@ -93,8 +92,7 @@ class _FakeChatRepository implements ChatRepository {
   @override
   Future<Map<String, String>> fetchDmPeers({
     required List<String> conversationIds,
-  }) async =>
-      dmPeers;
+  }) async => dmPeers;
 }
 
 void main() {
@@ -105,8 +103,9 @@ void main() {
     createdAt: DateTime.now(),
   );
 
-  testWidgets('renders empty state when no conversations exist',
-      (tester) async {
+  testWidgets('renders empty state when no conversations exist', (
+    tester,
+  ) async {
     final fakeRepo = _FakeChatRepository(initialConversations: []);
 
     await tester.pumpWidget(
@@ -129,8 +128,9 @@ void main() {
     );
   });
 
-  testWidgets('renders conversation list, opens thread and sends message',
-      (tester) async {
+  testWidgets('renders conversation list, opens thread and sends message', (
+    tester,
+  ) async {
     final fakeRepo = _FakeChatRepository(
       initialConversations: [
         Conversation(
@@ -190,8 +190,9 @@ void main() {
     expect(fakeRepo.lastSentText, 'I will be there!');
   });
 
-  testWidgets('New message lists the team and opens a direct message',
-      (tester) async {
+  testWidgets('New message lists the team and opens a direct message', (
+    tester,
+  ) async {
     final fakeRepo = _FakeChatRepository(
       contacts: const [
         ChatContact(userId: 'user-mia', displayName: 'Mia Manager'),
@@ -224,8 +225,9 @@ void main() {
     expect(find.text('Conversation'), findsOneWidget);
   });
 
-  testWidgets('a direct message is labelled with the other person',
-      (tester) async {
+  testWidgets('a direct message is labelled with the other person', (
+    tester,
+  ) async {
     final fakeRepo = _FakeChatRepository(
       initialConversations: [
         Conversation(

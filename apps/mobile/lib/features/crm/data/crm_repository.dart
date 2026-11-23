@@ -116,8 +116,9 @@ class SupabaseCrmRepository implements CrmRepository {
       query = query.or(crmLeadSearchFilter(search.trim()));
     }
 
-    final response =
-        await query.order('created_at', ascending: false).limit(limit);
+    final response = await query
+        .order('created_at', ascending: false)
+        .limit(limit);
     return (response as List<dynamic>)
         .map((row) => CrmLead.fromJson(row as Map<String, dynamic>))
         .toList();
@@ -301,8 +302,10 @@ class SupabaseCrmRepository implements CrmRepository {
   Future<({String contractId, bool alreadyExisted})> convertBeoToContract({
     required String beoId,
   }) async {
-    final response = await _client
-        .rpc('convert_beo_to_contract', params: {'p_beo_id': beoId});
+    final response = await _client.rpc(
+      'convert_beo_to_contract',
+      params: {'p_beo_id': beoId},
+    );
     if (response is! List || response.isEmpty) {
       throw const UnknownError(
         'Could not convert this BEO to a contract. Please try again.',
@@ -317,7 +320,7 @@ class SupabaseCrmRepository implements CrmRepository {
     final row = Map<String, dynamic>.from(first);
     return (
       contractId: row['contract_id'] as String,
-      alreadyExisted: row['already_existed'] as bool
+      alreadyExisted: row['already_existed'] as bool,
     );
   }
 
@@ -376,8 +379,10 @@ class SupabaseCrmRepository implements CrmRepository {
 
   @override
   Future<List<CrmForecastRow>> getForecast({required String venueId}) async {
-    final response = await _client
-        .rpc('crm_pipeline_forecast', params: {'p_venue_id': venueId});
+    final response = await _client.rpc(
+      'crm_pipeline_forecast',
+      params: {'p_venue_id': venueId},
+    );
     return (response as List<dynamic>)
         .map((row) => CrmForecastRow.fromJson(row as Map<String, dynamic>))
         .toList();
@@ -425,22 +430,27 @@ class SupabaseCrmRepository implements CrmRepository {
 
     return switch (code) {
       'forbidden' => const PermissionDeniedError(
-          'Only a venue manager can send this template.',
-        ),
-      'template_not_found' =>
-        const NotFoundError('That email template could not be found.'),
-      'missing_or_invalid_to_address' =>
-        const UnknownError('Enter a valid recipient email address.'),
+        'Only a venue manager can send this template.',
+      ),
+      'template_not_found' => const NotFoundError(
+        'That email template could not be found.',
+      ),
+      'missing_or_invalid_to_address' => const UnknownError(
+        'Enter a valid recipient email address.',
+      ),
       'email_not_configured' => const UnknownError(
-          'Email sending is not configured yet. Please try again later.',
-        ),
-      'email_send_failed' =>
-        const UnknownError('The email could not be sent. Please try again.'),
-      'invalid_or_expired_session' =>
-        const AuthError('Your session has expired. Please sign in again.'),
-      _ => error.status >= 500
-          ? const UnknownError('Email is temporarily unavailable.')
-          : const UnknownError('Something went wrong. Please try again.'),
+        'Email sending is not configured yet. Please try again later.',
+      ),
+      'email_send_failed' => const UnknownError(
+        'The email could not be sent. Please try again.',
+      ),
+      'invalid_or_expired_session' => const AuthError(
+        'Your session has expired. Please sign in again.',
+      ),
+      _ =>
+        error.status >= 500
+            ? const UnknownError('Email is temporarily unavailable.')
+            : const UnknownError('Something went wrong. Please try again.'),
     };
   }
 }

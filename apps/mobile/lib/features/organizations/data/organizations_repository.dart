@@ -52,10 +52,7 @@ class SupabaseOrganizationsRepository implements OrganizationsRepository {
         'p_timezone': timezone,
       },
     );
-    final row = _requireRpcRow(
-      response,
-      action: 'create a workspace',
-    );
+    final row = _requireRpcRow(response, action: 'create a workspace');
     // create_workspace does not return the zone it stored, so carry the requested one through
     // (normalized the same way the RPC does: trimmed, blank means UTC). Otherwise the venue
     // would silently report UTC.

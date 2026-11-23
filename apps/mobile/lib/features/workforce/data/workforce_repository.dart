@@ -49,11 +49,7 @@ class SupabaseWorkforceRepository implements WorkforceRepository {
 
     // Skip unknown role/status rows instead of failing the entire list (M17).
     return rows
-        .map(
-          (row) => Invite.tryFromJson(
-            Map<String, dynamic>.from(row as Map),
-          ),
-        )
+        .map((row) => Invite.tryFromJson(Map<String, dynamic>.from(row as Map)))
         .whereType<Invite>()
         .toList(growable: false);
   }
@@ -66,11 +62,7 @@ class SupabaseWorkforceRepository implements WorkforceRepository {
   }) async {
     final response = await _client.functions.invoke(
       'invite-member',
-      body: {
-        'venue_id': venueId,
-        'email': email,
-        'role': role.toDb(),
-      },
+      body: {'venue_id': venueId, 'email': email, 'role': role.toDb()},
     );
     if (response.status != 200) {
       throw StateError('Invitation email was not sent. Please retry.');
