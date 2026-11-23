@@ -1,6 +1,7 @@
 -- Low-severity cleanup:
 -- 1) staff_display_name must not fall back to HR legal_name (PII) for member-facing rosters.
--- 2) prepare_staff_invite must reconcile role/display_name when reusing a pending invite.
+-- 2) prepare_staff_invite must reconcile role/display_name when reusing a pending invite,
+--    while status stays pending (privilege-gated; clients still cannot change role directly).
 
 create or replace function app_hidden.staff_display_name(p_venue uuid, p_user uuid)
 returns text
@@ -22,6 +23,65 @@ as $$
 $$;
 
 revoke all on function app_hidden.staff_display_name(uuid, uuid) from public, anon, authenticated;
+
+-- Allow prepare_staff_invite to update role/display_name while remaining pending.
+-- Direct client updates of role stay forbidden (see invites_rls.test.sql).
+create or replace function app_hidden.enforce_invite_revoke_only()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if app_hidden.account_deletion_in_progress() then
+    return new;
+  end if;
+
+  if old.status <> 'pending' then
+    raise exception 'invites can only move from pending to revoked or accepted'
+      using errcode = '42501';
+  end if;
+
+  -- DEFINER reconcile path: status stays pending; only role / display_name may change.
+  if new.status = 'pending'
+     and app_hidden.privilege_gate_is_open('invite_reconcile') then
+    if new.organization_id is distinct from old.organization_id
+      or new.venue_id is distinct from old.venue_id
+      or new.email is distinct from old.email
+      or new.invited_by is distinct from old.invited_by
+      or new.created_at is distinct from old.created_at
+      or new.expires_at is distinct from old.expires_at
+    then
+      raise exception 'only an invite''s role or display_name may be reconciled'
+        using errcode = '42501';
+    end if;
+    return new;
+  end if;
+
+  if new.status = 'revoked' then
+    null; -- managers (RLS) or revoke_invite
+  elsif new.status = 'accepted' then
+    if not app_hidden.privilege_gate_is_open('invite_accept') then
+      raise exception 'invites are accepted through accept_invite' using errcode = '42501';
+    end if;
+  else
+    raise exception 'invites can only move from pending to revoked or accepted'
+      using errcode = '42501';
+  end if;
+
+  if new.organization_id is distinct from old.organization_id
+    or new.venue_id is distinct from old.venue_id
+    or new.email is distinct from old.email
+    or new.role is distinct from old.role
+    or new.invited_by is distinct from old.invited_by
+    or new.created_at is distinct from old.created_at
+    or new.expires_at is distinct from old.expires_at
+  then
+    raise exception 'only an invite''s status may be changed' using errcode = '42501';
+  end if;
+  return new;
+end;
+$$;
 
 create or replace function public.prepare_staff_invite(
   p_venue_id uuid,
@@ -74,15 +134,17 @@ begin
 
   if found then
     -- Reconcile when the manager re-invites with a different role or name so the
-    -- pending row matches what they just submitted (not a stale staff invite).
+    -- pending row matches what they just submitted (status stays pending).
     if v_invite.role is distinct from p_role
       or v_invite.display_name is distinct from v_display
     then
+      perform app_hidden.open_privilege_gate('invite_reconcile');
       update public.invites
       set role = p_role,
           display_name = v_display
       where id = v_invite.id
       returning * into v_invite;
+      perform app_hidden.close_privilege_gate('invite_reconcile');
     end if;
     return v_invite;
   end if;

@@ -1,6 +1,6 @@
 -- pgTAP: roster display hides HR legal_name; prepare_staff_invite reconciles role/name.
 begin;
-select plan(6);
+select plan(8);
 
 insert into auth.users (id, email) values
   ('f1000000-0000-0000-0000-000000000001', 'owner-low@example.test'),
@@ -130,6 +130,26 @@ select is(
   ),
   'New Name',
   're-invite reconciles display_name on the existing pending row'
+);
+
+-- Still only one pending invite for that email (in-place reconcile, not revoke+recreate).
+select is(
+  (
+    select count(*)::int
+    from public.invites
+    where email = 'hire-low@example.test' and status = 'pending'
+  ),
+  1,
+  'reconcile keeps a single pending invite row'
+);
+
+-- Direct client role edits remain blocked (privilege gate is DEFINER-only).
+select throws_ok(
+  $$ update public.invites set role = 'staff'
+     where email = 'hire-low@example.test' and status = 'pending' $$,
+  '42501',
+  null,
+  'clients still cannot change invite role outside prepare_staff_invite'
 );
 
 select * from finish();
