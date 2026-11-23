@@ -423,6 +423,67 @@ void main() {
       expect(store.saved.map((m) => m.id), ['b-pending']);
     });
 
+    test('load drops legacy null-owner rows and rewrites the store', () async {
+      final store = _InMemoryOfflineQueueStore()
+        ..saved = [
+          PendingMutation(
+            id: 'orphan',
+            kind: 'test_kind',
+            payload: const {},
+            createdAt: DateTime(2026),
+          ),
+          PendingMutation(
+            id: 'owned',
+            kind: 'test_kind',
+            payload: const {},
+            createdAt: DateTime(2026),
+            userId: 'user-a',
+          ),
+        ];
+      final controller = OfflineQueueController(
+        store,
+        const {},
+        currentUserId: () => 'user-a',
+      );
+      await controller.ready;
+
+      expect(controller.state.pending.map((m) => m.id), ['owned']);
+      expect(store.saved.map((m) => m.id), ['owned']);
+    });
+
+    test('clearAll drops null-owner orphans even when the owner is unknown',
+        () async {
+      final store = _InMemoryOfflineQueueStore()
+        ..saved = [
+          PendingMutation(
+            id: 'orphan',
+            kind: 'test_kind',
+            payload: const {},
+            createdAt: DateTime(2026),
+          ),
+          PendingMutation(
+            id: 'owned',
+            kind: 'test_kind',
+            payload: const {},
+            createdAt: DateTime(2026),
+            userId: 'user-b',
+          ),
+        ];
+      // No current-user callback: load keeps the orphan (auth not wired). clearAll
+      // still prunes null-owner rows as sign-out hygiene.
+      final controller = OfflineQueueController(store, const {});
+      await controller.ready;
+      expect(controller.state.pending.map((m) => m.id).toSet(), {
+        'orphan',
+        'owned',
+      });
+
+      await controller.clearAll(forUserId: null);
+
+      expect(controller.state.pending.map((m) => m.id), ['owned']);
+      expect(store.saved.map((m) => m.id), ['owned']);
+    });
+
     test('forUser exposes only the named users pending writes and conflicts',
         () async {
       final store = _InMemoryOfflineQueueStore();

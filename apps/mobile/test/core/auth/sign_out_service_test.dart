@@ -135,6 +135,7 @@ void main() {
       pushInstallationSecretStorageKey: 'install-secret',
       'supabase_persist_session': 'session-json',
       'floor_draft_user-a_plan': '{"tables": []}',
+      'floor_draft_user-b_plan': '{"tables": [{"id": "b"}]}',
       'theme_mode': 'dark',
     });
     pickerCleanups = 0;
@@ -160,6 +161,8 @@ void main() {
       expect(values.containsKey(registeredPushTokenStorageKey), isFalse);
       expect(values.containsKey('supabase_persist_session'), isFalse);
       expect(values.containsKey('floor_draft_user-a_plan'), isFalse);
+      // Other accounts' floor drafts survive on a shared device.
+      expect(values['floor_draft_user-b_plan'], '{"tables": [{"id": "b"}]}');
       // Device-level settings and the install secret survive.
       expect(values['theme_mode'], 'dark');
       expect(values[pushInstallationSecretStorageKey], 'install-secret');
@@ -198,6 +201,22 @@ void main() {
       );
       expect(auth.signOutCalls, 1);
     });
+
+    test('a failed signOut leaves the queue and drafts intact', () async {
+      final container = await makeContainer(failSignOut: true);
+
+      await expectLater(
+        signOutAndClearScopedData(container),
+        throwsStateError,
+      );
+
+      expect(auth.signOutCalls, 1);
+      expect(pickerCleanups, 0);
+      expect(store.saved.map((m) => m.id).toSet(), {'a-pending', 'b-pending'});
+      final values = await storedValues();
+      expect(values['floor_draft_user-a_plan'], '{"tables": []}');
+      expect(values['supabase_persist_session'], 'session-json');
+    });
   });
 
   group('serverSignOutCleanupProvider (server-initiated sign-out)', () {
@@ -220,6 +239,7 @@ void main() {
       final values = await storedValues();
       expect(values.containsKey('supabase_persist_session'), isFalse);
       expect(values.containsKey('floor_draft_user-a_plan'), isFalse);
+      expect(values['floor_draft_user-b_plan'], '{"tables": [{"id": "b"}]}');
       expect(values['theme_mode'], 'dark');
     });
 
@@ -265,7 +285,8 @@ void main() {
       expect(store.saved, isEmpty);
     });
 
-    test('a failed UI sign-out re-arms the listener cleanup', () async {
+    test('a failed UI sign-out still allows the listener to clean up later',
+        () async {
       final container = await makeContainer(failSignOut: true);
       container.read(serverSignOutCleanupProvider);
       await emit(AuthChangeEvent.signedIn, _session('user-a'));
@@ -274,13 +295,23 @@ void main() {
         signOutAndClearScopedData(container),
         throwsStateError,
       );
+      expect(pickerCleanups, 0);
+      expect(store.saved.map((m) => m.id).toSet(), {'a-pending', 'b-pending'});
+
       await emit(AuthChangeEvent.signedOut, null);
 
-      expect(pickerCleanups, 2);
+      expect(pickerCleanups, 1);
+      expect(store.saved.map((m) => m.id), ['b-pending']);
     });
 
-    test('a signed-out event with no known owner prunes no queue entries',
-        () async {
+    test(
+        'a signed-out event with no known owner keeps stamped entries and '
+        'drops only null-owner orphans', () async {
+      store.saved = [
+        _queued('a-pending', 'user-a'),
+        _queued('b-pending', 'user-b'),
+        _queued('orphan', null),
+      ];
       final container = await makeContainer();
       container.read(serverSignOutCleanupProvider);
       currentUser = null;

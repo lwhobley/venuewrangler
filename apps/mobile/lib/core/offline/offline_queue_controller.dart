@@ -78,6 +78,14 @@ class OfflineQueueController extends StateNotifier<OfflineQueueState> {
       debugPrint('Offline queue could not be read; starting empty: $error');
       loaded = const [];
     }
+    // When auth is wired, legacy rows without a userId never flush or prune by owner.
+    // Drop them once on upgrade so they cannot linger in encrypted storage. Controllers
+    // without a current-user callback (unit tests) keep null-owner rows as before.
+    final droppedOrphans =
+        _currentUserId != null && loaded.any((m) => m.userId == null);
+    if (droppedOrphans) {
+      loaded = loaded.where((m) => m.userId != null).toList(growable: false);
+    }
     final conflicts = <PendingMutation>[];
     final pending = <PendingMutation>[];
     for (final m in loaded) {
@@ -97,9 +105,11 @@ class OfflineQueueController extends StateNotifier<OfflineQueueState> {
       pending: pending,
       conflicts: conflicts,
     );
-    if (loaded.any(
-      (m) => m.attemptCount >= kMaxMutationAttempts && !m.isConflict,
-    )) {
+    final needsRewrite = droppedOrphans ||
+        loaded.any(
+          (m) => m.attemptCount >= kMaxMutationAttempts && !m.isConflict,
+        );
+    if (needsRewrite) {
       try {
         await _persist();
       } catch (error) {
@@ -136,22 +146,24 @@ class OfflineQueueController extends StateNotifier<OfflineQueueState> {
     return write;
   }
 
-  /// Sign-out: removes only the signed-out user's pending writes and conflicts. Entries owned
-  /// by anyone else (or legacy entries without an owner) stay queued, so a shared device never
-  /// discards another person's unsynced work or unresolved conflicts.
+  /// Sign-out: removes the signed-out user's pending writes and conflicts, and any legacy
+  /// null-owner rows (which can never flush or be dismissed). Entries owned by anyone else
+  /// stay queued, so a shared device never discards another person's unsynced work.
   ///
   /// [forUserId] names the user being signed out when the session is already gone (a
-  /// server-initiated sign-out), where the current-user callback would report null.
+  /// server-initiated sign-out), where the current-user callback would report null. When it
+  /// is null and there is no current user, only null-owner orphans are removed.
   Future<void> clearAll({String? forUserId}) async {
     await _loaded;
     _queueGeneration++;
     final signedOut = forUserId ?? _currentUserId?.call();
-    bool isSignedOut(PendingMutation m) => m.userId == signedOut;
+    bool shouldDrop(PendingMutation m) =>
+        m.userId == null || (signedOut != null && m.userId == signedOut);
     state = OfflineQueueState(
       pending:
-          state.pending.where((m) => !isSignedOut(m)).toList(growable: false),
+          state.pending.where((m) => !shouldDrop(m)).toList(growable: false),
       conflicts:
-          state.conflicts.where((m) => !isSignedOut(m)).toList(growable: false),
+          state.conflicts.where((m) => !shouldDrop(m)).toList(growable: false),
     );
     await _persist();
   }
@@ -183,7 +195,7 @@ class OfflineQueueController extends StateNotifier<OfflineQueueState> {
   /// call while one is already running is a no-op.
   ///
   /// When auth is configured, only entries stamped for the current user run.
-  /// Legacy entries without an owner remain pending for manual recovery.
+  /// Null-owner legacy rows are dropped on load / sign-out and are never flushed.
   Future<void> flush({String? onlyUserId}) async {
     final effectiveUserId = onlyUserId ?? _currentUserId?.call();
     if (_currentUserId != null && effectiveUserId == null) return;

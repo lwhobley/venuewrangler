@@ -7,6 +7,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../../../core/auth/auth_providers.dart';
 import '../../../core/storage/app_secure_storage.dart';
+import '../../../core/storage/secure_session_storage.dart';
 import '../data/floor_repository.dart';
 import '../domain/editor_table.dart';
 import '../domain/floor_table.dart';
@@ -306,7 +307,7 @@ class FloorEditorController extends StateNotifier<FloorEditorState> {
   // ---- drafts (local, per floor plan) -------------------------------------
 
   String? _draftKey(String planId) =>
-      _userId == null ? null : 'floor_draft_${_userId}_$planId';
+      _userId == null ? null : '$floorDraftStorageKeyPrefix${_userId}_$planId';
 
   Future<void> saveDraft(String planId) async {
     final key = _draftKey(planId);

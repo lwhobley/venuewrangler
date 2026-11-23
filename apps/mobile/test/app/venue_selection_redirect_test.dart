@@ -89,7 +89,11 @@ void main() {
     expect(location(container), '/');
 
     container.read(pendingNotificationRouteProvider.notifier).state =
-        const PendingNotificationRoute(route: '/tasks', venueId: 'venue-2');
+        const PendingNotificationRoute(
+      route: '/tasks',
+      venueId: 'venue-2',
+      userId: 'user-1',
+    );
     container.read(routerProvider).go('/select-venue');
     for (var i = 0; i < 6; i++) {
       await tester.pump(const Duration(milliseconds: 100));
@@ -112,7 +116,11 @@ void main() {
     expect(location(container), '/');
 
     container.read(pendingNotificationRouteProvider.notifier).state =
-        const PendingNotificationRoute(route: '/tasks', venueId: 'venue-2');
+        const PendingNotificationRoute(
+      route: '/tasks',
+      venueId: 'venue-2',
+      userId: 'user-1',
+    );
     container.read(routerProvider).go('/select-venue');
     for (var i = 0; i < 6; i++) {
       await tester.pump(const Duration(milliseconds: 100));
