@@ -9,6 +9,9 @@ on:
       - 'site/**'
       - 'scripts/**'
       - 'tests/**'
+      # tests/checkout-concurrency.spec.ts runs this function (and its _shared imports) in a sandbox.
+      - 'supabase/functions/stripe-create-checkout/**'
+      - 'supabase/functions/_shared/**'
       - 'tsconfig.json'
       - 'vitest.config.mts'
       - '.github/**'

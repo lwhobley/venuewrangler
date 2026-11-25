@@ -3,6 +3,10 @@ import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 import { expect, it } from 'vitest';
 
+// The function rejects a non-UUID organization_id with 400, so the fixture uses a real one.
+const ORG_ID = '10000000-0000-4000-8000-000000000001';
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 it('overlapping expired checkout retries share the replacement session', async () => {
   let handler!: (req: Request) => Promise<Response>;
   let key = 'expired-key';
@@ -57,12 +61,15 @@ it('overlapping expired checkout retries share the replacement session', async (
       if (name.includes('/stripe')) return { createStripeClient: () => stripe };
       if (name.includes('rate-limit')) return { async enforceRateLimit() { return null; } };
       if (name.includes('cors')) return { corsHeaders: {}, handleCorsPreflight: () => null };
+      if (name.includes('venue-auth')) {
+        return { isUuid: (value: unknown) => typeof value === 'string' && UUID.test(value) };
+      }
       return { initObservability() {}, captureException() {}, async flushObservability() {} };
     },
   });
   const responses = await Promise.all([1, 2].map(() => handler(new Request('https://example.test/checkout', {
     method: 'POST', headers: { Authorization: 'Bearer mock', 'Content-Type': 'application/json' },
-    body: JSON.stringify({ organization_id: 'org' }),
+    body: JSON.stringify({ organization_id: ORG_ID }),
   }))));
   expect(responses.map(response => response.status)).toEqual([200, 200]);
   expect(createdKeys.size).toBe(1);
