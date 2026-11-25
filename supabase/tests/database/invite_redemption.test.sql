@@ -4,7 +4,7 @@
 -- accepts one explicitly (accept_invite).
 
 begin;
-select plan(28);
+select plan(30);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-000000000004', 'venue-a1-manager@example.com');
@@ -283,6 +283,35 @@ select is(
   'venue_manager',
   'peer manager keeps their role'
 );
+
+-- ---------------------------------------------------------------------------
+-- Re-invite records the re-inviter: a manager's staff invite that an admin upgrades to
+-- venue_manager is accepted under the admin's authority.
+-- ---------------------------------------------------------------------------
+reset role;
+insert into auth.users (id, email, email_confirmed_at) values
+  ('00000000-0000-0000-0000-000000000019', 'upgrade@example.com', now());
+set local role authenticated;
+set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-000000000004';
+select public.prepare_staff_invite('20000000-0000-0000-0000-0000000000a1', 'upgrade@example.com', 'staff');
+set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-000000000016';
+select public.prepare_staff_invite('20000000-0000-0000-0000-0000000000a1', 'upgrade@example.com', 'venue_manager');
+reset role;
+select is(
+  (select invited_by from public.invites where email = 'upgrade@example.com' and status = 'pending'),
+  '00000000-0000-0000-0000-000000000016'::uuid,
+  'a reconciling re-invite records the re-inviter as invited_by'
+);
+-- The invitee cannot read invites under RLS; resolve the id as table owner.
+select set_config('test.upgrade_invite', id::text, true)
+  from public.invites where email = 'upgrade@example.com' and status = 'pending';
+set local role authenticated;
+set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-000000000019';
+select lives_ok(
+  $$ select public.accept_invite(current_setting('test.upgrade_invite')::uuid) $$,
+  'an admin-upgraded invite can be accepted'
+);
+reset role;
 
 select * from finish();
 rollback;
