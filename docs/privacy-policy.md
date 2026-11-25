@@ -30,6 +30,7 @@ Contact: **admin@venuewrangler.com** (privacy requests and questions). Postal ad
 | Photos and files | Profile photos, incident evidence, documents, count sheets, chat attachments. Photos may contain location metadata (EXIF) if your device adds it. | Operating the venue | Processor |
 | Guest data | Guest names, phone numbers, email addresses, reservation details, party size, visit history, dietary/allergy and preference notes, CRM leads and contract details a venue enters | Reservations and hospitality operations | Processor |
 | HR and pay data | Employee number, hourly rate, PTO balances, employment details a venue enters | Scheduling, payroll export | Processor |
+| HR system data (BrightHR, only if the venue connects it) | From the venue's BrightHR account: employee names, work email, job title and employment dates; for employees a manager links to a team member, approved absences (type, dates and length only; sickness reasons, notes and medical certification are not stored) and BrightHR Blip clock-in and clock-out times | Showing staff availability, comparing clock-ins | Processor |
 | Point-of-sale data | Check and order data received from a POS the venue connects, which can include a guest name | Reporting | Processor |
 | Billing data | Organization and subscription status, Stripe customer ID. Card numbers go directly to Stripe and never reach our servers. | Subscription payments | Controller |
 | Device and diagnostic data | Push notification tokens, device and platform type, app version, device attestation results, crash and error reports (with sign-in and request details scrubbed where we can) | Notifications, fraud and abuse prevention, reliability | Controller |
@@ -65,7 +66,7 @@ We use the following service providers to run Venue Wrangler. They process perso
 | **Google Firebase Cloud Messaging** and **Apple Push Notification service** | Delivering push notifications to Android and iOS devices | Device push token and notification content |
 | **Google (Play Integrity) and Apple (App Attest)** | Device and app integrity checks | Device attestation tokens |
 | **Cloudmersive** and **ClamAV** (self-operated scanner) | Malware scanning of uploaded documents | The uploaded file |
-| **Optional integrations the venue connects**: **Square**, **Toast** (point of sale), **QuickBooks (Intuit)** and **Gusto** (payroll/accounting) | Data exchange the venue chooses to enable | Whatever the venue authorizes (for example sales checks, employee and payroll data). These providers act under the venue's own agreement with them. |
+| **Optional integrations the venue connects**: **Square**, **Toast** (point of sale), **QuickBooks (Intuit)** and **Gusto** (payroll/accounting), and **BrightHR** (HR) | Data exchange the venue chooses to enable | Whatever the venue authorizes (for example sales checks, employee and payroll data, and for BrightHR the employee directory, approved absences and Blip clock-ins). We also write each linked team member's Venue Wrangler user ID to BrightHR as that employee's external reference. These providers act under the venue's own agreement with them. |
 
 We will update this list before adding a provider. **[Mechanism for notifying customers of subprocessor changes: counsel/operator to confirm.]**
 
@@ -87,6 +88,7 @@ Venue data is visible to members of that venue according to their role: for exam
 | Guest personal details on past reservations | Anonymized after 24 months |
 | Invitations (accepted, declined or expired) | 90 days after resolution; unaccepted pending invitations 30 days after expiry |
 | Notification events | 180 days |
+| BrightHR absences and clock-ins | 90 days, and removed sooner if the employee is unlinked or the venue disconnects BrightHR (which deletes all imported BrightHR data) |
 | Device attestation challenges | Minutes (single use) |
 | Database backups | 30 days, stored encrypted (see Security) |
 | Storage file mirror change history | 30 days |

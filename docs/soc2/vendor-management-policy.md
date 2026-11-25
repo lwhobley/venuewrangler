@@ -30,7 +30,7 @@ Columns "DPA on file", "SOC 2 / ISO report on file" and "Last review" record evi
 | **Apple (APNs)** | iOS push | Push token, notification content | `_shared/apns.ts` | No | No | Never |
 | **Google Play Integrity / Apple App Attest** | Device integrity | Attestation tokens | `device-attestation` function | No | No | Never |
 | **Cloudmersive** / **ClamAV** (self-hosted) | Malware scanning of uploads | The uploaded file | `_shared/malware-scan.ts` | No | No | Never |
-| **Square, Toast, QuickBooks (Intuit), Gusto** | Optional customer-connected POS / payroll / accounting | Whatever the venue authorizes | `supabase/functions/*-oauth`, `toast-pos` | No (venue's own agreements; verify OAuth app terms) | No | Never |
+| **Square, Toast, QuickBooks (Intuit), Gusto, BrightHR** | Optional customer-connected POS / payroll / accounting / HR | Whatever the venue authorizes (BrightHR: employee directory, approved absences without sickness detail, Blip clock-ins) | `supabase/functions/*-oauth`, `toast-pos`, `brighthr` | No (venue's own agreements; verify OAuth app terms) | No | Never |
 | **Codemagic** | iOS build and signing | Source, signing identities, build secrets | `codemagic.yaml` | No | No | Never |
 | **GitHub** | Source, CI | Source code, CI secrets | `.github/` | No | No | Never |
 
