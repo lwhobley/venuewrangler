@@ -25,6 +25,7 @@ import '../features/floor/presentation/floor_plan_screen.dart';
 import '../features/guests_reservations/presentation/reservations_screen.dart';
 import '../features/incidents/presentation/incident_list_screen.dart';
 import '../features/insights/presentation/shift_insights_screen.dart';
+import '../features/integrations/presentation/brighthr_screen.dart';
 import '../features/integrations/presentation/integration_complete_screen.dart';
 import '../features/integrations/presentation/integrations_screen.dart';
 import '../features/invites/application/invites_providers.dart';
@@ -478,6 +479,10 @@ StatefulShellRoute _fullShell(GlobalKey<NavigatorState> rootKey) {
           GoRoute(
             path: '/integrations',
             builder: (context, state) => const IntegrationsScreen(),
+          ),
+          GoRoute(
+            path: '/integrations/brighthr',
+            builder: (context, state) => const BrightHrScreen(),
           ),
           // Return links from the {provider}-oauth callbacks (venuewrangler://integrations/...).
           GoRoute(

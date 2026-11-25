@@ -23,3 +23,28 @@ header comment says so and links the provider's OAuth docs to confirm against be
 production use — in particular exact scopes, and Gusto's `external_account_id` (left `null`
 today; populating it needs a follow-up call to Gusto's own API after token exchange, not
 returned by the OAuth callback itself).
+
+## BrightHR
+
+Backed by `supabase/migrations/20261125100000_brighthr_integration.sql` and the `brighthr`
+Edge Function (`supabase/functions/brighthr`, API client in `_shared/brighthr.ts`).
+
+- BrightHR only supports OAuth2 client credentials, so there is no consent redirect: a BrightHR
+  admin creates a Client ID/Secret at account.brighthr.com/manage-api and a venue manager pastes
+  them into `presentation/brighthr_screen.dart` (routed at `/integrations/brighthr`). `/connect`
+  verifies them against BrightHR before storing the secret AES-GCM encrypted (bound to
+  `venue_id:brighthr`); a column-level grant keeps it out of every client.
+- Sync runs on connect, on "Sync now", and every 30 minutes via pg_cron → `brighthr/dispatch`
+  (needs Vault entries `brighthr_sync_dispatch_url` / `brighthr_sync_dispatch_secret` and the
+  `BRIGHTHR_SYNC_DISPATCH_SECRET` function secret).
+- Employees are imported in full; a manager links each one to a team member
+  (`public.link_brighthr_employee`), and the member id is written back to BrightHR as the
+  employee's `externalReference`. Absences (−30 to +180 days) and Blip clock-ins (last 14 days)
+  are imported **only for linked employees**, and kept for 90 days.
+- Sickness `reason`, absence `note`s and certification flags are never stored.
+- Read-only otherwise: BrightHR's API cannot create shifts, timesheets or leave.
+
+**Not verified against a live BrightHR tenant.** BrightHR's reference leaves several shapes
+undocumented (absence `end`, Blip `start`/`end` format, `breaks[].start`, the date format of
+`filters.from`/`to`); the parsers accept the plausible variants and skip anything they cannot
+read. Check a real sync's `brighthr_sync_runs` and imported rows before relying on it.

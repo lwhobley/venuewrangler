@@ -147,5 +147,8 @@ verify_jwt = false
 [functions.gusto-oauth]
 verify_jwt = false
 
+[functions.brighthr]
+verify_jwt = false
+
 [analytics]
 enabled = false

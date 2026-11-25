@@ -45,10 +45,13 @@ function importHmacKey(base64Key: string): Promise<CryptoKey> {
 
 export type OAuthProvider = "square" | "quickbooks" | "gusto";
 
+/** Providers whose credentials are stored with encryptToken (OAuth tokens or API secrets). */
+export type CredentialProvider = OAuthProvider | "brighthr";
+
 /** What a stored token is bound to. Used as AES-GCM additional authenticated data. */
 export interface TokenContext {
   venueId: string;
-  provider: OAuthProvider;
+  provider: CredentialProvider;
 }
 
 const TOKEN_FORMAT_V1 = "v1";
