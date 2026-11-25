@@ -11,6 +11,7 @@ import { createServiceClient } from "../_shared/supabase-clients.ts";
 import { createStripeClient } from "../_shared/stripe.ts";
 import type Stripe from "stripe";
 import { initObservability, captureException, flushObservability } from "../_shared/observability.ts";
+import { planItem, subscriptionEventAction } from "../_shared/stripe-price.ts";
 
 initObservability();
 
@@ -60,15 +61,15 @@ Deno.serve(async (req) => {
     statusOverride?: string,
   ): Promise<boolean> {
     // As of this account's API version, current_period_end lives on each subscription ITEM,
-    // not the top-level Subscription — a single-price subscription (the only kind this app
-    // creates) has exactly one item.
-    const firstItem = subscription?.items.data[0];
-    const periodEnd = firstItem?.current_period_end;
+    // not the top-level Subscription. Read it (and the price) from the item on this app's plan:
+    // a Dashboard add-on can add items in any order, so item 0 is not necessarily the plan.
+    const item = planItem(subscription, allowedPriceIds) ?? subscription?.items.data[0];
+    const periodEnd = item?.current_period_end;
     const { data, error } = await serviceClient.rpc("apply_stripe_subscription_state", {
       p_organization_id: organizationId,
       p_customer_id: customerId,
       p_subscription_id: subscription?.id ?? null,
-      p_price_id: firstItem?.price?.id ?? null,
+      p_price_id: item?.price?.id ?? null,
       p_status: statusOverride ?? subscription?.status ?? "none",
       p_current_period_end: periodEnd ? new Date(periodEnd * 1000).toISOString() : null,
       p_cancel_at_period_end: subscription?.cancel_at_period_end ?? false,
@@ -118,8 +119,7 @@ Deno.serve(async (req) => {
       return true;
     }
     if (!subscription) return true;
-    const priceId = subscription.items.data[0]?.price?.id;
-    return typeof priceId === "string" && allowedPriceIds.includes(priceId);
+    return planItem(subscription, allowedPriceIds) !== null;
   }
   async function refuseMissingPriceAllowlist(): Promise<Response> {
     console.error(
@@ -216,24 +216,46 @@ Deno.serve(async (req) => {
             : eventSubscription.customer.id;
 
         const subscription = await currentSubscription(eventSubscription.id, eventSubscription);
-        // A price outside the allowlist can never grant entitlement, but it must still be able
-        // to take it away: if an entitled subscription is moved onto another price, or deleted,
-        // skipping the event would leave the org `active` forever. Apply it as `canceled`;
-        // apply_stripe_subscription_state only lets a canceled status touch the row that
-        // already tracks this same subscription, so unrelated subscriptions stay no-ops.
-        const allowedPrice = isAllowedPrice(subscription);
-        if (!allowedPrice) {
-          console.warn("subscription not on an allowed price; applying as canceled", {
+        // Rules in _shared/stripe-price.ts: deletions always cancel; a subscription with an item
+        // on an allowed price is applied; one with no allowed item cancels only if the stored row
+        // tracks it on a still-allowed price (moved off the plan). A legacy price dropped from the
+        // allowlist, or another product's subscription, is skipped rather than cancelled.
+        let stored: { stripe_subscription_id: string | null; stripe_price_id: string | null } | null =
+          null;
+        if (event.type !== "customer.subscription.deleted" && !isAllowedPrice(subscription)) {
+          const { data, error: storedError } = await serviceClient
+            .from("subscriptions")
+            .select("stripe_subscription_id, stripe_price_id")
+            .eq("stripe_customer_id", customerId)
+            .maybeSingle();
+          if (storedError) throw storedError;
+          stored = data;
+        }
+        const action = subscriptionEventAction({
+          eventType: event.type,
+          subscription,
+          allowedPriceIds,
+          stored,
+        });
+        if (action === "skip") {
+          console.warn("ignoring subscription event for a price not in STRIPE_ALLOWED_PRICE_IDS", {
             eventType: event.type,
             eventId: event.id,
-            priceId: subscription.items.data[0]?.price?.id,
+            priceIds: subscription.items.data.map((i) => i.price?.id),
+          });
+          break;
+        }
+        if (action === "cancel" && event.type !== "customer.subscription.deleted") {
+          console.warn("subscription moved off an allowed price; applying as canceled", {
+            eventId: event.id,
+            priceIds: subscription.items.data.map((i) => i.price?.id),
           });
         }
         const applied = await applyState(
           null,
           customerId,
           subscription,
-          event.type === "customer.subscription.deleted" || !allowedPrice ? "canceled" : undefined,
+          action === "cancel" ? "canceled" : undefined,
         );
         if (!applied) {
           // Either a customer from another product on this shared Stripe account, or an event
