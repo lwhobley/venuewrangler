@@ -53,6 +53,15 @@ class IntegrationsScreen extends ConsumerWidget {
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => context.push('/pos'),
                 ),
+                ListTile(
+                  leading: const Icon(Icons.badge_outlined),
+                  title: const Text('BrightHR'),
+                  subtitle: const Text(
+                    'Employees, approved absences and Blip clock-ins',
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => context.push('/integrations/brighthr'),
+                ),
                 const Divider(),
                 for (final provider in PayrollProvider.values)
                   _ProviderTile(
