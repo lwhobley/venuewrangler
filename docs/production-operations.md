@@ -17,7 +17,7 @@ This list must match `docs/privacy-policy.md`, `site/privacy/index.html` and `do
 | Google Firebase Cloud Messaging, Apple APNs | Push notifications |
 | Google Play Integrity, Apple App Attest | Device/app integrity |
 | Cloudmersive, ClamAV | Malware scanning of uploaded documents |
-| Square, Toast, QuickBooks (Intuit), Gusto | Optional integrations a venue connects |
+| Square, Toast, QuickBooks (Intuit), Gusto, BrightHR | Optional integrations a venue connects |
 
 Not used by the current product and not to be listed: AWS S3, Google Cloud Run/Cloud Storage, Google Gemini, Apple In-App Purchase.
 
