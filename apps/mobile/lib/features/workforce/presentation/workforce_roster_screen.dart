@@ -256,6 +256,7 @@ class WorkforceRosterScreen extends ConsumerWidget {
     String venueId, {
     String? prefillEmail,
   }) async {
+    final container = ProviderScope.containerOf(context, listen: false);
     final emailController = TextEditingController(text: prefillEmail);
     var role = WorkforceRole.staff;
 
@@ -296,12 +297,12 @@ class WorkforceRosterScreen extends ConsumerWidget {
                   ? 'Enter a valid email'
                   : null,
               save: () async {
-                await ref.read(workforceRepositoryProvider).createInvite(
+                await container.read(workforceRepositoryProvider).createInvite(
                       venueId: venueId,
                       email: emailController.text.trim(),
                       role: role,
                     );
-                ref.invalidate(invitesForVenueProvider(venueId));
+                container.invalidate(invitesForVenueProvider(venueId));
               },
             ),
           ],
@@ -316,9 +317,10 @@ class WorkforceRosterScreen extends ConsumerWidget {
     String inviteId,
     String venueId,
   ) async {
+    final container = ProviderScope.containerOf(context, listen: false);
     try {
-      await ref.read(workforceRepositoryProvider).revokeInvite(inviteId);
-      ref.invalidate(invitesForVenueProvider(venueId));
+      await container.read(workforceRepositoryProvider).revokeInvite(inviteId);
+      container.invalidate(invitesForVenueProvider(venueId));
     } on PostgrestException catch (_) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -410,6 +412,8 @@ class WorkforceRosterScreen extends ConsumerWidget {
                       : TextButton(
                           onPressed: () {
                             Navigator.of(dialogContext).pop();
+                            // The screen that opened this dialog may be gone by now.
+                            if (!context.mounted) return;
                             _showInviteDialog(
                               context,
                               ref,

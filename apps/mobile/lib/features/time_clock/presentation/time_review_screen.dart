@@ -142,18 +142,25 @@ class _TimeReviewScreenState extends ConsumerState<TimeReviewScreen> {
                             isThreeLine: true,
                             trailing: TextButton(
                               onPressed: () async {
+                                final nowWall = clock.now;
                                 final picked = await pickVenueDateTime(
                                   context,
                                   initial: clock
                                       .wall(e.clockOutAt ?? DateTime.now()),
-                                  nowWall: clock.now,
+                                  nowWall: nowWall,
+                                  // Any punch this screen lists can be corrected; the
+                                  // correction RPC decides what is allowed.
+                                  daysBack: correctionDaysBack(
+                                    nowWall,
+                                    clock.wall(e.clockInAt),
+                                  ),
                                 );
                                 if (picked == null || !context.mounted) return;
                                 final reason = await showDialog<String>(
                                   context: context,
                                   builder: (_) => const _CorrectionReason(),
                                 );
-                                if (reason == null) return;
+                                if (reason == null || !mounted) return;
                                 try {
                                   await ref
                                       .read(timeReviewRepositoryProvider)
@@ -162,6 +169,7 @@ class _TimeReviewScreenState extends ConsumerState<TimeReviewScreen> {
                                         clock.instant(picked),
                                         reason,
                                       );
+                                  if (!mounted) return;
                                   ref.invalidate(
                                     timeReviewEntriesProvider(key),
                                   );
@@ -191,6 +199,16 @@ class _TimeReviewScreenState extends ConsumerState<TimeReviewScreen> {
       ),
     );
   }
+}
+
+/// How many days back from [nowWall] the correction date picker must reach so the punch's
+/// own clock-in day ([clockInWall]) is selectable. At least 1 (yesterday), as before.
+int correctionDaysBack(DateTime nowWall, DateTime clockInWall) {
+  final today = DateTime.utc(nowWall.year, nowWall.month, nowWall.day);
+  final clockInDay =
+      DateTime.utc(clockInWall.year, clockInWall.month, clockInWall.day);
+  final days = today.difference(clockInDay).inDays;
+  return days < 1 ? 1 : days;
 }
 
 class _CorrectionReason extends StatefulWidget {

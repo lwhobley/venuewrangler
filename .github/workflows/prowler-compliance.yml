@@ -80,23 +80,26 @@ jobs:
           service_account: ${{ env.GCP_SA_EMAIL }}
           create_credentials_file: true
 
-      # The exported-key fallback was removed. It was never reached while the
-      # WIF secrets were set, which made it worse than useless: a long-lived
-      # service-account key sat in repository secrets earning nothing, and if
-      # the WIF secrets were ever unset the scan would have silently downgraded
-      # to it rather than telling anyone. Static service-account keys are also
-      # a finding in the CIS GCP benchmark this very job runs.
+      # The exported-key fallback was removed: a long-lived service-account key in repository
+      # secrets is itself a CIS GCP finding, and silently downgrading to it would hide a broken
+      # WIF binding. GCP is scanned keyless via Workload Identity Federation only.
       #
-      # Fail loudly instead, so a broken WIF binding is fixed rather than
-      # quietly worked around.
-      - name: Require keyless GCP authentication
-        if: env.GCP_WIF_PROVIDER == '' || env.GCP_SA_EMAIL == ''
+      # GCP is optional: with neither WIF secret set, the GCP scan is skipped with a notice so an
+      # AWS-only run can still pass. A half-configured binding (only one of the two secrets set)
+      # is a misconfiguration and still fails loudly. If no scan at all runs, "Verify scan
+      # outputs generated" below fails the job.
+      - name: Check GCP Workload Identity configuration
+        shell: bash
         run: |
-          echo "::error::GCP_WORKLOAD_IDENTITY_PROVIDER and GCP_SERVICE_ACCOUNT must both be set. This job authenticates keyless via Workload Identity Federation, as the rest of this repository does. Bind the Prowler service account to the workload identity pool rather than reintroducing an exported key."
-          exit 1
+          if [ -z "$GCP_WIF_PROVIDER" ] && [ -z "$GCP_SA_EMAIL" ]; then
+            echo "::notice::GCP_WORKLOAD_IDENTITY_PROVIDER and GCP_SERVICE_ACCOUNT are not set; skipping the GCP scan."
+          elif [ -z "$GCP_WIF_PROVIDER" ] || [ -z "$GCP_SA_EMAIL" ]; then
+            echo "::error::Only one of GCP_WORKLOAD_IDENTITY_PROVIDER and GCP_SERVICE_ACCOUNT is set. Set both (keyless Workload Identity Federation) or neither to skip GCP; do not reintroduce an exported key."
+            exit 1
+          fi
 
       - name: Run Prowler GCP Compliance Scan
-        if: env.GCP_WIF_PROVIDER != ''
+        if: env.GCP_WIF_PROVIDER != '' && env.GCP_SA_EMAIL != ''
         shell: bash
         run: |
           set -e

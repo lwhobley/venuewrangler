@@ -25,11 +25,13 @@ class NotificationsScreen extends ConsumerWidget {
               icon: const Icon(Icons.done_all),
               tooltip: 'Mark all as read',
               onPressed: () async {
+                final container =
+                    ProviderScope.containerOf(context, listen: false);
                 try {
-                  await ref
+                  await container
                       .read(notificationsRepositoryProvider)
                       .markAllAsRead(venueId: currentVenue.id);
-                  ref.invalidate(notificationsFeedProvider);
+                  container.invalidate(notificationsFeedProvider);
                 } catch (_) {
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -141,12 +143,13 @@ class _NotificationListTile extends ConsumerWidget {
               ),
             ),
       onTap: () async {
+        final container = ProviderScope.containerOf(context, listen: false);
         if (!item.isRead) {
           try {
-            await ref
+            await container
                 .read(notificationsRepositoryProvider)
                 .markAsRead(notificationId: item.id);
-            ref.invalidate(notificationsFeedProvider);
+            container.invalidate(notificationsFeedProvider);
           } catch (_) {
             if (context.mounted) {
               ScaffoldMessenger.of(context).showSnackBar(

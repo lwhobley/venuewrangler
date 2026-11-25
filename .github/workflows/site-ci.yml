@@ -8,6 +8,9 @@ on:
       - 'packages/marketing/**'
       - 'site/**'
       - 'scripts/**'
+      - 'tests/**'
+      - 'tsconfig.json'
+      - 'vitest.config.mts'
       - '.github/**'
 
 permissions:
@@ -34,6 +37,10 @@ jobs:
       # Fails on high/critical advisories in production dependencies (audit O-05).
       - name: Audit production npm dependencies
         run: npm audit --omit=dev --audit-level=high
+
+      # tsc --noEmit over the root TypeScript (site/, tests/, vitest config); see tsconfig.json.
+      - name: Typecheck
+        run: npm run typecheck
 
       - name: Test
         run: npm test

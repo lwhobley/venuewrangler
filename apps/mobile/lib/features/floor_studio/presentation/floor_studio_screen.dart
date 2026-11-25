@@ -214,8 +214,8 @@ class _FloorStudioScreenState extends ConsumerState<FloorStudioScreen> {
               objects: objects,
             ),
           );
-      ref.invalidate(floorStudioLayoutsProvider(venueId));
       if (!mounted) return;
+      ref.invalidate(floorStudioLayoutsProvider(venueId));
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Floor plan layout saved.')),
       );

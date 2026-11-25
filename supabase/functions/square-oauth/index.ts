@@ -178,6 +178,9 @@ async function handleRequest(req: Request): Promise<Response> {
     } catch {
       return jsonResponse({ error: "invalid_json_body" }, 400);
     }
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+      return jsonResponse({ error: "invalid_json_body" }, 400);
+    }
     if (!payload.venue_id) return jsonResponse({ error: "missing_venue_id" }, 400);
     if (!isUuid(payload.venue_id)) return jsonResponse({ error: "invalid_venue_id" }, 400);
 
@@ -296,6 +299,9 @@ async function handleRequest(req: Request): Promise<Response> {
     try {
       payload = await req.json();
     } catch {
+      return jsonResponse({ error: "invalid_json_body" }, 400);
+    }
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
       return jsonResponse({ error: "invalid_json_body" }, 400);
     }
     if (!payload.venue_id) return jsonResponse({ error: "missing_venue_id" }, 400);

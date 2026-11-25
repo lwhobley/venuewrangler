@@ -269,13 +269,41 @@ async function handleRequest(req: Request): Promise<Response> {
     };
 
     if (existingCheck) {
+      // An update only overwrites what the webhook actually sent. The defaults above (0 cents,
+      // guest_count 1, opened_at now, no menu items) exist for a first insert; applied to an
+      // existing row they would wipe it, e.g. a bare `{status: "void"}` after a close zeroed
+      // the totals and emptied the items.
+      const sent = (key: string) => payload[key] !== undefined && payload[key] !== null;
+      const updateRow: Record<string, unknown> = {
+        status,
+        closed_at: closedAt,
+        raw_payload: payload,
+        updated_at: checkRow.updated_at,
+      };
+      // Payload keys and column names are the same for these fields.
+      const optionalColumns = [
+        "table_label",
+        "server_name",
+        "guest_name",
+        "guest_count",
+        "opened_at",
+        "subtotal_cents",
+        "tax_cents",
+        "tip_cents",
+        "total_cents",
+        "menu_items",
+      ] as const;
+      for (const column of optionalColumns) {
+        if (sent(column)) updateRow[column] = checkRow[column];
+      }
+
       // Atomic conditional update: only update if the row is still in an editable state
       // (open, or closed when applying a void-after-close), preventing a concurrent stale
       // webhook from overwriting a finalized check.
       const allowedPriorStatus = isVoidAfterClose ? "closed" : "open";
       const { data: updatedRows, error: updateError } = await serviceClient
         .from("pos_checks")
-        .update(checkRow)
+        .update(updateRow)
         .eq("venue_id", venueId)
         .eq("provider", "toast")
         .eq("external_check_id", externalCheckId)

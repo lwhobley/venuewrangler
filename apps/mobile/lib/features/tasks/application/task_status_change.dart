@@ -30,15 +30,21 @@ Map<String, TaskStatus> pendingTaskStatuses(
 /// Changes a task's status online; if the network is unavailable the change is queued and
 /// synced later (with the same optimistic-concurrency check the list screen uses). A
 /// permission denial is reported, not queued.
+///
+/// Takes the [ProviderContainer] (`ProviderScope.containerOf(context, listen: false)`) rather
+/// than a `WidgetRef`: the refresh after the write must still happen if the calling widget was
+/// disposed meanwhile, and a disposed widget's `ref` throws.
 Future<void> changeTaskStatus(
-  WidgetRef ref,
+  ProviderContainer container,
   ScaffoldMessengerState messenger,
   OperationalTask task,
   TaskStatus newStatus,
 ) async {
   try {
-    await ref.read(tasksRepositoryProvider).updateStatus(task.id, newStatus);
-    ref.invalidate(tasksForVenueProvider(task.venueId));
+    await container
+        .read(tasksRepositoryProvider)
+        .updateStatus(task.id, newStatus);
+    container.invalidate(tasksForVenueProvider(task.venueId));
   } catch (error) {
     if (error is PostgrestException && error.code == '42501') {
       messenger.showSnackBar(
@@ -54,17 +60,17 @@ Future<void> changeTaskStatus(
       );
       return;
     }
-    await _queue(ref, messenger, task, newStatus);
+    await _queue(container, messenger, task, newStatus);
   }
 }
 
 Future<void> _queue(
-  WidgetRef ref,
+  ProviderContainer container,
   ScaffoldMessengerState messenger,
   OperationalTask task,
   TaskStatus newStatus,
 ) async {
-  await ref
+  await container
       .read(offlineQueueControllerProvider.notifier)
       .enqueue(buildTaskStatusUpdateMutation(task: task, newStatus: newStatus));
   messenger.showSnackBar(

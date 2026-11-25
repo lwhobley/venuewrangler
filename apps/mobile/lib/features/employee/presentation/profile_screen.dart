@@ -316,7 +316,8 @@ class ProfileScreen extends ConsumerWidget {
     WidgetRef ref,
     String? current,
   ) async {
-    final userId = ref.read(currentUserIdProvider);
+    final container = ProviderScope.containerOf(context, listen: false);
+    final userId = container.read(currentUserIdProvider);
     var editedName = current ?? '';
     final name = await showDialog<String>(
       context: context,
@@ -344,14 +345,14 @@ class ProfileScreen extends ConsumerWidget {
         name == null ||
         name.isEmpty ||
         userId == null ||
-        ref.read(currentUserIdProvider) != userId) {
+        container.read(currentUserIdProvider) != userId) {
       return;
     }
     try {
-      await ref
+      await container
           .read(settingsRepositoryProvider)
           .updateDisplayName(userId, name);
-      ref.invalidate(myProfileProvider);
+      container.invalidate(myProfileProvider);
     } on PostgrestException catch (_) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

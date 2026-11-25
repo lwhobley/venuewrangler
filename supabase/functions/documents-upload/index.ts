@@ -12,7 +12,7 @@
 // itself (Deno.connect to CLAMAV_HOST) has not been exercised against a real clamd.
 import { corsHeaders, handleCorsPreflight } from "../_shared/cors.ts";
 import { createServiceClient, createUserClient } from "../_shared/supabase-clients.ts";
-import { getCallerVenueRoles, isManager } from "../_shared/venue-auth.ts";
+import { getCallerVenueRoles, isManager, isUuid } from "../_shared/venue-auth.ts";
 import { enforceRateLimit, requireEntitlement } from "../_shared/rate-limit.ts";
 import {
   MAX_DOCUMENT_BYTES,
@@ -131,16 +131,28 @@ async function handleRequest(req: Request): Promise<Response> {
     }
     return jsonResponse({ error: "invalid_json_body" }, 400);
   }
-  if (payload === null || typeof payload !== "object") {
+  if (payload === null || typeof payload !== "object" || Array.isArray(payload)) {
     return jsonResponse({ error: "invalid_json_body" }, 400);
   }
 
   const { venue_id, title, file_name, mime_type, category, data_base64 } = payload;
-  if (!venue_id || !title?.trim() || !file_name || !mime_type || !category || !data_base64) {
+  // Non-string values (numbers, objects) would throw on .trim() / the decoders below and surface
+  // as a 500, so they are treated the same as a missing field.
+  if (
+    typeof venue_id !== "string" || !venue_id ||
+    typeof title !== "string" || !title.trim() ||
+    typeof file_name !== "string" || !file_name ||
+    typeof mime_type !== "string" || !mime_type ||
+    typeof category !== "string" || !category ||
+    typeof data_base64 !== "string" || !data_base64
+  ) {
     return jsonResponse(
       { error: "missing_required_fields: venue_id, title, file_name, mime_type, category, data_base64" },
       400,
     );
+  }
+  if (!isUuid(venue_id)) {
+    return jsonResponse({ error: "invalid_venue_id" }, 400);
   }
   if (!DOCUMENT_CATEGORIES.includes(category)) {
     return jsonResponse({ error: "invalid_category" }, 400);

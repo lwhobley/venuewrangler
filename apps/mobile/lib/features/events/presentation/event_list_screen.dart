@@ -89,7 +89,8 @@ class EventListScreen extends ConsumerWidget {
     WidgetRef ref,
     String venueId,
   ) async {
-    final clock = ref.read(venueClockProvider);
+    final container = ProviderScope.containerOf(context, listen: false);
+    final clock = container.read(venueClockProvider);
     if (!ensureSupported(context, clock)) return;
     final nameController = TextEditingController();
     final notesController = TextEditingController();
@@ -128,7 +129,9 @@ class EventListScreen extends ConsumerWidget {
                     initial: start,
                     nowWall: clock.now,
                   );
-                  if (picked != null) setState(() => start = picked);
+                  if (picked != null && context.mounted) {
+                    setState(() => start = picked);
+                  }
                 },
               ),
               ListTile(
@@ -142,7 +145,9 @@ class EventListScreen extends ConsumerWidget {
                     initial: end,
                     nowWall: clock.now,
                   );
-                  if (picked != null) setState(() => end = picked);
+                  if (picked != null && context.mounted) {
+                    setState(() => end = picked);
+                  }
                 },
               ),
             ],
@@ -160,7 +165,7 @@ class EventListScreen extends ConsumerWidget {
                       ? 'End must be after start'
                       : null,
               save: () async {
-                await ref.read(eventsRepositoryProvider).createEvent(
+                await container.read(eventsRepositoryProvider).createEvent(
                       venueId: venueId,
                       name: nameController.text.trim(),
                       startTime: clock.instant(start),
@@ -169,7 +174,7 @@ class EventListScreen extends ConsumerWidget {
                           ? null
                           : notesController.text.trim(),
                     );
-                ref.invalidate(eventsForVenueProvider(venueId));
+                container.invalidate(eventsForVenueProvider(venueId));
               },
             ),
           ],
@@ -204,6 +209,7 @@ class _EventTile extends ConsumerWidget {
   }
 
   Future<void> _delete(BuildContext context, WidgetRef ref) async {
+    final container = ProviderScope.containerOf(context, listen: false);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -223,8 +229,8 @@ class _EventTile extends ConsumerWidget {
     );
     if (confirmed != true || !context.mounted) return;
     try {
-      await ref.read(eventsRepositoryProvider).deleteEvent(event.id);
-      ref.invalidate(eventsForVenueProvider(event.venueId));
+      await container.read(eventsRepositoryProvider).deleteEvent(event.id);
+      container.invalidate(eventsForVenueProvider(event.venueId));
     } catch (error) {
       if (!context.mounted) return;
       final message = error is PostgrestException && error.code == '42501'

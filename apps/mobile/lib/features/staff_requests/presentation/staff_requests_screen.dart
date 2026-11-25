@@ -238,9 +238,12 @@ class _StaffRequestTile extends ConsumerWidget {
   }
 
   Future<void> _cancelRequest(BuildContext context, WidgetRef ref) async {
+    final container = ProviderScope.containerOf(context, listen: false);
     try {
-      await ref.read(staffRequestsRepositoryProvider).cancelRequest(request.id);
-      ref.invalidate(staffRequestsForVenueProvider(request.venueId));
+      await container
+          .read(staffRequestsRepositoryProvider)
+          .cancelRequest(request.id);
+      container.invalidate(staffRequestsForVenueProvider(request.venueId));
     } catch (error) {
       // Any failure (permission, constraint, or network) must surface; silence would leave the
       // person unsure whether the cancel happened.
@@ -259,6 +262,7 @@ class _StaffRequestTile extends ConsumerWidget {
     WidgetRef ref,
     StaffRequestStatus status,
   ) async {
+    final container = ProviderScope.containerOf(context, listen: false);
     final notesController = TextEditingController();
     final shouldProceed = await showDialog<bool>(
       context: context,
@@ -288,12 +292,12 @@ class _StaffRequestTile extends ConsumerWidget {
     if (!context.mounted) return;
 
     try {
-      await ref.read(staffRequestsRepositoryProvider).reviewRequest(
+      await container.read(staffRequestsRepositoryProvider).reviewRequest(
             requestId: request.id,
             status: status,
             responseNotes: notesController.text.trim(),
           );
-      ref.invalidate(staffRequestsForVenueProvider(request.venueId));
+      container.invalidate(staffRequestsForVenueProvider(request.venueId));
     } catch (error) {
       if (!context.mounted) return;
       final message = error is PostgrestException && error.code == '42501'
@@ -342,7 +346,7 @@ class _CreateStaffRequestDialogState
       firstDate: DateTime.now().subtract(const Duration(days: 1)),
       lastDate: DateTime.now().add(const Duration(days: 365)),
     );
-    if (picked == null) return;
+    if (picked == null || !mounted) return;
     setState(() {
       if (isStart) {
         _startDate = picked;

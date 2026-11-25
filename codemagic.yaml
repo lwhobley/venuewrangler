@@ -28,6 +28,13 @@ workflows:
         SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB1dHR3andtd3J6bWhwc2p5a3VqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA5NTI5MTEsImV4cCI6MjEwNjUyODkxMX0.U5TR_8BdtkkT0qpG4oNuhDh4m52mlsltH44ex8budIQ"
         # Sentry DSNs are public by design (they can only submit events), like the anon key.
         SENTRY_DSN: "https://01fa184f9164f8f0bfb8250ca79e9c28@o4511660428820480.ingest.us.sentry.io/4511961182044160"
+        # Passed to the build as --dart-define (read by kTimeClockRequireAttested in
+        # lib/features/time_clock/application/time_clock_providers.dart). "false" keeps the
+        # observe-mode fallback and matches the other production builds today; set it to "true"
+        # together with the web build's FLUTTER_PRODUCTION_ENV_JSON secret and the Android
+        # env/production.json once TIME_CLOCK_ATTESTATION_MODE=enforce and
+        # require_attested_punches are on (see apps/mobile/env/production.json.example).
+        TIME_CLOCK_REQUIRE_ATTESTED: "false"
     triggering:
       events:
         - tag
@@ -84,6 +91,7 @@ workflows:
             --dart-define=SUPABASE_URL=$SUPABASE_URL \
             --dart-define=SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY \
             --dart-define=SENTRY_DSN=$SENTRY_DSN \
+            --dart-define=TIME_CLOCK_REQUIRE_ATTESTED=$TIME_CLOCK_REQUIRE_ATTESTED \
             --export-options-plist=/Users/builder/export_options.plist
     artifacts:
       - build/ios/ipa/*.ipa

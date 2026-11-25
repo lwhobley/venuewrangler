@@ -38,7 +38,11 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { event_id } = await req.json().catch(() => ({}));
+    // A literal `null`, array or scalar body parses but has no fields; treat it as no event id.
+    const parsed: unknown = await req.json().catch(() => null);
+    const event_id = parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>).event_id
+      : undefined;
     if (typeof event_id !== "string" || !UUID_PATTERN.test(event_id)) {
       return respond({ error: "invalid_event_id" }, 400);
     }

@@ -38,6 +38,7 @@ class _IntegrationCompleteScreenState
   }
 
   Future<void> _complete() async {
+    final container = ProviderScope.containerOf(context, listen: false);
     final provider = PayrollProvider.tryParse(widget.provider);
     final nonce = widget.nonce;
     if (provider == null || nonce == null || nonce.isEmpty) {
@@ -46,10 +47,10 @@ class _IntegrationCompleteScreenState
     }
 
     try {
-      await ref
+      await container
           .read(integrationsRepositoryProvider)
           .completeConnection(provider, nonce);
-      ref.invalidate(payrollConnectionsForVenueProvider);
+      container.invalidate(payrollConnectionsForVenueProvider);
       if (!mounted) return;
       setState(() => _done = true);
       ScaffoldMessenger.of(context).showSnackBar(

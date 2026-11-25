@@ -66,9 +66,15 @@ async function handleRequest(req: Request): Promise<Response> {
   } catch {
     return jsonResponse({ error: "invalid_json_body" }, 400);
   }
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return jsonResponse({ error: "invalid_json_body" }, 400);
+  }
 
   if (!payload.template_id || typeof payload.template_id !== "string") {
     return jsonResponse({ error: "missing_template_id" }, 400);
+  }
+  if (!UUID_PATTERN.test(payload.template_id)) {
+    return jsonResponse({ error: "invalid_template_id" }, 400);
   }
   const hasLead = payload.lead_id !== undefined && payload.lead_id !== null;
   const hasBeo = payload.beo_id !== undefined && payload.beo_id !== null;

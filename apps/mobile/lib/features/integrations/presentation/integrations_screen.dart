@@ -142,11 +142,12 @@ class _ProviderTile extends ConsumerWidget {
   }
 
   Future<void> _disconnect(BuildContext context, WidgetRef ref) async {
+    final container = ProviderScope.containerOf(context, listen: false);
     try {
-      await ref
+      await container
           .read(integrationsRepositoryProvider)
           .disconnect(provider, venueId);
-      ref.invalidate(payrollConnectionsForVenueProvider(venueId));
+      container.invalidate(payrollConnectionsForVenueProvider(venueId));
     } on AppError catch (error) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context)

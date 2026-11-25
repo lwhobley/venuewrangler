@@ -116,3 +116,43 @@ Deno.test("invite sends only to the stored authorized recipient", async () => {
   equal((await handleInvite(f.request(), f.deps)).status, 200);
   equal(f.sent[0].to, ["stored@example.test"]);
 });
+Deno.test("invite rejects null and non-object JSON bodies with 400", async () => {
+  const f = fixture();
+  for (const raw of ["null", "[]", "42", '"text"']) {
+    const response = await handleInvite(
+      new Request("https://functions.test/invite-member", {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer fixture",
+          "Content-Type": "application/json",
+        },
+        body: raw,
+      }),
+      f.deps,
+    );
+    equal(response.status, 400);
+    equal(await response.json(), { error: "invalid_invite" });
+  }
+  equal(f.prepared(), 0);
+  equal(f.sent.length, 0);
+});
+Deno.test("invite rejects a venue_id that is not a UUID before the RPC", async () => {
+  const f = fixture();
+  for (
+    const venueId of [
+      "not-a-uuid",
+      "------------------------------------",
+      "e3000000-0000-0000-0000-00000000000g",
+      42,
+    ]
+  ) {
+    const response = await handleInvite(
+      f.request({ venue_id: venueId }),
+      f.deps,
+    );
+    equal(response.status, 400);
+    equal(await response.json(), { error: "invalid_invite" });
+  }
+  equal(f.prepared(), 0);
+  equal(f.sent.length, 0);
+});

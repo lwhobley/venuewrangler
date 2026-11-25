@@ -50,8 +50,12 @@ final chatContactsProvider =
       .fetchContacts(venueId: activeVenue.id);
 });
 
-final activeConversationIdProvider =
-    StateProvider.autoDispose<String?>((ref) => null);
+/// The open thread. Watching the active venue's id resets it to null whenever the venue
+/// changes, so a venue switch never keeps showing the previous venue's conversation.
+final activeConversationIdProvider = StateProvider.autoDispose<String?>((ref) {
+  ref.watch(activeVenueProvider.select((venue) => venue?.id));
+  return null;
+});
 
 final conversationMessagesProvider = FutureProvider.autoDispose
     .family<List<ChatMessage>, String>((ref, conversationId) async {

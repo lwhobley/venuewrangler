@@ -59,10 +59,12 @@ class TaskListScreen extends ConsumerWidget {
             _ConflictBanner(
               mutation: conflict,
               onDismiss: () async {
-                await ref
+                final container =
+                    ProviderScope.containerOf(context, listen: false);
+                await container
                     .read(offlineQueueControllerProvider.notifier)
                     .dismissConflict(conflict.id);
-                ref.invalidate(tasksForVenueProvider(venue.id));
+                container.invalidate(tasksForVenueProvider(venue.id));
               },
             ),
           Expanded(
@@ -116,6 +118,7 @@ class TaskListScreen extends ConsumerWidget {
     WidgetRef ref,
     String venueId,
   ) async {
+    final container = ProviderScope.containerOf(context, listen: false);
     final controller = TextEditingController();
     await showDialog<bool>(
       context: context,
@@ -136,11 +139,11 @@ class TaskListScreen extends ConsumerWidget {
             validate: () =>
                 controller.text.trim().isEmpty ? 'Title is required' : null,
             save: () async {
-              await ref.read(tasksRepositoryProvider).createTask(
+              await container.read(tasksRepositoryProvider).createTask(
                     venueId: venueId,
                     title: controller.text.trim(),
                   );
-              ref.invalidate(tasksForVenueProvider(venueId));
+              container.invalidate(tasksForVenueProvider(venueId));
             },
           ),
         ],
@@ -211,12 +214,15 @@ class _TaskTile extends ConsumerWidget {
     WidgetRef ref,
     bool checked,
   ) async {
+    final container = ProviderScope.containerOf(context, listen: false);
     final messenger = ScaffoldMessenger.of(context);
     final newStatus = checked ? TaskStatus.completed : TaskStatus.open;
 
     try {
-      await ref.read(tasksRepositoryProvider).updateStatus(task.id, newStatus);
-      ref.invalidate(tasksForVenueProvider(venueId));
+      await container
+          .read(tasksRepositoryProvider)
+          .updateStatus(task.id, newStatus);
+      container.invalidate(tasksForVenueProvider(venueId));
     } catch (error) {
       if (error is PostgrestException && error.code == '42501') {
         messenger.showSnackBar(
@@ -234,18 +240,20 @@ class _TaskTile extends ConsumerWidget {
         return;
       }
       // No connectivity, a timeout, or a transient 5xx: try again later.
-      await _queueOffline(messenger, ref, newStatus);
+      await _queueOffline(messenger, container, newStatus);
     }
   }
 
   Future<void> _queueOffline(
     ScaffoldMessengerState messenger,
-    WidgetRef ref,
+    ProviderContainer container,
     TaskStatus newStatus,
   ) async {
     final mutation =
         buildTaskStatusUpdateMutation(task: task, newStatus: newStatus);
-    await ref.read(offlineQueueControllerProvider.notifier).enqueue(mutation);
+    await container
+        .read(offlineQueueControllerProvider.notifier)
+        .enqueue(mutation);
 
     messenger.showSnackBar(
       const SnackBar(

@@ -39,6 +39,9 @@ const _linked = [
   '/pos',
   '/billing',
   '/integrations',
+  '/integrations/brighthr',
+  '/integrations/connected',
+  '/integrations/error',
   '/settings',
   '/sign-in',
   '/select-venue',
@@ -75,6 +78,79 @@ void main() {
       expect(match.isError, isFalse, reason: '$path has no route');
       expect(match.matches, isNotEmpty, reason: '$path has no route');
     }
+  });
+
+  group('OAuth return deep links', () {
+    test('appSchemeLocation folds the URI host back into the path', () {
+      expect(
+        appSchemeLocation(
+          Uri.parse(
+            'venuewrangler://integrations/connected?provider=square&nonce=abc',
+          ),
+        ),
+        '/integrations/connected?provider=square&nonce=abc',
+      );
+      expect(
+        appSchemeLocation(
+          Uri.parse('venuewrangler://integrations/error?reason=denied'),
+        ),
+        '/integrations/error?reason=denied',
+      );
+      expect(
+        appSchemeLocation(Uri.parse('venuewrangler:///integrations/connected')),
+        '/integrations/connected',
+      );
+      expect(appSchemeLocation(Uri.parse('venuewrangler://')), '/');
+      expect(
+        appSchemeLocation(Uri.parse('https://venuewrangler.com/billing')),
+        isNull,
+      );
+      expect(appSchemeLocation(Uri.parse('/integrations')), isNull);
+    });
+
+    testWidgets('a full callback URL reaches its integrations route',
+        (tester) async {
+      final container = ProviderContainer(
+        overrides: [
+          isSignedInProvider.overrideWithValue(true),
+          mfaChallengeRequiredProvider.overrideWithValue(false),
+          myVenueRoleProvider.overrideWith((ref) async => 'venue_manager'),
+          activeVenueProvider.overrideWith(
+            (ref) => Venue(
+              id: 'v',
+              organizationId: 'o',
+              name: 'Venue',
+              createdAt: DateTime(2026),
+            ),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      await container.read(myVenueRoleProvider.future);
+      final router = container.read(routerProvider);
+
+      // The raw URL's path is `/connected`, which is the bug: no route has it.
+      expect(
+        router.configuration
+            .findMatch(Uri.parse('venuewrangler://integrations/connected'))
+            .isError,
+        isTrue,
+      );
+
+      // `router.go` takes the same full URL the platform delivers.
+      router.go('venuewrangler://integrations/error?provider=gusto&reason=x');
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp.router(routerConfig: router),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        router.routerDelegate.currentConfiguration.uri.toString(),
+        '/integrations/error?provider=gusto&reason=x',
+      );
+    });
   });
 
   testWidgets('the tab bar switches sections and keeps each tab\'s place',

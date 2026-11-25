@@ -54,7 +54,7 @@ Future<DateTime?> pickVenueDateTime(
     context: context,
     initialTime: TimeOfDay(hour: initial.hour, minute: initial.minute),
   );
-  if (time == null) return null;
+  if (time == null || !context.mounted) return null;
 
   return DateTime.utc(date.year, date.month, date.day, time.hour, time.minute);
 }

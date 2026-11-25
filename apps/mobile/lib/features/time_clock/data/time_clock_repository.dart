@@ -214,18 +214,18 @@ class SupabaseTimeClockRepository implements TimeClockRepository {
   }) async {
     final attested = _attested;
     if (attested != null) {
+      // Fail closed: if the entry's venue cannot be read, surface the error rather than
+      // skipping attestation and writing the clock-out directly (same rule as clockIn).
+      final venueId = await _venueOfEntry(entryId);
       try {
-        final venueId = await _venueOfEntry(entryId);
-        if (venueId != null) {
-          return await attested.punch(
-            kind: 'out',
-            venueId: venueId,
-            lat: lat,
-            lng: lng,
-            accuracyM: accuracyM,
-            mocked: mocked,
-          );
-        }
+        return await attested.punch(
+          kind: 'out',
+          venueId: venueId,
+          lat: lat,
+          lng: lng,
+          accuracyM: accuracyM,
+          mocked: mocked,
+        );
       } on AttestedPunchUnavailable catch (e) {
         if (e.failClosed) {
           throw const NetworkError(_attestationUnavailableMessage);
@@ -295,17 +295,26 @@ class SupabaseTimeClockRepository implements TimeClockRepository {
     }
   }
 
-  Future<String?> _venueOfEntry(String entryId) async {
+  /// The venue of [entryId]. Throws an [AppError] when it cannot be read, so callers never
+  /// silently skip the attested path.
+  Future<String> _venueOfEntry(String entryId) async {
+    final Map<String, dynamic>? row;
     try {
-      final row = await _client
+      row = await _client
           .from('time_entries')
           .select('venue_id')
           .eq('id', entryId)
           .maybeSingle();
-      return row?['venue_id'] as String?;
+    } on PostgrestException catch (e) {
+      throw _mapPostgrestException(e);
     } catch (_) {
-      return null;
+      throw const NetworkError();
     }
+    final venueId = row?['venue_id'];
+    if (venueId is! String) {
+      throw const UnknownError('You are not clocked in.');
+    }
+    return venueId;
   }
 
   AppError _mapPostgrestException(PostgrestException e) {

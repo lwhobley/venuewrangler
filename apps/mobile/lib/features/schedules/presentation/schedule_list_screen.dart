@@ -150,13 +150,15 @@ class ScheduleListScreen extends ConsumerWidget {
     DateTime? prefillStart,
     DateTime? prefillEnd,
   }) async {
-    final clock = ref.read(venueClockProvider);
+    final container = ProviderScope.containerOf(context, listen: false);
+    final clock = container.read(venueClockProvider);
     if (!ensureSupported(context, clock)) return;
 
     // Who can be assigned: the venue's roster (RPC venue_schedule_roster), not a typed user id.
     List<RosterMember> roster;
     try {
-      roster = await ref.read(scheduleRosterForVenueProvider(venueId).future);
+      roster =
+          await container.read(scheduleRosterForVenueProvider(venueId).future);
     } catch (_) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -230,7 +232,9 @@ class ScheduleListScreen extends ConsumerWidget {
                       initial: start,
                       nowWall: clock.now,
                     );
-                    if (picked != null) setState(() => start = picked);
+                    if (picked != null && context.mounted) {
+                      setState(() => start = picked);
+                    }
                   },
                 ),
                 ListTile(
@@ -244,7 +248,9 @@ class ScheduleListScreen extends ConsumerWidget {
                       initial: end,
                       nowWall: clock.now,
                     );
-                    if (picked != null) setState(() => end = picked);
+                    if (picked != null && context.mounted) {
+                      setState(() => end = picked);
+                    }
                   },
                 ),
               ],
@@ -281,7 +287,7 @@ class ScheduleListScreen extends ConsumerWidget {
     if (confirmed != true || !context.mounted) return;
 
     try {
-      await ref.read(schedulesRepositoryProvider).createShift(
+      await container.read(schedulesRepositoryProvider).createShift(
             venueId: venueId,
             staffId: staffId,
             roleLabel: roleLabelController.text.trim().isEmpty
@@ -290,7 +296,7 @@ class ScheduleListScreen extends ConsumerWidget {
             startTime: clock.instant(start),
             endTime: clock.instant(end),
           );
-      ref.invalidate(shiftsForVenueProvider(venueId));
+      container.invalidate(shiftsForVenueProvider(venueId));
     } on PostgrestException catch (error) {
       if (!context.mounted) return;
       final message = switch (error.code) {
@@ -402,6 +408,8 @@ class ScheduleListScreen extends ConsumerWidget {
                   isThreeLine: true,
                   trailing: TextButton(
                     onPressed: () {
+                      // The screen that opened this dialog may be gone by now.
+                      if (!context.mounted) return;
                       if (_suggestedWall(ref, suggestion.startTime) == null ||
                           _suggestedWall(ref, suggestion.endTime) == null) {
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -497,11 +505,12 @@ class _ShiftTile extends ConsumerWidget {
   }
 
   Future<void> _requestSwap(BuildContext context, WidgetRef ref) async {
+    final container = ProviderScope.containerOf(context, listen: false);
     try {
-      await ref
+      await container
           .read(schedulesRepositoryProvider)
           .requestSwap(shiftId: shift.id);
-      ref.invalidate(shiftSwapsForVenueProvider(shift.venueId));
+      container.invalidate(shiftSwapsForVenueProvider(shift.venueId));
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -519,9 +528,10 @@ class _ShiftTile extends ConsumerWidget {
   }
 
   Future<void> _delete(BuildContext context, WidgetRef ref) async {
+    final container = ProviderScope.containerOf(context, listen: false);
     try {
-      await ref.read(schedulesRepositoryProvider).deleteShift(shift.id);
-      ref.invalidate(shiftsForVenueProvider(shift.venueId));
+      await container.read(schedulesRepositoryProvider).deleteShift(shift.id);
+      container.invalidate(shiftsForVenueProvider(shift.venueId));
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -582,6 +592,7 @@ class _SwapTile extends ConsumerWidget {
   }
 
   Future<void> _accept(BuildContext context, WidgetRef ref) async {
+    final container = ProviderScope.containerOf(context, listen: false);
     final userId = currentUserId;
     if (userId == null) return;
     final confirmed = await showDialog<bool>(
@@ -605,11 +616,11 @@ class _SwapTile extends ConsumerWidget {
     );
     if (confirmed != true) return;
     try {
-      await ref
+      await container
           .read(schedulesRepositoryProvider)
           .acceptSwap(swapId: swap.id, accepterUserId: userId);
-      ref.invalidate(shiftSwapsForVenueProvider(swap.venueId));
-      ref.invalidate(shiftsForVenueProvider(swap.venueId));
+      container.invalidate(shiftSwapsForVenueProvider(swap.venueId));
+      container.invalidate(shiftsForVenueProvider(swap.venueId));
     } on PostgrestException catch (error) {
       if (!context.mounted) return;
       final message = error.code == '23P01'
@@ -623,9 +634,10 @@ class _SwapTile extends ConsumerWidget {
   }
 
   Future<void> _cancel(BuildContext context, WidgetRef ref) async {
+    final container = ProviderScope.containerOf(context, listen: false);
     try {
-      await ref.read(schedulesRepositoryProvider).cancelSwap(swap.id);
-      ref.invalidate(shiftSwapsForVenueProvider(swap.venueId));
+      await container.read(schedulesRepositoryProvider).cancelSwap(swap.id);
+      container.invalidate(shiftSwapsForVenueProvider(swap.venueId));
     } on PostgrestException catch (_) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

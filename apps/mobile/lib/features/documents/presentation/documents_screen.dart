@@ -95,81 +95,84 @@ class DocumentsScreen extends ConsumerWidget {
     WidgetRef ref, {
     required String venueId,
   }) async {
-    final picked = await ref.read(documentPickerServiceProvider).pickDocument();
+    final container = ProviderScope.containerOf(context, listen: false);
+    final picked =
+        await container.read(documentPickerServiceProvider).pickDocument();
     if (picked == null || !context.mounted) return;
 
     final titleController = TextEditingController(text: picked.name);
     var category = 'sop';
 
-    try {
-      await showDialog<bool>(
-        context: context,
-        builder: (context) => StatefulBuilder(
-          builder: (context, setState) => AlertDialog(
-            title: const Text('Upload document'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: titleController,
-                  autofocus: true,
-                  decoration: const InputDecoration(labelText: 'Title'),
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  initialValue: category,
-                  decoration: const InputDecoration(labelText: 'Category'),
-                  items: [
-                    for (final value in VenueDocument.categories)
-                      DropdownMenuItem(
-                        value: value,
-                        child: Text(_categoryLabels[value] ?? value),
-                      ),
-                  ],
-                  onChanged: (value) =>
-                      setState(() => category = value ?? category),
-                ),
-                if (VenueDocument.managerOnlyCategories.contains(category)) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    'Only managers can see documents in this category.',
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodySmall
-                        ?.copyWith(fontStyle: FontStyle.italic),
-                  ),
+    await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('Upload document'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: titleController,
+                autofocus: true,
+                decoration: const InputDecoration(labelText: 'Title'),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                initialValue: category,
+                decoration: const InputDecoration(labelText: 'Category'),
+                items: [
+                  for (final value in VenueDocument.categories)
+                    DropdownMenuItem(
+                      value: value,
+                      child: Text(_categoryLabels[value] ?? value),
+                    ),
                 ],
+                onChanged: (value) =>
+                    setState(() => category = value ?? category),
+              ),
+              if (VenueDocument.managerOnlyCategories.contains(category)) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'Only managers can see documents in this category.',
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodySmall
+                      ?.copyWith(fontStyle: FontStyle.italic),
+                ),
               ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('Cancel'),
-              ),
-              DialogSaveButton(
-                label: 'Upload',
-                validate: () => titleController.text.trim().isEmpty
-                    ? 'Title is required'
-                    : null,
-                save: () async {
-                  await ref.read(documentsRepositoryProvider).uploadDocument(
-                        venueId: venueId,
-                        title: titleController.text.trim(),
-                        category: category,
-                        fileName: picked.name,
-                        localFilePath: picked.path,
-                        bytes: picked.bytes,
-                      );
-                  ref.invalidate(documentsProvider(venueId));
-                },
-              ),
             ],
           ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            DialogSaveButton(
+              label: 'Upload',
+              validate: () => titleController.text.trim().isEmpty
+                  ? 'Title is required'
+                  : null,
+              save: () async {
+                await container
+                    .read(documentsRepositoryProvider)
+                    .uploadDocument(
+                      venueId: venueId,
+                      title: titleController.text.trim(),
+                      category: category,
+                      fileName: picked.name,
+                      localFilePath: picked.path,
+                      bytes: picked.bytes,
+                    );
+                container.invalidate(documentsProvider(venueId));
+              },
+            ),
+          ],
         ),
-      );
-    } finally {
-      titleController.dispose();
-    }
+      ),
+    );
+    // titleController is deliberately not disposed here: showDialog completes when the route is
+    // popped, but the dialog keeps rebuilding through its exit animation, and a disposed
+    // controller throws if the TextField builds with it. Nothing references it afterwards.
   }
 }
 

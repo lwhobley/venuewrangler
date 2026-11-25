@@ -204,6 +204,7 @@ class _ConnectedView extends ConsumerWidget {
   }
 
   Future<void> _disconnect(BuildContext context, WidgetRef ref) async {
+    final container = ProviderScope.containerOf(context, listen: false);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -227,8 +228,8 @@ class _ConnectedView extends ConsumerWidget {
     );
     if (confirmed != true) return;
     try {
-      await ref.read(brightHrRepositoryProvider).disconnect(venueId);
-      ref.invalidate(brightHrConnectionProvider(venueId));
+      await container.read(brightHrRepositoryProvider).disconnect(venueId);
+      container.invalidate(brightHrConnectionProvider(venueId));
     } catch (error) {
       if (context.mounted) _showError(context, error);
     }
@@ -449,6 +450,7 @@ class _EmployeesTab extends ConsumerWidget {
     BrightHrEmployee employee,
     List<RosterMember> roster,
   ) async {
+    final container = ProviderScope.containerOf(context, listen: false);
     // `''` stands for "unlink"; null means the sheet was dismissed.
     final choice = await showModalBottomSheet<String>(
       context: context,
@@ -493,12 +495,12 @@ class _EmployeesTab extends ConsumerWidget {
     );
     if (choice == null || choice == employee.linkedStaffId) return;
     try {
-      await ref.read(brightHrRepositoryProvider).link(
+      await container.read(brightHrRepositoryProvider).link(
             venueId: venueId,
             externalEmployeeId: employee.externalEmployeeId,
             staffId: choice.isEmpty ? null : choice,
           );
-      ref.invalidate(brightHrEmployeesProvider(connectionId));
+      container.invalidate(brightHrEmployeesProvider(connectionId));
     } catch (error) {
       if (context.mounted) _showError(context, error);
     }

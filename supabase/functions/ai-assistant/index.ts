@@ -87,6 +87,9 @@ async function handleRequest(
   } catch {
     return jsonResponse({ error: "invalid_json_body" }, 400);
   }
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return jsonResponse({ error: "invalid_json_body" }, 400);
+  }
 
   const { task, venue_id, input } = payload;
 
