@@ -205,10 +205,8 @@ void main() {
   test('enforce mode marks unavailable punches as fail-closed', () async {
     final client = _client(
       (body) async {
-        if (body['action'] == 'challenge') {
-          return {'nonce': 'N' * 43, 'mode': 'enforce'};
-        }
-        throw FunctionException(status: 503);
+        if (body['action'] == 'challenge') return {'mode': 'enforce'};
+        fail('no punch may be sent without a nonce');
       },
       _Proofs(null),
     );
@@ -222,6 +220,50 @@ void main() {
         ),
       ),
     );
+  });
+
+  test(
+      'an error answer to the punch itself fails the punch and never signals a fallback',
+      () async {
+    for (final mode in ['observe', 'enforce', '']) {
+      for (final status in [400, 404, 409, 500, 503]) {
+        final client = _client(
+          (body) async {
+            if (body['action'] == 'challenge') {
+              return {'nonce': 'N' * 43, 'mode': mode};
+            }
+            // e.g. a Postgres 23503 surfacing as an internal error.
+            throw FunctionException(
+              status: status,
+              details: {'error': 'internal_error', 'code': '23503'},
+            );
+          },
+          _Proofs(null),
+        );
+        await expectLater(
+          _punch(client),
+          throwsA(
+            isA<UnknownError>().having(
+              (e) => e.message,
+              'message',
+              contains('Could not record the punch'),
+            ),
+          ),
+          reason: 'mode=$mode status=$status',
+        );
+      }
+    }
+  });
+
+  test('a punch answer without an entry fails the punch (no fallback)',
+      () async {
+    final client = _client(
+      (body) async => body['action'] == 'challenge'
+          ? {'nonce': 'N' * 43, 'mode': 'observe'}
+          : {'status': 'verified'},
+      _Proofs(null),
+    );
+    await expectLater(_punch(client), throwsA(isA<UnknownError>()));
   });
 
   test('requireAttested marks unavailable punches as fail-closed', () async {

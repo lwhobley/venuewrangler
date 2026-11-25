@@ -5,6 +5,7 @@ import { corsHeaders, handleCorsPreflight } from "../_shared/cors.ts";
 import { createServiceClient, createUserClient } from "../_shared/supabase-clients.ts";
 import { createStripeClient } from "../_shared/stripe.ts";
 import { enforceRateLimit } from "../_shared/rate-limit.ts";
+import { isUuid } from "../_shared/venue-auth.ts";
 import { initObservability, captureException, flushObservability } from "../_shared/observability.ts";
 
 initObservability();
@@ -46,10 +47,16 @@ async function handleRequest(req: Request): Promise<Response> {
   } catch {
     return jsonResponse({ error: "invalid_json_body" }, 400);
   }
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return jsonResponse({ error: "invalid_json_body" }, 400);
+  }
 
   const organizationId = payload.organization_id;
   if (!organizationId || typeof organizationId !== "string") {
     return jsonResponse({ error: "missing_organization_id" }, 400);
+  }
+  if (!isUuid(organizationId)) {
+    return jsonResponse({ error: "invalid_organization_id" }, 400);
   }
 
   const userClient = createUserClient(authHeader);

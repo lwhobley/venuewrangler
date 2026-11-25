@@ -128,6 +128,7 @@ class _LeadsTab extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref,
   ) async {
+    final container = ProviderScope.containerOf(context, listen: false);
     final nameController = TextEditingController();
     final emailController = TextEditingController();
     final phoneController = TextEditingController();
@@ -171,7 +172,7 @@ class _LeadsTab extends ConsumerWidget {
                 ? 'Full name is required'
                 : null,
             save: () async {
-              await ref.read(crmRepositoryProvider).createLead(
+              await container.read(crmRepositoryProvider).createLead(
                     venueId: venueId,
                     fullName: nameController.text.trim(),
                     email: emailController.text.trim().isEmpty
@@ -184,7 +185,7 @@ class _LeadsTab extends ConsumerWidget {
                         ? null
                         : companyController.text.trim(),
                   );
-              ref.invalidate(crmLeadsProvider(venueId));
+              container.invalidate(crmLeadsProvider(venueId));
             },
           ),
         ],
@@ -236,9 +237,10 @@ class _BeosTab extends ConsumerWidget {
   }
 
   Future<void> _showCreateBeoDialog(BuildContext context, WidgetRef ref) async {
+    final container = ProviderScope.containerOf(context, listen: false);
     final nameController = TextEditingController();
     final guestCountController = TextEditingController();
-    final clock = ref.read(venueClockProvider);
+    final clock = container.read(venueClockProvider);
     if (!ensureSupported(context, clock)) return;
     DateTime? eventDate;
 
@@ -312,7 +314,7 @@ class _BeosTab extends ConsumerWidget {
                       ? 'Enter a positive guest count'
                       : null,
               save: () async {
-                await ref.read(crmRepositoryProvider).createBeo(
+                await container.read(crmRepositoryProvider).createBeo(
                       venueId: venueId,
                       eventName: nameController.text.trim(),
                       eventDate:
@@ -320,7 +322,7 @@ class _BeosTab extends ConsumerWidget {
                       guestCount:
                           int.tryParse(guestCountController.text.trim()),
                     );
-                ref.invalidate(crmBeosProvider(venueId));
+                container.invalidate(crmBeosProvider(venueId));
               },
             ),
           ],
@@ -375,6 +377,8 @@ class _BeoTileState extends ConsumerState<_BeoTile> {
               if (beo.status != 'confirmed' && beo.status != 'cancelled')
                 OutlinedButton(
                   onPressed: () async {
+                    final container =
+                        ProviderScope.containerOf(context, listen: false);
                     // The database rejects confirming a BEO with no start time (22023), so
                     // explain that here instead of showing a generic failure.
                     if (beo.eventDate == null) {
@@ -388,10 +392,10 @@ class _BeoTileState extends ConsumerState<_BeoTile> {
                       return;
                     }
                     try {
-                      await ref
+                      await container
                           .read(crmRepositoryProvider)
                           .updateBeoStatus(beoId: beo.id, status: 'confirmed');
-                      ref.invalidate(crmBeosProvider(venueId));
+                      container.invalidate(crmBeosProvider(venueId));
                     } catch (e) {
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -405,6 +409,8 @@ class _BeoTileState extends ConsumerState<_BeoTile> {
               if (beo.status != 'cancelled')
                 OutlinedButton(
                   onPressed: () async {
+                    final container =
+                        ProviderScope.containerOf(context, listen: false);
                     final confirmed = await showDialog<bool>(
                       context: context,
                       builder: (dialog) => AlertDialog(
@@ -426,10 +432,10 @@ class _BeoTileState extends ConsumerState<_BeoTile> {
                     );
                     if (confirmed != true || !context.mounted) return;
                     try {
-                      await ref
+                      await container
                           .read(crmRepositoryProvider)
                           .updateBeoStatus(beoId: beo.id, status: 'cancelled');
-                      ref.invalidate(crmBeosProvider(venueId));
+                      container.invalidate(crmBeosProvider(venueId));
                     } catch (_) {
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -445,11 +451,13 @@ class _BeoTileState extends ConsumerState<_BeoTile> {
               if (beo.status == 'cancelled')
                 OutlinedButton(
                   onPressed: () async {
+                    final container =
+                        ProviderScope.containerOf(context, listen: false);
                     try {
-                      await ref
+                      await container
                           .read(crmRepositoryProvider)
                           .updateBeoStatus(beoId: beo.id, status: 'draft');
-                      ref.invalidate(crmBeosProvider(venueId));
+                      container.invalidate(crmBeosProvider(venueId));
                     } catch (e) {
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -466,12 +474,14 @@ class _BeoTileState extends ConsumerState<_BeoTile> {
                   onPressed: converting
                       ? null
                       : () async {
+                          final container =
+                              ProviderScope.containerOf(context, listen: false);
                           setState(() => converting = true);
                           try {
-                            final result = await ref
+                            final result = await container
                                 .read(crmRepositoryProvider)
                                 .convertBeoToContract(beoId: beo.id);
-                            ref.invalidate(crmContractsProvider(venueId));
+                            container.invalidate(crmContractsProvider(venueId));
                             if (context.mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
@@ -571,63 +581,68 @@ class _ContractTile extends ConsumerWidget {
           if (contract.eventName != null) contract.eventName!,
         ].join(' · '),
       ),
-      trailing: contract.status != 'fully_signed' &&
-              contract.status != 'cancelled'
-          ? PopupMenuButton<String>(
-              onSelected: (status) async {
-                if (status == _recordSignatureAction) {
-                  await _recordSignature(context, ref);
-                  return;
-                }
-                try {
-                  await ref.read(crmRepositoryProvider).updateContractStatus(
-                        contractId: contract.id,
-                        status: status,
-                      );
-                  ref.invalidate(crmContractsProvider(venueId));
-                } catch (_) {
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Could not update contract status.'),
-                      ),
-                    );
-                  }
-                }
-              },
-              itemBuilder: (context) => [
-                const PopupMenuItem(
-                  value: _recordSignatureAction,
-                  child: Text('Record client signature…'),
-                ),
-                // Signed states are reachable only through the signature action above, which
-                // keeps the evidence; the database refuses them as plain status updates.
-                for (final status in CrmContract.statuses)
-                  if (status != contract.status &&
-                      !CrmContract.signedStatuses.contains(status))
-                    PopupMenuItem(value: status, child: Text(status)),
-              ],
-            )
-          : null,
+      trailing:
+          contract.status != 'fully_signed' && contract.status != 'cancelled'
+              ? PopupMenuButton<String>(
+                  onSelected: (status) async {
+                    final container =
+                        ProviderScope.containerOf(context, listen: false);
+                    if (status == _recordSignatureAction) {
+                      await _recordSignature(context, ref);
+                      return;
+                    }
+                    try {
+                      await container
+                          .read(crmRepositoryProvider)
+                          .updateContractStatus(
+                            contractId: contract.id,
+                            status: status,
+                          );
+                      container.invalidate(crmContractsProvider(venueId));
+                    } catch (_) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Could not update contract status.'),
+                          ),
+                        );
+                      }
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(
+                      value: _recordSignatureAction,
+                      child: Text('Record client signature…'),
+                    ),
+                    // Signed states are reachable only through the signature action above, which
+                    // keeps the evidence; the database refuses them as plain status updates.
+                    for (final status in CrmContract.statuses)
+                      if (status != contract.status &&
+                          !CrmContract.signedStatuses.contains(status))
+                        PopupMenuItem(value: status, child: Text(status)),
+                  ],
+                )
+              : null,
     );
   }
 
   static const _recordSignatureAction = '__record_signature';
 
   Future<void> _recordSignature(BuildContext context, WidgetRef ref) async {
+    final container = ProviderScope.containerOf(context, listen: false);
     final result = await showDialog<_SignatureInput>(
       context: context,
       builder: (_) => const _RecordSignatureDialog(),
     );
     if (result == null || !context.mounted) return;
     try {
-      await ref.read(crmRepositoryProvider).recordContractSignature(
+      await container.read(crmRepositoryProvider).recordContractSignature(
             contractId: contract.id,
             signerName: result.name,
             fullySigned: result.fullySigned,
             note: result.note,
           );
-      ref.invalidate(crmContractsProvider(venueId));
+      container.invalidate(crmContractsProvider(venueId));
     } catch (_) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

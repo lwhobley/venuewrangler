@@ -271,6 +271,7 @@ class _ShiftInsightCard extends ConsumerWidget {
   }
 
   Future<void> _confirmDelete(BuildContext context, WidgetRef ref) async {
+    final container = ProviderScope.containerOf(context, listen: false);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -293,15 +294,15 @@ class _ShiftInsightCard extends ConsumerWidget {
     if (confirmed != true) return;
 
     try {
-      await ref
+      await container
           .read(insightsRepositoryProvider)
           .deleteInsight(insightId: insight.id);
       if (shiftId != null) {
-        ref.invalidate(
+        container.invalidate(
           shiftInsightsForShiftProvider((venueId: venueId, shiftId: shiftId!)),
         );
       } else {
-        ref.invalidate(shiftInsightsForVenueProvider(venueId));
+        container.invalidate(shiftInsightsForVenueProvider(venueId));
       }
     } catch (e) {
       if (context.mounted) {

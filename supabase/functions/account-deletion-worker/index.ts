@@ -40,7 +40,11 @@ Deno.serve(async (req) => {
     return respond({ error: "unauthorized" }, 401);
   }
 
-  const { job_id } = await req.json().catch(() => ({}));
+  // A literal `null`, array or scalar body parses but has no fields; treat it as no job id.
+  const parsed: unknown = await req.json().catch(() => null);
+  const job_id = parsed && typeof parsed === "object" && !Array.isArray(parsed)
+    ? (parsed as Record<string, unknown>).job_id
+    : undefined;
   if (typeof job_id !== "string" || !UUID_PATTERN.test(job_id)) {
     return respond({ error: "invalid_job_id" }, 400);
   }

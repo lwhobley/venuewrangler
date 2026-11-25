@@ -120,6 +120,13 @@ class AttestedPunchClient {
     String? shiftId,
   }) async {
     var serverMode = '';
+    // Whether the `punch` request has been sent. Until then nothing can have been recorded, so
+    // an unreachable or undeployed function may be reported as [AttestedPunchUnavailable]
+    // (the observe-mode fallback the repository documents). Once the punch is sent, any error
+    // answer came from the attested path itself (for example a 500 from a database constraint)
+    // and must fail the punch: falling back would record an unattested punch that the server
+    // already refused, or one that may already have landed.
+    var punchSent = false;
     try {
       final challenge = await _invoke({'action': 'challenge'});
       final challengeMap = challenge as Map?;
@@ -142,6 +149,7 @@ class AttestedPunchClient {
       );
       final proof = await _proof.prove(payloadJson);
 
+      punchSent = true;
       final response = await _invoke({
         'action': 'punch',
         'payload_json': payloadJson,
@@ -150,11 +158,12 @@ class AttestedPunchClient {
       });
       final entry = (response as Map?)?['entry'];
       if (entry is! Map) {
-        throw AttestedPunchUnavailable(failClosed: _failClosed(serverMode));
+        // The punch may have been recorded; never fall back to a direct write here.
+        throw const UnknownError(_punchFailedMessage);
       }
       return TimeEntry.fromJson(Map<String, dynamic>.from(entry));
     } on FunctionException catch (error) {
-      throw _map(error, serverMode: serverMode);
+      throw _map(error, serverMode: serverMode, punchSent: punchSent);
     } on AttestedPunchUnavailable {
       rethrow;
     } on AppError {
@@ -170,7 +179,14 @@ class AttestedPunchClient {
   bool _failClosed(String serverMode) =>
       _requireAttested || serverMode == 'enforce';
 
-  Object _map(FunctionException error, {required String serverMode}) {
+  static const _punchFailedMessage =
+      'Could not record the punch. Please try again, or ask a manager to record your punch.';
+
+  Object _map(
+    FunctionException error, {
+    required String serverMode,
+    required bool punchSent,
+  }) {
     final details = error.details;
     final code = details is Map ? details['error'] as String? : null;
     switch (code) {
@@ -208,13 +224,14 @@ class AttestedPunchClient {
       case 'rate_limited':
         return const UnknownError('Too many attempts. Please wait a moment.');
     }
-    // 404 = function not deployed yet; 5xx = temporarily unavailable.
+    // Before the punch is sent: 404 = function not deployed yet; 5xx = temporarily unavailable.
     // Fail closed when attestation is required so an outage cannot reopen the direct path.
-    if (error.status == 404 || error.status >= 500) {
+    if (!punchSent && (error.status == 404 || error.status >= 500)) {
       return AttestedPunchUnavailable(failClosed: _failClosed(serverMode));
     }
+    // Any other error answer (including a 5xx from the punch itself) fails the punch.
     return UnknownError(
-      'Could not record the punch (${error.status}). Please try again.',
+      'Could not record the punch (error ${error.status}). Please try again, or ask a manager to record your punch.',
     );
   }
 }

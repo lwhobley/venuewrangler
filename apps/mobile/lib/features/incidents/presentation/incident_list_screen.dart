@@ -114,6 +114,9 @@ class IncidentListScreen extends ConsumerWidget {
     WidgetRef ref,
     Venue venue,
   ) async {
+    // Captured while mounted: the dialog's handlers run later, when this screen may be gone,
+    // and `ref` must not be used after its widget is disposed.
+    final container = ProviderScope.containerOf(context, listen: false);
     final titleController = TextEditingController();
     final descriptionController = TextEditingController();
     var severity = IncidentSeverity.medium;
@@ -158,13 +161,13 @@ class IncidentListScreen extends ConsumerWidget {
                   alignment: Alignment.centerLeft,
                   child: TextButton.icon(
                     onPressed: () async {
-                      final picked = await ref
+                      final picked = await container
                           .read(imagePickerServiceProvider)
                           .pickImage(source: ImageSource.camera);
                       if (picked == null || !context.mounted) return;
                       // Let the reporter mark up the photo (circle the damage, add a label…)
                       // before it's attached; backing out keeps the original.
-                      final annotate = ref.read(photoAnnotatorProvider);
+                      final annotate = container.read(photoAnnotatorProvider);
                       final annotated = await annotate(context, picked);
                       if (!context.mounted) return;
                       setState(() => photoPath = annotated ?? picked);
@@ -190,7 +193,7 @@ class IncidentListScreen extends ConsumerWidget {
               save: () async {
                 final saved = await _reportIncident(
                   context,
-                  ref,
+                  container,
                   venue: venue,
                   title: titleController.text.trim(),
                   description: descriptionController.text.trim().isEmpty
@@ -210,7 +213,7 @@ class IncidentListScreen extends ConsumerWidget {
 
   Future<bool> _reportIncident(
     BuildContext context,
-    WidgetRef ref, {
+    ProviderContainer container, {
     required Venue venue,
     required String title,
     String? description,
@@ -221,14 +224,14 @@ class IncidentListScreen extends ConsumerWidget {
     final incidentId = _uuid.v4();
 
     try {
-      await ref.read(incidentsRepositoryProvider).reportIncident(
+      await container.read(incidentsRepositoryProvider).reportIncident(
             incidentId: incidentId,
             venueId: venue.id,
             title: title,
             description: description,
             severity: severity,
           );
-      ref.invalidate(incidentsForVenueProvider(venue.id));
+      container.invalidate(incidentsForVenueProvider(venue.id));
     } catch (error) {
       if (error is PostgrestException && error.code == '42501') {
         messenger.showSnackBar(
@@ -250,7 +253,7 @@ class IncidentListScreen extends ConsumerWidget {
       }
       await _queueIncidentOffline(
         messenger,
-        ref,
+        container,
         incidentId,
         venue,
         title,
@@ -259,7 +262,7 @@ class IncidentListScreen extends ConsumerWidget {
       );
       if (photoPath != null) {
         await _attachPhotoOffline(
-          ref,
+          container,
           incidentId: incidentId,
           venue: venue,
           photoPath: photoPath,
@@ -271,7 +274,7 @@ class IncidentListScreen extends ConsumerWidget {
     if (photoPath != null) {
       await _attachPhoto(
         messenger,
-        ref,
+        container,
         incidentId: incidentId,
         venue: venue,
         photoPath: photoPath,
@@ -282,7 +285,7 @@ class IncidentListScreen extends ConsumerWidget {
 
   Future<void> _attachPhoto(
     ScaffoldMessengerState messenger,
-    WidgetRef ref, {
+    ProviderContainer container, {
     required String incidentId,
     required Venue venue,
     required String photoPath,
@@ -296,7 +299,7 @@ class IncidentListScreen extends ConsumerWidget {
         '${venue.organizationId}/${venue.id}/$incidentId/$attachmentId.$extension';
 
     try {
-      await ref.read(mediaRepositoryProvider).uploadIncidentEvidence(
+      await container.read(mediaRepositoryProvider).uploadIncidentEvidence(
             attachmentId: attachmentId,
             incidentId: incidentId,
             objectPath: objectPath,
@@ -324,7 +327,7 @@ class IncidentListScreen extends ConsumerWidget {
         return;
       }
       await _attachPhotoOffline(
-        ref,
+        container,
         incidentId: incidentId,
         venue: venue,
         photoPath: photoPath,
@@ -342,7 +345,7 @@ class IncidentListScreen extends ConsumerWidget {
   }
 
   Future<void> _attachPhotoOffline(
-    WidgetRef ref, {
+    ProviderContainer container, {
     required String incidentId,
     required Venue venue,
     required String photoPath,
@@ -361,12 +364,14 @@ class IncidentListScreen extends ConsumerWidget {
       objectPath: resolvedObjectPath,
       localFilePath: photoPath,
     );
-    await ref.read(offlineQueueControllerProvider.notifier).enqueue(mutation);
+    await container
+        .read(offlineQueueControllerProvider.notifier)
+        .enqueue(mutation);
   }
 
   Future<void> _queueIncidentOffline(
     ScaffoldMessengerState messenger,
-    WidgetRef ref,
+    ProviderContainer container,
     String incidentId,
     Venue venue,
     String title,
@@ -380,7 +385,9 @@ class IncidentListScreen extends ConsumerWidget {
       description: description,
       severity: severity,
     );
-    await ref.read(offlineQueueControllerProvider.notifier).enqueue(mutation);
+    await container
+        .read(offlineQueueControllerProvider.notifier)
+        .enqueue(mutation);
 
     messenger.showSnackBar(
       const SnackBar(
@@ -498,11 +505,12 @@ class _IncidentTile extends ConsumerWidget {
   }
 
   Future<void> _resolve(BuildContext context, WidgetRef ref) async {
+    final container = ProviderScope.containerOf(context, listen: false);
     try {
       await ref
           .read(incidentsRepositoryProvider)
           .updateStatus(incident.id, IncidentStatus.resolved);
-      ref.invalidate(incidentsForVenueProvider(venueId));
+      container.invalidate(incidentsForVenueProvider(venueId));
     } on PostgrestException catch (error) {
       if (!context.mounted) return;
       final message = error.code == '42501'

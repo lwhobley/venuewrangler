@@ -159,5 +159,9 @@ jobs:
       - name: Deno lint
         run: deno lint supabase/functions
 
-      - name: Deno test shared modules
-        run: deno test --permit-no-files supabase/functions/_shared/
+      # Runs every *_test.ts under supabase/functions (the _shared/ modules and per-function
+      # tests such as invite-member/index_test.ts), not just _shared/. --allow-env because
+      # function modules may read Deno.env at import time; no other permissions are granted.
+      - name: Deno test all Edge Function tests
+        working-directory: supabase/functions
+        run: deno test --allow-env --permit-no-files .

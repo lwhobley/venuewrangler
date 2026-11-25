@@ -132,6 +132,7 @@ class _FloorPlanEditorScreenState extends ConsumerState<FloorPlanEditorScreen> {
       await ref
           .read(floorRepositoryProvider)
           .createFloorPlan(venueId: venue.id, name: 'Main floor');
+      if (!mounted) return;
       ref.invalidate(floorPlansProvider);
       await _load();
     } catch (e) {
@@ -321,13 +322,14 @@ class _FloorPlanEditorScreenState extends ConsumerState<FloorPlanEditorScreen> {
         ],
       ),
     );
-    if (ok != true) return;
+    if (ok != true || !mounted) return;
     try {
       await editor.publish(
         repo: ref.read(floorRepositoryProvider),
         venueId: venue.id,
         planId: plan.id,
       );
+      if (!mounted) return;
       ref.invalidate(floorPlansProvider);
       _toast('Floor plan published.');
       await _load();

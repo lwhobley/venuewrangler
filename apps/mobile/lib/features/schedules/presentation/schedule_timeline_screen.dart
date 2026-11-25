@@ -230,6 +230,7 @@ class _ScheduleTimelineScreenState
                 ? _clock.instant(updated.endTime)
                 : null,
           );
+      if (!mounted) return;
       ref.invalidate(shiftsForVenueProvider(venueId));
       await ref.read(shiftsForVenueProvider(venueId).future);
       if (mounted) setState(() => _pending.remove(orig.id));
@@ -266,7 +267,7 @@ class _ScheduleTimelineScreenState
         end: start.add(const Duration(hours: 4)),
       ),
     );
-    if (result == null) return;
+    if (result == null || !mounted) return;
     try {
       await ref.read(schedulesRepositoryProvider).createShift(
             venueId: venueId,
@@ -276,6 +277,7 @@ class _ScheduleTimelineScreenState
             startTime: _clock.instant(result.start),
             endTime: _clock.instant(result.end),
           );
+      if (!mounted) return;
       ref.invalidate(shiftsForVenueProvider(venueId));
     } catch (e) {
       _toast(_errorMessage(e), error: true);
@@ -297,7 +299,7 @@ class _ScheduleTimelineScreenState
         end: shift.endTime,
       ),
     );
-    if (result == null) return;
+    if (result == null || !mounted) return;
     final repo = ref.read(schedulesRepositoryProvider);
     try {
       if (result.delete) {
@@ -321,6 +323,7 @@ class _ScheduleTimelineScreenState
               result.end != shift.endTime ? _clock.instant(result.end) : null,
         );
       }
+      if (!mounted) return;
       ref.invalidate(shiftsForVenueProvider(shift.venueId));
     } catch (e) {
       _toast(_errorMessage(e), error: true);
@@ -368,7 +371,7 @@ class _ScheduleTimelineScreenState
       firstDate: DateTime(today.year, today.month, today.day - 365),
       lastDate: DateTime(today.year, today.month, today.day + 365),
     );
-    if (picked != null) {
+    if (picked != null && mounted) {
       setState(
         () => _date = DateTime.utc(picked.year, picked.month, picked.day),
       );
@@ -1172,7 +1175,7 @@ class _ShiftFormState extends State<_ShiftForm> {
               trailing: const Icon(Icons.edit_calendar_outlined),
               onTap: () async {
                 final p = await _pick(_start);
-                if (p != null) {
+                if (p != null && mounted) {
                   setState(() {
                     final length = _end.difference(_start);
                     _start = p;
@@ -1188,7 +1191,7 @@ class _ShiftFormState extends State<_ShiftForm> {
               trailing: const Icon(Icons.edit_calendar_outlined),
               onTap: () async {
                 final p = await _pick(_end);
-                if (p != null) setState(() => _end = p);
+                if (p != null && mounted) setState(() => _end = p);
               },
             ),
             if (_error != null)

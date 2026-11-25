@@ -137,7 +137,7 @@ class _ShiftModeScreenState extends ConsumerState<ShiftModeScreen> {
                         now: _now,
                         syncing: pending.containsKey(t.id),
                         onDone: () => changeTaskStatus(
-                          ref,
+                          ProviderScope.containerOf(context, listen: false),
                           ScaffoldMessenger.of(context),
                           t,
                           TaskStatus.completed,

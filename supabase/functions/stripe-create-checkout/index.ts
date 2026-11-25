@@ -6,6 +6,7 @@
 // ai-assistant.
 import { corsHeaders, handleCorsPreflight } from "../_shared/cors.ts";
 import { createServiceClient, createUserClient } from "../_shared/supabase-clients.ts";
+import { isUuid } from "../_shared/venue-auth.ts";
 import { createStripeClient } from "../_shared/stripe.ts";
 import { enforceRateLimit } from "../_shared/rate-limit.ts";
 import { initObservability, captureException, flushObservability } from "../_shared/observability.ts";
@@ -43,9 +44,14 @@ async function handleRequest(req: Request): Promise<Response> {
     return jsonResponse({ error: "missing_authorization_header" }, 401);
   }
 
-  let payload: { organization_id?: string };
+  let payload: { organization_id?: unknown };
   try {
-    payload = await req.json();
+    const parsed: unknown = await req.json();
+    // JSON `null`, arrays and scalars parse fine but are not a request body.
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return jsonResponse({ error: "invalid_json_body" }, 400);
+    }
+    payload = parsed as { organization_id?: unknown };
   } catch {
     return jsonResponse({ error: "invalid_json_body" }, 400);
   }
@@ -53,6 +59,9 @@ async function handleRequest(req: Request): Promise<Response> {
   const organizationId = payload.organization_id;
   if (!organizationId || typeof organizationId !== "string") {
     return jsonResponse({ error: "missing_organization_id" }, 400);
+  }
+  if (!isUuid(organizationId)) {
+    return jsonResponse({ error: "invalid_organization_id" }, 400);
   }
 
   const userClient = createUserClient(authHeader);
@@ -87,6 +96,16 @@ async function handleRequest(req: Request): Promise<Response> {
   const cancelUrl = Deno.env.get("STRIPE_CHECKOUT_CANCEL_URL");
   if (!priceId || !successUrl || !cancelUrl) {
     console.error("Stripe checkout is not fully configured");
+    return jsonResponse({ error: "billing_not_configured" }, 500);
+  }
+  // The webhook only grants entitlement for STRIPE_ALLOWED_PRICE_IDS (shared Stripe account).
+  // Selling a price outside that list would take payment and never unlock the subscription.
+  const allowedPriceIds = (Deno.env.get("STRIPE_ALLOWED_PRICE_IDS") ?? "")
+    .split(",")
+    .map((id) => id.trim())
+    .filter((id) => id.length > 0);
+  if (allowedPriceIds.length > 0 && !allowedPriceIds.includes(priceId)) {
+    console.error("STRIPE_PRICE_ID is not in STRIPE_ALLOWED_PRICE_IDS; refusing checkout");
     return jsonResponse({ error: "billing_not_configured" }, 500);
   }
 
@@ -161,11 +180,21 @@ async function handleRequest(req: Request): Promise<Response> {
     // An open Checkout Session is the single session all concurrent/retried clients share.
     // If Stripe completed it but its webhook is still in flight, wait for subscription state
     // instead of opening another payment flow.
-    const previous = await stripe.checkout.sessions.retrieve(attempt.stripe_session_id);
-    if (previous.status === "open" && previous.url) {
+    // A session Stripe no longer knows (deleted, test data reset, other account) must not wedge
+    // the organization on a 500 forever: treat it like an expired session and open a new one.
+    let previous: Awaited<ReturnType<typeof stripe.checkout.sessions.retrieve>> | null = null;
+    try {
+      previous = await stripe.checkout.sessions.retrieve(attempt.stripe_session_id);
+    } catch (error) {
+      const code = (error as { code?: string; statusCode?: number })?.code;
+      const statusCode = (error as { statusCode?: number })?.statusCode;
+      if (code !== "resource_missing" && statusCode !== 404) throw error;
+      console.warn("stored Checkout Session no longer exists; starting a new attempt");
+    }
+    if (previous?.status === "open" && previous.url) {
       return jsonResponse({ url: previous.url });
     }
-    if (previous.status === "complete") {
+    if (previous?.status === "complete") {
       return jsonResponse({ error: "checkout_completed_processing" }, 409);
     }
     attempt = await claimAttempt(attempt.idempotency_key);

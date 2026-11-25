@@ -4,6 +4,7 @@ import {
   createUserClient,
 } from "../_shared/supabase-clients.ts";
 import { enforceRateLimit } from "../_shared/rate-limit.ts";
+import { isUuid } from "../_shared/venue-auth.ts";
 
 function json(body: Record<string, unknown>, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -42,8 +43,8 @@ export async function handleInvite(
   if (authError || !auth.user) return json({ error: "unauthorized" }, 401);
   const body = await req.json().catch(() => null);
   if (
-    !body || typeof body.venue_id !== "string" ||
-    !/^[0-9a-f-]{36}$/i.test(body.venue_id) ||
+    !body || typeof body !== "object" || Array.isArray(body) ||
+    !isUuid(body.venue_id) ||
     typeof body.email !== "string" || body.email.length > 254 ||
     !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.email) ||
     !["staff", "supervisor", "venue_manager"].includes(body.role) ||

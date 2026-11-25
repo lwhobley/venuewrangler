@@ -123,6 +123,8 @@ Future<void> _startDirectMessage(BuildContext context, WidgetRef ref) async {
         .read(chatRepositoryProvider)
         .createOrGetDm(venueId: venue.id, targetUserId: contact.userId);
     container.invalidate(conversationsListProvider);
+    // Do not open a thread from a venue the user has since switched away from.
+    if (container.read(activeVenueProvider)?.id != venue.id) return;
     container.read(activeConversationIdProvider.notifier).state = id;
   } catch (_) {
     messenger.showSnackBar(

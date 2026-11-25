@@ -179,6 +179,7 @@ class SettingsScreen extends ConsumerWidget {
     WidgetRef ref,
     String? currentName,
   ) async {
+    final container = ProviderScope.containerOf(context, listen: false);
     final controller = TextEditingController(text: currentName);
 
     final confirmed = await showDialog<bool>(
@@ -206,11 +207,12 @@ class SettingsScreen extends ConsumerWidget {
     }
 
     try {
-      final userId = ref.read(supabaseClientProvider).auth.currentUser!.id;
-      await ref
+      final userId =
+          container.read(supabaseClientProvider).auth.currentUser!.id;
+      await container
           .read(settingsRepositoryProvider)
           .updateDisplayName(userId, controller.text.trim());
-      ref.invalidate(myProfileProvider);
+      container.invalidate(myProfileProvider);
     } on PostgrestException catch (_) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

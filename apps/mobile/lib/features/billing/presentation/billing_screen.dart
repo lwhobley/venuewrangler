@@ -70,6 +70,9 @@ class _StatusCard extends StatelessWidget {
     final endLabel = end == null
         ? null
         : MaterialLocalizations.of(context).formatMediumDate(end);
+    final sub = subscription;
+    final periodLabel =
+        sub == null ? null : subscriptionPeriodLabel(sub, endLabel);
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -79,17 +82,27 @@ class _StatusCard extends StatelessWidget {
             Text('Status', style: Theme.of(context).textTheme.labelMedium),
             const SizedBox(height: 4),
             Text(status, style: Theme.of(context).textTheme.headlineSmall),
-            if (endLabel != null) ...[
+            if (periodLabel != null) ...[
               const SizedBox(height: 8),
-              Text(
-                subscription!.cancelAtPeriodEnd
-                    ? 'Cancels on $endLabel'
-                    : 'Renews on $endLabel',
-              ),
+              Text(periodLabel),
             ],
           ],
         ),
       ),
     );
   }
+}
+
+/// The line under the status describing the billing period, or null when there is nothing
+/// accurate to say. Only a live subscription that is not set to cancel "renews".
+String? subscriptionPeriodLabel(Subscription subscription, String? endLabel) {
+  switch (subscription.status) {
+    case 'canceled':
+    case 'incomplete_expired':
+      return 'Canceled';
+  }
+  if (endLabel == null) return null;
+  if (subscription.cancelAtPeriodEnd) return 'Ends on $endLabel';
+  if (subscription.isEntitled) return 'Renews on $endLabel';
+  return 'Current period ends on $endLabel';
 }

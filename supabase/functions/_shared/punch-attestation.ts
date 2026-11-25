@@ -88,6 +88,40 @@ export function parsePunchPayload(payloadJson: unknown, now = Date.now()): Punch
   };
 }
 
+/**
+ * Maps a record_attested_punch() Postgres error to the client-facing status and error code.
+ * Returns null for anything unrecognised, which the caller answers with a 500.
+ */
+export function classifyPunchRpcError(
+  error: { code?: string; message?: string; details?: string },
+): { status: number; error: string } | null {
+  const message = error.message ?? "";
+  switch (error.code) {
+    case "42501":
+      if (/geofence/i.test(message)) return { status: 403, error: "outside_geofence" };
+      if (/accuracy/i.test(message)) return { status: 403, error: "location_accuracy_too_low" };
+      if (/mock/i.test(message)) return { status: 403, error: "mocked_location" };
+      if (/identical to an earlier punch/i.test(message)) return { status: 403, error: "location_replayed" };
+      if (/attested_punch_required/.test(message)) return { status: 403, error: "attested_punch_required" };
+      return { status: 403, error: "forbidden" };
+    case "P0002":
+      return { status: 409, error: "no_open_punch" };
+    case "23505":
+      return { status: 409, error: "already_clocked_in" };
+    case "22023":
+      return { status: 400, error: "invalid_punch" };
+    case "23503":
+      // Foreign key violation: the client named a shift (or other row) that does not exist.
+      if (/shift/i.test(`${message} ${error.details ?? ""}`)) return { status: 400, error: "unknown_shift" };
+      return { status: 400, error: "invalid_punch_reference" };
+    case "22P02":
+      // Malformed input value (e.g. a non-UUID id); parsePunchPayload should already catch this.
+      return { status: 400, error: "invalid_punch" };
+    default:
+      return null;
+  }
+}
+
 export async function sha256Bytes(bytes: Uint8Array): Promise<Uint8Array<ArrayBuffer>> {
   return new Uint8Array(await crypto.subtle.digest("SHA-256", bytes as BufferSource));
 }

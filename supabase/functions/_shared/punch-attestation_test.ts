@@ -1,4 +1,5 @@
 import {
+  classifyPunchRpcError,
   evaluatePlayIntegrityForPunch,
   parsePunchPayload,
   PunchPayloadError,
@@ -291,4 +292,40 @@ Deno.test("evaluatePlayIntegrityForPunch rejects each way a token can be wrong",
     "app_not_recognized",
   );
   assert(!evaluatePlayIntegrityForPunch({}, "com.venuewrangler.app", "abc123", NOW).ok);
+});
+
+Deno.test("classifyPunchRpcError maps a foreign key violation to 400, not 500", () => {
+  assertEquals(
+    classifyPunchRpcError({
+      code: "23503",
+      message: 'insert or update on table "time_entries" violates foreign key constraint "time_entries_shift_id_fkey"',
+    }),
+    { status: 400, error: "unknown_shift" },
+  );
+  assertEquals(
+    classifyPunchRpcError({ code: "23503", message: "violates foreign key constraint" }),
+    { status: 400, error: "invalid_punch_reference" },
+  );
+});
+
+Deno.test("classifyPunchRpcError maps invalid text representation (22P02) to 400", () => {
+  assertEquals(
+    classifyPunchRpcError({ code: "22P02", message: 'invalid input syntax for type uuid: "x"' }),
+    { status: 400, error: "invalid_punch" },
+  );
+});
+
+Deno.test("classifyPunchRpcError keeps the existing mappings", () => {
+  assertEquals(classifyPunchRpcError({ code: "42501", message: "outside venue geofence" }), {
+    status: 403,
+    error: "outside_geofence",
+  });
+  assertEquals(classifyPunchRpcError({ code: "P0002" }), { status: 409, error: "no_open_punch" });
+  assertEquals(classifyPunchRpcError({ code: "23505" }), { status: 409, error: "already_clocked_in" });
+  assertEquals(classifyPunchRpcError({ code: "22023" }), { status: 400, error: "invalid_punch" });
+});
+
+Deno.test("classifyPunchRpcError leaves unexpected errors to the caller's 500", () => {
+  assertEquals(classifyPunchRpcError({ code: "XX000", message: "boom" }), null);
+  assertEquals(classifyPunchRpcError({}), null);
 });

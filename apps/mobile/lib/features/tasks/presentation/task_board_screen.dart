@@ -59,10 +59,16 @@ class _TaskBoardScreenState extends ConsumerState<TaskBoardScreen> {
   Future<void> _move(OperationalTask task, TaskStatus to) async {
     // Compare with what's on screen: a queued offline change may already have moved it.
     if (_statusOf(task) == to) return;
-    await changeTaskStatus(ref, ScaffoldMessenger.of(context), task, to);
+    await changeTaskStatus(
+      ProviderScope.containerOf(context, listen: false),
+      ScaffoldMessenger.of(context),
+      task,
+      to,
+    );
   }
 
   Future<void> _create(String venueId) async {
+    final container = ProviderScope.containerOf(context, listen: false);
     final result = await showModalBottomSheet<_NewTask>(
       context: context,
       isScrollControlled: true,
@@ -77,13 +83,13 @@ class _TaskBoardScreenState extends ConsumerState<TaskBoardScreen> {
     if (result == null || !mounted) return;
     final messenger = ScaffoldMessenger.of(context);
     try {
-      await ref.read(tasksRepositoryProvider).createTask(
+      await container.read(tasksRepositoryProvider).createTask(
             venueId: venueId,
             title: result.title,
             description: result.description,
             dueAt: result.dueAt,
           );
-      ref.invalidate(tasksForVenueProvider(venueId));
+      container.invalidate(tasksForVenueProvider(venueId));
     } on PostgrestException catch (e) {
       messenger.showSnackBar(
         SnackBar(
@@ -102,6 +108,7 @@ class _TaskBoardScreenState extends ConsumerState<TaskBoardScreen> {
     TaskStatus shown,
     String? assignee,
   ) async {
+    final container = ProviderScope.containerOf(context, listen: false);
     final action = await showModalBottomSheet<Object>(
       context: context,
       showDragHandle: true,
@@ -117,8 +124,8 @@ class _TaskBoardScreenState extends ConsumerState<TaskBoardScreen> {
     } else if (action == 'delete') {
       final messenger = ScaffoldMessenger.of(context);
       try {
-        await ref.read(tasksRepositoryProvider).deleteTask(task.id);
-        ref.invalidate(tasksForVenueProvider(task.venueId));
+        await container.read(tasksRepositoryProvider).deleteTask(task.id);
+        container.invalidate(tasksForVenueProvider(task.venueId));
       } on PostgrestException catch (e) {
         messenger.showSnackBar(
           SnackBar(
@@ -613,7 +620,7 @@ class _NewTaskFormState extends State<_NewTaskForm> {
       context: context,
       initialTime: TimeOfDay.fromDateTime(_due ?? now),
     );
-    if (time == null) return;
+    if (time == null || !mounted) return;
     setState(
       () => _due =
           DateTime(date.year, date.month, date.day, time.hour, time.minute),

@@ -32,6 +32,7 @@ import { getGoogleAccessToken } from "../_shared/google-auth.ts";
 import { initObservability, captureException, flushObservability } from "../_shared/observability.ts";
 import {
   base64ToBytes,
+  classifyPunchRpcError,
   evaluatePlayIntegrityForPunch,
   type PlayIntegrityDecoded,
   parsePunchPayload,
@@ -187,26 +188,11 @@ async function handle(req: Request): Promise<Response> {
   return json({ status: attested ? "verified" : "unverified", reason: attested ? "verified" : reason, entry });
 }
 
-function punchErrorResponse(error: { code?: string; message?: string }): Response {
-  const message = error.message ?? "";
-  switch (error.code) {
-    case "42501":
-      if (/geofence/i.test(message)) return json({ error: "outside_geofence" }, 403);
-      if (/accuracy/i.test(message)) return json({ error: "location_accuracy_too_low" }, 403);
-      if (/mock/i.test(message)) return json({ error: "mocked_location" }, 403);
-      if (/identical to an earlier punch/i.test(message)) return json({ error: "location_replayed" }, 403);
-      if (/attested_punch_required/.test(message)) return json({ error: "attested_punch_required" }, 403);
-      return json({ error: "forbidden" }, 403);
-    case "P0002":
-      return json({ error: "no_open_punch" }, 409);
-    case "23505":
-      return json({ error: "already_clocked_in" }, 409);
-    case "22023":
-      return json({ error: "invalid_punch" }, 400);
-    default:
-      console.error("record_attested_punch failed", error);
-      return json({ error: "punch_failed" }, 500);
-  }
+function punchErrorResponse(error: { code?: string; message?: string; details?: string }): Response {
+  const mapped = classifyPunchRpcError(error);
+  if (mapped) return json({ error: mapped.error }, mapped.status);
+  console.error("record_attested_punch failed", error);
+  return json({ error: "punch_failed" }, 500);
 }
 
 async function verifyIos(

@@ -255,17 +255,18 @@ class CrmBeoDetailScreen extends ConsumerWidget {
   }
 
   Future<void> _addCharge(BuildContext context, WidgetRef ref) async {
+    final container = ProviderScope.containerOf(context, listen: false);
     final draft = await AddBeoChargeDialog.show(context);
     if (draft == null) return;
     try {
-      await ref.read(crmRepositoryProvider).addBeoCharge(
+      await container.read(crmRepositoryProvider).addBeoCharge(
             beoId: beo.id,
             venueId: beo.venueId,
             description: draft.description,
             category: draft.category,
             amountCents: draft.cents,
           );
-      ref.invalidate(crmBeoChargesProvider(beo.id));
+      container.invalidate(crmBeoChargesProvider(beo.id));
     } catch (_) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -280,6 +281,7 @@ class CrmBeoDetailScreen extends ConsumerWidget {
     WidgetRef ref,
     CrmBeoCharge charge,
   ) async {
+    final container = ProviderScope.containerOf(context, listen: false);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -299,10 +301,10 @@ class CrmBeoDetailScreen extends ConsumerWidget {
     );
     if (confirmed != true) return;
     try {
-      await ref
+      await container
           .read(crmRepositoryProvider)
           .deleteBeoCharge(chargeId: charge.id);
-      ref.invalidate(crmBeoChargesProvider(beo.id));
+      container.invalidate(crmBeoChargesProvider(beo.id));
     } catch (_) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

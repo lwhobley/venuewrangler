@@ -40,6 +40,7 @@ class _MfaEnrollScreenState extends ConsumerState<MfaEnrollScreen> {
   }
 
   Future<void> _verify(MfaEnrollment enrollment) async {
+    final container = ProviderScope.containerOf(context, listen: false);
     final code = _code.text.trim();
     if (code.length != 6) {
       setState(() => _error = 'Enter the 6-digit code from your app.');
@@ -50,10 +51,10 @@ class _MfaEnrollScreenState extends ConsumerState<MfaEnrollScreen> {
       _error = null;
     });
     try {
-      await ref
+      await container
           .read(mfaRepositoryProvider)
           .verifyEnrollment(factorId: enrollment.factorId, code: code);
-      ref.invalidate(mfaFactorsProvider);
+      container.invalidate(mfaFactorsProvider);
       if (mounted) Navigator.of(context).pop(true);
     } catch (error) {
       if (mounted) setState(() => _error = mfaErrorMessage(error));

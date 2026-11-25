@@ -108,6 +108,7 @@ class CrmLeadDetailScreen extends ConsumerWidget {
   }
 
   Future<void> _showAddNoteDialog(BuildContext context, WidgetRef ref) async {
+    final container = ProviderScope.containerOf(context, listen: false);
     final controller = TextEditingController();
     final text = await showDialog<String>(
       context: context,
@@ -131,11 +132,11 @@ class CrmLeadDetailScreen extends ConsumerWidget {
     if (text == null || text.isEmpty || !context.mounted) return;
 
     try {
-      await ref
+      await container
           .read(crmRepositoryProvider)
           .addNote(leadId: lead.id, text: text);
-      ref.invalidate(crmNotesProvider(lead.id));
-      ref.invalidate(crmActivityProvider(lead.id));
+      container.invalidate(crmNotesProvider(lead.id));
+      container.invalidate(crmActivityProvider(lead.id));
     } catch (_) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -195,14 +196,16 @@ class _LeadSummaryCardState extends ConsumerState<_LeadSummaryCard> {
                       DropdownMenuItem(value: status, child: Text(status)),
                   ],
                   onChanged: (value) async {
+                    final container =
+                        ProviderScope.containerOf(context, listen: false);
                     if (value == null || value == _status) return;
                     try {
-                      await ref
+                      await container
                           .read(crmRepositoryProvider)
                           .updateLeadStatus(leadId: lead.id, status: value);
                       if (mounted) setState(() => _status = value);
-                      ref.invalidate(crmLeadsProvider(lead.venueId));
-                      ref.invalidate(crmActivityProvider(lead.id));
+                      container.invalidate(crmLeadsProvider(lead.venueId));
+                      container.invalidate(crmActivityProvider(lead.id));
                     } catch (_) {
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(

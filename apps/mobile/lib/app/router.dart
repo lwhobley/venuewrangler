@@ -91,6 +91,30 @@ final isEmployeeRoleProvider = Provider<bool>((ref) {
   return usesEmployeeShell(roleAsync.valueOrNull);
 });
 
+/// The custom URL scheme the OAuth callbacks return to (AndroidManifest.xml, Info.plist, and
+/// PAYROLL_OAUTH_SUCCESS_URL / PAYROLL_OAUTH_ERROR_URL in supabase/.env.example).
+const appUrlScheme = 'venuewrangler';
+
+/// Maps a custom-scheme deep link onto the in-app location it names.
+///
+/// The platform hands the router the whole URL. In `venuewrangler://integrations/connected` the
+/// first segment parses as the URI host, and go_router matches on the path alone, so it would
+/// look for `/connected` and fail. This folds the host back into the path:
+/// `venuewrangler://integrations/connected?provider=square` becomes
+/// `/integrations/connected?provider=square`. Returns null for any other scheme (https App and
+/// Universal Links already carry the full path).
+String? appSchemeLocation(Uri uri) {
+  if (uri.scheme != appUrlScheme) return null;
+  final segments = [
+    if (uri.host.isNotEmpty) uri.host,
+    ...uri.pathSegments.where((segment) => segment.isNotEmpty),
+  ];
+  return Uri(
+    path: '/${segments.join('/')}',
+    query: uri.hasQuery ? uri.query : null,
+  ).toString();
+}
+
 final routerProvider = Provider<GoRouter>((ref) {
   // Only watch the employee boolean so the router structure stays completely stable across
   // ordinary venue switches, background refreshes, and role syncs.
@@ -105,6 +129,11 @@ final routerProvider = Provider<GoRouter>((ref) {
     initialLocation: '/',
     refreshListenable: refreshNotifier,
     redirect: (context, state) {
+      // Runs before every other rule. The returned location goes through this redirect again,
+      // so the sign-in, venue and MFA gates still apply to the deep link's real destination.
+      final appLink = appSchemeLocation(state.uri);
+      if (appLink != null) return appLink;
+
       final isSignedIn = ref.read(isSignedInProvider);
       final hasActiveVenue = ref.read(activeVenueProvider) != null;
       final recoveringPassword = ref.read(passwordRecoveryPendingProvider);
