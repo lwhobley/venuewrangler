@@ -13,13 +13,15 @@ Map<String, dynamic> _row(Object? labels) => {
 
 void main() {
   test('parses labels and skips malformed ones', () {
-    final plan = FloorPlan.fromJson(_row([
-      {'text': ' Stage ', 'x': 10, 'y': 20, 'width': 300, 'height': 100},
-      {'text': '', 'x': 0, 'y': 0, 'width': 10, 'height': 10},
-      {'text': 'Bar', 'x': 0, 'y': 0, 'width': 0, 'height': 10},
-      {'text': 'DJ', 'x': 'a', 'y': 0, 'width': 10, 'height': 10},
-      'not a map',
-    ]));
+    final plan = FloorPlan.fromJson(
+      _row([
+        {'text': ' Stage ', 'x': 10, 'y': 20, 'width': 300, 'height': 100},
+        {'text': '', 'x': 0, 'y': 0, 'width': 10, 'height': 10},
+        {'text': 'Bar', 'x': 0, 'y': 0, 'width': 0, 'height': 10},
+        {'text': 'DJ', 'x': 'a', 'y': 0, 'width': 10, 'height': 10},
+        'not a map',
+      ]),
+    );
 
     expect(plan.labels, hasLength(1));
     final stage = plan.labels.single;
