@@ -139,6 +139,7 @@ Stripe deposits on both reservations and the legacy crm's BEO flow should reuse 
 existing Stripe Edge Function infrastructure rather than the legacy code's inline raw API calls.
 This is a new Stripe use case, a one-time charge rather than a subscription, so verify
 Checkout's one-time-payment mode shape against Stripe's real docs before coding against it.
+(Superseded 2026-10-04: deposit collection and Stripe Connect were removed by 20261004144042_remove_beo_deposit_and_stripe_connect.sql. The product does not collect guest or BEO deposits; Stripe is used only for the app subscription.)
 
 5. floor
 

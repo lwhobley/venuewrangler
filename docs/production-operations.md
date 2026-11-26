@@ -78,13 +78,45 @@ POS webhook secrets are stored only as SHA-256 digests; rotate a stale or expose
 
 ## Clock behavior
 
-Clock punches require an online response. Failed requests display an error and are never replayed later under another identity or time; staff should check their status before retrying and request a time correction for a missed punch. Punch location is reported by the client and can be spoofed, so geofencing is a deterrent rather than proof.
+Clock punches require an online response. Failed requests display an error and are never replayed later under another identity or time; staff should check their status before retrying and request a time correction for a missed punch. Punch location is reported by the client and can be spoofed, so geofencing is a deterrent rather than proof. Punches are refused at a venue that has no coordinates set (trigger `app_hidden.require_clock_in_location`, since `20261023101510`); managers set the location in the app's Settings (`set_venue_location`).
 
 ## Security configuration
 
 - Hosted auth settings the operator must apply by hand: `docs/security/hosted-auth-settings.md`.
 - Secrets, rotation and GitHub environment/branch-protection settings: `docs/security/secrets-handling.md`.
 - Compliance posture (honest status): `docs/soc2/soc2-controls-matrix.md`.
+- Findings and status from the 2026-11-25 security review: `docs/security/security-review-2026-11-25.md`.
+
+## Production flags and settings
+
+Platform flags live in the single row of `app_hidden.platform_settings`; change them as the table owner in the SQL editor (clients cannot read or write the table). Edge Function variables are set with `supabase secrets set NAME=value` and take effect on the next invocation. The older switches (`billing_enforcement`, `gps_retention_days`, `ai_monthly_org_budget_usd`) are described in `docs/security/remediation-2026-10-17.md`.
+
+| Setting | Where | Default | Effect |
+|---|---|---|---|
+| `require_mfa_for_admin_actions` | `app_hidden.platform_settings` | false | Requires an MFA (`aal2`) session for role changes, ownership transfer, wage edits, Stripe checkout/portal, payroll OAuth connect, and BrightHR connect/disconnect. |
+| `require_attested_punches` | `app_hidden.platform_settings` | false | The database refuses self-service punches that did not come through `time-clock-punch`. |
+| `TIME_CLOCK_ATTESTATION_MODE` | Edge Function secret (`time-clock-punch`) | `observe` | `enforce` refuses punches without a valid App Attest / Play Integrity proof and fails closed on verification errors. |
+| `TIME_CLOCK_REQUIRE_ATTESTED` | Flutter `--dart-define` (production build) | false | `true` makes the app fail closed instead of writing a punch directly when the function is unreachable. |
+| `POS_WEBHOOK_ALLOW_LEGACY_SECRET` | Edge Function secret (`toast-pos`) | unset (off) | Opt-out. When `true`, the function also accepts the legacy `X-Venue-Webhook-Secret` header. By default only signed Toast webhooks are accepted. |
+| `CORS_ALLOWED_ORIGINS` | Edge Function secret | see the function code | Allowlist of browser origins the Edge Functions answer with CORS headers. Requests from other origins get no CORS grant. |
+| Auth redirect allowlist | Supabase dashboard | n/a | `https://venuewrangler.com/reset-password` for iOS/web; `venuewrangler://reset-password` for Android only, until `site/.well-known/assetlinks.json` has the real fingerprint. See `docs/security/hosted-auth-settings.md` section 5. |
+
+**`require_mfa_for_admin_actions`.** Owners and admins must enrol TOTP in the app before this is turned on; otherwise they cannot change roles, edit wages, manage billing, or connect payroll or BrightHR. Enable with `update app_hidden.platform_settings set require_mfa_for_admin_actions = true;`.
+
+**Enforcing attested punches (rollout order).** Do these in order; doing them out of order blocks legitimate punches.
+1. Deploy `time-clock-punch` in `observe` mode and ship app builds that send per-punch proofs.
+2. Confirm on a real iPhone and a real Android phone that punches come back `verified`.
+3. Set `TIME_CLOCK_ATTESTATION_MODE=enforce` on the function.
+4. Run `update app_hidden.platform_settings set require_attested_punches = true;`.
+5. Ship production app builds with `--dart-define=TIME_CLOCK_REQUIRE_ATTESTED=true`.
+
+Details and verification queries: `docs/security/remediation-2026-10-17.md`, "Rolling out attested punches".
+
+**`POS_WEBHOOK_ALLOW_LEGACY_SECRET`.** Toast webhooks are now accepted only when signed. If a gateway in front of a venue still sends only the legacy `X-Venue-Webhook-Secret` header, run `supabase secrets set POS_WEBHOOK_ALLOW_LEGACY_SECRET=true` **before** deploying the updated function, then migrate that gateway to signed delivery and unset the variable.
+
+**`CORS_ALLOWED_ORIGINS`.** Set this to the comma-separated list of origins that must call the Edge Functions from a browser (for example the production site origin). Check the function code for the default used when it is unset, and add any additional web origin before deploying, or browser calls from it fail.
+
+**APNs secrets.** iOS push needs `APNS_KEY`, `APNS_KEY_ID`, `APNS_TEAM_ID` and `APNS_BUNDLE_ID` set as Edge Function secrets (`APNS_SANDBOX` only for development builds; see `supabase/.env.example`). When they are missing, the push functions now report it to Sentry instead of silently skipping iOS devices; treat that Sentry event as a configuration alert.
 
 ## Legacy (decommissioned, do not use)
 

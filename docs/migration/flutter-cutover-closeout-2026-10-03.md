@@ -47,15 +47,17 @@ data and Edge Functions, with Firebase only for Android push notifications.
    and confirm its recorded version and resulting grants. Do not run a blind
    `db push` against the old ignored project reference or infer migration state
    from filenames alone.
-3. Deploy the matching `crm-create-deposit-checkout`, `stripe-connect-account`,
-   `stripe-webhook`, `notifications-send`, and `toast-pos` functions from the
-   committed revision. Confirm no other CI or dashboard deployment overwrites
-   them. Keep deposit collection disabled until the migration and connected
-   account webhook are both in place.
-4. Configure the Stripe connected-account webhook and its own signing secret,
-   plus verified HTTPS return and refresh URLs. Reconcile or expire older BEO
-   Checkout links. Complete a controlled real transaction and verify checkout,
-   webhook, BEO state, refund/cancellation, and payout using the actual account.
+3. Deploy the matching `stripe-webhook`, `notifications-send`, and `toast-pos`
+   functions from the committed revision. Confirm no other CI or dashboard
+   deployment overwrites them. (Superseded: this step originally also listed
+   `crm-create-deposit-checkout` and `stripe-connect-account`. Guest/BEO deposit
+   collection and Stripe Connect were removed by
+   `20261004144042_remove_beo_deposit_and_stripe_connect.sql`; do not deploy
+   those functions. Stripe is used only for the app subscription.)
+4. Configure the Stripe subscription webhook signing secret and verified HTTPS
+   return URLs, then complete a controlled real subscription checkout and verify
+   the webhook and subscription state. (The connected-account webhook, BEO
+   Checkout links and payout checks that used to be listed here no longer apply.)
 5. Verify live Resend delivery, Sentry event delivery, and any payroll OAuth
    provider enabled for launch. Keep unverified integrations disabled or marked
    unavailable.
@@ -80,8 +82,9 @@ data and Edge Functions, with Firebase only for Android push notifications.
 
 The Flutter Billing screen shows app subscription status without an in-app
 Stripe Checkout or Portal link. Direct organization sales can continue through
-an appropriate business channel. Event deposits use Stripe Connect for a
-real-world venue service and remain a separate payment flow. Before store
+an appropriate business channel. The product does not collect guest or event
+(BEO) deposits and does not use Stripe Connect; that flow was removed on
+2026-10-04 (`*remove_beo_deposit_and_stripe_connect*` migration). Before store
 submission, review the actual storefronts and distribution model against the
 then-current Apple and Google payments rules.
 

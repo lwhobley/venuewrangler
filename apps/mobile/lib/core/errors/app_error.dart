@@ -38,6 +38,15 @@ final class AiUnavailableError extends AppError {
   const AiUnavailableError(super.message);
 }
 
+/// The server refused a sensitive operation (billing, payroll or HR connections, wage edits)
+/// because the session has not been verified with an authenticator (`mfa_required`). Screens
+/// that can offer step-up do so through `runWithMfaStepUp` (core/auth/mfa_step_up.dart).
+final class MfaRequiredError extends AppError {
+  const MfaRequiredError([
+    super.message = 'Verify with your authenticator to continue.',
+  ]);
+}
+
 final class UnknownError extends AppError {
   const UnknownError(super.message);
 }

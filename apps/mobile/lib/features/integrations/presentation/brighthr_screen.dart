@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/auth/mfa_step_up.dart';
 import '../../../core/errors/app_error.dart';
 import '../../venues/application/venues_providers.dart';
 import '../../workforce/application/workforce_providers.dart';
@@ -86,11 +87,16 @@ class _BrightHrConnectFormState extends ConsumerState<BrightHrConnectForm> {
     }
     setState(() => _submitting = true);
     try {
-      await ref.read(brightHrRepositoryProvider).connect(
-            venueId: widget.venueId,
-            clientId: clientId,
-            clientSecret: clientSecret,
-          );
+      // Connecting needs an authenticator-verified session (403 mfa_required).
+      await runWithMfaStepUp(
+        context,
+        ref,
+        () => ref.read(brightHrRepositoryProvider).connect(
+              venueId: widget.venueId,
+              clientId: clientId,
+              clientSecret: clientSecret,
+            ),
+      );
       _clientSecret.clear();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -228,7 +234,12 @@ class _ConnectedView extends ConsumerWidget {
     );
     if (confirmed != true) return;
     try {
-      await container.read(brightHrRepositoryProvider).disconnect(venueId);
+      if (!context.mounted) return;
+      await runWithMfaStepUp(
+        context,
+        ref,
+        () => container.read(brightHrRepositoryProvider).disconnect(venueId),
+      );
       container.invalidate(brightHrConnectionProvider(venueId));
     } catch (error) {
       if (context.mounted) _showError(context, error);

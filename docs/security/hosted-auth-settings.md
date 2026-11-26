@@ -64,17 +64,21 @@ from a shared domain. Configure the production sender (Resend is already a subpr
 | Setting | Value |
 |---|---|
 | Site URL | `https://venuewrangler.com/app/` (not `http://localhost:3000`) |
-| Redirect URLs | `https://venuewrangler.com/app/**` plus the **verified https App Link / Universal Link** used for password reset (below). Remove every `localhost` entry from production. |
+| Redirect URLs | `https://venuewrangler.com/app/**`, `https://venuewrangler.com/reset-password`, and (Android only, temporary) `venuewrangler://reset-password`. Remove every `localhost` entry from production. |
 
-**Password-reset redirect (A-05).** The app currently uses the custom scheme
-`venuewrangler://reset-password`. Any other Android app can register the same scheme and
-receive the link. Migrate to an https link under `venuewrangler.com` that is a verified App Link
-(Android `assetlinks.json` with the real signing fingerprint, see
-`site/.well-known/assetlinks.json.NEEDS_REAL_FINGERPRINT.md`) and Universal Link (iOS
-`apple-app-site-association`). Once the client uses the https redirect, **delete
-`venuewrangler://reset-password` from the hosted Redirect URLs and from `config.toml`**.
-PKCE means an intercepted code is useless without the verifier, so this is defense in depth,
-not an active exploit.
+**Password-reset redirect (A-05, security review 2026-11-25 F06).** iOS and web now request
+the https link `https://venuewrangler.com/reset-password`, which is a Universal Link on iOS
+(`apple-app-site-association`). Add it to the hosted Redirect URLs **before** shipping that
+client, or password-reset emails will fall back to the Site URL.
+
+Android still uses the custom scheme `venuewrangler://reset-password`, because the https link
+is only safe there once it is a verified App Link. Any other Android app can register the same
+custom scheme and receive the link. Keep the custom scheme in the allowlist **for Android only**
+until `site/.well-known/assetlinks.json` contains the real release signing fingerprint (see
+`site/.well-known/assetlinks.json.NEEDS_REAL_FINGERPRINT.md`) and Android verification passes.
+Then switch Android to the https link and **delete `venuewrangler://reset-password` from the
+hosted Redirect URLs and from `config.toml`**. PKCE means an intercepted code is useless
+without the verifier, so this is defense in depth, not an active exploit.
 
 ## 6. Tokens and sessions (Authentication -> Sessions, JWT Settings)
 
@@ -92,10 +96,15 @@ server-side; compensate with the in-app idle lock (audit F-10) and keep JWT expi
 ## 7. Multi-factor authentication (Authentication -> Sign In / Providers -> Multi-Factor)
 
 - Enable **TOTP** enrolment and verification (matches `[auth.mfa.totp]`).
-- Enabling this only exposes the API. MFA is **not enforced** until the app prompts owners and
-  admins to enrol and RLS requires `aal2` for sensitive operations (HR pay data, billing,
-  payroll/POS connections, account deletion). Track that work separately; do not describe
-  MFA as enforced anywhere until it is (see `docs/soc2/soc2-controls-matrix.md`).
+- Enabling this only exposes the API. Server-side enforcement is controlled by the platform
+  flag `app_hidden.platform_settings.require_mfa_for_admin_actions` (default off). When it is
+  on, an `aal2` session is required to change manager-level roles or transfer ownership, and
+  (since the 2026-11-25 security review, F04) also to edit wages, start Stripe subscription
+  checkout or open the billing portal, connect a payroll provider through OAuth, and connect
+  or disconnect BrightHR. **Owners and admins must enrol TOTP in the app before the flag is
+  turned on**, or they lose access to those actions. See `docs/production-operations.md`
+  ("Production flags and settings"). Operations not listed here are not MFA-gated; do not
+  describe MFA as enforced for them (see `docs/soc2/soc2-controls-matrix.md`).
 - Enable WebAuthn when it becomes generally available.
 
 ## 8. Sign-up providers and verified emails

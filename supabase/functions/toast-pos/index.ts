@@ -10,10 +10,15 @@
 //    secret is deliberately never stored, so the HMAC key is the lowercase hex SHA-256 of the
 //    provisioned secret, i.e. the value kept in pos_connections.webhook_secret_hash. The
 //    gateway computes it as sha256Hex(secret) and keeps it private.
-//  - Legacy: the static X-Venue-Webhook-Secret header. Still accepted unless
-//    POS_WEBHOOK_REQUIRE_SIGNATURE=true, so gateways can migrate without a flag day.
+//  - Legacy: the static X-Venue-Webhook-Secret header. Refused by default (audit F05): a
+//    static secret replayed from any log or proxy is a permanent credential. It is accepted
+//    only when the explicit opt-out POS_WEBHOOK_ALLOW_LEGACY_SECRET=true is set, and every
+//    request that uses it logs a warning so the remaining legacy gateways are visible.
+//    POS_WEBHOOK_REQUIRE_SIGNATURE=true still forces signed-only and wins over the opt-out.
+//    Edge Functions are deployed by hand: set the opt-out BEFORE deploying this version if a
+//    production gateway still sends the legacy header, or its checks will be refused (401).
 
-import { corsHeaders, handleCorsPreflight } from "../_shared/cors.ts";
+import { corsHeaders, handleCorsPreflight, serveWithCors } from "../_shared/cors.ts";
 import { createServiceClient } from "../_shared/supabase-clients.ts";
 import { initObservability, captureException, flushObservability } from "../_shared/observability.ts";
 import { sha256Hex } from "../_shared/crypto.ts";
@@ -60,6 +65,17 @@ function freeText(value: unknown): string | null | undefined | "invalid" {
   return trimmed.length === 0 ? null : trimmed;
 }
 
+/**
+ * Whether the legacy static-secret header may authenticate a webhook. Signed-only is the
+ * default; POS_WEBHOOK_ALLOW_LEGACY_SECRET=true opts back in, unless
+ * POS_WEBHOOK_REQUIRE_SIGNATURE=true forces signed-only.
+ */
+function legacySecretAllowed(): boolean {
+  const env = (name: string) => Deno.env.get(name);
+  if (env("POS_WEBHOOK_REQUIRE_SIGNATURE") === "true") return false;
+  return env("POS_WEBHOOK_ALLOW_LEGACY_SECRET") === "true";
+}
+
 function jsonResponse(body: Record<string, unknown>, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -67,7 +83,7 @@ function jsonResponse(body: Record<string, unknown>, status = 200): Response {
   });
 }
 
-Deno.serve(async (req) => {
+serveWithCors(async (req) => {
   const preflight = handleCorsPreflight(req);
   if (preflight) return preflight;
 
@@ -100,7 +116,7 @@ async function handleRequest(req: Request): Promise<Response> {
         return jsonResponse({ error: "unauthorized_webhook" }, 401);
       }
     } else {
-      if (Deno.env.get("POS_WEBHOOK_REQUIRE_SIGNATURE") === "true") {
+      if (!legacySecretAllowed()) {
         return jsonResponse({ error: "signature_required" }, 401);
       }
       if (!suppliedSecret || suppliedSecret.length < 32 || suppliedSecret.length > 512) {
@@ -169,6 +185,10 @@ async function handleRequest(req: Request): Promise<Response> {
       if (!constantTimeEqual(suppliedHash, expectedHash)) {
         return jsonResponse({ error: "unauthorized_webhook" }, 401);
       }
+      console.warn(
+        `toast-pos: accepted legacy X-Venue-Webhook-Secret for venue ${venueId}; ` +
+          "migrate this gateway to signed requests and unset POS_WEBHOOK_ALLOW_LEGACY_SECRET",
+      );
     }
 
     // Per-venue ingest ceiling, charged only after authentication so unauthenticated traffic

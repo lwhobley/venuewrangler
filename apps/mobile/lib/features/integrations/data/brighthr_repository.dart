@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/errors/app_error.dart';
+import '../../../core/errors/server_denials.dart';
 import '../domain/brighthr_models.dart';
 
 /// Reads imported BrightHR data directly (manager-tier RLS; the encrypted client secret is never
@@ -180,6 +181,9 @@ AppError mapBrightHrFunctionError(int status, Object? details) {
     'not_a_venue_manager' => const PermissionDeniedError(
         'Only a venue manager or organization admin can manage integrations.',
       ),
+    // 403: connecting or disconnecting BrightHR needs an authenticator-verified session.
+    mfaRequiredCode => const MfaRequiredError(),
+    mfaCheckUnavailableCode => const NetworkError(mfaCheckUnavailableMessage),
     'not_a_venue_member' =>
       const UnknownError('That person is not a member of this venue.'),
     'unknown_brighthr_employee' => const NotFoundError(

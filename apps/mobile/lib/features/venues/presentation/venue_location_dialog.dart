@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../core/network/supabase_providers.dart';
 import '../../../core/widgets/dialog_save_button.dart';
 import '../../time_clock/application/time_clock_providers.dart';
-import '../data/venue_location_repository.dart';
+import '../application/venue_location_providers.dart';
 
 class VenueLocationDialog extends ConsumerStatefulWidget {
   const VenueLocationDialog({super.key, required this.venueId});
@@ -115,14 +114,17 @@ class _VenueLocationDialogState extends ConsumerState<VenueLocationDialog> {
                   ? 'Enter an address, valid coordinates and a radius of 25-1000 metres.'
                   : null;
             },
-            save: () =>
-                VenueLocationRepository(ref.read(supabaseClientProvider)).save(
-              widget.venueId,
-              address.text.trim(),
-              double.parse(lat.text),
-              double.parse(lng.text),
-              int.parse(radius.text),
-            ),
+            save: () async {
+              await ref.read(venueLocationRepositoryProvider).save(
+                    widget.venueId,
+                    address.text.trim(),
+                    double.parse(lat.text),
+                    double.parse(lng.text),
+                    int.parse(radius.text),
+                  );
+              // Clears the time clock's "location not set" banner.
+              ref.invalidate(activeVenueMissingGeofenceProvider);
+            },
           ),
         ],
       );

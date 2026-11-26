@@ -6,10 +6,29 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { getGoogleAccessToken } from "./google-auth.ts";
 import { loadApnsConfigFromEnv, sendApnsPush } from "./apns.ts";
 import { privatePushAlert } from "./private-push.ts";
+import { captureException, flushObservability } from "./observability.ts";
 
 const FCM_SCOPE = "https://www.googleapis.com/auth/firebase.messaging";
 
 export type NotificationAudience = "user" | "venue_managers" | "venue_staff" | "organization_owners";
+
+// Missing APNs secrets silently drop every iOS push, so it is reported to Sentry (audit F17).
+// Once per cold start (module scope), not per request, so a misconfigured project produces one
+// event per worker instead of one per notification.
+let reportedMissingApns = false;
+
+/** Reports missing APNs configuration once per worker. Returns true if it reported now. */
+function reportMissingApnsOnce(): boolean {
+  if (reportedMissingApns) return false;
+  reportedMissingApns = true;
+  console.error("APNs is not configured (APNS_KEY/APNS_KEY_ID/APNS_TEAM_ID/APNS_BUNDLE_ID); skipping iOS push delivery");
+  captureException(new Error("APNs is not configured; iOS push delivery is disabled"), {
+    component: "push-delivery",
+    missing: ["APNS_KEY", "APNS_KEY_ID", "APNS_TEAM_ID", "APNS_BUNDLE_ID"]
+      .filter((name) => !Deno.env.get(name)),
+  });
+  return true;
+}
 
 export interface PushRequest {
   venueId: string;
@@ -100,6 +119,7 @@ export async function deliverPush(adminClient: SupabaseClient, req: PushRequest)
   // and could disable valid tokens on 404.
   const apnsConfig = loadApnsConfigFromEnv();
   let warnedMissingApns = false;
+  let reportedMissingApnsNow = false;
 
   const deadTokens: string[] = [];
   let deliveredCount = 0;
@@ -109,7 +129,11 @@ export async function deliverPush(adminClient: SupabaseClient, req: PushRequest)
       if (!apnsConfig) {
         if (!warnedMissingApns) {
           warnedMissingApns = true;
-          console.warn("APNs is not configured; skipping iOS push delivery");
+          if (reportMissingApnsOnce()) {
+            reportedMissingApnsNow = true;
+          } else {
+            console.warn("APNs is not configured; skipping iOS push delivery");
+          }
         }
         return;
       }
@@ -170,6 +194,8 @@ export async function deliverPush(adminClient: SupabaseClient, req: PushRequest)
   for (let i = 0; i < tokenList.length; i += BATCH_SIZE) {
     await Promise.allSettled(tokenList.slice(i, i + BATCH_SIZE).map(deliverOne));
   }
+  // Short-lived invocations can end before Sentry's queue drains.
+  if (reportedMissingApnsNow) await flushObservability();
 
   // A direct update, not rpc("disable_push_tokens"): that function lives in app_hidden, which
   // PostgREST doesn't expose. Scoped to this venue so one venue's dead-token report can't

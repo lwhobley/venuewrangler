@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/errors/app_error.dart';
 import '../../venues/application/venues_providers.dart';
 import '../application/ai_providers.dart';
+import '../domain/ai_access.dart';
 import '../domain/ai_models.dart';
 
 /// The "Wrangler" assistant: a free-text question answered using only the context the
@@ -37,6 +38,24 @@ class _WranglerAssistantScreenState
     final venue = ref.watch(activeVenueProvider);
     if (venue == null) {
       return const Scaffold(body: Center(child: Text('No venue selected.')));
+    }
+    final roleAsync = ref.watch(myVenueRoleProvider);
+    if (!roleAsync.hasValue && roleAsync.isLoading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+    if (!canUseWranglerAssistant(roleAsync.valueOrNull)) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Ask Wrangler')),
+        body: const Center(
+          child: Padding(
+            padding: EdgeInsets.all(24),
+            child: Text(
+              wranglerManagersOnlyMessage,
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ),
+      );
     }
 
     return Scaffold(

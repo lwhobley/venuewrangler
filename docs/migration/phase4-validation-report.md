@@ -240,6 +240,7 @@ should be treated as unverified rather than trusted until it's actually re-run.
 - **CRM**: Stripe-backed deposit checkout and Resend email delivery (`render_email_template`'s
   output) are not wired to anything — the schema/RPCs exist, the actual Stripe/Resend calls do
   not, consistent with Stripe/Resend being unverified everywhere else in this report.
+  (Superseded 2026-10-04: deposit collection and Stripe Connect were removed by `20261004144042_remove_beo_deposit_and_stripe_connect.sql`. The product does not collect guest or BEO deposits; Stripe is used only for the app subscription.)
 - **Documents**: the ClamAV scan's wire protocol and response parsing are unit-tested, but the
   actual `Deno.connect` TCP round-trip to a real clamd has never run — no reachable instance
   exists in this environment. `CLAMAV_HOST` is unset by design, so every upload 503s until a real

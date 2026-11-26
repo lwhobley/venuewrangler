@@ -18,13 +18,14 @@
 //
 // Env: PAYROLL_TOKEN_ENCRYPTION_KEY (shared AES key, secrets are bound to venue:brighthr),
 // BRIGHTHR_SYNC_DISPATCH_SECRET (>= 32 chars), optional BRIGHTHR_TOKEN_URL / BRIGHTHR_API_BASE.
-import { handleCorsPreflight } from "../_shared/cors.ts";
+import { handleCorsPreflight, serveWithCors } from "../_shared/cors.ts";
 import { createServiceClient, createUserClient } from "../_shared/supabase-clients.ts";
 import { getCallerVenueRoles, isManager, isUuid } from "../_shared/venue-auth.ts";
 import { decryptToken, encryptToken } from "../_shared/crypto.ts";
 import { oauthJson as jsonResponse } from "../_shared/oauth-connections.ts";
 import { captureException, flushObservability, initObservability } from "../_shared/observability.ts";
 import { enforceRateLimit } from "../_shared/rate-limit.ts";
+import { requireCallerMfa } from "../_shared/mfa.ts";
 import { BrightHrClient, BrightHrError } from "../_shared/brighthr.ts";
 import { syncConnection } from "./sync.ts";
 
@@ -118,7 +119,7 @@ async function leaseConnection(admin: Admin, connectionId: string): Promise<bool
   return data !== null;
 }
 
-Deno.serve(async (req) => {
+serveWithCors(async (req) => {
   const preflight = handleCorsPreflight(req);
   if (preflight) return preflight;
   try {
@@ -150,6 +151,13 @@ async function handleRequest(req: Request): Promise<Response> {
 
   const auth = await requireVenueManager(req.headers.get("Authorization"), venueId);
   if ("error" in auth) return auth.error;
+
+  // MFA step-up for connecting/disconnecting the HR integration (audit F04), after the manager
+  // check. /sync and /link are routine operations and stay ungated.
+  if (path.endsWith("/connect") || path.endsWith("/disconnect")) {
+    const mfaBlocked = await requireCallerMfa(createUserClient(auth.authHeader));
+    if (mfaBlocked) return mfaBlocked;
+  }
 
   if (path.endsWith("/connect")) return await handleConnect(body, venueId, auth.userId, admin, encryptionKey);
   if (path.endsWith("/sync")) return await handleSync(venueId, admin, encryptionKey);

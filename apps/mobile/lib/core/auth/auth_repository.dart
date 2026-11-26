@@ -1,12 +1,18 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform, kIsWeb;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-/// Where the password-reset email sends the user: the app's custom URL scheme (registered in
-/// AndroidManifest.xml and Info.plist). supabase_flutter picks the link up, exchanges its code
-/// for a recovery session (PKCE — so it must be opened on the device that asked for it) and
-/// emits AuthChangeEvent.passwordRecovery. This URL must be in the Supabase project's
-/// Auth → URL Configuration → Redirect URLs allow-list.
+/// The app's custom URL scheme reset link (registered in AndroidManifest.xml and Info.plist).
+/// Any app can claim a custom scheme, so it is only used where no verified https link exists
+/// yet: Android, until App Links are verified (see [passwordResetRedirectFor]).
 const kPasswordResetRedirect = 'venuewrangler://reset-password';
+
+/// The verified https reset link: an iOS Universal Link (`applinks:venuewrangler.com` in
+/// Runner.entitlements, matched by site/.well-known/apple-app-site-association) that only this
+/// app can open. supabase_flutter picks the link up, exchanges its code for a recovery session
+/// (PKCE, so it must be opened on the device that asked for it) and emits
+/// AuthChangeEvent.passwordRecovery; the router then holds the user on `/reset-password`.
+const kPasswordResetUniversalLink = 'https://venuewrangler.com/reset-password';
 
 /// Where the sign-up confirmation email sends a web user: back into the Flutter web app at
 /// /app/ on whatever origin they signed up from, so supabase_flutter can exchange the PKCE
@@ -16,13 +22,36 @@ const kPasswordResetRedirect = 'venuewrangler://reset-password';
 /// URL must be in the Supabase project's Auth → URL Configuration → Redirect URLs allow-list.
 String? signUpEmailRedirect() => kIsWeb ? '${Uri.base.origin}/app/' : null;
 
-/// Where the password-reset email sends the user. Native builds use the app's custom scheme
-/// ([kPasswordResetRedirect]); a custom scheme means nothing in a browser, so on web the link
-/// returns to the Flutter web app at /app/ on the origin the request was made from (the PKCE
-/// verifier lives in this browser's storage, so it has to open here). Same allow-list note as
-/// [signUpEmailRedirect].
-String passwordResetRedirect() =>
-    kIsWeb ? '${Uri.base.origin}/app/' : kPasswordResetRedirect;
+/// Where the password-reset email sends the user, per platform. Every value returned here
+/// must be in the Supabase project's Auth → URL Configuration → Redirect URLs allow-list.
+///
+/// - Web: the Flutter web app at `/app/` on the origin the request was made from. The PKCE
+///   verifier lives in this browser's storage, so the link has to open here, and the static
+///   site serves nothing at `/reset-password` that could finish the exchange.
+/// - iOS: [kPasswordResetUniversalLink], a Universal Link only this app can claim.
+/// - Android (and any other native target): [kPasswordResetRedirect], the custom scheme.
+String passwordResetRedirectFor({
+  required bool isWeb,
+  required TargetPlatform platform,
+  required String webOrigin,
+}) {
+  if (isWeb) return '$webOrigin/app/';
+  return switch (platform) {
+    TargetPlatform.iOS => kPasswordResetUniversalLink,
+    // TODO(F06): use kPasswordResetUniversalLink on Android too once
+    // site/.well-known/assetlinks.json lists the Play App Signing certificate, so App Links
+    // verify; see site/.well-known/assetlinks.json.NEEDS_REAL_FINGERPRINT.md. Until then an
+    // unverified https link could open a browser or a disambiguation dialog instead of the app.
+    _ => kPasswordResetRedirect,
+  };
+}
+
+/// [passwordResetRedirectFor] for the platform this build is running on.
+String passwordResetRedirect() => passwordResetRedirectFor(
+      isWeb: kIsWeb,
+      platform: defaultTargetPlatform,
+      webOrigin: kIsWeb ? Uri.base.origin : '',
+    );
 
 /// The project's password policy (Supabase Auth: 12+ chars with lower, upper, digit and symbol,
 /// matching `supabase/config.toml`'s minimum_password_length = 12), checked client-side so the
@@ -59,7 +88,7 @@ abstract interface class AuthRepository {
     Map<String, dynamic>? data,
   });
 
-  /// Emails a reset link that opens the app ([kPasswordResetRedirect]); tapping it signs the
+  /// Emails a reset link that opens the app ([passwordResetRedirect]); tapping it signs the
   /// user in with a recovery session and the app asks for a new password.
   Future<void> sendPasswordResetEmail(String email);
 

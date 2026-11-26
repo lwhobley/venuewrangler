@@ -13,6 +13,7 @@ import '../features/checklists/presentation/checklist_list_screen.dart';
 import '../features/chat/presentation/chat_screen.dart';
 import '../features/crm/presentation/crm_screen.dart';
 import '../features/documents/presentation/documents_screen.dart';
+import '../features/ai/domain/ai_access.dart';
 import '../features/ai/presentation/wrangler_assistant_screen.dart';
 import '../features/dashboard/presentation/dashboard_screen.dart';
 import '../features/dashboard/presentation/more_screen.dart';
@@ -202,6 +203,11 @@ final routerProvider = Provider<GoRouter>((ref) {
       }
       if (path == '/team' &&
           !teamManagerRoles.contains(roleAsync.valueOrNull)) {
+        return '/';
+      }
+      // The assistant is manager-only on the server (403 not_a_venue_manager).
+      if (path == '/wrangler' &&
+          !canUseWranglerAssistant(roleAsync.valueOrNull)) {
         return '/';
       }
       if (isEmployee && !employeeCanOpen(path)) return '/';

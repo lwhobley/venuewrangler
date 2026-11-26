@@ -17,7 +17,7 @@
 // sends it to App Attest; Android binds it to Play Integrity's requestHash or
 // classic nonce. Both paths require a recorded, single-use challenge before a
 // successful verdict can be recorded; observe mode still never blocks sign-in.
-import { corsHeaders, handleCorsPreflight } from "../_shared/cors.ts";
+import { corsHeaders, handleCorsPreflight, serveWithCors } from "../_shared/cors.ts";
 import {
   createServiceClient,
   createUserClient,
@@ -85,7 +85,7 @@ async function consumeAttestationChallenge(
   return existing?.consumed_at ? "already_used" : "not_found";
 }
 
-Deno.serve(async (req) => {
+serveWithCors(async (req) => {
   const preflight = handleCorsPreflight(req);
   if (preflight) return preflight;
 

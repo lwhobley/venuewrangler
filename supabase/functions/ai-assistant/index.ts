@@ -4,7 +4,7 @@
 // client — never trusted from the request body), budget-gated against a per-organization
 // monthly cap using a reserve/commit/release pattern so concurrent requests can't jointly
 // overspend, and logged to ai_usage_events for audit.
-import { corsHeaders, handleCorsPreflight } from "../_shared/cors.ts";
+import { corsHeaders, handleCorsPreflight, serveWithCors } from "../_shared/cors.ts";
 import { createServiceClient, createUserClient } from "../_shared/supabase-clients.ts";
 import {
   callGroqJson,
@@ -26,7 +26,7 @@ const RATE_LIMIT_WINDOW_MINUTES = 10;
 // finish (or abort) before its budget reservation expires.
 const RESERVATION_TTL_MARGIN_MS = 10_000;
 
-Deno.serve(async (req) => {
+serveWithCors(async (req) => {
   const preflight = handleCorsPreflight(req);
   if (preflight) return preflight;
 
@@ -139,9 +139,11 @@ async function handleRequest(
   }
   const organizationId = venue.organization_id as string;
 
-  // These actions lead to manager-only writes or operate on manager-only
-  // roster/inventory data. Reject before reserving and spending AI budget.
-  if (task !== "wrangler_ask") {
+  // Every task is manager-only (venue_manager on this venue, or organization_owner/admin).
+  // The structured tasks lead to manager-only writes or read manager-only roster/inventory
+  // data; wrangler_ask is an operator tool that spends the organization's AI budget, so it is
+  // not open to every member either (audit F10). Reject before reserving AI budget.
+  {
     const { data: memberships, error: membershipError } = await userClient
       .from("memberships")
       .select("venue_id,role")

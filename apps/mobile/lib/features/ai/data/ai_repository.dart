@@ -158,52 +158,62 @@ class SupabaseAiRepository implements AiRepository {
     }
   }
 
-  AppError _mapFunctionException(FunctionException error) {
-    final details = error.details;
-    final code = details is Map ? details['error'] as String? : null;
+  AppError _mapFunctionException(FunctionException error) =>
+      mapAiFunctionException(error);
+}
 
-    return switch (code) {
-      'venue_not_found_or_not_a_member' => const PermissionDeniedError(
-          "You don't have access to AI features for this venue.",
-        ),
-      'ai_disabled_for_org' => const AiUnavailableError(
-          'AI features are turned off for this organization. An owner or admin '
-          'can turn them on in Settings.',
-        ),
-      'subscription_required' => const AiUnavailableError(
-          "This organization's subscription is not active, so AI features are "
-          'paused. An owner can renew it under Billing.',
-        ),
-      'monthly_user_budget_exceeded' => const AiUnavailableError(
-          'You have used your share of AI requests for this month. Try again '
-          'next month, or ask an admin to raise the limit.',
-        ),
-      'ai_unavailable' => const AiUnavailableError(
-          'The AI assistant is temporarily unavailable. Please try again shortly.',
-        ),
-      'monthly_budget_exceeded' => const AiUnavailableError(
-          "This organization's AI budget for the month has been used up. "
-          'Try again next month, or ask an admin to raise the limit.',
-        ),
-      'rate_limited' => const AiUnavailableError(
-          'Too many AI requests in a short time. Wait a few minutes and try again.',
-        ),
-      'ai_provider_not_configured' ||
-      'ai_provider_call_failed' ||
-      'ai_response_not_valid_json' =>
-        const AiUnavailableError(
-          'The AI assistant is temporarily unavailable. Please try again shortly.',
-        ),
-      'invalid_or_expired_session' => const AuthError(
-          'Your session has expired. Please sign in again.',
-        ),
-      _ => error.status >= 500
-          ? const AiUnavailableError(
-              'The AI assistant is temporarily unavailable.',
-            )
-          : const UnknownError(
-              'The AI assistant could not process that request.',
-            ),
-    };
-  }
+/// Maps an `ai-assistant` Edge Function error body to a user-facing [AppError].
+AppError mapAiFunctionException(FunctionException error) {
+  final details = error.details;
+  final code = details is Map ? details['error'] as String? : null;
+
+  return switch (code) {
+    'venue_not_found_or_not_a_member' => const PermissionDeniedError(
+        "You don't have access to AI features for this venue.",
+      ),
+    // 403 from a manager-only task (the free-text `wrangler_ask` assistant).
+    'manager_permission_required' ||
+    'not_a_venue_manager' =>
+      const PermissionDeniedError(
+        'Only venue managers and organization admins can use this AI feature.',
+      ),
+    'ai_disabled_for_org' => const AiUnavailableError(
+        'AI features are turned off for this organization. An owner or admin '
+        'can turn them on in Settings.',
+      ),
+    'subscription_required' => const AiUnavailableError(
+        "This organization's subscription is not active, so AI features are "
+        'paused. An owner can renew it under Billing.',
+      ),
+    'monthly_user_budget_exceeded' => const AiUnavailableError(
+        'You have used your share of AI requests for this month. Try again '
+        'next month, or ask an admin to raise the limit.',
+      ),
+    'ai_unavailable' => const AiUnavailableError(
+        'The AI assistant is temporarily unavailable. Please try again shortly.',
+      ),
+    'monthly_budget_exceeded' => const AiUnavailableError(
+        "This organization's AI budget for the month has been used up. "
+        'Try again next month, or ask an admin to raise the limit.',
+      ),
+    'rate_limited' => const AiUnavailableError(
+        'Too many AI requests in a short time. Wait a few minutes and try again.',
+      ),
+    'ai_provider_not_configured' ||
+    'ai_provider_call_failed' ||
+    'ai_response_not_valid_json' =>
+      const AiUnavailableError(
+        'The AI assistant is temporarily unavailable. Please try again shortly.',
+      ),
+    'invalid_or_expired_session' => const AuthError(
+        'Your session has expired. Please sign in again.',
+      ),
+    _ => error.status >= 500
+        ? const AiUnavailableError(
+            'The AI assistant is temporarily unavailable.',
+          )
+        : const UnknownError(
+            'The AI assistant could not process that request.',
+          ),
+  };
 }

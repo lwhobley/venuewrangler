@@ -1,4 +1,4 @@
-import { corsHeaders, handleCorsPreflight } from "../_shared/cors.ts";
+import { corsHeaders, handleCorsPreflight, serveWithCors } from "../_shared/cors.ts";
 import {
   createServiceClient,
   createUserClient,
@@ -106,7 +106,7 @@ export async function handleInvite(
 }
 
 if (import.meta.main) {
-  Deno.serve(async (req) => {
+  serveWithCors(async (req) => {
     try {
       return await handleInvite(req);
     } catch {

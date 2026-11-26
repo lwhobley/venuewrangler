@@ -44,11 +44,44 @@ void main() {
     expect(passwordPolicyProblem('Abcdefghij1!'), isNull);
   });
 
-  test('reset emails send the user back into the app', () {
-    expect(kPasswordResetRedirect, startsWith('venuewrangler://'));
-    // Tests run on the VM, i.e. native: the custom scheme. On web it is the web app's /app/
-    // (a custom scheme is meaningless in a browser) — see passwordResetRedirect().
-    expect(passwordResetRedirect(), kPasswordResetRedirect);
+  group('reset link redirect per platform (F06)', () {
+    String forPlatform(TargetPlatform platform, {bool isWeb = false}) =>
+        passwordResetRedirectFor(
+          isWeb: isWeb,
+          platform: platform,
+          webOrigin: 'https://venuewrangler.com',
+        );
+
+    test('iOS uses the verified Universal Link', () {
+      expect(
+        forPlatform(TargetPlatform.iOS),
+        'https://venuewrangler.com/reset-password',
+      );
+      expect(kPasswordResetUniversalLink, forPlatform(TargetPlatform.iOS));
+    });
+
+    test('Android keeps the custom scheme until App Links verify', () {
+      expect(
+        forPlatform(TargetPlatform.android),
+        'venuewrangler://reset-password',
+      );
+    });
+
+    test('web returns to the Flutter web app on the requesting origin', () {
+      expect(
+        forPlatform(TargetPlatform.iOS, isWeb: true),
+        'https://venuewrangler.com/app/',
+      );
+      expect(
+        forPlatform(TargetPlatform.android, isWeb: true),
+        'https://venuewrangler.com/app/',
+      );
+    });
+
+    test('the running build uses the rule for its own platform', () {
+      // flutter_test reports Android as the default target platform.
+      expect(passwordResetRedirect(), kPasswordResetRedirect);
+    });
   });
 
   testWidgets('forgot password sends a reset email for the typed address',

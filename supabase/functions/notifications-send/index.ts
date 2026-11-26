@@ -1,4 +1,4 @@
-import { corsHeaders } from "../_shared/cors.ts";
+import { corsHeaders, serveWithCors } from "../_shared/cors.ts";
 import { createServiceClient, createUserClient } from "../_shared/supabase-clients.ts";
 import { deliverPush } from "../_shared/push-delivery.ts";
 import { enforceRateLimit } from "../_shared/rate-limit.ts";
@@ -23,7 +23,7 @@ interface NotificationRequest {
   data?: Record<string, unknown>;
 }
 
-Deno.serve(async (req: Request) => {
+serveWithCors(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }

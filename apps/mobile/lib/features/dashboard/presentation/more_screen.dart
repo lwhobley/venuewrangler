@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/auth/sign_out_service.dart';
 import '../../../core/theme/app_radii.dart';
 import '../../../core/theme/ops_colors.dart';
+import '../../ai/domain/ai_access.dart';
 import '../../venues/application/venues_providers.dart';
 
 class _Item {
@@ -80,6 +81,7 @@ class MoreScreen extends ConsumerWidget {
     final role = ref.watch(myVenueRoleProvider).valueOrNull;
     final canSeeBilling =
         role == 'organization_owner' || role == 'organization_admin';
+    final canAskWrangler = canUseWranglerAssistant(role);
     return Scaffold(
       appBar: AppBar(title: const Text('More')),
       body: ListView(
@@ -96,7 +98,8 @@ class MoreScreen extends ConsumerWidget {
             _Group(
               children: [
                 for (final item in items)
-                  if (item.route != '/billing' || canSeeBilling)
+                  if ((item.route != '/billing' || canSeeBilling) &&
+                      (item.route != '/wrangler' || canAskWrangler))
                     ListTile(
                       leading:
                           Icon(item.icon, color: theme.colorScheme.primary),

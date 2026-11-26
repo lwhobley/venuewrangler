@@ -2,9 +2,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:venuewrangler_mobile/features/floor/application/floor_providers.dart';
 import 'package:venuewrangler_mobile/features/floor/data/floor_repository.dart';
 import 'package:venuewrangler_mobile/features/floor/domain/editor_table.dart';
+import 'package:venuewrangler_mobile/features/floor/domain/floor_permissions.dart';
 import 'package:venuewrangler_mobile/features/floor/domain/floor_plan.dart';
 import 'package:venuewrangler_mobile/features/floor/domain/floor_table.dart';
 import 'package:venuewrangler_mobile/features/floor/presentation/floor_plan_screen.dart';
@@ -177,5 +179,109 @@ void main() {
 
     expect(fakeRepo.updateStatusCalled, isTrue);
     expect(fakeRepo.lastUpdatedStatus, 'seated');
+  });
+
+  group('merge and split are supervisor and above', () {
+    test('role check fails closed', () {
+      for (final role in [
+        'supervisor',
+        'venue_manager',
+        'organization_admin',
+        'organization_owner',
+      ]) {
+        expect(canMergeOrSplitTables(role), isTrue, reason: role);
+      }
+      for (final role in ['staff', null, 'platform_admin']) {
+        expect(canMergeOrSplitTables(role), isFalse, reason: '$role');
+      }
+    });
+
+    test('a 42501 from merge or split explains the role requirement', () {
+      const denied = PostgrestException(message: 'forbidden', code: '42501');
+      expect(
+        floorActionErrorMessage(denied, mergeOrSplit: true),
+        'Only supervisors and managers can merge or split tables.',
+      );
+      expect(
+        floorActionErrorMessage(denied),
+        "You don't have permission to change this table.",
+      );
+      expect(
+        floorActionErrorMessage(Exception('offline'), mergeOrSplit: true),
+        'Could not update the floor. Please try again.',
+      );
+    });
+
+    FloorTable table(String id, String label, {String? mergeGroupId}) =>
+        FloorTable(
+          id: id,
+          organizationId: 'org-1',
+          venueId: 'venue-1',
+          floorPlanId: 'fp-1',
+          label: label,
+          capacity: 4,
+          status: 'available',
+          mergeGroupId: mergeGroupId,
+          lastActivityAt: DateTime(2026),
+          createdAt: DateTime(2026),
+          updatedAt: DateTime(2026),
+        );
+
+    Future<void> pumpAs(WidgetTester tester, String role) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            activeVenueProvider.overrideWith((ref) => testVenue),
+            floorRepositoryProvider.overrideWithValue(
+              _FakeFloorRepository(
+                initialTables: [
+                  table('t1', 'T1', mergeGroupId: 'm1'),
+                  table('t2', 'T2', mergeGroupId: 'm1'),
+                  table('t3', 'T3'),
+                ],
+              ),
+            ),
+            canManageActiveVenueProvider.overrideWith((ref) async => false),
+            myVenueRoleProvider.overrideWith((ref) async => role),
+          ],
+          child: const MaterialApp(home: FloorPlanScreen()),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('staff cannot select tables to merge or see split',
+        (tester) async {
+      await pumpAs(tester, 'staff');
+
+      // No multi-select for staff: a long press just opens the table's actions.
+      await tester.longPress(find.text('T3'));
+      await tester.pumpAndSettle();
+      expect(find.text('Table T3'), findsOneWidget);
+      expect(find.byTooltip('Clear Selection'), findsNothing);
+      expect(find.byTooltip('Merge Selected Tables'), findsNothing);
+      await tester.tapAt(const Offset(10, 10));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('T1'));
+      await tester.pumpAndSettle();
+      expect(find.text('Mark Seated'), findsOneWidget);
+      expect(find.text('Split Merged Tables'), findsNothing);
+    });
+
+    testWidgets('supervisors can merge and split', (tester) async {
+      await pumpAs(tester, 'supervisor');
+
+      await tester.longPress(find.text('T3'));
+      await tester.longPress(find.text('T2'));
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Merge Selected Tables'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Clear Selection'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('T1'));
+      await tester.pumpAndSettle();
+      expect(find.text('Split Merged Tables'), findsOneWidget);
+    });
   });
 }

@@ -25,7 +25,7 @@
 //            platform_settings.require_attested_punches = true and app dart-define
 //            TIME_CLOCK_REQUIRE_ATTESTED=true so the direct database path and client fallback are
 //            closed as well. Challenge responses include mode so the app fails closed on outages.
-import { corsHeaders, handleCorsPreflight } from "../_shared/cors.ts";
+import { corsHeaders, handleCorsPreflight, serveWithCors } from "../_shared/cors.ts";
 import { createServiceClient, createUserClient } from "../_shared/supabase-clients.ts";
 import { enforceRateLimit } from "../_shared/rate-limit.ts";
 import { getGoogleAccessToken } from "../_shared/google-auth.ts";
@@ -60,11 +60,18 @@ function attestationMode(): Mode {
   return raw === "off" || raw === "enforce" ? raw : "observe";
 }
 
+// Audit F11: in enforce mode a limiter outage must not turn into unthrottled punch/challenge
+// traffic, so the limiter fails closed (503). In observe/off it keeps failing open so an outage
+// never blocks clocking in while attestation is still being rolled out.
+function rateLimitFailsOpen(): boolean {
+  return attestationMode() !== "enforce";
+}
+
 function base64Url(bytes: Uint8Array): string {
   return btoa(String.fromCharCode(...bytes)).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
 }
 
-Deno.serve(async (req) => {
+serveWithCors(async (req) => {
   const preflight = handleCorsPreflight(req);
   if (preflight) return preflight;
   try {
@@ -107,7 +114,9 @@ async function handle(req: Request): Promise<Response> {
   const serviceClient = createServiceClient();
 
   if (body.action === "challenge") {
-    const limited = await enforceRateLimit(serviceClient, `punch-challenge:${userId}`, 120, 3600, { failOpen: true });
+    const limited = await enforceRateLimit(serviceClient, `punch-challenge:${userId}`, 120, 3600, {
+      failOpen: rateLimitFailsOpen(),
+    });
     if (limited) return limited;
     const nonce = base64Url(crypto.getRandomValues(new Uint8Array(32)));
     const { error } = await serviceClient.rpc("issue_punch_nonce", {
@@ -124,7 +133,9 @@ async function handle(req: Request): Promise<Response> {
 
   if (body.action !== "punch") return json({ error: "unknown_action" }, 400);
 
-  const limited = await enforceRateLimit(serviceClient, `punch:${userId}`, 240, 3600, { failOpen: true });
+  const limited = await enforceRateLimit(serviceClient, `punch:${userId}`, 240, 3600, {
+    failOpen: rateLimitFailsOpen(),
+  });
   if (limited) return limited;
 
   let payload;
