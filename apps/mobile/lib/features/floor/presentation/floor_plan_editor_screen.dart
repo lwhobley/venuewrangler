@@ -13,6 +13,7 @@ import '../application/floor_editor_controller.dart';
 import '../application/floor_providers.dart';
 import '../domain/editor_table.dart';
 import '../domain/floor_plan.dart';
+import 'floor_plan_labels_layer.dart';
 
 /// Visual floor plan layout editor: pan/zoom canvas, drag tables, create / resize / rotate,
 /// snap-to-grid, undo, local draft and publish. Edits only touch layout columns — live table
@@ -509,6 +510,7 @@ class _FloorPlanEditorScreenState extends ConsumerState<FloorPlanEditorScreen> {
                       final scale = _tc.value.getMaxScaleOnAxis();
                       return _Canvas(
                         state: state,
+                        labels: _plan?.labels ?? const [],
                         overlapping: overlapping,
                         handleScale: scale,
                         onBackgroundTap: () => editor.select(null),
@@ -597,6 +599,7 @@ class _FloorPlanEditorScreenState extends ConsumerState<FloorPlanEditorScreen> {
 class _Canvas extends StatelessWidget {
   const _Canvas({
     required this.state,
+    required this.labels,
     required this.overlapping,
     required this.handleScale,
     required this.onBackgroundTap,
@@ -611,6 +614,7 @@ class _Canvas extends StatelessWidget {
   });
 
   final FloorEditorState state;
+  final List<FloorPlanLabel> labels;
   final Set<String> overlapping;
   final double handleScale;
   final VoidCallback onBackgroundTap;
@@ -639,6 +643,7 @@ class _Canvas extends StatelessWidget {
           clipBehavior: Clip.none,
           children: [
             Positioned.fill(child: BlueprintGrid(cell: kGridUnit)),
+            Positioned.fill(child: FloorPlanLabelsLayer(labels: labels)),
             for (final t in state.tables)
               _TableNode(
                 table: t,

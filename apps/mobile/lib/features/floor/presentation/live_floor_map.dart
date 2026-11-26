@@ -7,6 +7,7 @@ import '../../../core/widgets/blueprint_grid.dart';
 import '../domain/floor_plan.dart';
 import '../domain/floor_table.dart';
 import '../domain/table_status_style.dart';
+import 'floor_plan_labels_layer.dart';
 
 /// The published floor plan drawn to scale with live table status. Pinch to zoom, drag to
 /// pan, tap a table for its actions. When [highlightSection] is set, that section's tables
@@ -84,6 +85,9 @@ class _LiveFloorMapState extends State<LiveFloorMap> {
               child: Stack(
                 children: [
                   const Positioned.fill(child: BlueprintGrid(cell: 20)),
+                  Positioned.fill(
+                    child: FloorPlanLabelsLayer(labels: plan.labels),
+                  ),
                   for (final t in widget.tables)
                     Positioned(
                       left: t.x,
