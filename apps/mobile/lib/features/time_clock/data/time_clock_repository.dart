@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/errors/app_error.dart';
+import '../../../core/errors/server_denials.dart';
 import '../domain/time_entry.dart';
 import 'attested_punch_client.dart';
 
@@ -317,44 +318,53 @@ class SupabaseTimeClockRepository implements TimeClockRepository {
     return venueId;
   }
 
-  AppError _mapPostgrestException(PostgrestException e) {
-    if (e.code == '23505') {
-      return const UnknownError('You are already clocked in.');
-    }
-    if (e.code == 'P0002') {
-      if (e.message.contains('no open break')) {
-        return const UnknownError('You are not on a break.');
-      }
-      return UnknownError(e.message);
-    }
-    if (e.code == '22023' && e.message.contains('break type')) {
-      return const UnknownError('Choose a paid or unpaid break.');
-    }
-    if (e.code == '42501') {
-      if (e.message.contains('geofence')) {
-        return const PermissionDeniedError(
-          'You are outside the venue geofence. Move closer to the venue to clock in/out.',
-        );
-      }
-      if (e.message.contains('satellite-grade')) {
-        return const PermissionDeniedError(
-          'This location reading was flagged as an identical replay of an earlier fix. Please re-acquire GPS and try again.',
-        );
-      }
-      if (e.message.contains('two breaks') ||
-          e.message.contains('already') ||
-          e.message.contains('open at once')) {
-        return const PermissionDeniedError(
-          'You already have an open break. End it before starting another.',
-        );
-      }
-      if (e.message.contains('attested_punch_required')) {
-        return const PermissionDeniedError(
-          'This device could not be verified. Update the app and try again, or ask a manager to record your punch.',
-        );
-      }
-      return PermissionDeniedError(e.message);
+  AppError _mapPostgrestException(PostgrestException e) =>
+      mapTimeClockPostgrestException(e);
+}
+
+/// Maps a Postgres refusal from a punch, break or time-entry read to a user-facing [AppError].
+AppError mapTimeClockPostgrestException(PostgrestException e) {
+  if (e.code == '23505') {
+    return const UnknownError('You are already clocked in.');
+  }
+  if (e.code == 'P0002') {
+    if (e.message.contains('no open break')) {
+      return const UnknownError('You are not on a break.');
     }
     return UnknownError(e.message);
   }
+  if (e.code == '22023' && e.message.contains('break type')) {
+    return const UnknownError('Choose a paid or unpaid break.');
+  }
+  if (e.code == '42501') {
+    // Checked before the generic geofence message: no location is set for the venue, so
+    // nobody can punch there until a manager sets one.
+    if (isVenueGeofenceRequired(e)) {
+      return const PermissionDeniedError(venueGeofenceRequiredMessage);
+    }
+    if (e.message.contains('geofence')) {
+      return const PermissionDeniedError(
+        'You are outside the venue geofence. Move closer to the venue to clock in/out.',
+      );
+    }
+    if (e.message.contains('satellite-grade')) {
+      return const PermissionDeniedError(
+        'This location reading was flagged as an identical replay of an earlier fix. Please re-acquire GPS and try again.',
+      );
+    }
+    if (e.message.contains('two breaks') ||
+        e.message.contains('already') ||
+        e.message.contains('open at once')) {
+      return const PermissionDeniedError(
+        'You already have an open break. End it before starting another.',
+      );
+    }
+    if (e.message.contains('attested_punch_required')) {
+      return const PermissionDeniedError(
+        'This device could not be verified. Update the app and try again, or ask a manager to record your punch.',
+      );
+    }
+    return PermissionDeniedError(e.message);
+  }
+  return UnknownError(e.message);
 }

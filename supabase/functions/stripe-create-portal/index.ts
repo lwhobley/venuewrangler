@@ -1,10 +1,11 @@
 // Creates a Stripe Billing Portal Session (hosted) so an org admin can manage/cancel their
 // subscription or update a payment method, without the app ever touching card data. Same
 // membership-check discipline as stripe-create-checkout.
-import { corsHeaders, handleCorsPreflight } from "../_shared/cors.ts";
+import { corsHeaders, handleCorsPreflight, serveWithCors } from "../_shared/cors.ts";
 import { createServiceClient, createUserClient } from "../_shared/supabase-clients.ts";
 import { createStripeClient } from "../_shared/stripe.ts";
 import { enforceRateLimit } from "../_shared/rate-limit.ts";
+import { requireCallerMfa } from "../_shared/mfa.ts";
 import { isUuid } from "../_shared/venue-auth.ts";
 import { initObservability, captureException, flushObservability } from "../_shared/observability.ts";
 
@@ -17,7 +18,7 @@ function jsonResponse(body: Record<string, unknown>, status = 200): Response {
   });
 }
 
-Deno.serve(async (req) => {
+serveWithCors(async (req) => {
   const preflight = handleCorsPreflight(req);
   if (preflight) return preflight;
 
@@ -81,6 +82,10 @@ async function handleRequest(req: Request): Promise<Response> {
   if (!membership) {
     return jsonResponse({ error: "not_an_organization_admin" }, 403);
   }
+
+  // MFA step-up for billing changes (audit F04), after the role check.
+  const mfaBlocked = await requireCallerMfa(userClient);
+  if (mfaBlocked) return mfaBlocked;
 
   const serviceClient = createServiceClient();
 

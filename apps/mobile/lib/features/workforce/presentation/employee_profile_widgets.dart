@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../core/auth/auth_providers.dart';
+import '../../../core/auth/mfa_step_up.dart';
+import '../../../core/errors/app_error.dart';
 import '../../media/application/image_picker_service.dart';
 import '../../venues/application/venues_providers.dart';
 import '../application/employee_profiles_providers.dart';
@@ -328,16 +330,23 @@ class _HrEditorState extends ConsumerState<_HrEditor> {
       _error = null;
     });
     try {
-      await ref.read(employeeProfilesRepositoryProvider).saveHr(
-            widget.profileKey,
-            hrUpdatePayload(
-              {for (final e in _fields.entries) e.key: e.value.text},
-              manageEmployment: widget.manageEmployment,
-            ),
-          );
+      final payload = hrUpdatePayload(
+        {for (final e in _fields.entries) e.key: e.value.text},
+        manageEmployment: widget.manageEmployment,
+      );
+      // Wage fields need an authenticator-verified session (42501 mfa_required).
+      await runWithMfaStepUp(
+        context,
+        ref,
+        () => ref
+            .read(employeeProfilesRepositoryProvider)
+            .saveHr(widget.profileKey, payload),
+      );
       if (!mounted) return;
       ref.invalidate(employeeHrProvider(widget.profileKey));
       Navigator.pop(context);
+    } on MfaRequiredError catch (error) {
+      if (mounted) setState(() => _error = error.message);
     } catch (_) {
       if (mounted) {
         setState(

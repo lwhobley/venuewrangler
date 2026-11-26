@@ -7,7 +7,7 @@ Port of legacy NestJS `guests` and `reservations` modules to native Supabase + F
 - **Database**:
   - `public.guests`: venue-scoped guest CRM records, dietary preferences, tags, contact info.
   - `public.guest_household_links`: links guests belonging to the same household/company within the same venue. Cross-venue links are prevented by database trigger.
-  - `public.reservations`: venue-scoped bookings, party size, reservation times, statuses (`pending`, `confirmed`, `seated`, `completed`, `cancelled`, `no_show`), deposit tracking (`none`, `required`, `pending`, `paid`, `refunded`).
+  - `public.reservations`: venue-scoped bookings, party size, reservation times, statuses (`pending`, `confirmed`, `seated`, `completed`, `cancelled`, `no_show`). Deposits are not collected or tracked: the legacy `deposit_*` columns remain, but a trigger (20261012100000_review_fixes_tenant_integrity.sql) keeps `deposit_status` at `none` or `required`, and the app has no deposit UI.
   - `public.reservation_connections`: external reservation platform credentials & status with SHA-256 hashed webhook secret, strictly hidden from authenticated users via column-level security.
   - `public.webhook_replay_log`: atomic replay protection log for external webhook delivery.
 - **Triggers**:

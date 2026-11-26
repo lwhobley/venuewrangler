@@ -6,7 +6,9 @@ import '../../../core/theme/ops_colors.dart';
 import '../../../core/widgets/status_chip.dart';
 
 import '../../../core/errors/app_error.dart';
+import '../../venues/application/venue_location_providers.dart';
 import '../../venues/application/venues_providers.dart';
+import '../../venues/presentation/venue_location_dialog.dart';
 import '../application/time_clock_providers.dart';
 import '../domain/time_entry.dart';
 import '../../venues/application/venue_clock.dart';
@@ -253,6 +255,11 @@ class _TimeClockScreenState extends ConsumerState<TimeClockScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              if (ref.watch(activeVenueMissingGeofenceProvider).valueOrNull ==
+                  true) ...[
+                MissingGeofenceBanner(venueId: venue.id),
+                const SizedBox(height: 16),
+              ],
               // Segmented switch between My Punch and Clock Board
               SegmentedButton<int>(
                 segments: const [
@@ -682,6 +689,55 @@ class _MobileOnlyNotice extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Shown to managers when the venue has no clock-in location: every punch is refused with
+/// `venue_geofence_required` until one is set, so say so and offer the fix in place.
+class MissingGeofenceBanner extends StatelessWidget {
+  const MissingGeofenceBanner({super.key, required this.venueId});
+
+  final String venueId;
+
+  @override
+  Widget build(BuildContext context) {
+    final tone = context.ops.warning;
+    return Card(
+      color: tone.bg,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.location_off_outlined, color: tone.fg),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text(
+                    "This venue's location isn't set up yet, so nobody can clock "
+                    'in here. Set the venue location and clock-in radius to turn '
+                    'the time clock on.',
+                  ),
+                ),
+              ],
+            ),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                icon: const Icon(Icons.edit_location_alt_outlined),
+                label: const Text('Set location'),
+                onPressed: () => showDialog<bool>(
+                  context: context,
+                  builder: (_) => VenueLocationDialog(venueId: venueId),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

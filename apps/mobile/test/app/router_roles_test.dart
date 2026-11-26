@@ -67,6 +67,20 @@ void main() {
           .isNotEmpty;
     }
 
+    test('the https reset Universal Link lands on /reset-password', () async {
+      final link = Uri.parse(
+        'https://venuewrangler.com/reset-password?code=abc',
+      );
+      // Not rewritten like the custom scheme: go_router matches the path as-is.
+      expect(appSchemeLocation(link), isNull);
+      final container = containerFor(() async => 'staff');
+      await container.read(myVenueRoleProvider.future);
+      final match =
+          container.read(routerProvider).configuration.findMatch(link);
+      expect(match.matches, isNotEmpty);
+      expect(match.uri.path, '/reset-password');
+    });
+
     test(
       'unknown, missing and platform_admin roles get the employee shell',
       () async {
@@ -308,6 +322,30 @@ void main() {
         await tester.pump(const Duration(milliseconds: 100));
       }
       expect(location(manager), '/team');
+    });
+
+    testWidgets('only managers can open the AI assistant', (tester) async {
+      final supervisor = containerFor(
+        role: () async => 'supervisor',
+        activeVenue: venue,
+        organizations: [org],
+      );
+      await pumpApp(tester, supervisor);
+      supervisor.read(routerProvider).go('/wrangler');
+      for (var i = 0; i < 6; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(location(supervisor), '/');
+    });
+
+    testWidgets('managers reach the AI assistant', (tester) async {
+      final manager = containerFor(activeVenue: venue, organizations: [org]);
+      await pumpApp(tester, manager);
+      manager.read(routerProvider).go('/wrangler');
+      for (var i = 0; i < 6; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(location(manager), '/wrangler');
     });
   });
 }

@@ -59,6 +59,13 @@
                     android:scheme="https"
                     android:host="venuewrangler.com"
                     android:pathPrefix="/billing"/>
+                <!-- Password-reset Universal Link path. Not used on Android yet: the app still asks
+                     Supabase for venuewrangler://reset-password here until assetlinks.json has the
+                     real signing fingerprint (TODO(F06) in core/auth/auth_repository.dart). -->
+                <data
+                    android:scheme="https"
+                    android:host="venuewrangler.com"
+                    android:pathPrefix="/reset-password"/>
             </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.

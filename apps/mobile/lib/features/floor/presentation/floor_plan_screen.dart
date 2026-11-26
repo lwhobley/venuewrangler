@@ -8,6 +8,7 @@ import '../../../core/widgets/status_chip.dart';
 import '../../employee/application/employee_providers.dart';
 import '../../venues/application/venues_providers.dart';
 import '../application/floor_providers.dart';
+import '../domain/floor_permissions.dart';
 import '../domain/floor_table.dart';
 import '../domain/table_status_style.dart';
 import 'live_floor_map.dart';
@@ -25,16 +26,21 @@ class _FloorPlanScreenState extends ConsumerState<FloorPlanScreen> {
   bool _highlightMine = true;
   bool _busy = false;
 
-  Future<void> _runAction(Future<void> Function() action) async {
+  Future<void> _runAction(
+    Future<void> Function() action, {
+    bool mergeOrSplit = false,
+  }) async {
     if (_busy || !mounted) return;
     setState(() => _busy = true);
     try {
       await action();
-    } catch (_) {
+    } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Could not update the floor. Please try again.'),
+          SnackBar(
+            content: Text(
+              floorActionErrorMessage(error, mergeOrSplit: mergeOrSplit),
+            ),
           ),
         );
       }
@@ -52,6 +58,8 @@ class _FloorPlanScreenState extends ConsumerState<FloorPlanScreen> {
         plans.where((p) => p.isActive).firstOrNull ?? plans.firstOrNull;
     final mySection = ref.watch(mySectionProvider);
     final mapAvailable = plan != null;
+    // Merge and split are supervisor-and-above on the server; staff never see them.
+    final canMerge = ref.watch(canMergeFloorTablesProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -78,7 +86,7 @@ class _FloorPlanScreenState extends ConsumerState<FloorPlanScreen> {
               onPressed: () => context.push('/floor/studio'),
             ),
           ],
-          if (_selectedTableIds.length >= 2 && activeVenue != null)
+          if (canMerge && _selectedTableIds.length >= 2 && activeVenue != null)
             IconButton(
               icon: const Icon(Icons.merge_type),
               tooltip: 'Merge Selected Tables',
@@ -86,13 +94,18 @@ class _FloorPlanScreenState extends ConsumerState<FloorPlanScreen> {
                   ? null
                   : () async {
                       final tableIds = _selectedTableIds.toList();
-                      await _runAction(() async {
-                        await ref.read(floorRepositoryProvider).mergeTables(
-                              venueId: activeVenue.id,
-                              tableIds: tableIds,
-                            );
-                        if (mounted) setState(() => _selectedTableIds.clear());
-                      });
+                      await _runAction(
+                        () async {
+                          await ref.read(floorRepositoryProvider).mergeTables(
+                                venueId: activeVenue.id,
+                                tableIds: tableIds,
+                              );
+                          if (mounted) {
+                            setState(() => _selectedTableIds.clear());
+                          }
+                        },
+                        mergeOrSplit: true,
+                      );
                     },
             ),
           if (_selectedTableIds.isNotEmpty)
@@ -174,15 +187,18 @@ class _FloorPlanScreenState extends ConsumerState<FloorPlanScreen> {
                     _showTableActionSheet(context, table);
                   }
                 },
-                onLongPress: () {
-                  setState(() {
-                    if (isSelected) {
-                      _selectedTableIds.remove(table.id);
-                    } else {
-                      _selectedTableIds.add(table.id);
-                    }
-                  });
-                },
+                // Multi-select exists only to merge, so it is off for staff.
+                onLongPress: !canMerge
+                    ? null
+                    : () {
+                        setState(() {
+                          if (isSelected) {
+                            _selectedTableIds.remove(table.id);
+                          } else {
+                            _selectedTableIds.add(table.id);
+                          }
+                        });
+                      },
               );
             },
           );
@@ -265,18 +281,21 @@ class _FloorPlanScreenState extends ConsumerState<FloorPlanScreen> {
                 });
               },
             ),
-            if (table.isMerged)
+            if (table.isMerged && ref.read(canMergeFloorTablesProvider))
               ListTile(
                 leading: Icon(Icons.call_split, color: sheetCtx.ops.vip.fg),
                 title: const Text('Split Merged Tables'),
                 onTap: () async {
                   Navigator.of(sheetCtx).pop();
-                  await _runAction(() {
-                    return ref.read(floorRepositoryProvider).splitTables(
-                          venueId: activeVenue.id,
-                          mergeGroupId: table.mergeGroupId!,
-                        );
-                  });
+                  await _runAction(
+                    () {
+                      return ref.read(floorRepositoryProvider).splitTables(
+                            venueId: activeVenue.id,
+                            mergeGroupId: table.mergeGroupId!,
+                          );
+                    },
+                    mergeOrSplit: true,
+                  );
                 },
               ),
           ],
@@ -297,7 +316,7 @@ class _TableGridTile extends StatelessWidget {
   final FloorTable table;
   final bool isSelected;
   final VoidCallback onTap;
-  final VoidCallback onLongPress;
+  final VoidCallback? onLongPress;
 
   @override
   Widget build(BuildContext context) {

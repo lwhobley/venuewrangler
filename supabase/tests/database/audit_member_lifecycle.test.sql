@@ -110,8 +110,9 @@ select lives_ok(
 select throws_ok(
   $$ select public.remove_member((select membership_id from mid where user_id = 'b1000000-0000-0000-0000-000000000001')) $$,
   '42501', null, 'an org admin cannot remove the owner');
-select throws_ok($$ select public.remove_member('b9000000-0000-0000-0000-000000000000') $$, 'P0002', null,
-  'removing a missing membership reports not found');
+-- A missing id answers exactly like a forbidden one, so ids cannot be probed across tenants.
+select throws_ok($$ select public.remove_member('b9000000-0000-0000-0000-000000000000') $$, '42501', null,
+  'removing a missing membership is indistinguishable from a forbidden one');
 
 -- ---------------------------------------------------------------------------
 -- change_member_role

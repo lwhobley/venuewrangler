@@ -14,7 +14,7 @@
 // SECRET was available in this environment to exercise an actual code exchange. Confirm
 // against https://developer.squareup.com/docs/oauth-api/overview before relying on this in
 // production, and adjust SQUARE_OAUTH_SCOPES to exactly what the payroll-push feature needs.
-import { corsHeaders, handleCorsPreflight } from "../_shared/cors.ts";
+import { corsHeaders, handleCorsPreflight, serveWithCors } from "../_shared/cors.ts";
 import { createServiceClient, createUserClient } from "../_shared/supabase-clients.ts";
 import { getCallerVenueRoles, isCurrentVenueManager, isManager, isUuid } from "../_shared/venue-auth.ts";
 import { decryptToken, signOAuthState, verifyOAuthState } from "../_shared/crypto.ts";
@@ -27,6 +27,7 @@ import {
 } from "../_shared/oauth-connections.ts";
 import { initObservability, captureException, flushObservability } from "../_shared/observability.ts";
 import { enforceRateLimit } from "../_shared/rate-limit.ts";
+import { requireCallerMfa } from "../_shared/mfa.ts";
 
 initObservability();
 
@@ -129,7 +130,7 @@ async function requireVenueManager(
   return { userId: userData.user.id };
 }
 
-Deno.serve(async (req) => {
+serveWithCors(async (req) => {
   const preflight = handleCorsPreflight(req);
   if (preflight) return preflight;
 
@@ -186,6 +187,9 @@ async function handleRequest(req: Request): Promise<Response> {
 
     const auth = await requireVenueManager(req.headers.get("Authorization"), payload.venue_id);
     if ("error" in auth) return auth.error;
+    // MFA step-up before minting a consent link (audit F04), after the manager check.
+    const mfaBlocked = await requireCallerMfa(createUserClient(req.headers.get("Authorization")!));
+    if (mfaBlocked) return mfaBlocked;
 
     const limited = await enforceRateLimit(
       createServiceClient(),

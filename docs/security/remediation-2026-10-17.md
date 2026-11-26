@@ -53,7 +53,9 @@ Run as the table owner (SQL editor); clients cannot read or write this table.
 -- without a subscription row should get BEFORE enabling.
 update app_hidden.platform_settings set billing_enforcement = true;
 
--- Require an aal2 (MFA) session to change manager-level roles / transfer ownership.
+-- Require an aal2 (MFA) session to change manager-level roles / transfer ownership, and
+-- (since the 2026-11-25 security review) to edit wages, use Stripe checkout/portal, connect
+-- payroll OAuth, and connect/disconnect BrightHR.
 -- Enable only after owners and admins have enrolled TOTP in the app.
 update app_hidden.platform_settings set require_mfa_for_admin_actions = true;
 

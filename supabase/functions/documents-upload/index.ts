@@ -10,7 +10,7 @@
 //
 // NOT live-tested end to end: this sandbox has no reachable ClamAV instance, so the scan step
 // itself (Deno.connect to CLAMAV_HOST) has not been exercised against a real clamd.
-import { corsHeaders, handleCorsPreflight } from "../_shared/cors.ts";
+import { corsHeaders, handleCorsPreflight, serveWithCors } from "../_shared/cors.ts";
 import { createServiceClient, createUserClient } from "../_shared/supabase-clients.ts";
 import { getCallerVenueRoles, isManager, isUuid } from "../_shared/venue-auth.ts";
 import { enforceRateLimit, requireEntitlement } from "../_shared/rate-limit.ts";
@@ -81,7 +81,7 @@ async function readBoundedJson(req: Request, maxBytes: number): Promise<unknown>
   return JSON.parse(new TextDecoder().decode(merged));
 }
 
-Deno.serve(async (req) => {
+serveWithCors(async (req) => {
   const preflight = handleCorsPreflight(req);
   if (preflight) return preflight;
 

@@ -2,7 +2,7 @@
 -- Fixtures: Org A, Venue A1 (manager 004, staff 005), Org B, Venue B1 (owner 006).
 
 begin;
-select plan(15);
+select plan(16);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-000000000004', 'venue-a1-manager@example.com'),
@@ -156,8 +156,20 @@ select public.update_floor_table_status(
 );
 
 -- ---------------------------------------------------------------------------
--- 10, 11 & 12. RPC merge_floor_tables and split_floor_tables
+-- 10, 11 & 12. RPC merge_floor_tables and split_floor_tables (supervisor and up since the
+-- 2026-11-25 security review; seating guests stays open to staff, see section 13)
 -- ---------------------------------------------------------------------------
+select throws_ok(
+  $$ select public.merge_floor_tables(
+       '20000000-0000-0000-0000-0000000000a1',
+       array['60000000-0000-0000-0000-000000000001', '60000000-0000-0000-0000-000000000002']::uuid[]
+     ) $$,
+  '42501',
+  null,
+  'staff cannot merge tables'
+);
+
+set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-000000000004'; -- manager
 select throws_ok(
   $$ select public.merge_floor_tables(
        '20000000-0000-0000-0000-0000000000a1',
@@ -184,6 +196,7 @@ select lives_ok(
      ) $$,
   'splitting merged tables succeeds'
 );
+set local "request.jwt.claim.sub" to '00000000-0000-0000-0000-000000000005'; -- staff again
 
 -- ---------------------------------------------------------------------------
 -- 13. RPC assign_tables_to_reservation

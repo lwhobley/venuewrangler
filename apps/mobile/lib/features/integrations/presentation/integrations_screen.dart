@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../core/auth/mfa_step_up.dart';
 import '../../../core/errors/app_error.dart';
 import '../../venues/application/venues_providers.dart';
 import '../application/integrations_providers.dart';
@@ -117,9 +118,14 @@ class _ProviderTile extends ConsumerWidget {
 
   Future<void> _connect(BuildContext context, WidgetRef ref) async {
     try {
-      final url = await ref
-          .read(integrationsRepositoryProvider)
-          .createConnectUrl(provider, venueId);
+      // Connecting payroll needs an authenticator-verified session (403 mfa_required).
+      final url = await runWithMfaStepUp(
+        context,
+        ref,
+        () => ref
+            .read(integrationsRepositoryProvider)
+            .createConnectUrl(provider, venueId),
+      );
       final launched =
           await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
       if (!launched && context.mounted) {
@@ -144,9 +150,13 @@ class _ProviderTile extends ConsumerWidget {
   Future<void> _disconnect(BuildContext context, WidgetRef ref) async {
     final container = ProviderScope.containerOf(context, listen: false);
     try {
-      await container
-          .read(integrationsRepositoryProvider)
-          .disconnect(provider, venueId);
+      await runWithMfaStepUp(
+        context,
+        ref,
+        () => container
+            .read(integrationsRepositoryProvider)
+            .disconnect(provider, venueId),
+      );
       container.invalidate(payrollConnectionsForVenueProvider(venueId));
     } on AppError catch (error) {
       if (!context.mounted) return;

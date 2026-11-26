@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/errors/app_error.dart';
+import '../../../core/errors/server_denials.dart';
 import '../domain/payroll_connection.dart';
 
 /// Reads the non-secret columns of `payroll_connections` directly (RLS + a column-level grant
@@ -100,19 +101,26 @@ class SupabaseIntegrationsRepository implements IntegrationsRepository {
     }
   }
 
-  AppError _mapFunctionException(FunctionException error) {
-    final details = error.details;
-    final code = details is Map ? details['error'] as String? : null;
+  AppError _mapFunctionException(FunctionException error) =>
+      mapPayrollFunctionException(error);
+}
 
-    return switch (code) {
-      'not_a_venue_manager' => const PermissionDeniedError(
-          'Only a venue manager or organization admin can manage integrations.',
-        ),
-      'invalid_or_expired_session' =>
-        const AuthError('Your session has expired. Please sign in again.'),
-      _ => error.status >= 500
-          ? const UnknownError('This integration is temporarily unavailable.')
-          : const UnknownError('Something went wrong. Please try again.'),
-    };
-  }
+/// Maps a `{provider}-oauth` Edge Function error body to a user-facing [AppError].
+AppError mapPayrollFunctionException(FunctionException error) {
+  final details = error.details;
+  final code = details is Map ? details['error'] as String? : null;
+
+  return switch (code) {
+    'not_a_venue_manager' => const PermissionDeniedError(
+        'Only a venue manager or organization admin can manage integrations.',
+      ),
+    // 403: connecting payroll needs an authenticator-verified session.
+    mfaRequiredCode => const MfaRequiredError(),
+    mfaCheckUnavailableCode => const NetworkError(mfaCheckUnavailableMessage),
+    'invalid_or_expired_session' =>
+      const AuthError('Your session has expired. Please sign in again.'),
+    _ => error.status >= 500
+        ? const UnknownError('This integration is temporarily unavailable.')
+        : const UnknownError('Something went wrong. Please try again.'),
+  };
 }

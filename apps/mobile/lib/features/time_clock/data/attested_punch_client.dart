@@ -5,6 +5,7 @@ import 'package:crypto/crypto.dart' show sha256;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/errors/app_error.dart';
+import '../../../core/errors/server_denials.dart';
 import '../domain/time_entry.dart';
 
 /// Device proof for one punch request.
@@ -187,6 +188,9 @@ class AttestedPunchClient {
     required String serverMode,
     required bool punchSent,
   }) {
+    if (isVenueGeofenceRequired(error)) {
+      return const PermissionDeniedError(venueGeofenceRequiredMessage);
+    }
     final details = error.details;
     final code = details is Map ? details['error'] as String? : null;
     switch (code) {

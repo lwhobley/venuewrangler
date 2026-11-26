@@ -13,7 +13,7 @@
 // a lead or BEO, and the address is read server-side (through the caller's RLS) from that
 // lead's stored email. A `to` in the payload is only accepted if it equals the stored address.
 // Sends are also entitlement-gated and quota-limited per user and per organization.
-import { corsHeaders, handleCorsPreflight } from "../_shared/cors.ts";
+import { corsHeaders, handleCorsPreflight, serveWithCors } from "../_shared/cors.ts";
 import { createServiceClient, createUserClient } from "../_shared/supabase-clients.ts";
 import { enforceRateLimit, requireEntitlement } from "../_shared/rate-limit.ts";
 import { initObservability, captureException, flushObservability } from "../_shared/observability.ts";
@@ -36,7 +36,7 @@ function envInt(name: string, fallback: number): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-Deno.serve(async (req) => {
+serveWithCors(async (req) => {
   const preflight = handleCorsPreflight(req);
   if (preflight) return preflight;
 

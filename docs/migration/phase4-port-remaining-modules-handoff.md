@@ -203,6 +203,7 @@ side; the inbound webhook ingestion side is well-understood regardless. The Stri
 in `reservations` (and the one in `crm`'s BEO flow, see below) should reuse this rebuild's
 existing Stripe Edge Function patterns (`_shared/stripe.ts`), not reimplement raw Stripe API
 calls the way the legacy `crm.controller.ts` does inline.
+(Superseded 2026-10-04: deposit collection and Stripe Connect were removed by `20261004144042_remove_beo_deposit_and_stripe_connect.sql`. The product does not collect guest or BEO deposits; Stripe is used only for the app subscription.)
 
 ### `floor`
 Concurrency-sensitive: table merge/split/assignment uses serializable-isolation transactions
@@ -229,7 +230,8 @@ warrant a scope conversation with the product owner before porting — confirm i
 active use before investing in it, given its size relative to everything else in this list. If
 greenlit, it's a straightforward (if large) set of venue-scoped tables following the exact
 established pattern; the BEO deposit flow should go through this rebuild's Stripe Edge
-Functions, not a new raw integration. The "contract e-signature" is just a text-field capture
+Functions, not a new raw integration (superseded: the BEO deposit flow was later removed; see
+the note under `reservations`). The "contract e-signature" is just a text-field capture
 of a typed name/date in the legacy system, not a real e-signature integration — confirm that's
 still acceptable before porting as-is.
 

@@ -25,7 +25,9 @@ it('overlapping expired checkout retries share the replacement session', async (
       return query(table === 'memberships' ? { role: 'organization_owner' } :
         { stripe_customer_id: 'cus_mock', stripe_subscription_id: null, status: 'none' });
     },
-    async rpc(name: string, args: Record<string, unknown>) {
+    async rpc(name: string, args: Record<string, unknown> = {}) {
+      // MFA step-up gate (_shared/mfa.ts): the caller has satisfied it.
+      if (name === 'caller_mfa_satisfied') return { data: true, error: null };
       if (name === 'claim_subscription_checkout_attempt') {
         // Model the database compare-and-swap, not a timing window.
         if (args.p_force_new && args.p_expected_key === key) {
@@ -60,7 +62,22 @@ it('overlapping expired checkout retries share the replacement session', async (
       if (name.includes('supabase-clients')) return { createServiceClient: () => client, createUserClient: () => client };
       if (name.includes('/stripe')) return { createStripeClient: () => stripe };
       if (name.includes('rate-limit')) return { async enforceRateLimit() { return null; } };
-      if (name.includes('cors')) return { corsHeaders: {}, handleCorsPreflight: () => null };
+      if (name.includes('cors')) {
+        return {
+          corsHeaders: {},
+          handleCorsPreflight: () => null,
+          serveWithCors: (fn: typeof handler) => { handler = fn; },
+        };
+      }
+      if (name.includes('/mfa')) {
+        // Mirrors requireCallerMfa: asks the caller's client, blocks unless it answers true.
+        return {
+          async requireCallerMfa(userClient: typeof client) {
+            const { data } = await userClient.rpc('caller_mfa_satisfied');
+            return data === true ? null : new Response(JSON.stringify({ error: 'mfa_required' }), { status: 403 });
+          },
+        };
+      }
       if (name.includes('venue-auth')) {
         return { isUuid: (value: unknown) => typeof value === 'string' && UUID.test(value) };
       }
