@@ -32,6 +32,7 @@ import '../features/integrations/presentation/integrations_screen.dart';
 import '../features/invites/application/invites_providers.dart';
 import '../features/invites/presentation/pending_invites_screen.dart';
 import '../features/inventory/presentation/inventory_list_screen.dart';
+import '../features/auth/pin_settings_screen.dart';
 import '../features/mfa/presentation/mfa_challenge_screen.dart';
 import '../features/mfa/presentation/mfa_settings_screen.dart';
 import '../features/notifications/application/notification_routing.dart';
@@ -72,6 +73,7 @@ final routerRefreshNotifierProvider = Provider<RouterRefreshNotifier>((ref) {
   ref.listen(isSignedInProvider, (_, __) => notifier.notify());
   ref.listen(activeVenueProvider, (_, __) => notifier.notify());
   ref.listen(passwordRecoveryPendingProvider, (_, __) => notifier.notify());
+  ref.listen(mustChangePasswordProvider, (_, __) => notifier.notify());
   ref.listen(myVenueRoleProvider, (_, __) => notifier.notify());
   ref.listen(mfaChallengeRequiredProvider, (_, __) => notifier.notify());
   ref.listen(reauthInProgressProvider, (_, __) => notifier.notify());
@@ -137,7 +139,9 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       final isSignedIn = ref.read(isSignedInProvider);
       final hasActiveVenue = ref.read(activeVenueProvider) != null;
-      final recoveringPassword = ref.read(passwordRecoveryPendingProvider);
+      // A reset link, or an admin-created account still on its starting password.
+      final recoveringPassword = ref.read(passwordRecoveryPendingProvider) ||
+          ref.read(mustChangePasswordProvider);
       final roleAsync = isSignedIn && hasActiveVenue
           ? ref.read(myVenueRoleProvider)
           : const AsyncValue<String?>.data(null);
@@ -245,6 +249,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const MfaSettingsScreen(),
       ),
       GoRoute(
+        path: '/pin',
+        builder: (context, state) => const PinSettingsScreen(),
+      ),
+      GoRoute(
         path: '/mfa-challenge',
         builder: (context, state) => const MfaChallengeScreen(),
       ),
@@ -275,6 +283,7 @@ bool employeeCanOpen(String path) => const {
       '/invites',
       '/mfa',
       '/mfa-challenge',
+      '/pin',
     }.contains(path);
 
 class _LoadingScreen extends StatelessWidget {

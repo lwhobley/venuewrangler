@@ -139,7 +139,13 @@ class SupabaseAuthRepository implements AuthRepository {
 
   @override
   Future<void> updatePassword(String newPassword) async {
-    await _client.auth.updateUser(UserAttributes(password: newPassword));
+    // Also clears the admin-set "change your starting password" flag (scripts/import-staff.py).
+    await _client.auth.updateUser(
+      UserAttributes(
+        password: newPassword,
+        data: {'must_change_password': false},
+      ),
+    );
   }
 
   @override

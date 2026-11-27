@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/auth/auth_providers.dart';
 import '../../../core/auth/reauth_dialog.dart';
 import '../../../core/auth/auth_repository.dart';
+import '../../../core/auth/app_lock.dart';
 import '../../../core/auth/sign_out_service.dart';
 import '../../../core/network/supabase_providers.dart';
 import '../../../core/theme/ops_colors.dart';
@@ -276,6 +277,14 @@ class ProfileScreen extends ConsumerWidget {
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () => context.push('/mfa'),
                   ),
+                  if (appLockSupported)
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.pin_outlined),
+                      title: const Text('App PIN'),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => context.push('/pin'),
+                    ),
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     leading: const Icon(Icons.mail_outline),

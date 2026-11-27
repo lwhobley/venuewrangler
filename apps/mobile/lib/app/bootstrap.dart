@@ -11,6 +11,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../core/config/env_config.dart';
 import '../core/config/flavor.dart';
+import '../core/auth/app_lock.dart';
 import '../core/auth/auth_providers.dart';
 import '../core/errors/error_reporter.dart';
 import '../core/network/supabase_providers.dart';
@@ -54,6 +55,10 @@ Future<void> bootstrap(AppFlavor flavor) async {
     publishableKey: env.supabaseAnonKey,
     authOptions: FlutterAuthClientOptions(localStorage: SecureLocalStorage()),
   );
+  final appLockInitial = await loadInitialAppLockState(
+    store: const AppLockStore(),
+    session: Supabase.instance.client.auth.currentSession,
+  );
   final recoveryPending = await resolvePasswordRecoveryPending(
     session: Supabase.instance.client.auth.currentSession,
     storage: const SecureSessionStorage(),
@@ -82,6 +87,7 @@ Future<void> bootstrap(AppFlavor flavor) async {
       overrides: [
         authCallbackErrorProvider.overrideWith((ref) => authCallbackError),
         passwordRecoveryPendingProvider.overrideWith((ref) => recoveryPending),
+        appLockInitialStateProvider.overrideWithValue(appLockInitial),
         supabaseClientProvider.overrideWithValue(Supabase.instance.client),
         // Composition root for the offline-mutation-queue handler registry: each feature
         // that queues mutations exposes its own handler-map provider, merged here so
