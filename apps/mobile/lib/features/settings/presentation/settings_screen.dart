@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../core/auth/app_lock.dart';
 import '../../../core/auth/sign_out_service.dart';
 import '../../../core/network/supabase_providers.dart';
 import '../application/settings_providers.dart';
@@ -107,6 +108,14 @@ class SettingsScreen extends ConsumerWidget {
               trailing: const Icon(Icons.chevron_right),
               onTap: () => context.push('/mfa'),
             ),
+            if (appLockSupported)
+              ListTile(
+                leading: const Icon(Icons.pin_outlined),
+                title: const Text('App PIN'),
+                subtitle: const Text('Unlock this phone with a PIN'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => context.push('/pin'),
+              ),
             if (venue != null &&
                 (role == 'organization_owner' || role == 'organization_admin'))
               OrgAiToggleTile(organizationId: venue.organizationId),

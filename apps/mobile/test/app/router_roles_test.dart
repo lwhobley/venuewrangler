@@ -121,6 +121,7 @@ void main() {
 
   group('redirects', () {
     final mfaRequired = StateProvider<bool>((ref) => false);
+    final mustChange = StateProvider<bool>((ref) => false);
 
     ProviderContainer containerFor({
       Future<String?> Function()? role,
@@ -136,6 +137,9 @@ void main() {
             (ref) => ref.watch(mfaRequired),
           ),
           mfaRepositoryProvider.overrideWithValue(FakeMfaRepository()),
+          mustChangePasswordProvider.overrideWith(
+            (ref) => ref.watch(mustChange),
+          ),
           myOrganizationsProvider.overrideWith((ref) async => organizations),
           venuesForOrganizationProvider.overrideWith(
             (ref, organizationId) async => [venue],
@@ -200,6 +204,29 @@ void main() {
       expect(location(container), '/mfa-challenge');
 
       container.read(mfaRequired.notifier).state = false;
+      for (var i = 0; i < 6; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(location(container), '/');
+    });
+
+    testWidgets(
+        'holds an imported account on /reset-password until it picks a password',
+        (
+      tester,
+    ) async {
+      final container = containerFor(activeVenue: venue, organizations: [org]);
+      container.read(mustChange.notifier).state = true;
+      await pumpApp(tester, container);
+      expect(location(container), '/reset-password');
+
+      container.read(routerProvider).go('/schedules');
+      for (var i = 0; i < 4; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(location(container), '/reset-password');
+
+      container.read(mustChange.notifier).state = false;
       for (var i = 0; i < 6; i++) {
         await tester.pump(const Duration(milliseconds: 100));
       }

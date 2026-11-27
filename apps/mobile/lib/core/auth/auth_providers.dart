@@ -50,6 +50,25 @@ final currentUserIdProvider = Provider<String?>((ref) {
   );
 });
 
+/// True while the signed-in account was created by an admin with a starting password
+/// (scripts/import-staff.py sets `user_metadata.must_change_password`). The router holds the
+/// person on /reset-password until they choose their own; [AuthRepository.updatePassword]
+/// clears the flag. Re-evaluated on every auth event, including `userUpdated`.
+final mustChangePasswordProvider = Provider<bool>((ref) {
+  final authState = ref.watch(authStateChangesProvider);
+  Session? session;
+  try {
+    session = authState.maybeWhen(
+      data: (state) => state.session,
+      orElse: () => ref.read(authRepositoryProvider).currentSession,
+    );
+  } catch (_) {
+    // No auth client (some tests): nothing to enforce.
+    return false;
+  }
+  return session?.user.userMetadata?['must_change_password'] == true;
+});
+
 /// True from the moment a password-reset link signs the user in until they set a new
 /// password (or sign out). While true the router keeps them on /reset-password, so a recovery
 /// session can't be used to wander into the app without choosing a password.

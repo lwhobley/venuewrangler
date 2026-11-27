@@ -3,12 +3,14 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/auth/app_lock.dart';
 import '../core/auth/auth_providers.dart';
 import '../core/auth/sign_out_service.dart';
 import '../core/offline/offline_queue_connectivity.dart';
 import '../core/privacy/privacy_overlay.dart';
 import '../core/security/app_attest_providers.dart';
 import '../core/theme/app_theme.dart';
+import '../features/auth/app_lock_screen.dart';
 import '../features/notifications/application/notifications_providers.dart';
 import '../features/organizations/application/workspace_provisioning.dart';
 import 'intro_video_screen.dart';
@@ -41,6 +43,8 @@ class _VenueWranglerAppState extends ConsumerState<VenueWranglerApp> {
     ref.watch(passwordRecoveryTriggerProvider);
     ref.watch(recoveryMfaProbeProvider);
     ref.watch(serverSignOutCleanupProvider);
+    ref.watch(appLockAuthSyncProvider);
+    ref.watch(appLockLifecycleProvider);
     ref.watch(pendingWorkspaceCreationTriggerProvider);
 
     if (!_introDone) {
@@ -62,9 +66,11 @@ class _VenueWranglerAppState extends ConsumerState<VenueWranglerApp> {
       darkTheme: AppTheme.dark(),
       themeMode: ref.watch(themeModeProvider),
       routerConfig: router,
-      // Hides the app in the OS app switcher; see core/privacy/privacy_overlay.dart.
-      builder: (context, child) =>
-          PrivacyOverlay(child: child ?? const SizedBox.shrink()),
+      // Hides the app in the OS app switcher; see core/privacy/privacy_overlay.dart. The app
+      // PIN cover sits inside it, above the router, so locking keeps the current screen.
+      builder: (context, child) => PrivacyOverlay(
+        child: AppLockGate(child: child ?? const SizedBox.shrink()),
+      ),
     );
   }
 }
