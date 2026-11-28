@@ -162,7 +162,14 @@ class AttestedPunchClient {
         // The punch may have been recorded; never fall back to a direct write here.
         throw const UnknownError(_punchFailedMessage);
       }
-      return TimeEntry.fromJson(Map<String, dynamic>.from(entry));
+      try {
+        return TimeEntry.fromJson(Map<String, dynamic>.from(entry));
+      } catch (_) {
+        // The server answered with an entry, so the punch was almost certainly recorded; only
+        // the reply could not be read. Saying "no connection" would invite a duplicate punch
+        // (review E12).
+        throw const UnknownError(_punchUnreadableMessage);
+      }
     } on FunctionException catch (error) {
       throw _map(error, serverMode: serverMode, punchSent: punchSent);
     } on AttestedPunchUnavailable {
@@ -179,6 +186,10 @@ class AttestedPunchClient {
 
   bool _failClosed(String serverMode) =>
       _requireAttested || serverMode == 'enforce';
+
+  static const _punchUnreadableMessage =
+      'Your punch was sent, but the app could not read the reply. Check your time entries '
+      'before punching again.';
 
   static const _punchFailedMessage =
       'Could not record the punch. Please try again, or ask a manager to record your punch.';

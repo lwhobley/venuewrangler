@@ -9,19 +9,17 @@
 //
 // Failure policy:
 //  - false                     -> 403 {error: "mfa_required"}; the app prompts for a step-up.
-//  - RPC missing (migration
-//    not applied yet)          -> fail OPEN with a logged warning, so a function deploy that runs
-//                                 ahead of the migration does not break billing/integrations.
-//  - any other RPC error       -> 503 {error: "mfa_check_unavailable"} (fail closed).
+//  - RPC missing or any other
+//    RPC error                 -> 503 {error: "mfa_check_unavailable"} (fail closed). The RPC
+//                                 ships in migration 20261125120000, applied in production, so a
+//                                 missing function now means a broken deploy, not a race
+//                                 (review E04; this used to fail open).
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { corsHeaders } from "./cors.ts";
-import { isMissingFunctionError } from "./rate-limit.ts";
 
 export type MfaCheck = "satisfied" | "required" | "unavailable";
 
 type RpcClient = Pick<SupabaseClient, "rpc">;
-
-let warnedMissing = false;
 
 /** Raw check through the caller's user client. Never throws. */
 export async function checkCallerMfa(userClient: RpcClient): Promise<MfaCheck> {
@@ -34,16 +32,6 @@ export async function checkCallerMfa(userClient: RpcClient): Promise<MfaCheck> {
   }
   const { data, error } = result;
   if (error) {
-    if (isMissingFunctionError(error)) {
-      if (!warnedMissing) {
-        warnedMissing = true;
-        console.warn(
-          "mfa: public.caller_mfa_satisfied is not deployed; failing open until the migration is applied",
-          error,
-        );
-      }
-      return "satisfied";
-    }
     console.error("mfa: caller_mfa_satisfied failed", error);
     return "unavailable";
   }

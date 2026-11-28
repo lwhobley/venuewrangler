@@ -51,12 +51,14 @@ jwt_expiry = 3600
 enable_refresh_token_rotation = true
 refresh_token_reuse_interval = 10
 enable_signup = true
-# Password policy (audit A-04). 12+ characters with mixed case and digits. The hosted
+# Password policy (audit A-04). 12+ characters with mixed case, digits and a symbol, matching
+# the hosted project (which rejects passwords without a symbol) and the app's
+# passwordPolicyProblem. The hosted
 # project does NOT read this file; see docs/security/hosted-auth-settings.md for the
 # dashboard settings that must be applied by hand (including leaked-password protection,
 # which is a Pro-plan hosted-only feature and has no config.toml key).
 minimum_password_length = 12
-password_requirements = "lower_upper_letters_digits"
+password_requirements = "lower_upper_letters_digits_symbols"
 
 [auth.email]
 enable_signup = true

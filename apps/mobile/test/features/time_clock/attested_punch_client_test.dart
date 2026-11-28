@@ -371,7 +371,9 @@ void main() {
     await expectLater(_punch(client), throwsA(isA<NetworkError>()));
   });
 
-  test('a malformed punch response surfaces as NetworkError', () async {
+  test(
+      'an unreadable entry after a punch is not reported as a network error (E12)',
+      () async {
     const malformed = {
       'entry': {'id': 42},
     };
@@ -381,6 +383,15 @@ void main() {
           : malformed,
       _Proofs(null),
     );
-    await expectLater(_punch(client), throwsA(isA<NetworkError>()));
+    await expectLater(
+      _punch(client),
+      throwsA(
+        isA<UnknownError>().having(
+          (e) => e.message,
+          'message',
+          contains('Check your time entries'),
+        ),
+      ),
+    );
   });
 }
