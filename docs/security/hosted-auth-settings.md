@@ -16,7 +16,7 @@ screenshot (with no secrets visible) as SOC 2 evidence.
 | Setting | Value | Why |
 |---|---|---|
 | Minimum password length | **12** | `config.toml` sets `minimum_password_length = 12`; the hosted default is 6. |
-| Password requirements | **Lowercase, uppercase letters and digits** | Mirrors `password_requirements = "lower_upper_letters_digits"`. |
+| Password requirements | **Lowercase, uppercase letters, digits and symbols** | Mirrors `password_requirements = "lower_upper_letters_digits_symbols"` and the app's `passwordPolicyProblem`. Confirmed live on 2026-11-27: the hosted project rejects passwords without a symbol. |
 | Prevent use of leaked passwords | **On** (HaveIBeenPwned check) | Hosted-only; **Pro plan and above**. Has no `config.toml` key. |
 | Secure password change | **On** | Requires recent sign-in / reauthentication to change the password (A-03). The app must call `auth.reauthenticate()` before changing the password. |
 | Secure email change (double confirm) | **On** | Matches `double_confirm_changes = true`. |

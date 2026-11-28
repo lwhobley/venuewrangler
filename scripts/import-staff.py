@@ -42,8 +42,8 @@ EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 
 
 def password_problem(pw: str) -> str | None:
-    """The live project's policy: 12+ chars with lower, upper, digit and symbol (stricter than
-    supabase/config.toml, which omits the symbol; the app's passwordPolicyProblem matches)."""
+    """The project's policy: 12+ chars with lower, upper, digit and symbol (supabase/config.toml,
+    the hosted project and the app's passwordPolicyProblem all agree)."""
     if len(pw) < 12:
         return "use at least 12 characters"
     if not re.search(r"[a-z]", pw):

@@ -54,7 +54,8 @@ String passwordResetRedirect() => passwordResetRedirectFor(
     );
 
 /// The project's password policy (Supabase Auth: 12+ chars with lower, upper, digit and symbol,
-/// matching `supabase/config.toml`'s minimum_password_length = 12), checked client-side so the
+/// matching `supabase/config.toml`'s minimum_password_length = 12 and
+/// password_requirements = "lower_upper_letters_digits_symbols"), checked client-side so the
 /// user sees what's wrong before a round trip.
 String? passwordPolicyProblem(String password) {
   if (password.length < 12) return 'Use at least 12 characters';

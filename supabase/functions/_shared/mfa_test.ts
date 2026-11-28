@@ -31,13 +31,15 @@ Deno.test("requireCallerMfa answers 403 mfa_required when the RPC returns false"
   if (response.headers.get("Content-Type") !== "application/json") throw new Error("not JSON");
 });
 
-Deno.test("requireCallerMfa fails open when the RPC is not deployed yet", async () => {
+Deno.test("requireCallerMfa fails closed (503) when the RPC is missing (E04)", async () => {
   for (const error of [
     { code: "PGRST202", message: "Could not find the function public.caller_mfa_satisfied" },
     { code: "42883", message: "function public.caller_mfa_satisfied() does not exist" },
   ]) {
     const { client } = fakeClient({ data: null, error });
-    if (await requireCallerMfa(client) !== null) throw new Error(`missing RPC (${error.code}) blocked`);
+    const response = await requireCallerMfa(client);
+    if (response?.status !== 503) throw new Error(`missing RPC (${error.code}) not blocked`);
+    if ((await response.json()).error !== "mfa_check_unavailable") throw new Error("wrong error body");
   }
 });
 
